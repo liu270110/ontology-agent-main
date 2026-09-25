@@ -1,0 +1,24 @@
+version: '1.0'
+name: develop-pipeline
+displayName: 'CI-构建与测试'
+triggers:
+  push:
+    branches:
+      include:
+        - develop
+        - master
+    paths:
+      include:
+        - '*'
+stages:
+  - name: stage-build-test
+    displayName: '构建与测试'
+    steps:
+      - step: build@python
+        name: build_python
+        displayName: 'Python 构建与测试'
+        pythonVersion: 3.9
+        commands:
+          - python -m pip install --upgrade pip
+          - pip install -r requirements.txt
+          - pytest -v

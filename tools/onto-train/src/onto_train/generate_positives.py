@@ -112,6 +112,22 @@ TEMPLATES = {
     .ent(r.choice(STDS), "Standard").lit("的某").ent("信息单元", "Information Unit")
     .lit("以").ent(r.choice(FORMS), "Representation Form").lit("表述，涉及")
     .ent(r.choice(TERMS), "Term").lit("。"),
+    "T16_std_object": lambda r: SentenceBuilder()
+    .ent(r.choice(STDS), "Standard").lit("的标准化对象是")
+    .ent(r.choice(OBJS), "Standardized Object").lit("，归口单位为")
+    .ent(r.choice(ORGS), "Stakeholder").lit("。"),
+    "T17_ob2_object_action": lambda r: SentenceBuilder()
+    .lit("按 OB2 建模法，").ent(r.choice(OBJS), "OB2 Object")
+    .lit("是对象，").ent(r.choice(ACTIONS), "OB2 Action")
+    .lit("是改变其状态的行为。"),
+    "T18_ob2_event_rule": lambda r: SentenceBuilder()
+    .ent(r.choice(["订单支付成功事件", "设备停电上报事件"]), "OB2 Event")
+    .lit("满足守卫规则").ent("R" + str(r.randint(1, 99)).zfill(3), "OB2 Rule")
+    .lit("的条件下触发。"),
+    "T19_ob2_chain": lambda r: SentenceBuilder()
+    .ent("状态越限事件", "OB2 Event").lit("触发")
+    .ent(r.choice(ACTIONS), "OB2 Action").lit("，结果回写")
+    .ent(r.choice(OBJS), "OB2 Object").lit("并记入").ent(r.choice(FORMS), "Representation Form").lit("。"),
 }
 
 

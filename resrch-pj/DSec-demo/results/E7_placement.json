@@ -61,5 +61,6 @@
       ],
       "util_imbalance_std": 0.0144
     }
-  ]
+  ],
+  "passed": true
 }

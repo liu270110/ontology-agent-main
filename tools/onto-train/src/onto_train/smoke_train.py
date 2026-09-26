@@ -14,9 +14,13 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 import time
 from pathlib import Path
+
+# 须先于 torch/transformers/gliner 导入链：huggingface_hub 在 import 时固化 constants.ENDPOINT
+os.environ.setdefault("HF_ENDPOINT", "https://hf-mirror.com")
 
 import torch
 
@@ -52,9 +56,6 @@ def main() -> None:
     ]
     print(f"[data] {len(train_data)} 条训练样本（{data_file.name}）")
 
-    import os
-
-    os.environ.setdefault("HF_ENDPOINT", "https://hf-mirror.com")
     model = GLiNER.from_pretrained(MODEL_ID)
     if use_gpu:
         model = model.cuda()

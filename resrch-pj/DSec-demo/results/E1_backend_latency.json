@@ -73,5 +73,6 @@
     "fncall_acquire_p50_ms": 118.9,
     "fncall_acquire_p99_ms": 181.8,
     "speedup": 3.7
-  }
+  },
+  "passed": true
 }

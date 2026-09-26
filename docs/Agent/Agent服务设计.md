@@ -38,6 +38,17 @@ Session 与 Run/Task 的状态机**权威定义在 [04-领域层设计 §3](../a
 
 > `waiting_tool` 涵盖两种暂停：等工具结果（毫秒~秒级）、等人工审批（`action.invoke` 高风险动作，分钟级，human-in-the-loop 可配置，研究整理 05 §2.2）。waiting_tool 停留超时（默认 24h，策略可配）自动转 cancelled。
 
+**Run attempt 重试参数（2026-09-26 P1 设计补全）**——task 不变式 attempt_count ≤3（04 篇 §2）的执行语义定稿：
+
+| 项 | 定稿 |
+| ---- | ---- |
+| 触发方 | **编排器**（L3 agent_runtime / chat_orchestrator 读 ChatPolicy 裁决），非模型自述——重放是平台主权动作，模型无权宣布重试（对齐 02 篇 A4「终止只认判据求值与预算耗尽」的同构约束：重启 Run 同样只认编排器） |
+| 上限 | attempt_count ≤3 **含首次执行**（至多 2 次重试）；每建新 Run 递增计数并随 RunStarted 事件留痕（先落库后推送） |
+| 退避 | 四元组：基数 **5s** × 乘数 2（5s×2ⁿ）× 上限 **60s** × jitter **±20%**（03 篇 §1 退避纪律，缺一即评审打回；Run 级基数 5s 高于平台默认 1s——Run 重建含上下文重组与容器/子进程重启，成本高于普通调用重试） |
+| 新 Run 上下文 | **重放**：新 Run 重新消费触发消息，上下文从 **L1（Redis 工作记忆，PG messages 兜底，08 篇 §5 降级路径）+ PG 账本（task_events 步快照）**重建（内核 C1：内核可重启可替换而状态不丢）；**消息 seq 不变**——重放不新写用户消息（messages 只追加不变式不破），失败 Run 的部分输出仅留 task_events 审计流、不进 messages 正史（防污染 L1 上下文与 L2 沉淀输入） |
+| 预算联动 | 建新 Run 每次从 `retry_budget_total`（03 篇 §1，默认 N=10）扣 1，Run 内 LLM/工具/队列重投另按各自策略扣减；**余额不足即快速失败**——不建新 Run，task 直接 failed 并下发 RUN_ERROR **5005 RETRY_BUDGET_EXHAUSTED**，`run_retry_budget_exhausted_total` 计数 |
+| 可重试范围 | 仅 `run_error.retryable=true`（§6.3）的失败：适配器错误/超时；cancelled、判据已满足的 completed、预算耗尽类失败（内核 A4 / 5005）不触发重试 |
+
 ## 3. agent 工具适配层
 
 ### 3.1 Adapter 接口（Python Protocol）

@@ -11,6 +11,8 @@ dependencies = [
     "torch==2.8.0",
     "jieba==0.42.1",
     "protobuf>=4.25",  # DeBERTa-v3 分词器加载必需（transformers 4.x 隐式依赖）
+    "peft>=0.14",       # LoRA（03 决议：嵌入表冻结，默认训练路线）
+    "openai>=1.50",     # llm_rewrite 走平台网关（OpenAI 兼容协议）
     # 符号内核（公理负例验证 + 后续裁决层）
     "rdflib>=7.0",
     "owlrl>=7.0",

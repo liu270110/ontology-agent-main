@@ -27,3 +27,15 @@ Thumbs.db
 # 本地数据
 *.db
 *.sqlite3
+
+# 参考项目区：只读研究用，绝不入库（2026-09-26 用户裁决）
+ods-project/
+
+# 凭据与密钥（架构 07 §6.2 / 架构设计 14 §5：仅本地，绝不入库）
+.env
+.env.local
+.env.test
+deploy/.env
+*.pem
+*.key
+credentials*

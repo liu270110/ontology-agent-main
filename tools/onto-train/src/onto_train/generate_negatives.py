@@ -63,12 +63,10 @@ def build_negatives(seed: int, per_kind: int) -> list[dict]:
     rng = random.Random(seed)
     samples: list[dict] = []
     stds = ["GB/T 31486-2024", "GB/T 48000.3-2026", "DL/T 634.5104-2025"]
-    chars = ["容量特性", "循环寿命", "绝缘性能"]
     objs = ["电池包", "连接器"]
 
     for k in range(per_kind):
         std = rng.choice(stds)
-        ch = rng.choice(chars)
         obj = rng.choice(objs)
 
         # 1) disjointWith：同一 span 断言两个互斥类型
@@ -146,9 +144,6 @@ def build_negatives(seed: int, per_kind: int) -> list[dict]:
             {"asserted_labels": [], "explanation": "层次约束：无标题条不可再分子条"},
         ))
 
-        # 消耗随机数保持可复现
-        _ = (ch, rng.random())
-
     return samples
 
 
@@ -164,8 +159,7 @@ def main() -> None:
     samples = build_negatives(args.seed, args.per_kind)
 
     if args.symbolic_check:
-        checked = run_symbolic_check(samples)
-        print(f"[negatives] 符号验证通过 {checked}/{len(samples)}（仅枚举/函数性两类参与）")
+        samples = run_symbolic_check(samples)
 
     out = Path(args.out)
     out.parent.mkdir(parents=True, exist_ok=True)
@@ -177,22 +171,26 @@ def main() -> None:
     print(f"[negatives] {len(samples)} 条 -> {out}（{len(kinds)} 类算子: {', '.join(kinds)}）")
 
 
-def run_symbolic_check(samples: list[dict]) -> int:
+def run_symbolic_check(samples: list[dict]) -> list[dict]:
     """四步管线第 3 步：把枚举/函数性负例建成小图，pySHACL 必须报违规。
-    报不出违规的负例视为"生成缺陷"剔除——符号兜底，零标签噪声。"""
+    报不出违规的负例视为"生成缺陷"剔除——符号兜底，零标签噪声。
+    返回保留样本；rdflib/pyshacl 缺失时零验证原样返回。"""
     try:
-        from rdflib import Graph, Literal, Namespace, URIRef
         from pyshacl import validate
+        from rdflib import Graph, Namespace
     except ImportError:
         print("[symbolic-check] rdflib/pyshacl 未安装（uv sync 后可用），跳过验证")
-        return -1
+        return samples
 
     EX = Namespace("http://example.org/negcheck#")
     GBT = Namespace("https://ontology-agent.dev/ns/gbt48000#")
-    passed = 0
+    kept: list[dict] = []
+    checked = passed = 0
     for s in samples:
         if s["axiom_kind"] not in ("enumeration", "functionalProperty"):
+            kept.append(s)  # 其余算子暂无对应 SHACL 模板，不参与验证
             continue
+        checked += 1
         g = Graph()
         if s["axiom_kind"] == "enumeration":
             shapes = Graph()
@@ -236,9 +234,11 @@ def run_symbolic_check(samples: list[dict]) -> int:
         conforms, _, _ = validate(g, shacl_graph=shapes, inference="none", advanced=True)
         if not conforms:
             passed += 1
+            kept.append(s)
         else:
             print(f"[symbolic-check] 缺陷：{s['id']} 未被判定违规，剔除候选")
-    return passed
+    print(f"[negatives] 符号验证通过 {passed}/{checked}（仅枚举/函数性两类参与）")
+    return kept
 
 
 if __name__ == "__main__":

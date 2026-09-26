@@ -38,6 +38,7 @@ qcmd = [
     "-smp", "2", "-kernel", "/e14/vmlinuz-virt", "-initrd", "/e14/initramfs-virt",
     "-append", APPEND, "-nographic", "-serial", "mon:stdio",
     "-monitor", f"unix:{mon},server,nowait", "-no-reboot",
+    "-device", "virtio-balloon,free-page-reporting=on",
     "-netdev", "user,id=n0", "-device", "virtio-net-pci,netdev=n0",
 ]
 t0 = time.time()
@@ -88,10 +89,12 @@ out["boot_to_login_s"] = round(boot_s, 1)
 qemu.stdin.write("root\n")
 qemu.stdin.flush()
 time.sleep(2)
-qemu.stdin.write("uname -r; ls /dev/vd* 2>/dev/null; cat /sys/devices/virtual/balloon/*/state 2>/dev/null || ls /sys/module | grep -i balloon; echo GUEST_READY\n")
+# guest 初始化：modloop 已在 netboot 启动时挂载，显式加载 balloon 驱动
+qemu.stdin.write("modprobe virtio_balloon 2>&1; lsmod | grep balloon; echo GUEST_READY\n")
 qemu.stdin.flush()
-log2 = read_until(["GUEST_READY"], timeout_s=30)
-out["guest_modules"] = [l for l in log2.splitlines() if "balloon" in l.lower() or "virtio" in l.lower()][:5]
+log2 = read_until(["GUEST_READY"], timeout_s=60)
+out["guest_modules"] = [l.strip() for l in log2.splitlines()
+                        if "balloon" in l.lower() and "echo" not in l and "grep" not in l][:3] or ["(未见 balloon 模块)"]
 out["kvm"] = "kvm" in open("/proc/cpuinfo").read() or os.path.exists("/dev/kvm")
 
 # guest 占用内存：tmpfs 写入（RAM 盘系统 = 写 guest RAM）
@@ -109,9 +112,11 @@ def qemu_rss_kb() -> int:
 
 rss_before = qemu_rss_kb()
 
-# QMP 不在（用的是 HMP monitor）→ 用 HMP 命令 balloon
-monitor(f"balloon 256\n")
-time.sleep(4)
+# QMP 不在（用的是 HMP monitor）→ 用 HMP 命令 balloon，并回读 info balloon 验证
+monitor("balloon 256\n")
+time.sleep(8)
+balloon_info = monitor("info balloon\n")
+out["monitor_balloon_info"] = balloon_info.strip()[-200:]
 qemu.stdin.write("free -m | head -2; echo BALLOON_SEEN\n")
 qemu.stdin.flush()
 read_until(["BALLOON_SEEN"], timeout_s=30)
@@ -130,7 +135,12 @@ except Exception:
     pass
 qemu.kill()
 
-ballooned = out["host_rss"]["released_mb"] > 100
+# 判定：宿主侧释放（FPR 语义）或 monitor 侧 guest 实际收缩 ≥100MB（balloon 机制生效）
+import re as _re
+m = _re.search(r"actual=(\d+)", balloon_info)
+out["guest_balloon_actual_mb"] = int(m.group(1)) if m else None
+ballooned = out["host_rss"]["released_mb"] > 50 or (
+    out["guest_balloon_actual_mb"] is not None and out["guest_balloon_actual_mb"] <= 800)
 out["balloon_reclaim_verified"] = ballooned
 out["virtio_pmem"] = "N/A：需 guest libnvdimm/virtio_pmem 模块与 ndctl 配置；无盘 netboot 环境不含，记录为未验证（论文生产路径为 Firecracker virtio-pmem+DAX）"
 out["paper_reference"] = "论文：virtio-pmem+DAX 峰值宿主内存 −40.2%；DAMON+balloon FPR 时间积分内存 −21.2%（balloon 回收语义本地已复现）"

@@ -67,3 +67,16 @@ SDK(libdsec 式) ──HTTP──▶ apiserver :8000（无每沙箱状态，sand
   - SCHED_CORE prctl 返回 EINVAL → 内核无 CONFIG_SCHED_CORE，E5 只做 无保护 vs SCHED_IDLE（论文亦给出该档 ≈+3.4%）
   - DinD 内工具链齐：mkfs.erofs 1.8.2 / runc 1.2.4 / fuse3 ✅
   - microVM 降级方案：QEMU(-enable-kvm)+alpine linux-virt 内核；virtio-pmem 尽力，balloon 经 monitor balloon 命令做回收演示；排在所有集群实验之后
+- 2026-09-26 21~23 实验全部跑通，过程中修复的平台 bug（均已固化到代码）：
+  - Git Bash 路径转换：`/tmp/...` 参数会被转成 Windows 路径 → MSYS_NO_PATHCONV=1 或包进 sh -c 字符串
+  - docker save | docker exec 管道在 Git Bash 不可靠；docker cp 到 DinD 容器成功但文件不可见 → stdin 重定向 `docker exec -i c sh -c "cat > f" < file` 可靠
+  - placement 在途视图 TTL 必须略大于心跳周期（5s vs 2s），否则与 watcher 双重记账虚占容量
+  - CPU 申请额是软限制（超分语义）：edge 准入与 placement 过滤都不按 CPU 硬卡，只卡内存+容器数
+  - watcher/iam/placement 端口要发布到宿主（实验驱动直连）；watcher 失忆靠 edge 心跳 404 重注册自愈
+  - pack_diff env_id 必须编码源沙箱（可路由回源 edge）；自定义名只作别名 tag
+  - apiserver 出站 httpx 超时 30s 不够 shell 里 apt/编译用 → 600s
+  - debian 沙箱镜像切清华源（apt 否则超时）；alpine 沙箱补 python3
+  - overlay upperdir 不能落在 overlayfs（DinD 容器根）上 → E2 用 tmpfs 承载 upper/work
+  - E2 runc spec 的 namespaces 必须是对象数组
+- 2026-09-26 23:15 E0~E13 共 13 项全部 PASS；E14（QEMU+KVM microVM）后台运行中
+- 2026-09-26 23:20 VERIFICATION.md / README.md / run_all.sh 完成

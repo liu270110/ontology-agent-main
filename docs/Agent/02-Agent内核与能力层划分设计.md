@@ -98,6 +98,253 @@
 | `event.sinks` | Outbox、审计 sink（必选） | 外部通知 | L0/L2 |
 | `execution.backends`（07 执行阶段的落点） | 出口控制、审批语义 | 沙箱实现 | L3 |
 
+### 4.1 Protocol 签名（draft v0.1，M3 冻结）——2026-09-26 设计定稿
+
+> 状态：**draft v0.1，随 M3 内核骨架实现冻结**（§8 里程碑表）；冻结前签名可随实现微调，冻结后按 §7.1 CI 静态契约管理——**八扩展点 Protocol 签名变更 = 破坏性变更，须锚点评审**。落点：`agent_runtime/kernel/extensions.py`。编号对应 §4 表八行（gates 一行含 pre/post 两个 Protocol，共九个类）。
+>
+> 全部签名的公共纪律：① 每个方法必带 `ctx: TenantContext`（C3：租户上下文由平台侧从 JWT/任务装载注入，**实现不得自取、不得跨任务缓存**）；② 每个方法必带 `timeout_ms` 关键字参数（默认值=建议上限，**硬上限由内核按 A4 预算与循环阶段钳制**，超时按失败分支处理、走 08 篇 §5 降级矩阵）；③ 每个实现携带 `meta: ExtensionMeta`（名称/版本/**本体语义标注**/来源包 id）——无语义标注不上架（§7.4）。
+
+```python
+# agent_runtime/kernel/extensions.py —— 八扩展点 Protocol 签名（draft v0.1）
+from dataclasses import dataclass
+from typing import Any, Protocol, runtime_checkable
+from uuid import UUID
+
+# ── 内核持有的公共值对象（内核定义、能力只消费；TaskRef/StepResult 等
+#    领域值对象随 A1/A2 内核聚合定义，此处不重复） ─────────────────────
+@dataclass(frozen=True, slots=True)
+class TenantContext:
+    """租户上下文（C3）：平台侧注入，插件不得自取。"""
+    tenant_id: UUID
+    user_id: UUID | None
+    roles: tuple[str, ...]
+    scopes: tuple[str, ...]
+    trace_id: str
+
+@dataclass(frozen=True, slots=True)
+class ExtensionMeta:
+    name: str                              # 命名空间.名称，如 coldchain.iot_feed
+    version: str                           # semver
+    semantic_annotation: dict[str, Any]    # 绑定的本体 IRI（行动类/规则类/概念类）
+    provider_pack_id: str | None = None    # 来源能力包；L3 内置实现为 None
+
+
+# ① context.providers —— 上下文供给器
+@runtime_checkable
+class ContextProvider(Protocol):
+    """上下文供给器（`context.providers`，通道 L2/L3；组装器骨架归内核 A1/B3）。
+
+    职责：在装载（Grounding+确认）与逐步循环的「组装」断点，把外部数据源 /
+    专用召回（IoT 流、业务库、领域检索器）产出为 ContextBlock，交内核组装器
+    做三断点冻结、遮蔽式 schema 裁剪与绝对预算分配；平台内置供给器
+    （GraphRAG/记忆/TBox 摘要）即本接口的 L3 首批实现。
+
+    契约（违反即拒载）：
+    - 产出内容一律视为**不可信外部输入**：ContextBlock.trust_level 不得自称
+      externally_verified，注入标界与降权由内核负责（B3）；
+    - budget_tokens 是**绝对上限**：超预算的块由内核截断或丢弃，供给器自报
+      token 数仅供核对；
+    - 幂等：同 (task, step) 重复调用应返回等价内容（漂移检测会重放）；
+    - 禁止直写任何存储（写回走 C1 协议）、禁止发起工具调用。
+    """
+    meta: ExtensionMeta
+
+    def provide(
+        self,
+        task: "TaskRef",                   # 任务装载引用（任务本体实例 IRI + 计划上下文）
+        step: "StepRef | None",            # 步循环内调用给当前步；装载期为 None
+        ctx: TenantContext,
+        *,
+        budget_tokens: int,                # 绝对预算（组装器骨架分配）
+        timeout_ms: int = 3_000,           # 建议上限 3s；硬上限随组装断点预算钳制
+    ) -> "ContextBlock": ...
+
+
+# ② planning.strategies —— 规划策略
+@runtime_checkable
+class PlanningStrategy(Protocol):
+    """规划策略（`planning.strategies`，通道 L1/L2；规划阶段与三层校验归内核 T2/T3）。"""
+    meta: ExtensionMeta
+
+    def plan(
+        self,
+        task: "TaskRef",
+        ctx: TenantContext,
+        *,
+        mode: str = "template",            # template | composite | free 三档
+        timeout_ms: int = 10_000,
+    ) -> "PlanCandidate": ...              # 计划图候选：仍是本体实例候选，过三层校验
+
+
+# ③ gates.pre / gates.post —— 增量门禁（基线只增不替）
+@runtime_checkable
+class PreGate(Protocol):
+    """前置门禁（`gates.pre`，通道 L2、上架默认禁用待复核；基线校验 B1 归内核）。
+
+    职责：在「门禁」断点对待执行动作做增量前置校验（行业规则包、SHACL
+    shape 包），在任务级投影上毫秒级完成。
+
+    契约（违反即拒载）：
+    - **只增不替**：本 gate 只能新增违例，不得覆盖/放行基线校验结果——合成
+      顺序固定「基线先、包后」，包 gate 无权改写基线 GateReport（铁律 1）；
+    - 输入 decision 由内核从 ABox 投影构造，gate 不得反查外部状态做判定；
+    - GateReport 必须结构化（focus node + 规则 IRI + severity + message），
+      供「错误即反馈」回流与审计；
+    - 确定性：同输入必同输出（禁随机、禁 LLM 调用）——高频逻辑走规则
+      （推理分级宪法）。
+    """
+    meta: ExtensionMeta
+
+    def check(
+        self,
+        decision: "ActionDecision",        # 行动类 IRI + 槽位参数 + executionMode
+        ctx: TenantContext,
+        *,
+        timeout_ms: int = 100,             # 投影上毫秒级：硬上限 1_000
+    ) -> "GateReport": ...
+
+
+@runtime_checkable
+class PostGate(Protocol):
+    """后验校验器（`gates.post`，通道 L2、上架默认禁用待复核）。
+
+    契约同 PreGate（只增不替、结构化报告、确定性），对象从「待执行动作」
+    换为「已执行步产物」（含工具原始输出指针）：ValidationReport 的错误供
+    重生成与降级安全回答分支消费；**不得修改 StepState**（状态主权 T2）。
+    """
+    meta: ExtensionMeta
+
+    def validate(
+        self,
+        result: "StepResult",
+        ctx: TenantContext,
+        *,
+        timeout_ms: int = 1_000,
+    ) -> "ValidationReport": ...
+
+
+# ④ tools.bindings —— 工具绑定
+@runtime_checkable
+class ToolBinding(Protocol):
+    """工具绑定（`tools.bindings`，通道 L0/L2；行动类注册表、scope 校验与
+    审批路由 B1/B5 归内核）。
+
+    职责：把本体**行动类**绑定到具体实现（MCP 工具/本地函数/规则执行器/
+    沙箱代码），在「执行」断点被内核调用；行动类枚举与语义标注归本体。
+
+    契约（违反即拒载）：
+    - 实现必须声明 required_scopes（授权唯一依据）；MCP annotations 仅
+      UI 提示、不参与授权（红线）；
+    - 高风险（executionMode 分级）动作：内核先行审批路由（B5），未携有效
+      ApprovalTicket 的调用一律拒绝——实现不得自查自放；
+    - 参数遵循「值不经采样」：数字/ID/枚举值由调用方槽位填充，实现不得
+      改造为自由文本（幻觉防线 §5）；
+    - ToolResult 一律视为不可信外部输入（B3 标界）；失败必须结构化错误
+      返回（供错误回喂 LLM 自行决策），不得抛裸异常逃逸循环；
+    - 沙箱类实现（executionMode=code）另见 ExecutionBackend：出口控制 B4
+      硬编码、不随后端走。
+    """
+    meta: ExtensionMeta
+
+    def invoke(
+        self,
+        call: "ToolCall",                  # 行动类 IRI + 槽位参数 + 参数哈希
+        ctx: TenantContext,
+        *,
+        approval: "ApprovalTicket | None" = None,   # B5 放行回执（需审批动作必填）
+        timeout_ms: int = 30_000,          # 单工具调用建议上限 30s
+    ) -> "ToolResult": ...
+
+
+# ⑤ reasoning.engines —— 确定性推理引擎（ADR-6 替换位）
+@runtime_checkable
+class ReasoningEngine(Protocol):
+    """推理引擎（`reasoning.engines`，通道 L3；路由器与分级宪法不可换——调用方禁自选引擎）。"""
+    meta: ExtensionMeta
+
+    def run(
+        self,
+        request: "ReasoningRequest",       # consistency | classification | entailment | 规则物化
+        ctx: TenantContext,
+        *,
+        timeout_ms: int = 60_000,
+    ) -> "ReasoningResult": ...
+
+
+# ⑥ memory.policies —— 记忆策略（L2→L3 升级隐私门禁不外包）
+@runtime_checkable
+class MemoryPolicy(Protocol):
+    """记忆策略（`memory.policies`，通道 L2/L3；四层结构与遗忘底线归平台，docs/memory 篇）。"""
+    meta: ExtensionMeta
+
+    def judge(
+        self,
+        candidates: "list[MemoryCandidate]",
+        ctx: TenantContext,
+        *,
+        timeout_ms: int = 5_000,
+    ) -> "list[ConsolidationDecision]": ...   # ADD/UPDATE/DELETE/升级（升级仅产工单，不直写 L3）
+
+    def weight(
+        self,
+        item: "RecallItem",
+        ctx: TenantContext,
+    ) -> float: ...                           # 召回加权（w_layer 之上的策略项）
+
+
+# ⑦ event.sinks —— 事件汇（Outbox 与审计 sink 是内核必选，不可卸载）
+@runtime_checkable
+class EventSink(Protocol):
+    """事件汇（`event.sinks`，通道 L0/L2；只做外部通知，不替代 Outbox/审计 sink）。"""
+    meta: ExtensionMeta
+
+    def handle(
+        self,
+        events: "list[DomainEvent]",
+        ctx: TenantContext,
+        *,
+        timeout_ms: int = 5_000,
+    ) -> "SinkAck": ...                       # 至少一次语义，按 event_id 幂等
+
+
+# ⑧ execution.backends —— 执行后端（07 执行阶段落点）
+@runtime_checkable
+class ExecutionBackend(Protocol):
+    """执行后端（`execution.backends`，通道 L3；出口控制 B4 与审批语义 B5 不随后端走；v1 仅 Docker）。"""
+    meta: ExtensionMeta
+
+    def acquire(
+        self,
+        spec: "SandboxSpec",              # 镜像/配额/出口白名单（B4 硬编码项不可覆盖）
+        ctx: TenantContext,
+        *,
+        timeout_ms: int = 60_000,
+    ) -> "SandboxLease": ...
+
+    def run(
+        self,
+        lease: "SandboxLease",
+        action: "CodeAction",             # executionMode=code 的沙箱代码行动类
+        ctx: TenantContext,
+        *,
+        timeout_ms: int = 120_000,
+    ) -> "ExecutionResult": ...
+
+    def release(
+        self,
+        lease: "SandboxLease",
+        ctx: TenantContext,
+        *,
+        timeout_ms: int = 5_000,
+    ) -> None: ...                        # 取消清单第 3 步：强制释放不等优雅回收（§2.4）
+```
+
+补充三点：
+
+1. **注册面**：L3 通道的注册函数族（`register_tool / register_gate / register_context_provider / on(event)`，对标 pi extensions）即上述 Protocol 的注册面，由 A3 扩展点分发器提供，随 M3 实现与签名一并冻结；
+2. **超时与预算的关系**：`timeout_ms` 是单调用上限，仍受 A4 四维预算（token/步数/时长/成本）总量约束——任一维度耗尽即终止，不认模型自述；
+3. **异步形态**：M3 全部为同步调用签名；`event.sinks` 与长时 `execution.backends.run` 在 M4+ 如需异步化，以返回 `Awaitable[...]` 的子协议扩展（向后兼容，不算破坏性变更）。
+
 ## 5. 灰区机制的裁决理由（三例争议项）
 
 1. **规划为什么不全下放**：策略（怎么规划）下放，但「Plan 是本体实例、过三层校验、可回滚版本化」这个**形态**是内核的——否则漂移检测（从 ABox 重读计划）与恢复（对账已执行步）失去载体（T2/T3）。
@@ -146,7 +393,7 @@
 
 ## 10. 待办与开放问题
 
-- [ ] 八扩展点 Protocol 的完整签名定稿（随 M3 实现，冻结前标 draft）；
+- [x] ~~八扩展点 Protocol 的完整签名定稿（随 M3 实现，冻结前标 draft）~~（2026-09-26 设计定稿：draft v0.1 签名已入 §4.1——九 Protocol 类覆盖八行扩展点，含 TenantContext 注入、timeout_ms 上限与三处详细 docstring；M3 随内核实现冻结，冻结后变更走 §7.1 破坏性变更评审）；
 - [ ] B4 白名单代理的具体实现选型（宿主 sidecar vs 网关代理路由）；
 - [ ] 子代理 AgentSlot 协议与本文 A3 分发器的合并设计（避免两套插槽概念）；
 - [ ] L2 能力包清单 schema（server.json 扩展字段）与 Skills 篇 §四通道细则的联合定稿；

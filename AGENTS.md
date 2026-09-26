@@ -26,7 +26,7 @@
 | 前端视觉/组件/工程 | [docs/架构设计/03](docs/架构设计/03-前端架构与UI设计规范.md)（设计系统）→ 16/22/23/24（规格/流程/组件库）+ frontend/src/design-system |
 | 前端信息架构/页面/路由/角色 | [docs/frontend/02](docs/frontend/02-信息架构与页面设计.md)（栈无关权威） |
 | 需求与产品 | [docs/product/](docs/product/README.md)（BRD/PRD/路线图） |
-| 模块详设 | docs/Agent（含 02 内核/能力层划分权威）、ontology（含 02 重型本体优化）、OntRAG、memory、MCP（含业务回写）、Skills（含四通道能力层） |
+| 模块详设 | docs/Agent（含 02 内核/能力层划分权威）、ontology（含 02 重型本体优化）、OntRAG、memory、MCP（含业务回写）、Skills（含四通道能力层）、Sandbox（沙箱与执行环境，模块 13）；RSI = [architecture/09](docs/architecture/09-平台自进化RSI设计.md)（模块 14，含 §12 二轮增补） |
 | API 与协议（端点登记册=docs/api/01） | [docs/api/](docs/api/README.md)（REST/SSE/MCP/A2A） |
 | 数据库 DDL / 编码规范 / 测试 / 运维 | docs/database、standards、testing、ops |
 | 上游研究依据 | docs/研究整理/00~07（结论只引用不修改） |

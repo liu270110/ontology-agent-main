@@ -55,3 +55,19 @@ pip-wheel-metadata/
 wheels/
 # ----- ↑ 以上为 ZCode 默认排除规则（自定义规则请写在本行下方，不会被同步/恢复改动）-----
 # 自定义规则写在下方（本行提示可删除）
+ods-project/
+
+# 凭据与密钥（部署文档红线：secrets 不进 AI 上下文，架构 07 §6.2 / 架构设计 14 §5）
+.env
+.env.local
+.env.test
+deploy/.env
+*.pem
+*.key
+credentials*
+
+# 训练产物与模型权重（防上下文膨胀）
+tools/onto-train/runs/
+*.safetensors
+*.ckpt
+wandb/

@@ -29,20 +29,12 @@ pip install torch --index-url https://download.pytorch.org/whl/cu128
 
 ## 训练自己领域的判定模型
 
-攒 50~200 条真实标注即可微调出专属模型（8GB 显存用 fp16 + batch 4~8 没问题）：
+> ⚠ 2026-09-26 更新：训练工程已独立落地到 [`tools/onto-train/`](../onto-train/README.md)
+> （03 决议：**不用 clone 官方仓库**，gliner 0.2.29 pip 包自带 Trainer；LoRA r=16 冒烟
+> 峰值 1.60 GiB）。本目录保留零样本演示与 Jev 背景，训练一律去 onto-train。
 
-1. 按 `train_sample.json` 的格式准备数据（tokenized_text + ner 跨度标注）
-2. 克隆官方训练代码：
-
-   ```bash
-   git clone https://github.com/urchade/GLiNER.git GLiNER
-   pip install accelerate  # 训练额外依赖
-   ```
-
-3. 以 `GLiNER/finetune.py` 为入口，`--base_model_name urchade/gliner_multi-v2.1`
-   加上你的数据路径启动训练
-
-微调后用 `GLiNER.from_pretrained("你的输出目录")` 加载，接入 Agent 流水线。
+数据格式沿用 `train_sample.json`（tokenized_text + ner，token 跨度标注；
+必须经 onto-train 的 char→token 映射器生成，禁止手工重分词）。
 
 ## 文件
 

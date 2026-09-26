@@ -17,8 +17,8 @@ import json
 import os
 import time
 
-# 国内网络：走 HF 镜像；禁用 xet 传输（镜像下更稳）
-os.environ["HF_ENDPOINT"] = "https://hf-mirror.com"
+# 国内网络：走 HF 镜像（尊重用户已配置的 HF_ENDPOINT）；禁用 xet 传输（镜像下更稳）
+os.environ.setdefault("HF_ENDPOINT", "https://hf-mirror.com")
 os.environ.setdefault("HF_HUB_DISABLE_XET", "1")
 
 import torch
@@ -104,7 +104,8 @@ def main():
     demo_route(model)
 
     print("\n提示: 要微调成你自己专属的判定模型，把训练数据放到本目录下的")
-    print("      train.json，参考 https://github.com/urchade/GLiNER 的 finetune 脚本。")
+    print("      train.json（格式可参考本目录的 train_sample.json），")
+    print("      参考 https://github.com/urchade/GLiNER 的 finetune 脚本。")
 
 
 if __name__ == "__main__":

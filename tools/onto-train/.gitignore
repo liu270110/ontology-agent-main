@@ -1,0 +1,6 @@
+# 训练产物与重物不进 git（Gitee HTTPS >1MB 推送必失败，03 决议 §4）
+.venv/
+data/
+runs/
+__pycache__/
+*.pyc

@@ -28,18 +28,17 @@ def load_domain_dict(dict_path: Path | None = None) -> int:
     if not path.exists():
         raise FileNotFoundError(f"领域词典缺失：{path}（分词一致性红线，禁止无词典分词）")
     added = 0
-    if path.exists():
-        for line in path.read_text(encoding="utf-8").splitlines():
-            line = line.strip()
-            if not line or line.startswith("#"):
-                continue
-            parts = line.split()
-            word = parts[0]
-            freq = int(parts[1]) if len(parts) > 1 and parts[1].isdigit() else None
-            tag = parts[2] if len(parts) > 2 else None
-            if word not in jieba.dt.FREQ:  # 只统计新增，保证幂等
-                jieba.add_word(word, freq=freq, tag=tag)
-                added += 1
+    for line in path.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        parts = line.split()
+        word = parts[0]
+        freq = int(parts[1]) if len(parts) > 1 and parts[1].isdigit() else None
+        tag = parts[2] if len(parts) > 2 else None
+        if word not in jieba.dt.FREQ:  # 只统计新增，保证幂等
+            jieba.add_word(word, freq=freq, tag=tag)
+            added += 1
     _loaded = True
     return added
 

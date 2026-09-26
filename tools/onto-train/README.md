@@ -20,9 +20,11 @@ uv run python src/onto_train/generate_negatives.py --symbolic-check   # 公理�
 | `configs/labels.json` | 标签注册表：19 实体 + 24 确认关系 + 7 公理算子（领域 IRI 永不入表） |
 | `dictionaries/domain_terms.dic` | jieba 固化领域词典（改动=重新生成全部数据+重训） |
 | `src/onto_train/tokenizer_utils.py` | 分词一致性唯一入口：jieba.tokenize + char→token 映射（词典缺失即抛错） |
-| `src/onto_train/generate_positives.py` | 模板正例（GB/T 附录 D 风格，15 模板） |
-| `src/onto_train/generate_negatives.py` | 公理负例（7 类扰动算子，可选 pySHACL 验证） |
-| `src/onto_train/smoke_train.py` | 10-step 冒烟（gliner pip 包 Trainer + bf16） |
+| `src/onto_train/generate_positives.py` | 模板正例（GB/T 附录 D 风格，19 模板，19/19 标签覆盖） |
+| `src/onto_train/generate_negatives.py` | 公理负例（7 类扰动算子，`--symbolic-check` 走 pySHACL） |
+| `src/onto_train/smoke_train.py` | 10-step 全参冒烟（对照基线） |
+| `src/onto_train/smoke_train_lora.py` | 10-step LoRA 冒烟（默认路线） |
+| `src/onto_train/llm_rewrite.py` | LLM 改写管线（硬校验拒收；待 ONTO_LLM_* 端点配置） |
 | `data/` | 生成的数据集（positives.jsonl / negatives.jsonl） |
 | `runs/` | 训练输出（不进 git） |
 
@@ -39,6 +41,8 @@ uv run python src/onto_train/generate_negatives.py --symbolic-check   # 公理�
 | 配置 | 结果 |
 | --- | --- |
 | transformers 5.16.1（全局） | 训练路径 PASS；bf16 全参 batch2 峰值 5.41 GiB，0.53 s/步 |
-| transformers 4.4x（本工程 venv） | 待 uv sync 完成后回填 |
+| transformers 4.57.6（本工程 venv） | PASS；bf16 全参 batch2 峰值 5.41 GiB，0.45 s/步 |
+| **LoRA r=16（venv，默认路线）** | **PASS；峰值 1.60 GiB，可训练参数 0.9%，grad_norm 40~150** |
 
-结论：全参 batch2 可行但偏紧（+桌面开销约 6.2GiB），**下一步按决议转 LoRA r=16（嵌入表冻结）**。
+结论：**LoRA 定为默认路线**（全参 5.41 GiB 偏紧作对照保留）；数据校验 514 条零错误
+（2026-09-26 复核：跨度越界 0 / 非法标签 0）。

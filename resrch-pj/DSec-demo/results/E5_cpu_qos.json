@@ -1,0 +1,29 @@
+{
+  "experiment": "E5_cpu_qos",
+  "cpus": "0-7",
+  "be_workers": 8,
+  "baseline": {
+    "mean_ms": 101.6,
+    "p50_ms": 97.7,
+    "p99_ms": 150.0
+  },
+  "BE-normal": {
+    "mean_ms": 120.0,
+    "p50_ms": 131.4,
+    "p99_ms": 140.3,
+    "inflation_pct": 18.1
+  },
+  "BE-sched_idle": {
+    "mean_ms": 116.6,
+    "p50_ms": 130.2,
+    "p99_ms": 151.4,
+    "inflation_pct": 14.7
+  },
+  "core_scheduling": "N/A：WSL2 内核 5.15 无 CONFIG_SCHED_CORE（prctl EINVAL），论文该档无法本地复现",
+  "paper_reference": {
+    "baseline_inflation_unprotected_pct": 45.2,
+    "note": "论文：无保护 +45.2%；仅 SCHED_IDLE 改善 ≤3.4%；+core scheduling 压到 +17.3%"
+  },
+  "idle_improvement_pct_pts": 3.4,
+  "passed": true
+}

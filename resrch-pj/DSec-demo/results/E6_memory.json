@@ -1,0 +1,12 @@
+{
+  "experiment": "E6_pause_reclaim",
+  "mechanism": "docker pause + cgroup v1 memory.force_empty",
+  "allocated_inside_mb": 300.7,
+  "mem_before_bytes": 315768832,
+  "mem_after_bytes": 1028096,
+  "reclaimed_bytes": 314740736,
+  "reclaimed_mb": 314.7,
+  "state_survives_pause": true,
+  "transparent_resume": true,
+  "passed": true
+}

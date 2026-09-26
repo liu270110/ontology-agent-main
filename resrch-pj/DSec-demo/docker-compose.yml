@@ -1,0 +1,106 @@
+name: dsec-demo
+
+# mini-DSec 集群：4 个无状态控制面服务 + 3 台 DinD edge 节点 + 存储替身 objserver
+# 论文规模(~160 节点/3 万核)按 ~1/1000 缩放到 22 逻辑核/16GB VM
+
+x-control-base: &control-base
+  build: ./controlplane
+  image: dsec-control:latest
+  restart: unless-stopped
+  environment: &control-env
+    DS_WATCHER_URL: http://watcher:8002
+    DS_IAM_URL: http://iam:8003
+    DS_PLACEMENT_URL: http://placement:8001
+
+services:
+  apiserver:
+    container_name: apiserver
+    <<: *control-base
+    command: python apiserver.py
+    ports: ["8000:8000"]
+    depends_on: [iam, watcher, placement]
+
+  placement:
+    container_name: placement
+    <<: *control-base
+    command: python placement.py
+    ports: ["8001:8001"]
+    environment:
+      <<: *control-env
+      DS_PLACEMENT_K: "3"
+
+  watcher:
+    container_name: watcher
+    <<: *control-base
+    command: python watcher.py
+    ports: ["8002:8002"]
+
+  iam:
+    container_name: iam
+    <<: *control-base
+    command: python iam.py
+    ports: ["8003:8003"]
+
+  objserver:
+    container_name: objserver  # 模拟 3FS：HTTP 对象存储 + 字节数记账（E3 按需加载用）
+    image: python:3.12-slim
+    volumes: ["./experiments/E03_ondemand/objserver.py:/srv/objserver.py:ro", "objdata:/data"]
+    command: python /srv/objserver.py
+    ports: ["9000:9000"]
+
+  edge-1:
+    container_name: edge-1  # 主密度实验节点
+    build: ./edge
+    image: dsec-edge:latest
+    privileged: true
+    restart: unless-stopped
+    environment:
+      DS_EDGE_ID: edge-1
+      DS_EDGE_MAX_CONTAINERS: "500"
+      DS_EDGE_CPU_CORES: "6"
+      DS_EDGE_MEM_MB: "7168"
+      DS_EDGE_FNCALL_POOL: "6"
+      DS_WATCHER_URL: http://watcher:8002
+      DS_APISERVER_URL: http://apiserver:8000
+    volumes: ["edge1:/var/lib/docker"]
+    ports: ["8101:8080"]
+
+  edge-2:
+    container_name: edge-2
+    build: ./edge
+    image: dsec-edge:latest
+    privileged: true
+    restart: unless-stopped
+    environment:
+      DS_EDGE_ID: edge-2
+      DS_EDGE_MAX_CONTAINERS: "200"
+      DS_EDGE_CPU_CORES: "5"
+      DS_EDGE_MEM_MB: "4096"
+      DS_EDGE_FNCALL_POOL: "0"
+      DS_WATCHER_URL: http://watcher:8002
+      DS_APISERVER_URL: http://apiserver:8000
+    volumes: ["edge2:/var/lib/docker"]
+    ports: ["8102:8080"]
+
+  edge-3:
+    container_name: edge-3  # 容量故意最小：E7 验证 edge 准入拒绝→改选
+    build: ./edge
+    image: dsec-edge:latest
+    privileged: true
+    restart: unless-stopped
+    environment:
+      DS_EDGE_ID: edge-3
+      DS_EDGE_MAX_CONTAINERS: "40"
+      DS_EDGE_CPU_CORES: "3"
+      DS_EDGE_MEM_MB: "2048"
+      DS_EDGE_FNCALL_POOL: "0"
+      DS_WATCHER_URL: http://watcher:8002
+      DS_APISERVER_URL: http://apiserver:8000
+    volumes: ["edge3:/var/lib/docker"]
+    ports: ["8103:8080"]
+
+volumes:
+  edge1: {}
+  edge2: {}
+  edge3: {}
+  objdata: {}

@@ -1,0 +1,35 @@
+{
+  "experiment": "E4_density",
+  "target": 350,
+  "error_samples": [],
+  "density_per_node": {
+    "edge-2": 132,
+    "edge-3": 55,
+    "edge-1": 163
+  },
+  "max_density_node": 163,
+  "host_stats": {
+    "edge-1": {
+      "mem": "1.422GiB / 15.36GiB",
+      "cpu": "0.88%"
+    },
+    "edge-2": {
+      "mem": "1.116GiB / 15.36GiB",
+      "cpu": "1.13%"
+    },
+    "edge-3": {
+      "mem": "518.1MiB / 15.36GiB",
+      "cpu": "0.35%"
+    }
+  },
+  "stop_all_s": 96.9,
+  "stopped": 350,
+  "summary": {
+    "created": 350,
+    "errors": 0,
+    "create_rate_per_s": 5.3,
+    "max_containers_on_one_node": 163,
+    "note": "论文单节点 3,200 容器 → 本地单节点数百级（VM 资源 1/1000 缩放），睡眠沙箱 CPU≈0 验证超分前提"
+  },
+  "passed": true
+}

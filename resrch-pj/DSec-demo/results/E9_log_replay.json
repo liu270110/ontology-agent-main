@@ -1,0 +1,12 @@
+{
+  "experiment": "E9_log_replay",
+  "preempt_counter": 2,
+  "resume_executed": 2,
+  "resume_reused": 2,
+  "final_counter": 4,
+  "no_duplicate_side_effects": true,
+  "full_log_len": 4,
+  "naive_rerun_counter": 6,
+  "naive_duplicate_side_effects": true,
+  "passed": true
+}

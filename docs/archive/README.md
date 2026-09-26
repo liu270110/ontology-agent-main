@@ -1,16 +1,11 @@
 # docs/archive - 历史方案归档
 
-> 本目录存放**已裁决废弃的并行方案**，仅作历史追溯，**禁止作为开发依据**。现行唯一权威：[docs/architecture/01-总体架构与分层](../architecture/01-总体架构与分层.md)。
+> 本目录存放**已裁决废弃的产物**，仅作历史追溯（git 历史完整保留），**禁止作为开发依据**。
 
-## 归档清单
+## 裁决史（2026-09-26，同日三轮）
 
-| 目录 | 历史定位 | 归档裁决 | 增量去向 |
-| ---- | ---- | ---- | ---- |
-| [架构设计-React路线-2026-09/](./架构设计-React路线-2026-09/README.md) | 并行产出的另一套架构定稿（README+00~23 共 25 篇，React + Tailwind + Apple 风格，六层），commit 265ff2a / 565daf7 | 2026-09-26 全量文档验收评审裁决：留 Vue + Onto Blue 路线（docs/architecture/），本套整体归档 | B 类增量（知识治理四型分诊/双队列记忆调度/IAM 审批中心/vLLM 推理服务/RSI 自进化/沙箱五场景/提示词治理等）的合入清单登记在 [../代办任务/](../代办任务/README.md)，未合入前不得引用本套实现细节 |
-| [设计稿-Apple风格-2026-09/](./设计稿-Apple风格-2026-09/README.md) | Apple 风格 UI 设计看板（ui-design-board.html） | 同上（与 Onto Blue 主题冲突） | 线框交互思路可参考，视觉规范勿用 |
+1. 第一轮：React/Apple 旧稿（25 篇+设计稿+CSS）归档，Vue+Onto Blue 为权威；
+2. 第二轮（并行会话，commit 8d5e61b）：反转为 React 权威，Vue 路线产物归档于 `Vue路线-OntoBlue-2026-09/`；
+3. **第三轮（用户终裁，最终有效）：混合路线**——后端工程权威=docs/architecture/（七层+全生命周期文档，已从本归档恢复）；前端视觉权威=docs/架构设计/（React+Apple，已恢复为活文档）+ frontend/src/design-system；信息架构权威=docs/frontend/02（栈无关，已恢复）。两套归档产物各自回到活文档位置，本目录现为空。
 
-> 架构设计-React路线-2026-09/ 内含 `frontend-design-system-src/`（原 frontend/src/design-system 的 Apple 令牌 CSS 资产），一并归档；Vue 路线前端工程从零搭（[frontend 工程架构](../frontend/03-前端工程架构.md)）。
-
-## 为什么归档（裁决记录）
-
-2026-09-26 五专家全量文档验收（[评审记录](../architecture/评审-2026-09-26-全量文档验收与闭环确认.md)）确认：两套架构并存且 AI 入口（AGENTS.md）指向旧套，会导致所有 AI 代理按废弃路线工作（P0）。用户裁决：保留已过评审修订、配套全生命周期文档的 Vue + Onto Blue 路线，旧套归档。
+**并行纪律（AGENTS.md 同款）**：禁止移动、归档、删除他人未裁决的产物；路线冲突提交用户裁决。

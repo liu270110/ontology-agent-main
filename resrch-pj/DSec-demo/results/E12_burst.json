@@ -1,0 +1,22 @@
+{
+  "experiment": "E12_burst",
+  "N": 200,
+  "concurrency": 20,
+  "error_samples": [],
+  "results": {
+    "wall_s": 38.88,
+    "created": 200,
+    "failed": 0,
+    "rate_per_s": 5.1,
+    "latency_p50_ms": 4312.4,
+    "latency_p95_ms": 7171.5,
+    "latency_p99_ms": 8724.3
+  },
+  "edge_spread": {
+    "edge-1": 88,
+    "edge-2": 70,
+    "edge-3": 42
+  },
+  "teardown_s": 53.9,
+  "passed": true
+}

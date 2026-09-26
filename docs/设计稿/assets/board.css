@@ -321,13 +321,13 @@ body{font-family:var(--font);background:var(--board);color:var(--label);
 .traj-item{display:flex;gap:8px;align-items:flex-start;padding:6px 0;font-family:var(--mono);
   font-size:11px;line-height:1.5;border-bottom:1px solid var(--separator)}
 .traj-item:last-child{border-bottom:none}
-.traj-badge{flex:none;font-size:9px;font-weight:700;border-radius:4px;padding:1px 5px;margin-top:1px}
+.traj-badge{flex:none;font-size:10px;font-weight:700;border-radius:4px;padding:1px 5px;margin-top:1px}
 .upzone{border:1.5px dashed var(--separator);border-radius:14px;padding:20px 14px;text-align:center;
   color:var(--label-2);font-size:12px;background:var(--surface-2)}
 .term{background:var(--surface-2);border:1px solid var(--separator);border-radius:12px;
   padding:12px 14px;display:flex;align-items:center;gap:10px}
 .term .ps{color:var(--label-3)}
-.sortic{color:var(--label-3);font-size:9px;margin-left:3px}
+.sortic{color:var(--label-3);font-size:10px;margin-left:3px}
 
 /* ============ 01 工作台 ============ */
 .stat-num{font-size:30px;font-weight:700;letter-spacing:-.8px;font-variant-numeric:tabular-nums}
@@ -433,12 +433,12 @@ body{font-family:var(--font);background:var(--board);color:var(--label);
   border-radius:13px;padding:9px 13px;box-shadow:var(--sh-card);transition:.18s var(--ease)}
 .gnode .gt{display:flex;align-items:center;gap:7px;font-size:12px;font-weight:700}
 .gnode .gd{width:8px;height:8px;border-radius:50%}
-.gnode .ge{font-family:var(--mono);font-size:9.5px;color:var(--label-3);margin-top:3px}
+.gnode .ge{font-family:var(--mono);font-size:11px;color:var(--label-3);margin-top:3px}
 .gnode.sel{border-color:var(--accent);box-shadow:0 0 0 4px var(--accent-soft),var(--sh-card)}
 .gnode.dim{opacity:.55}
-.gnode .gcount{font-size:9px;color:var(--label-2);background:var(--surface-2);
+.gnode .gcount{font-size:10px;color:var(--label-2);background:var(--surface-2);
   border-radius:var(--r-pill);padding:1px 6px;margin-left:2px;font-weight:600}
-.elabel{font-family:var(--mono);font-size:9.5px;fill:var(--label-2)}
+.elabel{font-family:var(--mono);font-size:11px;fill:var(--label-2)}
 .canvas-tools{position:absolute;top:14px;left:14px;display:flex;gap:6px}
 .ct-btn{width:30px;height:30px;border-radius:9px;
   background:linear-gradient(135deg,var(--glass-tint),transparent 42%),var(--glass-clear);
@@ -455,7 +455,7 @@ body{font-family:var(--font);background:var(--board);color:var(--label);
   background:linear-gradient(135deg,var(--glass-tint),transparent 42%),var(--glass-regular);
   -webkit-backdrop-filter:blur(24px) saturate(220%);backdrop-filter:blur(24px) saturate(220%)}
 .inspector h4{font-size:13px;font-weight:700;display:flex;align-items:center;gap:7px;margin-bottom:2px}
-.inspector .iri{font-family:var(--mono);font-size:9.5px;color:var(--label-3);margin-bottom:14px;
+.inspector .iri{font-family:var(--mono);font-size:11px;color:var(--label-3);margin-bottom:14px;
   word-break:break-all;line-height:1.5}
 .ptabs{display:flex;gap:2px;background:rgba(0,0,0,.05);border-radius:9px;padding:2px;margin-bottom:16px}
 .dark .ptabs{background:rgba(255,255,255,.08)}
@@ -463,12 +463,12 @@ body{font-family:var(--font);background:var(--board);color:var(--label);
 /* ============ 04 抽取审核 ============ */
 .hl{background:var(--orange-soft);border-bottom:1.5px solid var(--orange);border-radius:2px;padding:0 1px}
 .hl-b{background:var(--teal-soft);border-bottom-color:var(--teal)}
-.docpane{font-size:12.5px;line-height:2;color:var(--label)}
+.docpane{font-size:13px;line-height:2;color:var(--label)}
 .cand{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border-radius:11px;transition:.15s var(--ease)}
 .cand.on{background:var(--accent-soft)}
 .cand .cc{font-family:var(--mono);font-size:11px;font-weight:700;color:var(--label-2)}
 .cand .ct{font-size:12px;font-weight:600}
-.cand .cs{font-size:10.5px;color:var(--label-2);margin-top:2px}
+.cand .cs{font-size:11px;color:var(--label-2);margin-top:2px}
 .kv{display:flex;font-size:12px;padding:7px 0;border-bottom:1px solid var(--separator)}
 .kv:last-child{border-bottom:none}
 .kv .k{width:88px;flex:none;color:var(--label-2)}
@@ -484,9 +484,9 @@ body{font-family:var(--font);background:var(--board);color:var(--label);
 .tl-item{position:relative;padding:0 0 18px}
 .tl-dot{position:absolute;left:-22px;top:4px;width:12px;height:12px;border-radius:50%;
   border:2.5px solid var(--surface);box-shadow:0 0 0 1.5px var(--separator)}
-.tl-c{background:var(--surface);border-radius:13px;padding:11px 14px;box-shadow:var(--sh-card);font-size:12.5px;line-height:1.55}
+.tl-c{background:var(--surface);border-radius:13px;padding:11px 14px;box-shadow:var(--sh-card);font-size:13px;line-height:1.55}
 .tl-c.invalid .tlt{text-decoration:line-through;color:var(--label-2)}
-.tl-meta{display:flex;gap:8px;align-items:center;margin-top:7px;font-size:10.5px;color:var(--label-2)}
+.tl-meta{display:flex;gap:8px;align-items:center;margin-top:7px;font-size:11px;color:var(--label-2)}
 .memstat{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--separator);font-size:12px}
 .memstat:last-child{border-bottom:none}
 .membar{flex:1;height:6px;border-radius:3px;background:rgba(0,0,0,.06);overflow:hidden}
@@ -500,7 +500,7 @@ body{font-family:var(--font);background:var(--board);color:var(--label);
 .pic{width:42px;height:42px;border-radius:12px;display:flex;align-items:center;justify-content:center}
 .pic svg{width:20px;height:20px}
 .pname{font-size:14px;font-weight:700;display:flex;align-items:center;gap:7px}
-.pdesc{font-size:11.5px;color:var(--label-2);line-height:1.5;flex:1}
+.pdesc{font-size:11px;color:var(--label-2);line-height:1.5;flex:1}
 .pfoot{display:flex;align-items:center;gap:8px;font-size:11px;color:var(--label-2)}
 
 /* ============ 07 审批中心 ============ */
@@ -527,7 +527,7 @@ body{font-family:var(--font);background:var(--board);color:var(--label);
   display:flex;align-items:center;justify-content:center;margin:0 auto 16px}
 .login-logo svg{width:26px;height:26px}
 .login-card h1{font-size:21px;font-weight:700;letter-spacing:-.4px;text-align:center}
-.login-card .lsub{font-size:12.5px;color:var(--label-2);text-align:center;margin:6px 0 24px}
+.login-card .lsub{font-size:13px;color:var(--label-2);text-align:center;margin:6px 0 24px}
 .login-meta{position:absolute;bottom:18px;left:0;right:0;text-align:center;
   font-family:var(--mono);font-size:10px;color:var(--label-3)}
 
@@ -603,3 +603,11 @@ body{font-family:var(--font);background:var(--board);color:var(--label);
 @media (prefers-reduced-motion:reduce){
   .glass-aurora::before,.border-flow::after,.iridescent::after,.blob-morph,.float-y{animation:none!important}
 }
+
+/* =============================================================
+   元素级审计修复 F-001：图标默认尺寸兜底
+   未获上下文尺寸的 svg 一律 16px；sprite 根节点带 [width] 属性
+   且位于 .board 外，天然排除；类/内联样式优先级更高不受影响
+   ============================================================= */
+.board svg:not([width]){width:16px;height:16px;flex:none}
+.board .chipmodel svg{width:11px;height:11px}

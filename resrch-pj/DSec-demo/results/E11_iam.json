@@ -1,0 +1,51 @@
+{
+  "experiment": "E11_iam_nested_projects",
+  "checks": [
+    {
+      "name": "create subjects",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "name": "nested project + grants",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "name": "child quota > parent rejected",
+      "pass": true,
+      "detail": "403 iam/projects: {\"detail\":\"build-agent lacks admin on swe-team\"}"
+    },
+    {
+      "name": "child quota <= parent accepted",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "name": "sub-project grant by parent admin",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "name": "unauthorized subject rejected",
+      "pass": true,
+      "detail": "{\"detail\":\"mallory lacks use on swe-team\"}"
+    },
+    {
+      "name": "usage accounted up the chain",
+      "pass": true,
+      "detail": "{\"root\": {\"cpu\": 0.5, \"mem_mb\": 128, \"sandboxes\": 1}, \"swe-team\": {\"cpu\": 0.5, \"mem_mb\": 128, \"sandboxes\": 1}, \"agent-pool\": {\"cpu\": 0.5, \"mem_mb\": 128, \"sandboxes\": 1}}"
+    },
+    {
+      "name": "quota exhaustion rejected (429)",
+      "pass": true,
+      "detail": "429 /v1/sandboxes: {\"detail\":\"IAM: {\\\"detail\\\":\\\"quota exceeded at project agent-pool: cpu 2.0+0.5/2"
+    },
+    {
+      "name": "release on stop",
+      "pass": true,
+      "detail": "{'cpu': 0.0, 'mem_mb': 0, 'sandboxes': 0}"
+    }
+  ],
+  "passed": true
+}

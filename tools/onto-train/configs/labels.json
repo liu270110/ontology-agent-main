@@ -1,0 +1,104 @@
+{
+  "meta": {
+    "name": "onto-train 标签注册表",
+    "version": "0.1.0",
+    "created": "2026-09-26",
+    "依据": [
+      "docs/ontology/本体核心设计.md §2/§4.1（OB2 顶类与命名空间、行动类专属属性）",
+      "docs/研究整理/03-知识库与本体核心.md §2.2（GB/T 48000.3 15 类实体类型、34 对象属性节选、第 8 章公理类型）"
+    ],
+    "纪律": [
+      "只收稳定闭集层（元模型层），领域扩展 IRI（.../ext/#）永不做训练标签（03 决议 §0.4）",
+      "GLiNER 推理期标签集来自本表 entity 组；schema 变更只换标签参数不重训",
+      "国标 34 对象属性文档节选仅 19 项，其余待解析国标 PDF 后补齐（properties_confirmed=false 时不得进训练）",
+      "每次本体 changeset 发布需 diff 本表并记录 schema_hash"
+    ]
+  },
+  "ob2_top_classes": {
+    "namespace": "https://ontology-agent.dev/ns/ob2#",
+    "role": "entity",
+    "labels": [
+      { "label_en": "OB2 Object", "label_zh": "对象", "iri": "ob2:Object", "stable": true },
+      { "label_en": "OB2 Action", "label_zh": "行为", "iri": "ob2:Action", "stable": true },
+      { "label_en": "OB2 Event", "label_zh": "事件", "iri": "ob2:Event", "stable": true },
+      { "label_en": "OB2 Rule", "label_zh": "规则", "iri": "ob2:Rule", "stable": true }
+    ]
+  },
+  "gbt_entity_types": {
+    "namespace": "https://ontology-agent.dev/ns/gbt48000#",
+    "role": "entity",
+    "labels": [
+      { "label_en": "Standard", "label_zh": "标准实体", "iri": "gbt:Standard", "stable": true },
+      { "label_en": "Standardized Object", "label_zh": "标准化对象", "iri": "gbt:StandardizedObject", "stable": true },
+      { "label_en": "Stakeholder", "label_zh": "相关方（机构/个人）", "iri": "gbt:Stakeholder", "stable": true },
+      { "label_en": "Domain Category", "label_zh": "领域类别（ICS/CCS）", "iri": "gbt:DomainCategory", "stable": true },
+      { "label_en": "Structural Element", "label_zh": "要素（规范性/资料性）", "iri": "gbt:StructuralElement", "stable": true },
+      { "label_en": "Hierarchy Level", "label_zh": "层次（章/条/段/列项）", "iri": "gbt:HierarchyLevel", "stable": true },
+      { "label_en": "Term", "label_zh": "术语", "iri": "gbt:Term", "stable": true },
+      { "label_en": "Information Unit", "label_zh": "信息单元（条款）", "iri": "gbt:InformationUnit", "stable": true },
+      { "label_en": "Representation Form", "label_zh": "表述形式（图/表/公式等）", "iri": "gbt:RepresentationForm", "stable": true },
+      { "label_en": "Technical Object", "label_zh": "对象", "iri": "gbt:Object", "stable": true },
+      { "label_en": "Characteristic", "label_zh": "特性（描述/能力/约束型）", "iri": "gbt:Characteristic", "stable": true },
+      { "label_en": "Constraint Logic", "label_zh": "约束逻辑", "iri": "gbt:ConstraintLogic", "stable": true },
+      { "label_en": "Action", "label_zh": "行动", "iri": "gbt:Action", "stable": true },
+      { "label_en": "External Constraint", "label_zh": "外部约束（法规/专利）", "iri": "gbt:ExternalConstraint", "stable": true },
+      { "label_en": "Development Stage", "label_zh": "制定程序阶段", "iri": "gbt:DevelopmentStage", "stable": true }
+    ]
+  },
+  "gbt_object_properties": {
+    "namespace": "https://ontology-agent.dev/ns/gbt48000#",
+    "role": "relation",
+    "note": "国标 34 个核心对象属性，文档节选 19 项；properties_confirmed=false 的行补齐国标原文前只作候选",
+    "labels": [
+      { "label_en": "adopts", "label_zh": "采用", "iri": "gbt:adopts", "properties_confirmed": true },
+      { "label_en": "replaces", "label_zh": "替代", "iri": "gbt:replaces", "properties_confirmed": true },
+      { "label_en": "cites", "label_zh": "引用", "iri": "gbt:cites", "properties_confirmed": true },
+      { "label_en": "references", "label_zh": "参考", "iri": "gbt:references", "properties_confirmed": true },
+      { "label_en": "hasPart", "label_zh": "包含部分", "iri": "gbt:hasPart", "properties_confirmed": true },
+      { "label_en": "issuedBy", "label_zh": "发布机构", "iri": "gbt:issuedBy", "properties_confirmed": true, "functional": true },
+      { "label_en": "draftedBy", "label_zh": "起草单位", "iri": "gbt:draftedBy", "properties_confirmed": true },
+      { "label_en": "administeredBy", "label_zh": "归口单位", "iri": "gbt:administeredBy", "properties_confirmed": true },
+      { "label_en": "hasStructuralElement", "label_zh": "含要素", "iri": "gbt:hasStructuralElement", "properties_confirmed": true },
+      { "label_en": "hasClause", "label_zh": "含条款", "iri": "gbt:hasClause", "properties_confirmed": true },
+      { "label_en": "hasSubClause", "label_zh": "含子条款", "iri": "gbt:hasSubClause", "properties_confirmed": true },
+      { "label_en": "defines", "label_zh": "定义术语", "iri": "gbt:defines", "properties_confirmed": true },
+      { "label_en": "usesTerm", "label_zh": "使用术语", "iri": "gbt:usesTerm", "properties_confirmed": true },
+      { "label_en": "involvesObject", "label_zh": "涉及对象", "iri": "gbt:involvesObject", "properties_confirmed": true },
+      { "label_en": "specifiesCharacteristic", "label_zh": "规定特性", "iri": "gbt:specifiesCharacteristic", "properties_confirmed": true },
+      { "label_en": "hasCharacteristic", "label_zh": "具有特性", "iri": "gbt:hasCharacteristic", "properties_confirmed": true },
+      { "label_en": "imposesConstraint", "label_zh": "施加约束", "iri": "gbt:imposesConstraint", "properties_confirmed": true },
+      { "label_en": "constrainsObject", "label_zh": "约束对象", "iri": "gbt:constrainsObject", "properties_confirmed": true },
+      { "label_en": "describesAction", "label_zh": "描述行动", "iri": "gbt:describesAction", "properties_confirmed": true },
+      { "label_en": "hasDevelopmentStage", "label_zh": "所处制定阶段", "iri": "gbt:hasDevelopmentStage", "properties_confirmed": true }
+    ]
+  },
+  "ob2_action_properties": {
+    "namespace": "https://ontology-agent.dev/ns/ob2#",
+    "role": "relation",
+    "note": "行动类专属属性（本体核心设计 §2），lint 强制反向引用",
+    "labels": [
+      { "label_en": "triggeredByEvent", "label_zh": "由事件触发", "iri": "ob2:triggeredByEvent", "stable": true },
+      { "label_en": "guardedByRule", "label_zh": "被规则守卫", "iri": "ob2:guardedByRule", "stable": true },
+      { "label_en": "hasPrecondition", "label_zh": "前置条件", "iri": "ob2:hasPrecondition", "stable": true },
+      { "label_en": "hasEffect", "label_zh": "效果", "iri": "ob2:hasEffect", "stable": true }
+    ]
+  },
+  "axiom_kinds_for_negatives": {
+    "note": "公理负例生成器的扰动算子来源（国标第 8 章 + axioms.kind 枚举，03 决议 §2 公理负例四步管线）",
+    "kinds": [
+      { "kind": "disjointWith", "zh": "互斥类型", "operator": "给同一 span 断言两个互斥类型" },
+      { "kind": "uniqueness", "zh": "唯一值约束", "operator": "同一唯一标识出现在两个不同实体上" },
+      { "kind": "date_validity", "zh": "日期有效性", "operator": "实施日期早于发布日期" },
+      { "kind": "enumeration", "zh": "枚举约束", "operator": "状态取值落在枚举之外" },
+      { "kind": "functionalProperty", "zh": "函数性", "operator": "函数性属性挂两个不同客体（如双发布机构）" },
+      { "kind": "version_replacement", "zh": "版本替代", "operator": "废止未指向替代标准" },
+      { "kind": "hierarchy", "zh": "层次约束", "operator": "无标题条包含子条" }
+    ]
+  },
+  "schema_hash_input": "ob2_top_classes + gbt_entity_types + gbt_object_properties(confirmed) + ob2_action_properties 的 iri 排序拼接",
+  "stats": {
+    "entity_labels": 19,
+    "relation_labels_confirmed": 24,
+    "relation_labels_pending_full_gbt": true
+  }
+}

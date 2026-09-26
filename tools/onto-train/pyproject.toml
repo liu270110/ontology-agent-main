@@ -1,0 +1,35 @@
+[project]
+name = "onto-train"
+version = "0.1.0"
+description = "本体判定模型训练工程（决议依据：resrch-pj/JEV/03-多专家研讨纪要与技术栈决议.md）"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    # 训练路径社区验证在 transformers 4.4x；5.x 待冒烟通过后再放宽（决议 §4）
+    "gliner==0.2.29",
+    "transformers>=4.45,<5",
+    "accelerate>=1.0",
+    "torch==2.8.0",
+    "jieba==0.42.1",
+    "protobuf>=4.25",  # DeBERTa-v3 分词器加载必需（transformers 4.x 隐式依赖）
+    # 符号内核（公理负例验证 + 后续裁决层）
+    "rdflib>=7.0",
+    "owlrl>=7.0",
+    "pyshacl>=0.26.0",
+]
+
+[tool.uv]
+# 全局环境已冻结（03 决议 §0.1），本工程一切依赖走隔离 venv + 锁文件
+
+[[tool.uv.index]]
+name = "tuna"
+url = "https://pypi.tuna.tsinghua.edu.cn/simple"
+default = true
+
+[[tool.uv.index]]
+name = "pytorch-cu128"
+url = "https://download.pytorch.org/whl/cu128"
+explicit = true
+
+# PyPI 上的 Windows torch 默认是 CPU 版，必须显式指到 cu128 索引（03 决议 §4 环境管理行）
+[tool.uv.sources]
+torch = { index = "pytorch-cu128" }

@@ -1,6 +1,6 @@
 # UI 设计稿元素级审计报告
 
-> v1.0 | 2026-09-26 | 对象：[ui-design-board.html](./ui-design-board.html)（17 画框）+ [样式库](../../frontend/src/design-system/)（6 文件）
+> v1.0 | 2026-09-26 | 对象：[ui-design-board.html](./ui-pages.html)（17 画框）+ [样式库](../../frontend/src/design-system/)（6 文件）
 > 方法：**视觉检测（Playwright 截图逐画框核对，亮/暗）+ 前端源码扫描（令牌合规/引用完整/命名冲突/符号规范）双手段组合**，对应 23 篇 DoD"视觉+类型"两维的静态审计。
 
 ## 一、源码扫描结果（修复后终态）

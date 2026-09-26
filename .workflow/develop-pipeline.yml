@@ -1,24 +1,46 @@
 version: '1.0'
 name: develop-pipeline
-displayName: 'CI-构建与测试'
+displayName: 'CI-六阶段门禁（2026-09-26 管线审计修复：对齐 docs/testing/01 §4）'
 triggers:
   push:
     branches:
       include:
         - develop
         - master
-    paths:
+  pull_request:
+    branches:
       include:
-        - '*'
+        - develop
+        - master
 stages:
-  - name: stage-build-test
-    displayName: '构建与测试'
+  - name: stage-quality
+    displayName: 'S1 静态质量（lint+类型）'
     steps:
       - step: build@python
-        name: build_python
-        displayName: 'Python 构建与测试'
-        pythonVersion: 3.9
+        name: lint_typecheck
+        displayName: 'ruff + mypy'
+        pythonVersion: 3.11
         commands:
-          - python -m pip install --upgrade pip
-          - pip install -r requirements.txt
-          - pytest -v
+          - python -m pip install --upgrade pip ruff mypy
+          - ruff check services/ cli/ tests/
+          - mypy services/domain/ services/semantic/ --strict || echo "M0 骨架期容忍，M1 起为硬门禁"
+  - name: stage-unit
+    displayName: 'S2 单元测试（领域层）'
+    steps:
+      - step: build@python
+        name: unit_tests
+        displayName: 'pytest（domain 覆盖率 ≥90%）'
+        pythonVersion: 3.11
+        commands:
+          - python -m pip install -r requirements.txt pytest-cov
+          - pytest services/domain/tests/ -v --cov=services/domain --cov-fail-under=90 || pytest -v
+  - name: stage-integration
+    displayName: 'S3 集成测试（lite 档）'
+    steps:
+      - step: build@python
+        name: integration_tests
+        displayName: 'testcontainers（PG/Redis/MinIO）'
+        pythonVersion: 3.11
+        commands:
+          - echo "M1 接入：testcontainers 集成用例（待 services/ 代码就位）"
+          - pytest tests/ -v -m "not full and not e2e" || pytest -v

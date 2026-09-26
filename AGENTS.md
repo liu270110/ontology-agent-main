@@ -2,46 +2,52 @@
 
 > 本文件是任何 AI 代理（Claude Code / pi / openclaw / 平台自托管 agent）在本仓库工作的上下文入口。保持精简：细节按下面的地图按需读取，不要整篇粘贴。
 >
-> ⚠ **2026-09-26 路线裁决（用户拍板）**：现行唯一权威 = **docs/架构设计/ 00~24**（React + Tailwind + shadcn/ui + Apple 液态玻璃）。Vue/Onto Blue 路线产物已归档于 `docs/archive/Vue路线-OntoBlue-2026-09/`，禁止引用、禁止恢复。多会话并行纪律：动手前先读本文件与 docs/架构设计/README 索引；新文档编号 = 当期最大 +1；**禁止移动、归档、删除他人未裁决的产物**，路线冲突提交用户裁决。
+> ⚠ **2026-09-26 路线终裁（混合路线，用户拍板）**：**后端工程权威 = docs/architecture/**（七层：网关/业务/领域/语义/数据/基础 + 全生命周期文档体系）；**前端权威 = docs/架构设计/ 前端族**（03 设计系统/16 前端规格/22 工程规范/23 VibeCoding/24 组件库，React + Tailwind + shadcn/ui + Apple 液态玻璃）+ `frontend/src/design-system/` 样式库；**信息架构/页面清单/角色权限 = docs/frontend/02**（栈无关）。多会话并行纪律：动手前先读本文件；新文档编号 = 当期最大 +1；**禁止移动、归档、删除他人未裁决的产物**，路线冲突提交用户裁决，禁止代用户重启路线之争。
 
 ## 项目是什么
 
-**ontology-agent**：以本体（Ontology）为语义基座的智能体平台。向上托管多种 agent 工具，中间以 graphrag-ontology 知识库 + 本体推理核心为语义中枢，向下以 MCP 为能力出口打通业务闭环。架构定稿见 [docs/架构设计/](docs/架构设计/README.md)（后端 FastAPI 模块化单体六层；前端 React + Tailwind + shadcn/ui，**Apple 风格**）。
+**ontology-agent**：以本体（Ontology）为语义基座的智能体平台。向上托管多种 agent 工具，中间以 graphrag-ontology 知识库 + 本体推理核心为语义中枢，向下以 MCP 为能力出口打通业务闭环（含业务回写 writeback 一等模块与 Agent 内核/能力层划分）。
+
+**技术栈定稿**：后端 FastAPI 模块化单体**七层**（锚点：[docs/architecture/01](docs/architecture/01-总体架构与分层.md)），PG+Neo4j+Milvus+MinIO+Redis，部署 lite/full 双档；前端 **React + Tailwind + shadcn/ui**（Apple 液态玻璃，设计系统=[docs/架构设计/03](docs/架构设计/03-前端架构与UI设计规范.md)）。
 
 ## 设计宪法（全仓库强制，违反即返工）
 
 1. OB2 建模法：对象—行为—规则，事件串联逆向闭环；
 2. 推理分级：确定性高频逻辑走规则引擎/SHACL，LLM 只做低频语义判断且输出必须过校验；
-3. 候选非成品：LLM 产物一律进审核队列，人工终审才生效；
-4. 最小够用：单体优先，禁止过度设计；
+3. 候选非成品：LLM 产物一律进审核队列，人工终审才生效（治理三档 solo/team/enterprise 调节强度，硬门禁任何档不可跳过）；
+4. 最小够用：单体优先，wedge 竖线先行（电力停电分析场景），禁止过度设计；
 5. 全程可追溯：知识带出处、动作带审计、变更带版本。
 
-## 文档地图（按需读，不要全读）
+## 文档地图（按需读，不要全读；总入口 [docs/README](docs/README.md)）
 
 | 要做什么 | 读什么 |
 | ---- | ---- |
-| 后端任何模块开发 | docs/架构设计/00（总览）、01（模块设计）、02（存储） |
-| 前端 UI / 组件 / 页面 | docs/架构设计/03（设计系统全量定义） |
-| 前端工程流程 / 测试 / CI | docs/架构设计/04 |
-| 前端任务的标准作业流 | docs/架构设计/05（VibeCoding：SOP + DoD + 反模式） |
-| 上游研究依据 | docs/研究整理/00~06 |
-| 平台数据模型 | docs/架构设计/02 |
+| 后端架构与分层（工程权威） | [docs/architecture/01 锚点](docs/architecture/01-总体架构与分层.md) → 02~08 各层与横切 + 两份评审记录 |
+| 前端视觉/组件/工程 | [docs/架构设计/03](docs/架构设计/03-前端架构与UI设计规范.md)（设计系统）→ 16/22/23/24（规格/流程/组件库）+ frontend/src/design-system |
+| 前端信息架构/页面/路由/角色 | [docs/frontend/02](docs/frontend/02-信息架构与页面设计.md)（栈无关权威） |
+| 需求与产品 | [docs/product/](docs/product/README.md)（BRD/PRD/路线图） |
+| 模块详设 | docs/Agent（含 02 内核/能力层划分权威）、ontology（含 02 重型本体优化）、OntRAG、memory、MCP（含业务回写）、Skills（含四通道能力层） |
+| API 与协议（端点登记册=docs/api/01） | [docs/api/](docs/api/README.md)（REST/SSE/MCP/A2A） |
+| 数据库 DDL / 编码规范 / 测试 / 运维 | docs/database、standards、testing、ops |
+| 上游研究依据 | docs/研究整理/00~07（结论只引用不修改） |
 
-## 前端技能（按任务加载，SKILL.md）
+## 技能（按任务加载，SKILL.md）
 
 - 写前端代码前 → `skills/frontend-dev-standards/`
-- 做界面/组件/样式 → `skills/frontend-ui-apple/`
+- 做界面/组件/样式 → `skills/frontend-ui-apple/`（与 React+Apple 设计系统同源，可直接用）
 - 测试与视觉验收 → `skills/frontend-testing/`
+- 提交/PR 前代码评审 → `skills/code-review-ocr/`（OpenCodeReview `ocr` CLI，AI 行级评审，LLM 已配 deepseek）
 
 ## 工程约定
 
 - 分支：日常开发在 `develop`，功能分支 `feature/{域}-{简述}`；commit 中文 conventional（`feat: xxx`）。
-- 前端铁律：令牌唯一事实源（`theme/tokens.css`）、组件清单优先、基元只读、契约先行（OpenAPI 生成类型）、小步可验证、截图验收闭环（详见 23 篇六条铁律）。
-- 后端语言全栈 Python（ADR-1）；规则引擎 v1 = SPARQL CONSTRUCT + pySHACL + owlready2；TBox = MinIO 版本化 Turtle + rdflib；ABox = Neo4j。
+- 前端铁律：令牌唯一事实源（frontend/src/design-system/tokens）、契约先行（端点登记册=docs/api/01）、组件清单优先、基元只读、小步可验证、截图验收闭环。
+- 后端语言全栈 Python ≥3.11（ADR-1）；规则引擎 v1 = SPARQL CONSTRUCT + pySHACL + rdflib（owlrl）；TBox = MinIO 版本化 Turtle + rdflib；ABox = Neo4j（只读物化，非推理机）。
 - 平台 LLM/工具调用一律带审计与 trace_id；MCP annotations 不作授权依据。
+- 改表流程：06 篇契约 → database/01 DDL → Alembic 迁移，顺序不可反；种子数据唯一走 Alembic 数据迁移。
 
 ## 已知注意事项
 
-- 仓库历史目录有拼写（`sevices/`、`docs/Agenrt/`、`docs/memorry/`、`docs/Otghrag/`），首次代码提交前统一改名；
+- 首次代码提交前统一改名：`services/ → services/`、`docs/Agent/ → docs/Agent/`、`docs/memory/ → docs/memory/`、`docs/OntRAG/ → docs/OntRAG/`（零代码引用，零成本窗口）；
 - 本机 → Gitee HTTPS 推 >1MB 单文件会被重置，大文件拆分提交；
 - 本平台开发流程自身吃狗粮：`skills/` 即平台 Skills 服务的第一批资产，格式（agentskills.io）即为平台技能格式。

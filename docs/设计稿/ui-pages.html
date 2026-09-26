@@ -239,7 +239,7 @@
                         <span class="ev-chip"><svg><use href="#i-doc"/></svg>GB/T 36276-2018 §5.2.4</span>
                         <span class="ev-chip"><svg><use href="#i-cube"/></svg>图谱路径：循环寿命 ←特性— 对象：电池单体</span>
                       </div>
-                      <span class="stream-caret"></span><p style="font-size:11px;color:var(--label-2);margin-top:10px">以上结论经本体约束过滤（术语对齐 0.92+），推理路径可追溯。</p>
+                      <p style="font-size:11px;color:var(--label-2);margin-top:10px">以上结论经本体约束过滤（术语对齐 0.92+），推理路径可追溯。<span class=\"stream-caret\"></span></p>
                     </div>
                   </div></div>
               </div>
@@ -317,7 +317,7 @@
           <div class="onto-body">
             <div class="tree">
               <div class="tree-h"><b>类层级 TBox</b><span class="icobtn" style="width:22px;height:22px"><svg><use href="#i-plus"/></svg></span></div>
-              <div class="t-item"><svg><use href="#i-chev-d"/></svg>标准实体 Standard<span class="gcount" style="font-size:9px;color:var(--label-2);background:var(--surface-2);border-radius:99px;padding:0 6px;margin-left:auto">41</span></div>
+              <div class="t-item"><svg><use href="#i-chev-d"/></svg>标准实体 Standard<span class="gcount" style="font-size:10px;color:var(--label-2);background:var(--surface-2);border-radius:99px;padding:0 6px;margin-left:auto">41</span></div>
               <div class="t-item t-i1 sel"><svg><use href="#i-cube"/></svg>循环寿命 CycleLife</div>
               <div class="t-item t-i1"><svg><use href="#i-chev-r"/></svg>热失控 ThermalRunaway</div>
               <div class="t-item t-i1"><svg><use href="#i-chev-r"/></svg>容量保持率</div>
@@ -459,9 +459,9 @@
                   <div class="card-h"><h3>终审操作</h3></div>
                   <div style="font-size:12px;color:var(--label-2);line-height:1.7;margin-bottom:12px">通过后该候选写入 ABox（Neo4j）并建立向量索引；驳回可附意见并重抽分片。</div>
                   <div style="display:flex;gap:8px">
-                    <button class="btn btn-p"><svg><use href="#i-check"/></svg>通过并入库</button>
-                    <button class="btn btn-d"><svg><use href="#i-x"/></svg>驳回</button>
-                    <button class="btn btn-g"><svg><use href="#i-refresh"/></svg>重抽该分片</button>
+                    <button class="btn btn-p" style="white-space:nowrap"><svg><use href="#i-check"/></svg>通过并入库</button>
+                    <button class="btn btn-d" style="white-space:nowrap"><svg><use href="#i-x"/></svg>驳回</button>
+                    <button class="btn btn-g" style="white-space:nowrap"><svg><use href="#i-refresh"/></svg>重抽该分片</button>
                   </div>
                   <div style="margin-top:14px;font-size:11px;color:var(--label-3)">提示：#133 置信度低于 0.7，建议结合 CL-014 人工复核。</div>
                 </div>
@@ -535,7 +535,7 @@
                   <div class="memstat"><span style="width:64px;color:var(--label-2)">L1 会话</span><span class="membar"><i style="width:38%;background:var(--accent)"></i></span><b>12</b></div>
                   <div class="memstat"><span style="width:64px;color:var(--label-2)">L2 用户</span><span class="membar"><i style="width:64%;background:var(--teal)"></i></span><b>23</b></div>
                   <div class="memstat"><span style="width:64px;color:var(--label-2)">L3 组织</span><span class="membar"><i style="width:48%;background:var(--purple)"></i></span><b>17</b></div>
-                  <div class="memstat"><span style="width:64px;color:var(--label-2)">L4 知识</span><span class="membar"><i style="width:92%;background:var(--green)"></i></span><b>41 实体</b></div>
+                  <div class="memstat"><span style="width:64px;color:var(--label-2)">L4 知识</span><span class="membar"><i style="width:92%;background:var(--green)"></i></span><b>41</b></div>
                 </div>
                 <div class="card" style="border:1.5px solid var(--orange)">
                   <div class="card-h"><h3>待升级审批</h3><span class="badge b-orange">2</span></div>
@@ -594,7 +594,7 @@
               <div class="pcard">
                 <div style="display:flex;gap:12px;align-items:center"><span class="pic" style="background:var(--accent-soft);color:var(--accent)"><svg><use href="#i-wrench"/></svg></span>
                   <div><div class="pname">cli-anything <span class="badge b-blue">官方认证</span></div>
-                  <div style="font-size:10.5px;color:var(--label-3)">HKUDS · v2.1.0 · cli-harness</div></div></div>
+                  <div style="font-size:11px;color:var(--label-3)">HKUDS · v2.1.0 · cli-harness</div></div></div>
                 <div class="pdesc">把任意命令行工具包装为受治理的 MCP 工具（cli.*.run/help）。默认配置从严：出网全拒、未分类命令一律审批。</div>
                 <div style="display:flex;gap:5px;flex-wrap:wrap"><span class="badge b-gray">本地执行</span><span class="badge b-orange">命令需审批</span><span class="badge b-red">默认禁出网</span></div>
                 <div class="pfoot"><span class="dot d-green"></span>运行中 · 调用 1.2k 次 / 30d<span style="margin-left:auto"></span><button class="btn btn-g btn-sm">管理</button></div>
@@ -602,7 +602,7 @@
               <div class="pcard">
                 <div style="display:flex;gap:12px;align-items:center"><span class="pic" style="background:var(--teal-soft);color:var(--teal)"><svg><use href="#i-search"/></svg></span>
                   <div><div class="pname">web-search <span class="badge b-blue">官方认证</span></div>
-                  <div style="font-size:10.5px;color:var(--label-3)">ontology-official · v1.3.2 · MCP</div></div></div>
+                  <div style="font-size:11px;color:var(--label-3)">ontology-official · v1.3.2 · MCP</div></div></div>
                 <div class="pdesc">联网检索与网页抓取，结果自动附出处指针，可直接作为知识库候选来源进入审核流水线。</div>
                 <div style="display:flex;gap:5px;flex-wrap:wrap"><span class="badge b-gray">网络</span><span class="badge b-gray">只读</span></div>
                 <div class="pfoot"><span class="dot d-green"></span>3.4k 安装<span style="margin-left:auto"></span><button class="btn btn-p btn-sm">安装</button></div>
@@ -610,7 +610,7 @@
               <div class="pcard">
                 <div style="display:flex;gap:12px;align-items:center"><span class="pic" style="background:var(--purple-soft);color:var(--purple)"><svg><use href="#i-doc"/></svg></span>
                   <div><div class="pname">pdf-ocr <span class="badge b-orange">审核中</span></div>
-                  <div style="font-size:10.5px;color:var(--label-3)">community · v0.9.0-beta · MCP</div></div></div>
+                  <div style="font-size:11px;color:var(--label-3)">community · v0.9.0-beta · MCP</div></div></div>
                 <div class="pdesc">扫描件 OCR 与表格还原（pymupdf + Tesseract），关键术语自动标记"需人工复核"。</div>
                 <div style="display:flex;gap:5px;flex-wrap:wrap"><span class="badge b-gray">文件读写</span><span class="badge b-orange">上架审核中</span></div>
                 <div class="pfoot"><span class="dot d-orange"></span>审核队列第 2 位<span style="margin-left:auto"></span><button class="btn btn-dis btn-sm">暂不可安装</button></div>
@@ -619,7 +619,7 @@
             <div class="card" style="margin-top:16px;display:flex;align-items:center;gap:14px">
               <span class="pic" style="background:var(--indigo-soft);color:var(--indigo)"><svg><use href="#i-upload"/></svg></span>
               <div style="flex:1"><b style="font-size:13px">发布你的插件</b>
-                <div style="font-size:11.5px;color:var(--label-2);margin-top:2px">提交 server.json（MCP）或 OpenAPI 3.x 文档（REST→工具），经自动门禁 + 人工审核后上架。</div></div>
+                <div style="font-size:11px;color:var(--label-2);margin-top:2px">提交 server.json（MCP）或 OpenAPI 3.x 文档（REST→工具），经自动门禁 + 人工审核后上架。</div></div>
               <button class="btn btn-s">提交插件</button>
             </div>
           </div>
@@ -667,7 +667,7 @@
             <div class="acard">
               <span class="aic" style="background:var(--accent-soft);color:var(--accent)"><svg><use href="#i-cube"/></svg></span>
               <div style="flex:1">
-                <div style="display:flex;align-items:center;gap:8px"><b style="font-size:13.5px">本体变更：术语重命名</b><span class="badge b-blue">本体 · CR-031</span><span style="font-size:11px;color:var(--label-3)">2 小时前 · 提交人：知识工程师 王</span></div>
+                <div style="display:flex;align-items:center;gap:8px"><b style="font-size:13px">本体变更：术语重命名</b><span class="badge b-blue">本体 · CR-031</span><span style="font-size:11px;color:var(--label-3)">2 小时前 · 提交人：知识工程师 王</span></div>
                 <div style="margin-top:10px;background:var(--surface-2);border:1px solid var(--separator);border-radius:10px;padding:8px 10px">
                   <div class="diffline del">- gb:CycleLife500 rdfs:label "500次循环寿命"</div>
                   <div class="diffline add">+ gb:CycleLife rdfs:label "循环寿命" <span style="color:var(--label-3)"># 术语唯一性整改，影响 3 个实体</span></div>
@@ -679,7 +679,7 @@
             <div class="acard">
               <span class="aic" style="background:var(--purple-soft);color:var(--purple)"><svg><use href="#i-layers"/></svg></span>
               <div style="flex:1">
-                <div style="display:flex;align-items:center;gap:8px"><b style="font-size:13.5px">记忆升级：L2 → L3</b><span class="badge b-purple">记忆 · MP-009</span><span style="font-size:11px;color:var(--label-3)">今天 09:12 · 系统</span></div>
+                <div style="display:flex;align-items:center;gap:8px"><b style="font-size:13px">记忆升级：L2 → L3</b><span class="badge b-purple">记忆 · MP-009</span><span style="font-size:11px;color:var(--label-3)">今天 09:12 · 系统</span></div>
                 <div style="margin-top:8px;font-size:12px;color:var(--label-2);line-height:1.7">「测试依据已切换为 GB/T 31486-2024」申请共享至组织级（17 人可见）。来源可溯：会话 s-2417 + 文档 chunk_042。</div>
               </div>
               <div style="display:flex;flex-direction:column;gap:6px;justify-content:center">
@@ -688,7 +688,7 @@
             <div class="acard">
               <span class="aic" style="background:var(--teal-soft);color:var(--teal)"><svg><use href="#i-puzzle"/></svg></span>
               <div style="flex:1">
-                <div style="display:flex;align-items:center;gap:8px"><b style="font-size:13.5px">插件上架：pdf-ocr v0.9.0-beta</b><span class="badge b-orange">插件 · PR-014</span><span style="font-size:11px;color:var(--label-3)">昨天 · 自动门禁已通过</span></div>
+                <div style="display:flex;align-items:center;gap:8px"><b style="font-size:13px">插件上架：pdf-ocr v0.9.0-beta</b><span class="badge b-orange">插件 · PR-014</span><span style="font-size:11px;color:var(--label-3)">昨天 · 自动门禁已通过</span></div>
                 <div style="margin-top:8px;display:flex;gap:5px;flex-wrap:wrap">
                   <span class="badge b-gray">schema 合法</span><span class="badge b-gray">投毒扫描通过</span><span class="badge b-gray">依赖审计 0 风险</span><span class="badge b-orange">文件读写 scope · 需人工复核</span></div>
               </div>
@@ -698,7 +698,7 @@
             <div class="acard" style="border:1.5px solid var(--red)">
               <span class="aic" style="background:var(--red-soft);color:var(--red)"><svg><use href="#i-warn"/></svg></span>
               <div style="flex:1">
-                <div style="display:flex;align-items:center;gap:8px"><b style="font-size:13.5px;color:var(--red)">高风险动作确认</b><span class="badge b-red">动作 · ACT-002</span><span style="font-size:11px;color:var(--label-3)">10 分钟前 · Agent 发起</span></div>
+                <div style="display:flex;align-items:center;gap:8px"><b style="font-size:13px;color:var(--red)">高风险动作确认</b><span class="badge b-red">动作 · ACT-002</span><span style="font-size:11px;color:var(--label-3)">10 分钟前 · Agent 发起</span></div>
                 <div style="margin-top:8px;font-size:12px;color:var(--label-2);line-height:1.7">
                   <span class="mono" style="color:var(--label)">action.invoke</span> → erp.freezeAccount(customer=C-20481)<br>
                   命中约束逻辑 <span class="mono">CL-007（逾期 ≥90 天自动冻结）</span>· 该动作绑定二次确认策略，执行结果将回流本体实例。</div>
@@ -965,8 +965,8 @@
               <h4><svg><use href="#i-search"/></svg>检索测试台</h4>
               <div class="input-bar" style="margin:0 0 14px;padding:8px 10px"><span class="fakeinput" style="font-size:12px">循环寿命要求是什么？</span><span class="sendbtn" style="width:28px;height:28px"><svg style="width:12px;height:12px"><use href="#i-search"/></svg></span></div>
               <div class="ctx-t">Local Search · 3 实体 / 2 路径</div>
-              <div class="ctx-item"><span class="dot d-blue" style="margin-top:5px"></span><span><b>循环寿命</b>· 500 次循环后容量保持率 ≥80%<br><span class="mono" style="font-size:9.5px;color:var(--label-3)">路径：31486-2024 —specifies→ 循环寿命</span></span></div>
-              <div class="ctx-item"><span class="dot d-teal" style="margin-top:5px;background:var(--teal)"></span><span><b>CL-012 约束</b>· 强制条款，约束对象：电池单体<br><span class="mono" style="font-size:9.5px;color:var(--label-3)">路径：31486-2024 —imposes→ CL-012</span></span></div>
+              <div class="ctx-item"><span class="dot d-blue" style="margin-top:5px"></span><span><b>循环寿命</b>· 500 次循环后容量保持率 ≥80%<br><span class="mono" style="font-size:11px;color:var(--label-3)">路径：31486-2024 —specifies→ 循环寿命</span></span></div>
+              <div class="ctx-item"><span class="dot d-teal" style="margin-top:5px;background:var(--teal)"></span><span><b>CL-012 约束</b>· 强制条款，约束对象：电池单体<br><span class="mono" style="font-size:11px;color:var(--label-3)">路径：31486-2024 —imposes→ CL-012</span></span></div>
               <div style="margin-top:12px;font-size:11px;color:var(--label-3)">切换 <b style="color:var(--label-2)">Global</b> 走社区摘要（map-reduce），适合全库主题问题。</div>
             </div>
             </div>
@@ -1016,8 +1016,8 @@
                 <div style="display:flex;gap:12px;align-items:center;margin-bottom:12px">
                   <span class="pic" style="background:var(--accent-soft);color:var(--accent)"><svg><use href="#i-spark"/></svg></span>
                   <div><div class="pname">平台原生 Agent <span class="badge b-green"><span class="dot d-green pulse-ring" style="width:5px;height:5px"></span>运行中</span></div>
-                  <div style="font-size:10.5px;color:var(--label-3)">内置 · 默认插槽</div></div></div>
-                <div style="font-size:11.5px;color:var(--label-2);line-height:1.9;margin-bottom:10px">GraphRAG 检索 · 本体校验 · 四层记忆 · 工具 12 个<br>上下文组装预算制 · AG-UI 事件流</div>
+                  <div style="font-size:11px;color:var(--label-3)">内置 · 默认插槽</div></div></div>
+                <div style="font-size:11px;color:var(--label-2);line-height:1.9;margin-bottom:10px">GraphRAG 检索 · 本体校验 · 四层记忆 · 工具 12 个<br>上下文组装预算制 · AG-UI 事件流</div>
                 <div style="font-size:11px;color:var(--label-3);margin-bottom:10px">会话 24 · P95 响应 1.2s · 工具调用 89 次</div>
                 <div style="display:flex;gap:6px"><button class="btn btn-p btn-sm">新会话</button><button class="btn btn-g btn-sm">配置</button></div>
               </div>
@@ -1025,8 +1025,8 @@
                 <div style="display:flex;gap:12px;align-items:center;margin-bottom:12px">
                   <span class="pic" style="background:var(--teal-soft);color:var(--teal)"><svg><use href="#i-bot"/></svg></span>
                   <div><div class="pname">pi <span class="badge b-gray">已注册</span></div>
-                  <div style="font-size:10.5px;color:var(--label-3)">earendil-works · RPC 模式 · MIT</div></div></div>
-                <div style="font-size:11.5px;color:var(--label-2);line-height:1.9;margin-bottom:10px">20+ 模型 provider · JSONL 会话树 · compaction<br>经桥接扩展接入平台工具</div>
+                  <div style="font-size:11px;color:var(--label-3)">earendil-works · RPC 模式 · MIT</div></div></div>
+                <div style="font-size:11px;color:var(--label-2);line-height:1.9;margin-bottom:10px">20+ 模型 provider · JSONL 会话树 · compaction<br>经桥接扩展接入平台工具</div>
                 <div style="font-size:11px;color:var(--label-3);margin-bottom:10px">会话 6 · P95 响应 0.9s</div>
                 <div style="display:flex;gap:6px"><button class="btn btn-s btn-sm">启用</button><button class="btn btn-g btn-sm">配置</button></div>
               </div>
@@ -1034,8 +1034,8 @@
                 <div style="display:flex;gap:12px;align-items:center;margin-bottom:12px">
                   <span class="pic" style="background:var(--surface-2);color:var(--label-3)"><svg><use href="#i-bot"/></svg></span>
                   <div><div class="pname" style="color:var(--label-2)">Claude Agent SDK <span class="badge b-red">未接入</span></div>
-                  <div style="font-size:10.5px;color:var(--label-3)">Anthropic · 专有授权</div></div></div>
-                <div style="font-size:11.5px;color:var(--label-2);line-height:1.9;margin-bottom:10px">hooks / 子代理 / Skills 体系<br><svg style="width:11px;height:11px;color:var(--orange);vertical-align:-1px"><use href="#i-warn"/></svg> 接入前需法务确认条款版本（00 篇风险登记）</div>
+                  <div style="font-size:11px;color:var(--label-3)">Anthropic · 专有授权</div></div></div>
+                <div style="font-size:11px;color:var(--label-2);line-height:1.9;margin-bottom:10px">hooks / 子代理 / Skills 体系<br><svg style="width:11px;height:11px;color:var(--orange);vertical-align:-1px"><use href="#i-warn"/></svg> 接入前需法务确认条款版本（00 篇风险登记）</div>
                 <div style="display:flex;gap:6px;margin-top:16px"><button class="btn btn-dis btn-sm">暂不可用</button></div>
               </div>
             </div>
@@ -1086,14 +1086,14 @@
               </table>
             </div>
             <div class="grid3 stagger">
-              <div class="card"><div class="card-h" style="margin-bottom:8px"><h3 style="font-size:13.5px">本体建模六步法</h3><span class="badge b-gray" style="margin-left:auto">SKILL.md · v3</span></div>
-                <div style="font-size:11.5px;color:var(--label-2);line-height:1.6;margin-bottom:10px">访谈 → 概念层级 → 属性关系 → 业务公理 → 评审 → 推理测试的固定作业流。</div>
+              <div class="card"><div class="card-h" style="margin-bottom:8px"><h3 style="font-size:13px">本体建模六步法</h3><span class="badge b-gray" style="margin-left:auto">SKILL.md · v3</span></div>
+                <div style="font-size:11px;color:var(--label-2);line-height:1.6;margin-bottom:10px">访谈 → 概念层级 → 属性关系 → 业务公理 → 评审 → 推理测试的固定作业流。</div>
                 <div style="display:flex;gap:5px;align-items:center"><span class="badge b-gray">已分发：原生 Agent</span><button class="btn btn-g btn-sm" style="margin-left:auto">详情</button></div></div>
-              <div class="card"><div class="card-h" style="margin-bottom:8px"><h3 style="font-size:13.5px">标准条款抽取</h3><span class="badge b-gray" style="margin-left:auto">SKILL.md · v12</span></div>
-                <div style="font-size:11.5px;color:var(--label-2);line-height:1.6;margin-bottom:10px">四类抽取模板 + 固定输出结构 + 原文出处指针，禁止凭空创造。</div>
+              <div class="card"><div class="card-h" style="margin-bottom:8px"><h3 style="font-size:13px">标准条款抽取</h3><span class="badge b-gray" style="margin-left:auto">SKILL.md · v12</span></div>
+                <div style="font-size:11px;color:var(--label-2);line-height:1.6;margin-bottom:10px">四类抽取模板 + 固定输出结构 + 原文出处指针，禁止凭空创造。</div>
                 <div style="display:flex;gap:5px;align-items:center"><span class="badge b-gray">已分发：抽取流水线</span><button class="btn btn-g btn-sm" style="margin-left:auto">详情</button></div></div>
-              <div class="card"><div class="card-h" style="margin-bottom:8px"><h3 style="font-size:13.5px">停电分析思维链</h3><span class="badge b-gray" style="margin-left:auto">SKILL.md · v2</span></div>
-                <div style="font-size:11.5px;color:var(--label-2);line-height:1.6;margin-bottom:10px">获取对象 → 提取数据 → 计算指标的固定流程，配双盲检测校验查询意图。</div>
+              <div class="card"><div class="card-h" style="margin-bottom:8px"><h3 style="font-size:13px">停电分析思维链</h3><span class="badge b-gray" style="margin-left:auto">SKILL.md · v2</span></div>
+                <div style="font-size:11px;color:var(--label-2);line-height:1.6;margin-bottom:10px">获取对象 → 提取数据 → 计算指标的固定流程，配双盲检测校验查询意图。</div>
                 <div style="display:flex;gap:5px;align-items:center"><span class="badge b-gray">未分发</span><button class="btn btn-s btn-sm" style="margin-left:auto">分发</button></div></div>
             </div>
           </div>

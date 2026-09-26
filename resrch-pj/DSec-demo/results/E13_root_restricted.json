@@ -1,0 +1,33 @@
+{
+  "experiment": "E13_root_restricted",
+  "note": "AppArmor 不可用（WSL2 内核未启用），用 cap 修剪 + 属主隔离等价验证 'root 也受限' 语义",
+  "restricted": [
+    "LOG_READ_DENIED",
+    "ANSWER_READ_DENIED",
+    "HONEST_OK"
+  ],
+  "unrestricted": [
+    "LOG_READ_OK",
+    "ANSWER_READ_OK",
+    "HONEST_OK"
+  ],
+  "checks": [
+    {
+      "name": "restricted root denied on chronus log",
+      "pass": true
+    },
+    {
+      "name": "restricted root denied on protected answer",
+      "pass": true
+    },
+    {
+      "name": "restricted sandbox normal work OK",
+      "pass": true
+    },
+    {
+      "name": "unrestricted root CAN read (risk surface)",
+      "pass": true
+    }
+  ],
+  "passed": true
+}

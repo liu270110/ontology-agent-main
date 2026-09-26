@@ -7,3 +7,4 @@ psycopg[binary]>=3.1
 pydantic>=2.7
 pydantic-settings>=2.2
 redis>=5
+uuid-utils>=0.12

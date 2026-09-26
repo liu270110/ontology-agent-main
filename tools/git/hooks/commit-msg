@@ -1,0 +1,14 @@
+#!/bin/sh
+# 提交信息门禁：中文 conventional 格式（<type>(<scope>)?: 描述）
+# 规范：docs/standards/02-git多Agent协作与Worktree规范.md
+msg=$(head -n 1 "$1")
+case "$msg" in
+  "Merge "*|"Revert "*|"revert "*) exit 0 ;;
+esac
+if printf '%s\n' "$msg" | grep -Eq '^(feat|fix|docs|style|refactor|perf|test|build|ci|chore|assets)(\([^)]+\))?[:：] .+'; then
+  exit 0
+fi
+echo "✗ [git-workflow] 提交信息不符合 conventional 格式：<type>(<scope>)?: 描述" >&2
+echo "  允许 type: feat|fix|docs|style|refactor|perf|test|build|ci|chore|assets" >&2
+echo "  示例: 'feat(kb): 新增冲突工单状态机' / 'docs: 修订 OntRAG §8 承接判定'" >&2
+exit 1

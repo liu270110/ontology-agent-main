@@ -184,7 +184,7 @@ HTTP/1.1 403 Forbidden
 
 > 已裁决（2026-09-26，参照 OpenAI 惯例 + 设计意图）：二者语义分立共存——`POST /sessions/{id}/close`=状态迁移（会话所有者，触发归档与 L2 沉淀）；`DELETE /sessions/{id}`=管理员软删已归档会话（清理语义，需 `session:admin`）。本表补录 close 行：`| POST | /sessions/{id}/close | 关闭会话（触发 L1 归档与 L2 沉淀） | session:write | 202 | 4101 |`。
 
-> 预登记（2026-09-26，[25 篇](../架构设计/25-前端页面功能缺口对标与任务清单.md)对标缺口，契约先行）：上表 PATCH / branch / knowledge / share 五行为契约预登记，实现随 F-03~F-07 排期；`POST /sessions` 请求体补两个**向后兼容可选字段**：`ephemeral`（临时会话标记：不进历史检索、不产生 L2 候选沉淀，审计照写，F-06）、`effort`（思考档位初值 off|low|medium|high，F-02，档位变化写审计）。新增 scope `session:share` 在 11 篇 §2 Permission 字典登记，并回填本篇 §5 导语与 08 篇 §2.3 动作集枚举（X6/X7 同批）；`PATCH /sessions/{id}` 仅元信息、与 close/DELETE 三者关系=元信息/生命周期迁移/管理员清理，互不重叠。**群聊扩展（2026-09-26 第二批预登记，[27 篇](./27-Agent群聊与工作流编排设计.md)）**：`POST /sessions` body 再补三个可选字段 `type=single\|group`（默认 single）、`members[]`（成员=Agent 插槽实例：slot_id/display_name/system_prompt/model/routing_role）、`routing=mention\|round_robin\|all\|orchestrator`（发言编排四模式，前三种确定性路由、协调者为唯一 LLM 路由且写审计）；MESSAGE_* SSE 事件补 `agent_id`（挂账 02-SSE 协议篇，X15）。
+> 预登记（2026-09-26，[25 篇](../架构设计/25-前端页面功能缺口对标与任务清单.md)对标缺口，契约先行）：上表 PATCH / branch / knowledge / share 五行为契约预登记，实现随 F-03~F-07 排期；`POST /sessions` 请求体补两个**向后兼容可选字段**：`ephemeral`（临时会话标记：不进历史检索、不产生 L2 候选沉淀，审计照写，F-06）、`effort`（思考档位初值 off|low|medium|high，F-02，档位变化写审计）。新增 scope `session:share` 在 11 篇 §2 Permission 字典登记，并回填本篇 §5 导语与 08 篇 §2.3 动作集枚举（X6/X7 同批）；`PATCH /sessions/{id}` 仅元信息、与 close/DELETE 三者关系=元信息/生命周期迁移/管理员清理，互不重叠。**群聊扩展（2026-09-26 第二批预登记，[27 篇](../架构设计/27-Agent群聊与工作流编排设计.md)）**：`POST /sessions` body 再补三个可选字段 `type=single\|group`（默认 single）、`members[]`（成员=Agent 插槽实例：slot_id/display_name/system_prompt/model/routing_role）、`routing=mention\|round_robin\|all\|orchestrator`（发言编排四模式，前三种确定性路由、协调者为唯一 LLM 路由且写审计）；MESSAGE_* SSE 事件补 `agent_id`（挂账 02-SSE 协议篇，X15）。
 
 ### 5.3 ontology（routers/ontology.py）
 
@@ -314,8 +314,24 @@ HTTP/1.1 403 Forbidden
 | POST | /auth/login | 登录：校验凭据，签发 access（2h）+ refresh（14d），claims 按 08 篇 §2.1（sub/tenant_id/roles/scopes/typ/jti）；**匿名白名单**（02 篇 §3 ③） | 匿名 | 200 | 1002（凭据无效）、2005 |
 | POST | /auth/refresh | 以有效 refresh token 换发新 access；旧令牌 `jti` 入 Redis 黑名单（TTL=剩余有效期，08 篇 §2.2；轮换细则随 08 篇 §10 对应待办定稿） | 匿名（body 携 refresh token） | 200 | 1002、1003 |
 | POST | /auth/logout | 登出：将请求所持 access/refresh 的 `jti` 写入吊销黑名单 | 认证后（无额外 scope） | 204 | 1001、1002 |
+| POST | /auth/password/reset | 忘记密码两步（body 区分：①邮箱请求重置→202 ②携重置 token 设新密码→200；邮件通道挂账 12 篇，[28 篇](../架构设计/28-账号自助域三页设计.md) §2） | 匿名 | 202 / 200 | 1002 |
+| POST | /auth/totp/setup | 开启 2FA 第一步：生成 secret 与 otpauth URI（二维码载荷，一次性展示） | 认证后 | 200 | 409*（已启用） |
+| POST | /auth/totp/enable | 第二步：提交六位码验证并启用；签发一次性备份码集（仅本次明文展示） | 认证后 | 200 | 3001 |
+| POST | /auth/totp/disable | 停用 2FA（需 otp 或备份码验证；写审计） | 认证后 | 204 | 1002 |
 
-> 三端点计入端点清单总数；body 与响应 DTO（token 对、错误分支）随 OpenAPI 契约测试快照冻结（§8 变更管理）。
+> 三端点计入端点清单总数；body 与响应 DTO（token 对、错误分支）随 OpenAPI 契约测试快照冻结（§8 变更管理）。**MFA 扩展（2026-09-27 预登记，[28 篇](../架构设计/28-账号自助域三页设计.md) §2，X17）**：设置页已启 TOTP 时，`POST /auth/login` 密码校验通过后返回 **`200 {mfa_required:true, mfa_token}`**（同步两段式用 200+字段，不用 202 异步语义）；前端二步以 `mfa_token+otp`（或备份码）再调 login 换发正式令牌；**`mfa_token` 一次性（用后即焚）**，有效期建议 5min（服务端绑定客户端标识，11 篇会审定稿）；"信任此设备 30 天"由**服务端签发 device token**（不依赖前端指纹，联动 §5.8 设备会话列表）；二步失败与密码失败**同池限速计数**。TOTP 启用/停用三端点（setup/enable/disable）兑现 26 篇 IX-SET-02 既有引用。
+
+### 5.13 me（routers/me.py，2026-09-27 预登记）
+
+> 来源：[28 篇](../架构设计/28-账号自助域三页设计.md)（账号自助域）。scope 新增 `me:write`（挂账 11 篇 §2/§3）；导出/注销均走异步与审计，不做同步物理删除（宪法 5）。
+
+| 方法 | 路径 | 用途 | 所需 scope | 成功码 | 主要错误码 |
+| ---- | ---- | ---- | ---- | ---- | ---- |
+| GET/PUT | /me/preferences | 个人偏好（主页引导进度/默认模型与思考档位/默认 routing/界面偏好） | 认证后 / me:write | 200 / 200 | 3001 |
+| PUT | /me/memory-settings | 记忆开关（总开关/个性化程度；关=不召回不沉淀，联动记忆域 X10） | me:write | 200 | 3001 |
+| POST | /me/export | 我的数据导出（202→异步任务，type=me_export；完成通知下载，保留 7 天） | me:write | 202 | 409* |
+| GET | /me/sessions | 设备会话列表（**本人**设备会话与下线；管理员查他人走 §5.8 admin 用户管理） | 认证后 | 200 | — |
+| POST | /me/deactivate | 账号注销申请（body: confirm_token；**停用+匿名化，不物理删除**；enterprise 档转管理员审批，合规口径挂 11 篇 X17） | me:write | 202 | 409*、2002 |
 
 ### 5.10 files / prompts / groups / acl / permission-requests（routers/files.py 等，2026-09-26 预登记）
 
@@ -337,7 +353,7 @@ HTTP/1.1 403 Forbidden
 
 ### 5.11 workflows（routers/workflows.py，2026-09-26 预登记）
 
-> 来源：[27 篇](./27-Agent群聊与工作流编排设计.md) P15（工作流编排）。契约预登记，实现随 X16 工作流引擎排期；scope `workflow:read/run/edit/publish` 挂账 11 篇 §2/§3。工作流版本不可变；发布在 team/enterprise 档走 `workflow_publish` 审批（第七类对象候选，11 篇裁决）。
+> 来源：[27 篇](../架构设计/27-Agent群聊与工作流编排设计.md) P15（工作流编排）。契约预登记，实现随 X16 工作流引擎排期；scope `workflow:read/run/edit/publish` 挂账 11 篇 §2/§3。工作流版本不可变；发布在 team/enterprise 档走 `workflow_publish` 审批（第七类对象候选，11 篇裁决）。
 
 | 方法 | 路径 | 用途 | 所需 scope | 成功码 | 主要错误码 |
 | ---- | ---- | ---- | ---- | ---- | ---- |
@@ -508,4 +524,5 @@ HTTP/1.1 202 Accepted
 - [ ] 4301 的 HTTP 映射（建议 410 Gone）在 02 篇登记；
 - [ ] ★ 25 篇对标缺口端点实现排期（2026-09-26 预登记）：§5.2 新增五行（PATCH/branch/knowledge/share）与 §5.10（files/prompts/groups/acl/permission-requests）；实现时同步：新增 scope 与专用错误码登记（11 篇 §2/§3 + §4.2 号段）、**动作集枚举回填**（`share` 动作入 08 篇 §2.3 固定动作集与本篇 §5 导语）、SSE 分支/用量水位事件登记 02-SSE 协议篇（X3/X8）、OpenAPI 快照再生成（16 篇 §2.3 漂移校验）。协调项 X1~X14 见 [docs/代办任务/2026-09-26-前端页面功能缺口补齐.md](../代办任务/2026-09-26-前端页面功能缺口补齐.md)；
 - [ ] ★ 27 篇群聊与工作流端点实现排期（2026-09-26 预登记）：§5.2 群聊扩展（type/members/routing 字段+members 两端点）与 §5.11 workflows 八端点；实现时同步：`workflow:*` scope 登记（11 篇 §2/§3）、`workflow_publish` 审批对象裁决（X16）、MESSAGE_* 事件 agent_id 与路由决策事件（02-SSE 协议篇，X15）、工作流 DAG 校验错误码定号（§4.2）。
+- [ ] ★ 28 篇账号自助域端点实现排期（2026-09-27 预登记）：§5.9 MFA 两段式与 password/reset、§5.13 me 五端点；实现时同步：`me:write` scope 登记（11 篇 §2/§3）、mfa_token 粒度与注销合规裁决（X17）、邮件通道档位（12 篇）、OpenAPI 快照再生成。
 - [ ] 本篇端点表的 OpenAPI 标注核对（八个 routers 全端点标注 scope，02 篇 §8 验收项）进入 CI 契约测试。

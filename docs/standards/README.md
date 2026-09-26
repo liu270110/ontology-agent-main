@@ -11,6 +11,7 @@
 | 文档 | 内容 | 状态 |
 | ---- | ---- | ---- |
 | [01-编码规范](./01-编码规范.md) | 工具链与 CI 门禁；Python 后端 9 节（分层 import 契约/命名/类型/pydantic/异步/错误/事务/日志/测试）；前端 5 节（组合式 API/组件/样式铁律/状态请求/路由权限）；SQL 与迁移；Git 规范；评审清单（后端 10 + 前端 8）；文档同步义务 | v0.1 |
+| [02-git多Agent协作与Worktree规范](./02-git多Agent协作与Worktree规范.md) | 分支模型（master/develop/feature 三级）、worktree 生命周期（wt new/sync/finish）、hooks 门禁（develop 禁直提/conventional 提交信息）、串行集成锁、共享文件追加式纪律 | v1.0（2026-09-27 启用） |
 
 ## 与 08 篇 §8 的关系
 

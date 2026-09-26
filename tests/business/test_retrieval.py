@@ -1,5 +1,6 @@
 # tests/business/test_retrieval.py
 """RRF 融合与新鲜度降权单测（规格 06 篇 §5.2；均为确定性纯函数）。"""
+
 from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
@@ -12,7 +13,7 @@ A, B, C, D = uuid4(), uuid4(), uuid4(), uuid4()
 
 def test_rrf_merge_two_channels():
     merged = rrf_merge({"keyword": [A, B, C], "time": [D, B]}, k=60)
-    # A=1/61；B=1/62+1/61；C=1/63；D=1/61 → B > (A 与 D 同分，按首现序) > C
+    # A=1/61；B=1/62+1/62=1/31；C=1/63；D=1/61 → B > (A 与 D 同分，首现序 A 在前) > C
     assert merged == [B, A, D, C]
 
 

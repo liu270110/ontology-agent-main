@@ -37,6 +37,7 @@
 | 25 | 版本与评审（changeset 列表/三元组 diff/发布物化进度/版本回滚） | `/ontology/:projectId/versions` |
 | 26 | 检索 Playground（Local/Global/Drift 三模式 + 行内引用 + 证据链图谱） | `/kb/playground` |
 | 27 | 个人设置（Settings Shell：资料/安全 2FA/API Key/通知偏好/会话设备） | `/settings` |
+| 22 | Tabs 深层视图补全：审核台关系/属性/公理 · 记忆 L1/L3/L4 · 审批已办 · 检查器属性/公理（8 面板） | 各分段控件对应视图 |
 
 每个画框上方标注了**组件构成**与**页面跳转关系**（与 03 篇 §4.1 导航图一一对应）。`preview/` 目录是各画框的静态截图（含 2 张暗色），便于评审引用；**元素级审计报告见 [ui-audit.md](./ui-audit.md)**（视觉检测 + 源码扫描双手段，v1.3 全绿）。
 

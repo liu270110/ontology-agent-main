@@ -81,7 +81,7 @@
       <a href="#p-admin">系统</a><a href="#p-analytics">数据分析</a><a href="#p-roles">角色权限</a>
       <a href="#p-tasks">任务中心</a><a href="#p-versions">版本评审</a><a href="#p-playground">Playground</a>
       <a href="#p-settings">个人设置</a><a href="#p-status">状态页</a><a href="#p-empty-skel">空态骨架</a>
-      <a href="#p-axiom-diff">公理版本</a><a href="#p-auditlog">审计</a><a href="#p-trajectory">轨迹</a>
+      <a href="#p-axiom-diff">公理版本</a><a href="#p-auditlog">审计</a><a href="#p-trajectory">轨迹</a><a href="#p-tabviews">深层视图</a>
     </nav>
     <button class="theme-btn" onclick="document.documentElement.classList.toggle('dark')">切换亮 / 暗</button>
   </header>
@@ -2151,6 +2151,66 @@
             </div>
           </div>
         </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="frame" id="p-tabviews">
+    <div class="frame-head">
+      <div class="fnum">22</div>
+      <div><h2>Tabs 深层视图补全</h2>
+        <p>八个分段控件点击后的深层视图一次性定稿：审核台四类型（实体已画，补关系/属性/公理）、记忆四层（L2 已画，补 L1/L3/L4）、审批已办、检查器属性/公理页签。全部复用已定稿组件语言，不引入新样式。</p>
+        <div class="jumps"><span class="jump-chip">宿主页 → 抽取审核台 / 记忆管理 / 审批中心 / 本体工作台</span></div>
+      </div>
+    </div>
+    <div class="browser"><div class="bbar"><span class="bdot" style="background:#ff5f57"></span><span class="bdot" style="background:#febc2e"></span><span class="bdot" style="background:#28c840"></span><span class="burl">tab deep views · 8 panels</span></div>
+      <div style="background:var(--bg);padding:24px;color:var(--label);font-size:13px;display:grid;grid-template-columns:1fr 1fr;gap:16px">
+        <div class="card"><div class="card-h" style="margin-bottom:10px"><h3 style="font-size:13.5px">审核台 · 关系候选</h3><span class="badge b-gray" style="margin-left:auto">seg 2/4</span></div>
+          <div class="tri"><span style="color:var(--accent)">gb:31486-2024</span><span class="arrow">—<span class="rel">issuedBy</span>→</span><span>org:SAC</span></div>
+          <div class="tri"><span style="color:var(--accent)">gb:31486-2024</span><span class="arrow">—<span class="rel">cites</span>→</span><span>gb:36276-2018</span></div>
+          <div class="tri"><span style="color:var(--accent)">cl:CL-012</span><span class="arrow">—<span class="rel">constrainsObject</span>→</span><span>obj:电池单体</span></div>
+          <p class="text-faint" style="font-size:10.5px;margin-top:8px">关系候选 = 三元组队列，逐条核验宾语实体存在性与方向正确性。</p></div>
+        <div class="card"><div class="card-h" style="margin-bottom:10px"><h3 style="font-size:13.5px">审核台 · 属性/公理候选</h3><span class="badge b-gray" style="margin-left:auto">seg 3-4/4</span></div>
+          <div class="kv"><span class="k">属性候选</span><span class="v">实施日期 = 2024-11-01（值域：date ✓）</span></div>
+          <div class="kv"><span class="k">属性候选</span><span class="v">循环次数 = 500（值域：integer ✓）</span></div>
+          <div class="kv"><span class="k">公理候选</span><span class="v">CL-012：循环 500 次 → 容量 ≥80%（强制）</span></div>
+          <p class="text-faint" style="font-size:10.5px;margin-top:8px">属性候选核值域、公理候选核不变式表达与强制级别。</p></div>
+        <div class="card"><div class="card-h" style="margin-bottom:10px"><h3 style="font-size:13.5px">记忆 L1 · 会话视图</h3><span class="badge b-gray" style="margin-left:auto">seg 1/4 · Letta 式自编辑块</span></div>
+          <div class="kv"><span class="k">persona 块</span><span class="v">助手人设与语气（常驻，可自编辑）</span></div>
+          <div class="kv"><span class="k">任务块</span><span class="v">当前：标准对比分析 · 中间结论 2 条</span></div>
+          <div class="kv"><span class="k">草稿区</span><span class="v">滑窗内的中间计算（TTL = 会话期）</span></div>
+          <p class="text-faint" style="font-size:10.5px;margin-top:8px">会话结束即归档至 PG，活跃期常驻 Redis。</p></div>
+        <div class="card"><div class="card-h" style="margin-bottom:10px"><h3 style="font-size:13.5px">记忆 L3 · 组织视图</h3><span class="badge b-gray" style="margin-left:auto">Graphiti 时序图</span></div>
+          <div class="kv"><span class="k">共享记忆</span><span class="v">17 条 · 团队 17 人可见</span></div>
+          <div class="kv"><span class="k">失效边</span><span class="v">3 条（invalidation，不物理删除）</span></div>
+          <div class="kv"><span class="k">升级来源</span><span class="v">L2 审批通过 2 条 · 待审 1 条</span></div>
+          <p class="text-faint" style="font-size:10.5px;margin-top:8px">共享情景按 bi-temporal 组织，事实失效留痕可审计。</p></div>
+        <div class="card"><div class="card-h" style="margin-bottom:10px"><h3 style="font-size:13.5px">记忆 L4 · 知识视图</h3><span class="badge b-gray" style="margin-left:auto">与本体同源</span></div>
+          <div class="kv"><span class="k">知识条目</span><span class="v">41 实体 / 261 关系（即 ABox）</span></div>
+          <div class="kv"><span class="k">索引状态</span><span class="v">GraphRAG 已索引 · 社区 14 个</span></div>
+          <div class="kv"><span class="k">治理</span><span class="v">变更走本体工作台 + 审批（本页只读）</span></div>
+          <div style="display:flex;gap:6px;margin-top:10px"><button class="btn btn-s btn-sm">去本体工作台</button><button class="btn btn-g btn-sm">图谱浏览</button></div></div>
+        <div class="card"><div class="card-h" style="margin-bottom:10px"><h3 style="font-size:13.5px">审批中心 · 已办</h3><span class="badge b-gray" style="margin-left:auto">seg 2/2</span></div>
+          <table class="tbl">
+            <tr><th>时间</th><th>对象</th><th>决定</th><th>操作人</th></tr>
+            <tr><td class="mono" style="font-size:11px">14:22</td><td>CR-031 术语重命名</td><td><span class="badge b-green">通过 · v1.5</span></td><td>刘以在</td></tr>
+            <tr><td class="mono" style="font-size:11px">13:05</td><td>MP-008 记忆升级</td><td><span class="badge b-green">通过</span></td><td>刘以在</td></tr>
+            <tr><td class="mono" style="font-size:11px">11:48</td><td>PR-011 插件上架</td><td><span class="badge b-red">驳回</span></td><td>王工</td></tr>
+          </table>
+          <p class="text-faint" style="font-size:10.5px;margin-top:8px">已办保留决定、操作人与理由链接（驳回理由必填沉淀）。</p></div>
+        <div class="card"><div class="card-h" style="margin-bottom:10px"><h3 style="font-size:13.5px">检查器 · 属性页签</h3><span class="badge b-gray" style="margin-left:auto">seg 2/3</span></div>
+          <table class="tbl">
+            <tr><th>属性</th><th>Domain → Range</th><th>基数</th></tr>
+            <tr><td class="mono" style="font-size:11px">issuedBy</td><td>Standard → Organization</td><td>恰好 1</td></tr>
+            <tr><td class="mono" style="font-size:11px">hasPart</td><td>Standard → Clause</td><td>1..*</td></tr>
+            <tr><td class="mono" style="font-size:11px">specifiesCharacteristic</td><td>Standard → Characteristic</td><td>0..*</td></tr>
+          </table>
+          <p class="text-faint" style="font-size:10.5px;margin-top:8px">GB/T 48000.3 属性 10 项元数据的表格化呈现。</p></div>
+        <div class="card"><div class="card-h" style="margin-bottom:10px"><h3 style="font-size:13.5px">检查器 · 公理页签</h3><span class="badge b-gray" style="margin-left:auto">seg 3/3</span></div>
+          <div style="background:var(--surface-2);border:1px solid var(--separator);border-radius:10px;padding:8px 10px;margin-bottom:8px">
+            <div class="diffline add" style="background:transparent">Standard ⊑ ∀imposesConstraint.(ConstraintLogic ⊓ ∃constrainsObject.Object)</div></div>
+          <div style="display:flex;gap:5px;flex-wrap:wrap"><span class="badge b-green">HermiT 一致</span><span class="badge b-gray">可满足</span><span class="badge b-blue">公理 1 条</span></div>
+          <p class="text-faint" style="font-size:10.5px;margin-top:8px">公理以描述逻辑表达式呈现，推理结果回填状态徽标。</p></div>
       </div>
     </div>
   </section>

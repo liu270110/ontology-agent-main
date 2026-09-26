@@ -11,6 +11,7 @@
 | 文档 | 内容 |
 | ---- | ---- |
 | [知识库GraphRAG设计.md](./知识库GraphRAG设计.md) | ABox/TBox 边界、七步抽取流水线（含四大国标硬门禁）、GraphRAG 索引管线（Leiden 社区 + community report + 任务化增量）、local/global/drift 检索路由与 RRF 混合检索、knowledge.search 契约、四存储落库模型、人工终审对接、Playground 联调接口、验收标准 |
+| [多源接入与连接器设计.md](./多源接入与连接器设计.md) | **姊妹篇：知识从哪来**——六类源全景（安全分区红线/最差可行路径）、连接器契约与统一信封、业务库零侵入三段式+分级 SLA（T0~T3）、跨系统语义消歧（source_system scope/谓词级 systemRelative/实体解析）、动态知识（活性环+knowledge.next_actions）、FDE 工具包与第一周清单、接入验收标准 |
 
 ## 上游依据
 

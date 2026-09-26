@@ -195,3 +195,4 @@ STATE_* / MESSAGES_SNAPSHOT 用于重连校正，不直接渲染。
 - [ ] 双副本压测执行（M3 出口条件，结论回填 02 篇 §8）；
 - [ ] RETRIEVAL_EVIDENCE 的 `chunks` 内部字段（doc_id / chunk_id / quote / score）与 messages.citations 的同构关系在 OntRAG 篇定稿后回填本篇载荷 schema 细则；
 - [ ] M5 阶段评估消息推送是否升级 WebSocket 双向通道（当前 SSE + REST POST 组合已满足需求，最小够用原则下不预建）。
+- [ ] ★ 25 篇对标缺口事件预登记（2026-09-26）：`MESSAGE_BRANCH_CREATED`（消息编辑=分叉，api/01 §5.2 branch 端点配套，X3）与**用量水位事件**（Run 内 context 占用 20% 档位推送+终值，X8）待事件分波表评审后入 §3；事件名以本篇评审定稿为准。

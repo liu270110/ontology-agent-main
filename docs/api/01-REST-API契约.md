@@ -164,17 +164,25 @@ HTTP/1.1 403 Forbidden
 | POST | /sessions | 创建会话（绑定 agent） | session:write | 201 | 3001、404* |
 | GET | /sessions | 当前用户会话列表 | session:read | 200 | — |
 | GET | /sessions/{id} | 会话详情与状态 | session:read | 200 | 404* |
-| DELETE | /sessions/{id} | 关闭会话（终态；触发 L1 归档与 L2 沉淀） | session:write | 204 | 4101 |
+| DELETE | /sessions/{id} | 管理员软删已归档会话（清理语义；归档=close 状态迁移，2026-09-26 按下方裁决注记补齐行与措辞） | session:admin | 204 | 4101 |
 | GET | /sessions/{id}/messages | 历史消息（before_id 游标分页） | session:read | 200 | 404* |
 | POST | /sessions/{id}/messages | 发送消息：`Accept: text/event-stream` 返回 SSE 流，否则 202 + `{run_id}` | session:chat | 200（SSE）/ 202 | 3001、4101、4102、5001 |
 | GET | /sessions/{id}/events | SSE 订阅 / 断线重连（Last-Event-ID，协议见 02 篇） | session:chat | 200（流） | 4301 |
 | POST | /sessions/{id}/cancel | 取消运行中任务 | session:write | 202 | 4102 |
+| POST | /sessions/{id}/close | 关闭会话（触发 L1 归档与 L2 沉淀；2026-09-26 按下方裁决注记补录） | session:write | 202 | 4101 |
+| PATCH | /sessions/{id} | 会话元信息更新（重命名/置顶/标签；**不含归档**——生命周期迁移唯一入口=close；2026-09-26 预登记，25 篇 F-04/X11） | session:write | 200 | 404*、3001 |
+| POST | /sessions/{id}/messages/{mid}/branch | 从指定消息分叉并重生成（**编辑消息=分叉**语义，非原地改写；25 篇 F-03/X3，P0） | session:chat | 202 | 404*、4102 |
+| PUT | /sessions/{id}/knowledge | 会话级知识库挂载（覆盖式更新挂载集合，检索收敛至挂载库；25 篇 F-05/X4） | session:write | 200 | 404*、3001 |
+| POST | /sessions/{id}/share | 创建只读分享快照（body: expires_in / watermark；25 篇 F-07/X5） | session:share | 201 | 404*、409* |
+| DELETE | /sessions/{id}/share | 撤销分享（快照即失效） | session:share | 204 | 404* |
 | GET ★ | /tasks | 任务列表（分页，按 `session_id` / `status` / `type` 过滤） | session:read | 200 | — |
 | GET ★ | /tasks/{task_id} | 任务详情（状态 / 用量 / 成本，Agent §6.2） | session:read | 200 | 404* |
 | GET ★ | /tasks/{task_id}/events | 任务事件时间线（task_events 按 seq 回放：`Accept: text/event-stream` 订阅 SSE，或 JSON 游标分页） | session:read | 200（流）/ 200 | 404*、4301 |
 | POST ★ | /tasks/{task_id}/cancel | 取消运行（Agent §6.2） | session:write | 202 | 4102 |
 
 > 已裁决（2026-09-26，参照 OpenAI 惯例 + 设计意图）：二者语义分立共存——`POST /sessions/{id}/close`=状态迁移（会话所有者，触发归档与 L2 沉淀）；`DELETE /sessions/{id}`=管理员软删已归档会话（清理语义，需 `session:admin`）。本表补录 close 行：`| POST | /sessions/{id}/close | 关闭会话（触发 L1 归档与 L2 沉淀） | session:write | 202 | 4101 |`。
+
+> 预登记（2026-09-26，[25 篇](../架构设计/25-前端页面功能缺口对标与任务清单.md)对标缺口，契约先行）：上表 PATCH / branch / knowledge / share 五行为契约预登记，实现随 F-03~F-07 排期；`POST /sessions` 请求体补两个**向后兼容可选字段**：`ephemeral`（临时会话标记：不进历史检索、不产生 L2 候选沉淀，审计照写，F-06）、`effort`（思考档位初值 off|low|medium|high，F-02，档位变化写审计）。新增 scope `session:share` 在 11 篇 §2 Permission 字典登记，并回填本篇 §5 导语与 08 篇 §2.3 动作集枚举（X6/X7 同批）；`PATCH /sessions/{id}` 仅元信息、与 close/DELETE 三者关系=元信息/生命周期迁移/管理员清理，互不重叠。
 
 ### 5.3 ontology（routers/ontology.py）
 
@@ -283,12 +291,47 @@ HTTP/1.1 403 Forbidden
 | GET ★ | /admin/writeback/ledger | 回写台账查询（status / needs_human 过滤，业务回写设计 §8） | admin:read | 200 | — |
 | GET ★ | /admin/writeback/ledger/{id} | 台账单条详情（含 receipt 凭证与 attempts） | admin:read | 200 | 404* |
 | POST ★ | /admin/writeback/ledger/{id}/dispose | 人工处置：重发（同幂等键新 attempt）/ 标记冲正 / 关闭（业务回写设计 §3.3） | admin:write | 202 | 409*、48xx |
+| POST ★ | /admin/users | 创建用户（分配角色，password 哈希入库；08 篇 §2.2 矩阵「租户/用户/密钥管理」归 admin） | admin:write | 201 | 3001、2001 |
+| GET ★ | /admin/users | 用户列表（分页，按 status / role 过滤） | admin:read | 200 | — |
+| GET ★ | /admin/users/{user_id} | 用户详情（含角色绑定与 last_login_at） | admin:read | 200 | 404* |
+| PATCH ★ | /admin/users/{user_id} | 更新用户元信息与角色绑定（display_name / username / roles） | admin:write | 200 | 3001、3003 |
+| DELETE ★ | /admin/users/{user_id} | 禁用（软删 status=disabled；**不物理删除**，全程可追溯，审计留痕） | admin:write | 204 | 409* |
+| POST ★ | /admin/api-keys | 签发 API Key（scopes ⊆ owner 用户 scopes；**明文仅本次响应返回一次**，库只存哈希与前缀——08 篇 §2.0/§2.6） | admin:write | 201 | 3001、2001 |
+| GET ★ | /admin/api-keys | Key 列表（按 owner / status 过滤；只回前缀与元数据，不回明文与哈希） | admin:read | 200 | — |
+| POST ★ | /admin/api-keys/{id}/rotate | 轮换：新钥即时生效，旧钥 24h 宽限（active→rotated，**状态机权威 08 篇 §2.6**） | admin:write | 200 | 404*、409* |
+| POST ★ | /admin/api-keys/{id}/revoke | 吊销：立即失效不可逆（→revoked 终态，08 篇 §2.6；签发/轮换/吊销全走审计） | admin:write | 202 | 404*、409* |
 
 > ★ 三条 writeback 端点为本篇补充（上游业务回写设计 §8 只定义了表结构未定义 REST 端点）；48xx 号段为本篇建议预留（§4.2）。
 
-### 5.9 auth（规划中，待定）
+### 5.9 auth（routers/auth.py，2026-09-26 设计定稿）
 
-`POST /auth/login`（签发 access + refresh）在 02 篇 §3 ③ 匿名白名单中已出现，但路由归属（并入 admin 还是独立 auth router）为 02 篇 §9 待办——**定稿前不进入端点清单计数**。
+路由归属裁决：**独立 auth router**（`routers/auth.py`，不并入 admin）。JWT claims 权威定义引 [08 篇 §2.1](../architecture/08-横切关注点与工程规范.md)；错误码**不新增**——复用现有 1xxx 段（02 篇错误码表不动），凭据类失败统一映射 1002（凭据无效）。登录/刷新失败与登出全走审计（08 篇 §3 认证类事件）。
+
+| 方法 | 路径 | 用途 | 所需 scope | 成功码 | 主要错误码 |
+| ---- | ---- | ---- | ---- | ---- | ---- |
+| POST | /auth/login | 登录：校验凭据，签发 access（2h）+ refresh（14d），claims 按 08 篇 §2.1（sub/tenant_id/roles/scopes/typ/jti）；**匿名白名单**（02 篇 §3 ③） | 匿名 | 200 | 1002（凭据无效）、2005 |
+| POST | /auth/refresh | 以有效 refresh token 换发新 access；旧令牌 `jti` 入 Redis 黑名单（TTL=剩余有效期，08 篇 §2.2；轮换细则随 08 篇 §10 对应待办定稿） | 匿名（body 携 refresh token） | 200 | 1002、1003 |
+| POST | /auth/logout | 登出：将请求所持 access/refresh 的 `jti` 写入吊销黑名单 | 认证后（无额外 scope） | 204 | 1001、1002 |
+
+> 三端点计入端点清单总数；body 与响应 DTO（token 对、错误分支）随 OpenAPI 契约测试快照冻结（§8 变更管理）。
+
+### 5.10 files / prompts / groups / acl / permission-requests（routers/files.py 等，2026-09-26 预登记）
+
+> 来源：[25 篇](../架构设计/25-前端页面功能缺口对标与任务清单.md) 对标缺口（25 篇 §7 契约先行落点）。本节为**契约预登记**：路径/scope/语义已定，实现随对应任务排期（P0 标注者随 M3/M5 对话批先行）。错误码复用现有号段；新增专用错误码（如分享已过期）在实现 PR 按 §4.2 号段登记。新增 scope `file:read/write`、`group:read/write`、`prompt:read/write`、`{resource}:admin`（acl）一并在 11 篇 §2 Permission 字典登记（X6/X7）。
+
+| 方法 | 路径 | 用途 | 所需 scope | 成功码 | 主要错误码 |
+| ---- | ---- | ---- | ---- | ---- | ---- |
+| POST | /files | 临时附件上传（multipart；返回 file_id + MinIO 预签名直传地址；生命周期默认 7 天+租户配额，25 篇 F-01/X1，**P0**） | file:write | 201 | 3001、409* |
+| GET | /files/{id} | 附件元数据与下载预签名（会话内引用） | file:read | 200 | 404* |
+| POST | /files/{id}/to-kb | 临时附件转存知识库（创建 kb 文档登记并进七步流水线与审核队列，**不绕审**；25 篇 F-01，宪法 3） | kb:write | 202 | 404*、409* |
+| GET/POST | /prompts | 提示词库列表/新建（`scope=personal\|tenant` 两级；25 篇 F-08/X12） | prompt:read / prompt:write | 200 / 201 | 3001 |
+| PUT/DELETE | /prompts/{id} | 提示词更新/删除（tenant 级需管理权限） | prompt:write | 200 / 204 | 404*、2002 |
+| GET/POST | /admin/groups | 用户组列表/建组（RBAC 之上的批量授权单元；25 篇 F-10/X6） | group:read / group:write | 200 / 201 | 3001 |
+| PUT/PATCH/DELETE | /admin/groups/{id} | 组更新 / 成员增删（PATCH）/ 解散 | group:write | 200 / 200 / 204 | 404*、2002 |
+| PUT | /{resource}/{id}/acl | 资源级 ACL 覆盖式授权（`resource=kb\|agent\|model_channel`；body: grants[]{subject_type=group\|user, subject_id, level=read\|use\|write}；25 篇 F-10/X6） | {resource}:admin | 200 | 404*、2002 |
+| GET | /acl | 查询资源授权与继承链（`?resource=&id=`） | 对应资源 read | 200 | — |
+| POST | /permission-requests | 提交权限申请（body: resource/action/reason；生成审批工单=**第六类对象**，权威=11 篇 §6；25 篇 F-11/X7） | 认证后（无额外 scope） | 202 | 3001、409* |
+| GET | /permission-requests | 申请列表（`?role=mine\|approvable`） | review:read | 200 | — |
 
 ## 6. 关键端点详设
 
@@ -428,7 +471,8 @@ HTTP/1.1 202 Accepted
 - [x] ~~冲突裁决 ⑤ MCP memory 层级命名~~（2026-09-26：MCP 对外语义枚举 session/user/org/knowledge ↔ 内部 L1~L4，映射表已入 MCP 篇 §2）；
 - [ ] ★ 补充端点回填：02 篇 §4 已声明「全量端点登记册权威=本篇」（代表性端点不再回填），剩余动作是各**模块设计文档**（Agent/ontology/memory/Skills）端点小节加指向本篇的链接，随开发进行；
 - [x] ~~端点补录：GET /tasks、GET /tasks/{task_id}/events、kb 审核（候选列表 / 单条决策 / 批量决策）、分片预览、图谱三查、GET /admin/models、PUT /admin/models/{id}、GET /admin/costs、GET /memory/facts/{id}/timeline 已补入 §5.2 / §5.4 / §5.5 / §5.8~~（2026-09-26 评审修复F ★ 评审补录）；
-- [ ] `POST /auth/login` 路由归属定稿（02 篇 §9 待办，08 篇 §2 定稿后回填 §5.9）——2026-09-26 评审修复F：清理 §9 重复行（原两行同文，保留一行）；
+- [x] ~~`POST /auth/login` 路由归属定稿~~（2026-09-26 设计定稿：独立 auth router（routers/auth.py），login/refresh/logout 三端点入 §5.9；admin 补 users CRUD 五端点与 api_keys 四端点（签发/轮换/吊销/列表，状态机引 08 篇 §2.6）入 §5.8。错误码复用现有 1xxx、02 篇错误码表不动；02 篇 §9 同名待办随其维护流程同步勾销）；
 - [ ] 48xx 号段（writeback）与 404 / 409 通用码在 02 篇 §7 正式登记；
 - [ ] 4301 的 HTTP 映射（建议 410 Gone）在 02 篇登记；
+- [ ] ★ 25 篇对标缺口端点实现排期（2026-09-26 预登记）：§5.2 新增五行（PATCH/branch/knowledge/share）与 §5.10（files/prompts/groups/acl/permission-requests）；实现时同步：新增 scope 与专用错误码登记（11 篇 §2/§3 + §4.2 号段）、**动作集枚举回填**（`share` 动作入 08 篇 §2.3 固定动作集与本篇 §5 导语）、SSE 分支/用量水位事件登记 02-SSE 协议篇（X3/X8）、OpenAPI 快照再生成（16 篇 §2.3 漂移校验）。协调项 X1~X14 见 [docs/代办任务/2026-09-26-前端页面功能缺口补齐.md](../代办任务/2026-09-26-前端页面功能缺口补齐.md)；
 - [ ] 本篇端点表的 OpenAPI 标注核对（八个 routers 全端点标注 scope，02 篇 §8 验收项）进入 CI 契约测试。

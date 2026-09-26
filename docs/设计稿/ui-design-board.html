@@ -54,6 +54,43 @@
   --glass-lo:rgba(0,0,0,.3);
   --glass-border:rgba(255,255,255,.14);
 }
+
+/* ---- 动效实装（styles/motion.css 同源；滚动入场由 IntersectionObserver 触发） ---- */
+@keyframes oa-fade-up{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+@keyframes oa-pulse-ring{0%{box-shadow:0 0 0 0 var(--accent-soft)}70%{box-shadow:0 0 0 6px transparent}100%{box-shadow:0 0 0 0 transparent}}
+@keyframes oa-caret{0%,45%{opacity:1}50%,100%{opacity:0}}
+@keyframes oa-shimmer{from{background-position:200% 0}to{background-position:-200% 0}}
+@keyframes oa-indet{from{left:-40%}to{left:100%}}
+@keyframes oa-sheen-loop{0%{background-position:220% 0}55%,100%{background-position:-120% 0}}
+@keyframes oa-blob-drift{0%,100%{transform:translate(0,0) scale(1)}33%{transform:translate(3%,-4%) scale(1.04)}66%{transform:translate(-3%,3%) scale(.97)}}
+.pulse-ring{animation:oa-pulse-ring 2s var(--ease) infinite}
+.stream-caret{display:inline-block;width:2px;height:.95em;vertical-align:-2px;background:var(--accent);margin-left:2px;animation:oa-caret 1s steps(1) infinite}
+.skel-animated{background:linear-gradient(90deg,rgba(0,0,0,.06) 25%,rgba(0,0,0,.12) 50%,rgba(0,0,0,.06) 75%);background-size:200% 100%;animation:oa-shimmer 1.4s linear infinite}
+.dark .skel-animated{background:linear-gradient(90deg,rgba(255,255,255,.08) 25%,rgba(255,255,255,.16) 50%,rgba(255,255,255,.08) 75%);background-size:200% 100%}
+.indeterminate{position:relative;overflow:hidden;background:var(--accent-soft);border-radius:3px;height:6px}
+.indeterminate::after{content:"";position:absolute;top:0;bottom:0;width:40%;border-radius:3px;background:var(--accent);animation:oa-indet 1.2s var(--ease) infinite}
+.glass-sheen-loop{position:relative;overflow:hidden}
+.glass-sheen-loop::after{content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none;
+  background:linear-gradient(115deg,transparent 38%,var(--glass-hi) 50%,transparent 62%);
+  background-size:220% 100%;background-position:220% 0;opacity:.4;mix-blend-mode:screen;
+  animation:oa-sheen-loop 5.5s var(--ease) infinite}
+.blob-drift{animation:oa-blob-drift 14s ease-in-out infinite}
+/* 滚动入场：画框头与 stagger 列表进入视口才播 */
+.frame-head,.anim-up{opacity:0;transform:translateY(8px);transition:opacity .4s var(--ease),transform .4s var(--ease)}
+.frame.in-view .frame-head,.in-view.anim-up{opacity:1;transform:none}
+.stagger>*{opacity:0;transform:translateY(8px)}
+.frame.in-view .stagger>*{animation:oa-fade-up .4s var(--ease) both}
+.frame.in-view .stagger>*:nth-child(2){animation-delay:40ms}
+.frame.in-view .stagger>*:nth-child(3){animation-delay:80ms}
+.frame.in-view .stagger>*:nth-child(4){animation-delay:120ms}
+.frame.in-view .stagger>*:nth-child(5){animation-delay:160ms}
+.frame.in-view .stagger>*:nth-child(n+6){animation-delay:200ms}
+.theme-fading *{transition:background-color var(--dur-2) var(--ease),color var(--dur-2) var(--ease),border-color var(--dur-2) var(--ease)!important}
+@media (prefers-reduced-motion:reduce){
+  .frame-head,.anim-up,.stagger>*{opacity:1!important;transform:none!important;animation:none!important}
+  .pulse-ring,.stream-caret,.skel-animated,.indeterminate::after,.glass-sheen-loop::after,.blob-drift{animation:none!important}
+}
+
 /* ============ 画板全局 ============ */
 *{box-sizing:border-box;margin:0;padding:0}
 html{scroll-behavior:smooth}
@@ -745,6 +782,37 @@ body{font-family:var(--font);background:var(--board);color:var(--label);
           <p style="font-size:11px;color:var(--label-3);margin-top:8px">CLI `oa` 全集见 13 篇；复制按钮 hover 显现。</p>
         </div>
       </div>
+      <!-- 动效展演（实时循环，motion.css 同源） -->
+      <div style="display:flex;align-items:center;gap:10px;padding:20px 4px 2px">
+        <h3 style="font-size:15px;font-weight:700">动效展演</h3>
+        <span class="badge b-blue">motion.css 实时循环</span>
+        <span style="margin-left:auto"><button class="btn btn-g btn-sm" onclick="replayMotion()">重播入场</button></span>
+      </div>
+      <div class="grid3 stagger" style="margin-top:12px" id="motion-demo">
+        <div class="card">
+          <div class="card-h" style="margin-bottom:10px"><h3 style="font-size:13.5px">加载态</h3><span class="badge b-gray">skel-animated / indeterminate</span></div>
+          <div class="skel skel-animated" style="width:70%"></div><div class="skel skel-animated" style="width:90%;margin-top:8px"></div><div class="skel skel-animated" style="width:50%;margin-top:8px"></div>
+          <div style="font-size:11px;color:var(--label-2);margin:14px 0 5px">流水线心跳（不确定进度）</div>
+          <div class="indeterminate"></div>
+          <div style="display:flex;align-items:center;gap:8px;margin-top:14px;font-size:12px;color:var(--label-2)">
+            <svg class="spin" style="width:13px;height:13px;color:var(--accent)"><use href="#i-refresh"/></svg>批量抽取运行中…</div>
+        </div>
+        <div class="card">
+          <div class="card-h" style="margin-bottom:10px"><h3 style="font-size:13.5px">运行态 / 流式</h3><span class="badge b-gray">pulse-ring / stream-caret</span></div>
+          <div style="display:flex;align-items:center;gap:8px;font-size:13px"><span class="dot d-green pulse-ring"></span>原生 Agent 运行中</div>
+          <div style="margin-top:14px;background:var(--surface-2);border:1px solid var(--separator);border-radius:12px;padding:10px 12px;font-size:12.5px;line-height:1.7">
+            两个标准在循环寿命上的核心差异…<span class="stream-caret"></span></div>
+          <div style="font-size:11px;color:var(--label-3);margin-top:10px">对话生成中：光标闪烁直到 RUN_FINISHED</div>
+        </div>
+        <div class="card">
+          <div class="card-h" style="margin-bottom:10px"><h3 style="font-size:13.5px">玻璃氛围 / 反馈</h3><span class="badge b-gray">sheen-loop / hover-lift</span></div>
+          <div class="glass glass-sheen-loop" style="border-radius:14px;padding:12px 14px;font-size:12px"><b>Regular 光扫循环</b><div class="text-dim" style="margin-top:3px">登录卡 / 空态插图用</div></div>
+          <div class="row" style="margin-top:10px;display:flex;gap:8px">
+            <button class="btn btn-gl-p">Tinted 主操作</button>
+            <button class="btn btn-gl hover-lift pressable">hover / press</button></div>
+          <div style="font-size:11px;color:var(--label-3);margin-top:10px">Tinted 着色玻璃：iOS 26 第三档，每屏至多一处</div>
+        </div>
+      </div>
     </div></div>
   </section>
 
@@ -760,8 +828,8 @@ body{font-family:var(--font);background:var(--board);color:var(--label);
     </div>
     <div class="browser"><div class="bbar"><span class="bdot" style="background:#ff5f57"></span><span class="bdot" style="background:#febc2e"></span><span class="bdot" style="background:#28c840"></span><span class="burl">ontology.local/login</span></div>
       <div class="login-stage">
-        <div class="login-wash lw1"></div><div class="login-wash lw2"></div>
-        <div class="login-card">
+        <div class="login-wash lw1 blob-drift"></div><div class="login-wash lw2 blob-drift" style="animation-delay:-7s"></div>
+        <div class="login-card glass-sheen-loop">
           <div class="login-logo"><svg><use href="#i-cube"/></svg></div>
           <h1>ontology-agent</h1>
           <p class="lsub">以本体为语义基座的智能体平台</p>
@@ -929,7 +997,7 @@ body{font-family:var(--font);background:var(--board);color:var(--label);
                         <span class="ev-chip"><svg><use href="#i-doc"/></svg>GB/T 36276-2018 §5.2.4</span>
                         <span class="ev-chip"><svg><use href="#i-cube"/></svg>图谱路径：循环寿命 ←特性— 对象：电池单体</span>
                       </div>
-                      <p style="font-size:11px;color:var(--label-2);margin-top:10px">以上结论经本体约束过滤（术语对齐 0.92+），推理路径可追溯。</p>
+                      <span class="stream-caret"></span><p style="font-size:11px;color:var(--label-2);margin-top:10px">以上结论经本体约束过滤（术语对齐 0.92+），推理路径可追溯。</p>
                     </div>
                   </div></div>
               </div>
@@ -1601,7 +1669,7 @@ body{font-family:var(--font);background:var(--board);color:var(--label);
             <div class="card" style="padding:6px 14px">
               <table class="tbl">
                 <tr><th>文档名称</th><th>类型</th><th>大小</th><th>切片</th><th>流水线</th><th>更新</th><th></th></tr>
-                <tr><td style="font-weight:600">动力电池标准汇编 v3.pdf</td><td><span class="badge b-gray">PDF</span></td><td class="mono">18.2MB</td><td class="mono">412</td><td><span class="badge b-orange"><span class="dot d-orange" style="width:5px;height:5px"></span>抽取中 · JOB #218</span></td><td class="text-dim">10 分钟前</td><td><span class="icobtn" style="width:24px;height:24px"><svg><use href="#i-more"/></svg></span></td></tr>
+                <tr><td style="font-weight:600">动力电池标准汇编 v3.pdf</td><td><span class="badge b-gray">PDF</span></td><td class="mono">18.2MB</td><td class="mono">412</td><td><span class="badge b-orange"><span class="dot d-orange pulse-ring" style="width:5px;height:5px"></span>抽取中 · JOB #218</span></td><td class="text-dim">10 分钟前</td><td><span class="icobtn" style="width:24px;height:24px"><svg><use href="#i-more"/></svg></span></td></tr>
                 <tr><td style="font-weight:600">GB送审稿-热失控专题.docx</td><td><span class="badge b-gray">Word</span></td><td class="mono">2.4MB</td><td class="mono">58</td><td><span class="badge b-blue">预处理</span></td><td class="text-dim">1 小时前</td><td><span class="icobtn" style="width:24px;height:24px"><svg><use href="#i-more"/></svg></span></td></tr>
                 <tr><td style="font-weight:600">循环寿命测试数据.xlsx</td><td><span class="badge b-gray">Excel</span></td><td class="mono">860KB</td><td class="mono">31</td><td><span class="badge b-green">已入库</span></td><td class="text-dim">昨天</td><td><span class="icobtn" style="width:24px;height:24px"><svg><use href="#i-more"/></svg></span></td></tr>
                 <tr><td style="font-weight:600">退单流程图（扫描）.png</td><td><span class="badge b-gray">图片</span></td><td class="mono">4.1MB</td><td class="mono">6</td><td><span class="badge b-green">已入库 · OCR 复核完成</span></td><td class="text-dim">周一</td><td><span class="icobtn" style="width:24px;height:24px"><svg><use href="#i-more"/></svg></span></td></tr>
@@ -1948,5 +2016,21 @@ body{font-family:var(--font);background:var(--board);color:var(--label);
     评审通过后按 16 篇页面规格进入 M1 实现 · 03 篇路由表 15 页已全部覆盖（本体项目/知识库/图谱/Agent/工具技能/MCP/系统管理 为 v1.3 新增）
   </p>
 </div>
+
+<script>
+const io = new IntersectionObserver(es => es.forEach(e => {
+  if (e.isIntersecting) { e.target.classList.add('in-view'); io.unobserve(e.target); }
+}), {threshold: .12});
+document.querySelectorAll('.frame').forEach(f => io.observe(f));
+function replayMotion(){
+  const d = document.getElementById('motion-demo');
+  d.classList.remove('stagger'); void d.offsetWidth; d.classList.add('stagger');
+}
+const _toggle = document.querySelector('.theme-btn');
+_toggle.addEventListener('click', () => {
+  document.documentElement.classList.add('theme-fading');
+  setTimeout(() => document.documentElement.classList.remove('theme-fading'), 300);
+});
+</script>
 </body>
 </html>

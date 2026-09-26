@@ -33,6 +33,8 @@
   --glass-hi:rgba(255,255,255,.65);          /* 顶部镜面高光 */
   --glass-lo:rgba(0,0,0,.08);                /* 底部内阴影 */
   --glass-border:rgba(255,255,255,.55);
+  --glass-tinted:rgba(0,113,227,.78);       /* Tinted：强调色着色玻璃（主操作/选中，iOS 26） */
+  --glass-tinted-border:rgba(255,255,255,.4);
 
   /* 几何 / 阴影 / 动效 / 字体 */
   --r-card:18px; --r-panel:14px; --r-ctl:10px; --r-pill:999px;
@@ -78,6 +80,8 @@
   --glass-hi:rgba(255,255,255,.22);
   --glass-lo:rgba(0,0,0,.3);
   --glass-border:rgba(255,255,255,.14);
+  --glass-tinted:rgba(10,132,255,.6);
+  --glass-tinted-border:rgba(255,255,255,.25);
   --sh-card:0 2px 8px rgba(0,0,0,.3),0 8px 24px rgba(0,0,0,.35);
   --sh-float:0 4px 12px rgba(0,0,0,.4),0 16px 48px rgba(0,0,0,.55);
   --edge:rgba(255,255,255,.22);

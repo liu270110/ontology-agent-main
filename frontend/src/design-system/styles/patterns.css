@@ -102,3 +102,169 @@
 .popover .p-title{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:700;margin-bottom:6px}
 .popover .p-body{font-size:12px;color:var(--label-2);line-height:1.6}
 .popover .p-acts{display:flex;gap:6px;justify-content:flex-end;margin-top:10px}
+
+/* =============================================================
+   v1.1 扩充：数据分析 / 系统管理 / AI 对话增强 / 消费级 / 覆盖层
+   （24 篇 §3.3–§3.7 的样式基座；与画板 00C–00H 同名同源）
+   ============================================================= */
+/* ---- 数据分析（Tremor 模式）：序列色一律取 --chart-1..6，数字 tabular-nums ---- */
+.num-tick{font-variant-numeric:tabular-nums}
+.kpi{display:flex;flex-direction:column;gap:2px}
+.kpi .kpiv{font-size:26px;font-weight:700;letter-spacing:-.6px;font-variant-numeric:tabular-nums}
+.chart{padding:4px 2px 0}
+.chart svg{display:block;width:100%;height:auto}
+.ax{font-size:10px;fill:var(--label-3);font-family:var(--mono)}
+.legend{display:flex;gap:14px;flex-wrap:wrap;font-size:11px;color:var(--label-2)}
+.legend i{width:8px;height:8px;border-radius:3px;display:inline-block;margin-right:5px}
+.tracker{display:flex;gap:3px}
+.tracker i{flex:1;height:8px;border-radius:3px;min-width:4px}
+.t-ok{background:var(--green)} .t-warn{background:var(--orange)} .t-err{background:var(--red)}
+.t-idle{background:rgba(0,0,0,.07)} .dark .t-idle{background:rgba(255,255,255,.1)}
+.heat{display:grid;grid-template-columns:repeat(14,1fr);gap:3px}
+.heat i{aspect-ratio:1/1;border-radius:3px;background:var(--accent)}
+.heat-lab{display:flex;justify-content:space-between;font-size:10px;color:var(--label-3);margin-top:6px;font-family:var(--mono)}
+.barlist{display:flex;flex-direction:column;gap:10px}
+.barlist .bl{display:grid;grid-template-columns:112px 1fr 56px;align-items:center;gap:10px;font-size:12px;color:var(--label)}
+.barlist .bl .tr{height:8px;border-radius:4px;background:rgba(0,0,0,.06);overflow:hidden}
+.dark .barlist .bl .tr{background:rgba(255,255,255,.1)}
+.barlist .bl .tr i{display:block;height:100%;border-radius:4px}
+.barlist .bl .v{font-family:var(--mono);font-size:11px;color:var(--label-2);text-align:right}
+.funnel{display:flex;flex-direction:column;gap:6px}
+.funnel .fn{height:34px;border-radius:9px;display:flex;align-items:center;justify-content:center;gap:8px;
+  color:var(--on-accent);font-size:11px;font-weight:600;margin:0 auto;width:100%}
+.gauge-wrap{display:flex;align-items:center;justify-content:center;padding:6px 0}
+
+/* ---- 系统管理（Settings Shell 模式） ---- */
+.perm th,.perm td{text-align:center}
+.perm td:first-child,.perm th:first-child{text-align:left;font-weight:500}
+.keyrow{display:flex;align-items:center;gap:10px;padding:11px 4px;border-bottom:1px solid var(--separator);font-size:12px;flex-wrap:wrap}
+.keyrow:last-child{border-bottom:none}
+.keymask{font-family:var(--mono);font-size:11px;background:var(--surface-2);border:1px solid var(--separator);
+  border-radius:7px;padding:3px 8px;color:var(--label-2)}
+.danger-zone{border:1.5px solid var(--red);border-radius:var(--r-panel);padding:16px 18px}
+.danger-zone h4{color:var(--red);font-size:13px;font-weight:700;display:flex;align-items:center;gap:7px;margin-bottom:4px}
+.danger-zone h4 svg{width:14px;height:14px}
+.setnav{width:186px;flex:none;border-right:1px solid var(--separator);padding:14px 8px}
+.setnav .sn{display:flex;align-items:center;gap:8px;height:32px;padding:0 10px;border-radius:8px;
+  font-size:12.5px;color:var(--label-2);text-decoration:none;cursor:pointer}
+.setnav .sn svg{width:14px;height:14px}
+.setnav .sn:hover{background:rgba(0,0,0,.04)}
+.dark .setnav .sn:hover{background:rgba(255,255,255,.06)}
+.setnav .sn.on{background:var(--accent-soft);color:var(--accent);font-weight:600}
+.devrow{display:flex;align-items:center;gap:12px;padding:12px 4px;border-bottom:1px solid var(--separator)}
+.devrow:last-child{border-bottom:none}
+.devrow .d-ic{width:34px;height:34px;border-radius:9px;background:var(--surface-2);border:1px solid var(--separator);
+  display:flex;align-items:center;justify-content:center;color:var(--label-2);flex:none}
+.devrow .d-ic svg{width:16px;height:16px}
+.avatar-group{display:flex;align-items:center}
+.avatar-group .avatar{width:26px;height:26px;font-size:10px;border:2px solid var(--surface);margin-left:-8px}
+.avatar-group .avatar:first-child{margin-left:0}
+
+/* ---- 覆盖层补充：抽屉 / 菜单 / 语义 Alert / 玻璃 Banner ---- */
+.ov-stage{position:relative;border-radius:14px;overflow:hidden;
+  background:radial-gradient(circle at 1px 1px,var(--separator) 1px,transparent 0) 0 0/18px 18px,var(--bg)}
+.ov-dim{position:absolute;inset:0;background:rgba(0,0,0,.38)}
+.drawer{position:absolute;right:0;top:0;bottom:0;width:272px;background:var(--surface);
+  box-shadow:-12px 0 40px rgba(0,0,0,.16);padding:18px;border-left:1px solid var(--separator);font-size:12px;color:var(--label)}
+.drawer h4{font-size:14px;font-weight:700;margin-bottom:10px}
+.menu{width:212px;background:var(--surface);border:1px solid var(--separator);border-radius:13px;
+  box-shadow:var(--sh-float);padding:5px;position:relative;z-index:2}
+.menu-i{display:flex;align-items:center;gap:9px;height:32px;padding:0 10px;border-radius:8px;font-size:13px;cursor:pointer;color:var(--label)}
+.menu-i svg{width:14px;height:14px;color:var(--label-2)}
+.menu-i:hover{background:rgba(0,0,0,.05)}
+.dark .menu-i:hover{background:rgba(255,255,255,.07)}
+.menu-i.danger{color:var(--red)} .menu-i.danger svg{color:var(--red)}
+.menu-sep{height:1px;background:var(--separator);margin:5px 8px}
+.menu-k{margin-left:auto;font-family:var(--mono);font-size:10px;color:var(--label-3)}
+.alert{display:flex;gap:10px;border-radius:12px;padding:12px 14px;font-size:12px;line-height:1.6;border:1px solid transparent}
+.alert svg{width:15px;height:15px;flex:none;margin-top:1px}
+.alert b{display:block;font-size:12.5px;margin-bottom:2px}
+.al-info{background:var(--accent-soft);color:var(--accent)}
+.al-ok{background:var(--green-soft);color:var(--green)}
+.al-warn{background:var(--orange-soft);color:var(--orange)}
+.al-err{background:var(--red-soft);color:var(--red)}
+.banner{display:flex;align-items:center;gap:10px;border-radius:12px;padding:9px 14px;font-size:12px;font-weight:500;color:var(--label);
+  background:linear-gradient(135deg,var(--glass-tint),transparent 42%),var(--glass-regular);
+  -webkit-backdrop-filter:blur(24px) saturate(200%);backdrop-filter:blur(24px) saturate(200%);
+  border:1px solid var(--glass-border);box-shadow:inset 0 1px 0 var(--glass-hi)}
+.banner svg{width:14px;height:14px;flex:none;color:var(--orange)}
+.banner .btn{margin-left:auto;white-space:nowrap}
+
+/* ---- AI 对话增强（AI Elements 模式） ---- */
+.toolcard{display:flex;align-items:center;gap:9px;background:var(--surface);border:1px solid var(--separator);
+  border-radius:12px;padding:9px 13px;font-family:var(--mono);font-size:11px;color:var(--label-2)}
+.toolcard .tn{color:var(--label);font-weight:600}
+.toolcard.ok{border-left:3px solid var(--green)}
+.toolcard.run{border-left:3px solid var(--accent)}
+.toolcard.err{border-left:3px solid var(--red)}
+.think{border:1px solid var(--separator);border-radius:12px;background:var(--surface);overflow:hidden}
+.think-h{display:flex;align-items:center;gap:8px;padding:9px 12px;font-size:12px;font-weight:600;color:var(--label-2);cursor:pointer}
+.think-h svg{width:13px;height:13px;color:var(--label-3)}
+.think-h .tmr{margin-left:auto;font-family:var(--mono);font-size:10px;color:var(--label-3);font-variant-numeric:tabular-nums}
+.think-b{padding:2px 12px 10px;font-size:12px;color:var(--label-2);line-height:1.75;border-top:1px solid var(--separator)}
+.think-b .dim{opacity:.72}
+.confirm-card{border:1.5px solid var(--orange);border-radius:14px;background:var(--surface);padding:14px 16px}
+.confirm-card h5{font-size:13px;font-weight:700;display:flex;align-items:center;gap:7px;color:var(--label)}
+.confirm-card h5 svg{width:14px;height:14px;color:var(--orange)}
+.artifact{border:1px solid var(--separator);border-radius:14px;background:var(--surface);overflow:hidden}
+.artifact .af-h{display:flex;align-items:center;gap:8px;padding:9px 12px;border-bottom:1px solid var(--separator);
+  font-size:12px;font-weight:600;color:var(--label)}
+.artifact .af-h svg{width:13px;height:13px;color:var(--accent)}
+.artifact .af-h .more{margin-left:auto}
+.artifact .af-b{padding:12px;font-size:12px;line-height:1.7;color:var(--label-2)}
+.cite-sup{display:inline-flex;align-items:center;justify-content:center;min-width:15px;height:15px;border-radius:5px;
+  background:var(--accent-soft);color:var(--accent);font-size:9.5px;font-weight:700;font-family:var(--mono);
+  vertical-align:super;margin:0 1px;cursor:pointer}
+.task-card{display:flex;align-items:center;gap:10px;border:1px solid var(--separator);border-radius:12px;
+  background:var(--surface);padding:10px 12px;font-size:12px;color:var(--label)}
+.sugg{display:flex;gap:6px;flex-wrap:wrap}
+.sugg .sg{font-size:11.5px;color:var(--label-2);border:1px solid var(--separator);background:var(--surface);
+  border-radius:var(--r-pill);padding:5px 12px;cursor:pointer;transition:all var(--dur-1) var(--ease)}
+.sugg .sg:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-soft)}
+
+/* ---- 消费级门户 ---- */
+.hero-demo{position:relative;border-radius:16px;overflow:hidden;padding:34px 28px;text-align:center;
+  background:linear-gradient(135deg,var(--accent-soft),var(--teal-soft) 55%,var(--indigo-soft))}
+.hero-demo h2{font-size:26px;font-weight:800;letter-spacing:-.6px;color:var(--label)}
+.hero-demo p{font-size:13px;color:var(--label-2);margin-top:8px;max-width:420px;margin-left:auto;margin-right:auto;line-height:1.7}
+.hero-demo .h-cta{display:flex;gap:10px;justify-content:center;margin-top:18px}
+.price{display:flex;flex-direction:column;gap:12px}
+.price .p-name{font-size:13px;font-weight:700;display:flex;align-items:center;gap:8px}
+.price .p-amt{font-size:28px;font-weight:800;letter-spacing:-.8px;font-variant-numeric:tabular-nums}
+.price .p-amt small{font-size:12px;color:var(--label-2);font-weight:400;letter-spacing:0}
+.price ul{list-style:none;display:flex;flex-direction:column;gap:7px;font-size:12px;color:var(--label-2)}
+.price ul li{display:flex;gap:7px;align-items:flex-start;line-height:1.5}
+.price ul svg{width:13px;height:13px;color:var(--green);flex:none;margin-top:2px}
+.price.on{border:1.5px solid var(--accent);box-shadow:var(--glow-accent)}
+.onboard .ob{display:flex;gap:10px;align-items:center;padding:9px 0;border-bottom:1px solid var(--separator);font-size:12.5px;color:var(--label)}
+.onboard .ob:last-child{border-bottom:none}
+.statuspill{display:inline-flex;align-items:center;gap:7px;font-size:12px;font-weight:600;color:var(--green)}
+.billrow{display:flex;align-items:center;gap:10px;padding:10px 4px;border-bottom:1px solid var(--separator);font-size:12px;color:var(--label)}
+.billrow:last-child{border-bottom:none}
+
+/* ---- 手风琴（FAQ/配置分组） ---- */
+.acc{border:1px solid var(--separator);border-radius:13px;overflow:hidden;background:var(--surface)}
+.acc-item+.acc-item{border-top:1px solid var(--separator)}
+.acc-h{display:flex;align-items:center;gap:8px;padding:12px 14px;font-size:13px;font-weight:600;cursor:pointer;color:var(--label)}
+.acc-h svg{margin-left:auto;width:13px;height:13px;color:var(--label-3);transition:transform var(--dur-2) var(--ease)}
+.acc-item.open .acc-h svg{transform:rotate(180deg)}
+.acc-b{padding:0 14px 12px;font-size:12px;color:var(--label-2);line-height:1.75}
+
+/* ---- v1.1 新动效：光束流动 / 眩光 hover / 渐进模糊（24 篇 §4.13） ---- */
+@keyframes oa-beam{to{stroke-dashoffset:-64}}
+.beam{stroke-dasharray:5 11;animation:oa-beam 1.4s linear infinite}
+.glare-hover{position:relative;overflow:hidden}
+.glare-hover::after{content:"";position:absolute;inset:0;pointer-events:none;
+  background:linear-gradient(115deg,transparent 42%,var(--glass-hi) 50%,transparent 58%);
+  transform:translateX(-110%);transition:transform var(--dur-4) var(--ease)}
+.glare-hover:hover::after{transform:translateX(110%)}
+.pblur{position:relative}
+.pblur::before{content:"";position:absolute;left:0;right:0;height:24px;pointer-events:none;z-index:1;
+  -webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);
+  -webkit-mask-image:linear-gradient(to bottom,#000,transparent);mask-image:linear-gradient(to bottom,#000,transparent)}
+.pblur.top::before{top:0}
+.pblur.bottom::before{top:auto;bottom:0;
+  -webkit-mask-image:linear-gradient(to top,#000,transparent);mask-image:linear-gradient(to top,#000,transparent)}
+@media (prefers-reduced-motion:reduce){
+  .beam,.glare-hover::after{animation:none!important;transition:none!important}
+}

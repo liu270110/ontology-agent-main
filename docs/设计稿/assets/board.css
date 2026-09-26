@@ -209,7 +209,7 @@ body{font-family:var(--font);background:var(--board);color:var(--label);
 .sub{font-size:13px;color:var(--label-2);margin-bottom:22px}
 .btn{display:inline-flex;align-items:center;gap:6px;font-family:var(--font);font-size:13px;font-weight:600;
   border:none;cursor:pointer;border-radius:var(--r-pill);padding:7px 16px;
-  transition:.18s var(--ease);letter-spacing:0}
+  transition:.18s var(--ease);letter-spacing:0;white-space:nowrap}
 .btn svg{width:13px;height:13px}
 .btn:hover{transform:translateY(-1px);box-shadow:var(--sh-card)}
 .btn:active{transform:translateY(0);box-shadow:none}
@@ -327,7 +327,7 @@ body{font-family:var(--font);background:var(--board);color:var(--label);
 /* 扩充组件预览 v1.2（24 篇 §3） */
 .cmdk{max-width:560px;margin:0 auto;border-radius:16px;overflow:hidden}
 .cmdk-input{display:flex;align-items:center;gap:8px;padding:12px 14px;border-bottom:1px solid var(--separator)}
-.cmdk-list{max-height:230px;overflow:auto;padding:6px}
+.cmdk-list{max-height:266px;overflow:auto;padding:6px}
 .cmdk-group{font-size:10px;font-weight:700;color:var(--label-3);letter-spacing:.5px;padding:8px 8px 4px}
 .cmdk-item{display:flex;align-items:center;gap:9px;padding:8px 10px;border-radius:9px;font-size:13px;color:var(--label)}
 .cmdk-item svg{width:14px;height:14px;color:var(--label-2)}
@@ -626,8 +626,11 @@ body{font-family:var(--font);background:var(--board);color:var(--label);
    元素级审计修复 F-001：图标默认尺寸兜底
    未获上下文尺寸的 svg 一律 16px；sprite 根节点带 [width] 属性
    且位于 .board 外，天然排除；类/内联样式优先级更高不受影响
+   v1.6 修正：带 [viewBox] 的数据图表 SVG（面积图/环图/仪表/光束）
+   不适用 16px 兜底——高度由 viewBox 宽高比推导，避免图表塌缩
    ============================================================= */
-.board svg:not([width]){width:16px;height:16px;flex:none}
+.board svg:not([width]):not([viewBox]):not(.edges){width:16px;height:16px;flex:none}
+.board svg[viewBox]:not([width]){max-width:100%;height:auto}
 .board .chipmodel svg{width:11px;height:11px}
 
 /* =============================================================
@@ -660,8 +663,8 @@ body{font-family:var(--font);background:var(--board);color:var(--label);
 .inum span{width:44px;text-align:center;font-family:var(--mono);font-size:13px;border-left:1px solid var(--separator);
   border-right:1px solid var(--separator);line-height:32px;color:var(--label)}
 .igroup{display:flex;align-items:center}
-.igroup .input{border-radius:var(--r-ctl) 0 0 var(--r-ctl);border-right:none}
-.igroup .btn{border-radius:0 var(--r-ctl) var(--r-ctl) 0}
+.igroup .input{border-radius:var(--r-ctl) 0 0 var(--r-ctl);border-right:none;min-width:0}
+.igroup .btn{border-radius:0 var(--r-ctl) var(--r-ctl) 0;flex:none;white-space:nowrap}
 .dpick{display:inline-flex;align-items:center;gap:8px;height:38px;padding:0 12px;background:var(--surface);
   border:1px solid var(--separator);border-radius:var(--r-ctl);font-size:13px;color:var(--label)}
 .dpick svg{width:13px;height:13px;color:var(--label-3)}

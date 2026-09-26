@@ -97,3 +97,23 @@
   border:1px solid var(--glass-border);
   box-shadow:inset 0 1px 0 var(--glass-hi),var(--sh-float)}
 .toast svg{width:16px;height:16px;color:var(--green);flex:none}
+
+/* =============================================================
+   v1.1 表单补充（24 篇 §3.7；画板 00H 同名同源）
+   InputOTP / InputNumber / InputGroup / DateRange 提示
+   ============================================================= */
+.otp{display:flex;gap:6px}
+.otp b{width:36px;height:44px;border:1px solid var(--separator);border-radius:9px;background:var(--surface);
+  display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-size:17px;font-weight:600;color:var(--label)}
+.otp b.cur{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.inum{display:inline-flex;align-items:center;border:1px solid var(--separator);border-radius:var(--r-ctl);background:var(--surface);overflow:hidden}
+.inum b{width:28px;height:32px;display:flex;align-items:center;justify-content:center;font-size:14px;color:var(--label-2);font-weight:600;cursor:pointer}
+.inum span{width:44px;text-align:center;font-family:var(--mono);font-size:13px;border-left:1px solid var(--separator);
+  border-right:1px solid var(--separator);line-height:32px;color:var(--label)}
+.igroup{display:flex;align-items:center}
+.igroup .input{border-radius:var(--r-ctl) 0 0 var(--r-ctl);border-right:none}
+.igroup .btn{border-radius:0 var(--r-ctl) var(--r-ctl) 0}
+.dpick{display:inline-flex;align-items:center;gap:8px;height:38px;padding:0 12px;background:var(--surface);
+  border:1px solid var(--separator);border-radius:var(--r-ctl);font-size:13px;color:var(--label);cursor:pointer}
+.dpick svg{width:13px;height:13px;color:var(--label-3)}
+.fhint{font-size:11px;color:var(--label-3);margin-top:5px;line-height:1.5}

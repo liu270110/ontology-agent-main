@@ -23,14 +23,11 @@ def rrf_merge(channels: Mapping[str, Sequence[UUID]], k: int = 60) -> list[UUID]
 
 def stale_observation_ids(records: Sequence[MemoryRecord], now: datetime) -> set[UUID]:
     """新鲜度降权（规格 §5.2 第 5 点）：subject 存在晚于观察 created_at 的活跃事实且该观察
-    尚未被固化刷新时，观察视为 stale。纯集合运算，调用方决定降权或回退。"""
+    尚未被固化刷新时，观察视为 stale。纯集合运算，调用方决定降权或回退。now 是调用方统一的
+    判定基准时刻（本函数用 created_at 互比较，固化状态由调用方判定）。"""
     latest_active_fact: dict[str, datetime] = {}
     for r in records:
-        if (
-            r.record_type is MemoryType.FACT_CLAIM
-            and r.state is RecordState.ACTIVE
-            and r.subject_iri is not None
-        ):
+        if r.record_type is MemoryType.FACT_CLAIM and r.state is RecordState.ACTIVE and r.subject_iri is not None:
             prev = latest_active_fact.get(r.subject_iri)
             if prev is None or r.created_at > prev:
                 latest_active_fact[r.subject_iri] = r.created_at

@@ -944,3 +944,14 @@ body{font-family:var(--font);background:var(--board);color:var(--label);
 .traj-tree{font-family:var(--mono);font-size:11.5px;line-height:1.9;color:var(--label)}
 .traj-tree .branch{color:var(--label-3);padding-left:18px}
 .audit-filter{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px}
+
+/* iOS 26 对应：interactive 玻璃 + 融合层（glass.css 同源） */
+.glass-interactive{transition:transform var(--dur-1) var(--ease),box-shadow var(--dur-1) var(--ease)}
+.glass-interactive:hover{transform:scale(1.02)}
+.glass-interactive:active{transform:scale(.97)}
+.fuse-stage{position:relative;overflow:hidden}
+.fuse-layer{position:absolute;inset:0;filter:url(#oa-gooey) saturate(1.1)}
+.fuse-blob{position:absolute;border-radius:var(--r-card);
+  background:linear-gradient(135deg,var(--glass-tint),transparent 42%),var(--glass-regular);
+  border:1px solid var(--glass-border);
+  box-shadow:inset 0 1px 0 var(--glass-hi),inset 0 -1px 1px var(--glass-lo)}

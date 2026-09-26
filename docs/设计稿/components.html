@@ -318,6 +318,22 @@
           <div class="glass glass-aurora glass-lens" style="height:120px;border-radius:14px;display:flex;flex-direction:column;align-items:flex-start;justify-content:center;padding:0 16px">
             <b style="font-size:13px">aurora + lens 组合</b><span style="font-size:11px;color:var(--label-2)">统计卡/项目卡主形态</span></div>
           <p class="text-faint" style="font-size:11px;margin-top:8px">.glass.glass-aurora.glass-lens · 全站主卡升级为该形态</p></div>
+        <div class="card"><div class="card-h" style="margin-bottom:10px"><h3 style="font-size:13.5px">玻璃融合（拖动滑块试试）</h3><span class="badge b-gray" style="margin-left:auto">GlassEffectContainer 对应</span></div>
+          <svg width="0" height="0" style="position:absolute"><filter id="oa-gooey"><feGaussianBlur in="SourceGraphic" stdDeviation="9" result="b"/><feColorMatrix in="b" mode="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 20 -9" result="g"/><feComposite in="SourceGraphic" in2="g" operator="atop"/></filter></svg>
+          <div class="fuse-stage" style="height:130px;background:linear-gradient(135deg,var(--purple-soft),var(--teal-soft) 60%,var(--accent-soft))">
+            <div class="fuse-layer"><div class="fuse-blob" style="left:12%;top:22%;width:110px;height:74px" id="fuseL"></div><div class="fuse-blob" style="right:12%;top:30%;width:110px;height:74px" id="fuseR"></div></div>
+            <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;gap:14px;font-size:11.5px;font-weight:600"><span id="fuseTL">工具 A</span><span id="fuseTR">工具 B</span></div>
+          </div>
+          <input type="range" min="0" max="100" value="55" style="width:100%;margin-top:10px;accent-color:var(--accent)"
+            oninput="const g=+this.value;const off=8+g*1.6;L.style.transform=`translateX(${-off}px)`;R.style.transform=`translateX(${off}px)`;TL.style.transform=`translateX(${-off*0.72}px)`;TR.style.transform=`translateX(${off*0.72}px)`"
+            onload="this.dispatchEvent(new Event('input'))">
+          <p class="text-faint" style="font-size:10.5px;margin-top:8px">距离越近玻璃越融合（gooey 滤镜作用于形状层；文字独立其上）</p></div>
+        <div class="card"><div class="card-h" style="margin-bottom:10px"><h3 style="font-size:13.5px">Interactive 交互玻璃</h3><span class="badge b-gray" style="margin-left:auto">.interactive() 对应</span></div>
+          <div style="display:flex;gap:10px;justify-content:center;padding:16px 0">
+            <div class="glass glass-interactive" style="border-radius:14px;padding:12px 16px;font-size:12px;font-weight:600;cursor:pointer">悬停/按压我</div>
+            <div class="glass glass-tinted glass-interactive" style="border-radius:14px;padding:12px 16px;font-size:12px;font-weight:600;cursor:pointer">Tinted 交互</div>
+          </div>
+          <p class="text-faint" style="font-size:10.5px">仅交互元素加 .glass-interactive；形变过渡用 View Transitions API（渐进增强）</p></div>
       </div>
       <div style="display:flex;align-items:center;gap:10px;padding:20px 4px 2px">
         <h3 style="font-size:15px;font-weight:700">动效展演</h3>

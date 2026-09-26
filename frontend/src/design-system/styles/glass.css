@@ -140,3 +140,27 @@
 @media (prefers-reduced-motion:reduce){
   .glass-aurora::before,.border-flow::after,.iridescent::after,.blob-morph,.float-y{animation:none!important}
 }
+
+/* =============================================================
+   iOS 26 GlassEffectContainer 概念的 Web 对应（24 篇 §4.13）
+   来源技能：docs/设计稿/liquid-glass-design-skills.md
+   ============================================================= */
+
+/* .interactive() 对应：玻璃对指针有反应（按压/悬停微缩放） */
+.glass-interactive{transition:transform var(--dur-1) var(--ease),box-shadow var(--dur-1) var(--ease)}
+.glass-interactive:hover{transform:scale(1.02)}
+.glass-interactive:active{transform:scale(.97)}
+
+/* GlassEffectContainer 融合：相邻玻璃形状合并为一滴（gooey 滤镜作用于
+   形状层；浏览器限制：父级 filter 会使子级 backdrop-filter 失效，
+   故融合层只画"玻璃底"，文字/内容置于融合层之外的兄弟节点） */
+.fuse-stage{position:relative;overflow:hidden}
+.fuse-layer{position:absolute;inset:0;filter:url(#oa-gooey) saturate(1.1)}
+.fuse-blob{position:absolute;border-radius:var(--r-card);
+  background:linear-gradient(135deg,var(--glass-tint),transparent 42%),var(--glass-regular);
+  border:1px solid var(--glass-border);
+  box-shadow:inset 0 1px 0 var(--glass-hi),inset 0 -1px 1px var(--glass-lo)}
+
+/* 形变过渡（glassEffectID 对应）：View Transitions API 渐进增强，
+   M1 实现时配 document.startViewTransition 使用，Firefox 自动降级为直切 */
+.vt-morph{view-transition-name:var(--vt-name, none)}

@@ -1,14 +1,14 @@
 # UI 设计稿（Apple 液态玻璃风格可视化画板）
 
-> v1.5（组件库与页面设计物理分离）| 2026-09-26 | 设计事实源：[docs/架构设计/03-前端架构与UI设计规范.md](../架构设计/03-前端架构与UI设计规范.md)（§2.1 材质、§2.2 玻璃令牌、§3.0 使用规则）
+> v1.6（组件库大扩充）| 2026-09-26 | 设计事实源：[docs/架构设计/03-前端架构与UI设计规范.md](../架构设计/03-前端架构与UI设计规范.md)（§2.1 材质、§2.2 玻璃令牌、§3.0 使用规则）
 
 ## 怎么看
 
 ## 怎么看（v1.5 起物理分离）
 
 - **入口**：[index.html](./index.html)
-- **[components.html](./components.html) 前端组件库**：设计令牌、玻璃三档、基元/模式组件、扩充组件、动效展演、分辨率适配（00A）、**表单/导航/反馈与状态组件（00B）· 反馈浮层（00C）· 分辨率适配（00A）**——**主题与样式约束的物理载体**；
-- **[ui-pages.html](./ui-pages.html) UI 设计稿**：15 个页面画框 + 分辨率适配——**页面结构与跳转关系的物理载体**；
+- **[components.html](./components.html) 前端组件库**：设计令牌、玻璃三档、基元/模式组件、扩充组件、动效展演、分辨率适配（00A）、表单/导航/反馈与状态（00B，并行批次）、**数据分析（00C）· 系统管理（00D）· AI 对话增强（00E）· 覆盖层与反馈补充（00F）· 消费级门户（00G）· 表单补充与新动效（00H）**（v1.6 本批，依据 24 篇 v1.1 §3.3–§3.7）——**主题与样式约束的物理载体**；
+- **[ui-pages.html](./ui-pages.html) UI 设计稿**：25 个页面画框 + 分辨率适配——**页面结构与跳转关系的物理载体**；
 - 两页共享 [assets/board.css](./assets/board.css)（主题令牌单一来源，与 frontend/src/design-system/ 样式库同名同源）；右上角可切换亮暗。
 
 ## 页面画框清单（ui-pages.html）
@@ -30,8 +30,18 @@
 | 19 | 本体工作台深层：公理编辑器 + 版本 Diff 与回滚（A2） | `?tab=axioms` |
 | 20 | 审计日志（筛选 + 表格 + trace_id 跳转 + 导出） | `/admin?tab=audit` |
 | 21 | 会话轨迹回放（TrajectoryView 宿主：来源过滤/树形事件流/分叉恢复） | `/chat/:id/trajectory` |
+| 22 | 数据分析与成本看板（KPI 带/趋势双轨/用量归因/审批漏斗/时段热力/预算降级策略） | `/admin?tab=analytics` |
+| 23 | 角色与权限（RBAC 勾选矩阵/治理档位 solo-team-enterprise/成员列表） | `/admin?tab=roles` |
+| 24 | 任务中心（异步任务表/SSE 事件时间线/回写对账与补偿重放） | `/tasks` |
+| 25 | 版本与评审（changeset 列表/三元组 diff/发布物化进度/版本回滚） | `/ontology/:projectId/versions` |
+| 26 | 检索 Playground（Local/Global/Drift 三模式 + 行内引用 + 证据链图谱） | `/kb/playground` |
+| 27 | 个人设置（Settings Shell：资料/安全 2FA/API Key/通知偏好/会话设备） | `/settings` |
 
 每个画框上方标注了**组件构成**与**页面跳转关系**（与 03 篇 §4.1 导航图一一对应）。`preview/` 目录是各画框的静态截图（含 2 张暗色），便于评审引用；**元素级审计报告见 [ui-audit.md](./ui-audit.md)**（视觉检测 + 源码扫描双手段，v1.3 全绿）。
+
+## 上游参考资料
+
+- [liquid-glass-design-skills.md](./liquid-glass-design-skills.md)：iOS 26 Liquid Glass 官方 API 模式（SwiftUI/UIKit/WidgetKit），其 GlassEffectContainer 融合 / interactive / Tinted 三概念的 Web 对应见 24 篇 §4.13 与组件库效果库
 
 ## 设计约定（评审时请对照检查）
 

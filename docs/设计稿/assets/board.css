@@ -637,35 +637,20 @@ body{font-family:var(--font);background:var(--board);color:var(--label);
    Magic UI · Linear/Vercel/Stripe/GitHub Settings 公开结构），全部令牌化
    ============================================================= */
 
-/* ---- 表单增强（shadcn/AntD 对齐） ---- */
-.sel{position:relative;display:inline-flex;align-items:center;width:100%;height:38px;padding:0 30px 0 12px;
-  font-size:13px;color:var(--label);background:var(--surface);border:1px solid var(--separator);
-  border-radius:var(--r-ctl);transition:border-color var(--dur-1) var(--ease)}
-.sel svg{position:absolute;right:10px;width:12px;height:12px;color:var(--label-3);pointer-events:none}
-.sel.sm{height:30px;font-size:12px}
-.chk{width:16px;height:16px;flex:none;border:1.5px solid var(--label-3);border-radius:5px;
-  display:inline-flex;align-items:center;justify-content:center;color:transparent;background:var(--surface);cursor:pointer}
-.chk.on{background:var(--accent);border-color:var(--accent);color:#fff}
-.chk.on svg{width:10px;height:10px}
-.chk.part{background:var(--accent-soft);border-color:var(--accent);color:var(--accent)}
-.chk.part svg{width:10px;height:10px}
-.rd{width:16px;height:16px;flex:none;border:1.5px solid var(--label-3);border-radius:50%;background:var(--surface);
-  display:inline-flex;align-items:center;justify-content:center;cursor:pointer}
-.rd.on{border-color:var(--accent)}
-.rd.on::after{content:"";width:8px;height:8px;border-radius:50%;background:var(--accent)}
-.switch{width:40px;height:24px;border-radius:999px;background:rgba(0,0,0,.15);position:relative;flex:none;
-  transition:background var(--dur-2) var(--ease);cursor:pointer;border:none}
-.dark .switch{background:rgba(255,255,255,.18)}
-.switch::after{content:"";position:absolute;top:2px;left:2px;width:20px;height:20px;border-radius:50%;background:#fff;
-  box-shadow:0 1px 3px rgba(0,0,0,.25);transition:left var(--dur-2) var(--spring)}
-.switch.on{background:var(--green)}
-.switch.on::after{left:18px}
-.slider{position:relative;height:20px;display:flex;align-items:center;flex:1;min-width:120px}
-.slider .tr{height:4px;border-radius:2px;background:rgba(0,0,0,.08);width:100%}
-.dark .slider .tr{background:rgba(255,255,255,.14)}
-.slider .fl{position:absolute;left:0;height:4px;border-radius:2px;background:var(--accent)}
-.slider .th{position:absolute;width:18px;height:18px;border-radius:50%;background:#fff;border:1px solid var(--separator);
-  box-shadow:0 1px 4px rgba(0,0,0,.2);transform:translateX(-50%)}
+/* ---- 公共缺口修复：画板多页引用但此前未定义的类 ---- */
+.text-dim{color:var(--label-2)}
+.dim{color:var(--label-3)}
+.hover-lift{transition:transform var(--dur-2) var(--ease),box-shadow var(--dur-2) var(--ease)}
+.hover-lift:hover{transform:translateY(-2px);box-shadow:var(--sh-float)}
+.pressable{transition:transform var(--dur-1) var(--ease)}
+.pressable:active{transform:scale(.97)}
+.empty{display:flex;flex-direction:column;align-items:center;text-align:center;gap:6px;padding:24px}
+.empty>svg{width:30px;height:30px;color:var(--label-3);margin-bottom:6px}
+.empty .t{font-size:14px;font-weight:700;color:var(--label)}
+.empty .d{font-size:12px;color:var(--label-2);max-width:300px;line-height:1.65}
+.empty .acts{display:flex;gap:8px;margin-top:10px}
+
+/* ---- 表单补充（与 00B 区 fcheck/fswitch/fselect/fslider 互补，不重复） ---- */
 .otp{display:flex;gap:6px}
 .otp b{width:36px;height:44px;border:1px solid var(--separator);border-radius:9px;background:var(--surface);
   display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-size:17px;font-weight:600;color:var(--label)}
@@ -682,16 +667,10 @@ body{font-family:var(--font);background:var(--board);color:var(--label);
 .dpick svg{width:13px;height:13px;color:var(--label-3)}
 .fhint{font-size:11px;color:var(--label-3);margin-top:5px;line-height:1.5}
 
-/* ---- 覆盖层与反馈 ---- */
+/* ---- 覆盖层与反馈（modal 归 00B 区 .modal-mask/.modal，此处为补充件） ---- */
 .ov-stage{position:relative;height:310px;border-radius:14px;overflow:hidden;padding:18px;
   background:radial-gradient(circle at 1px 1px,var(--separator) 1px,transparent 0) 0 0/18px 18px,var(--bg)}
 .ov-dim{position:absolute;inset:0;background:rgba(0,0,0,.38)}
-.modal{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:390px;border-radius:16px;
-  background:var(--surface);box-shadow:var(--sh-float);padding:20px 22px}
-.modal h4{font-size:15px;font-weight:700;display:flex;align-items:center;gap:8px}
-.modal h4 svg{width:16px;height:16px;color:var(--red)}
-.modal .m-desc{font-size:12px;color:var(--label-2);line-height:1.65;margin-top:6px}
-.modal .m-foot{display:flex;gap:8px;justify-content:flex-end;margin-top:16px}
 .drawer{position:absolute;right:0;top:0;bottom:0;width:272px;background:var(--surface);
   box-shadow:-12px 0 40px rgba(0,0,0,.16);padding:18px;border-left:1px solid var(--separator);font-size:12px}
 .drawer h4{font-size:14px;font-weight:700;margin-bottom:10px}
@@ -727,23 +706,7 @@ body{font-family:var(--font);background:var(--board);color:var(--label);
 .result p{font-size:12px;color:var(--label-2);max-width:330px;line-height:1.7}
 .result .r-code{font-family:var(--mono);font-size:11px;color:var(--label-3)}
 
-/* ---- 导航 ---- */
-.tabs{display:flex;gap:18px;border-bottom:1px solid var(--separator)}
-.tab{position:relative;padding:8px 2px 10px;font-size:13px;font-weight:500;color:var(--label-2);cursor:pointer}
-.tab.on{color:var(--accent);font-weight:600}
-.tab.on::after{content:"";position:absolute;left:0;right:0;bottom:-1px;height:2px;border-radius:1px;background:var(--accent)}
-.tab .cnt{font-size:10px;color:var(--label-3);background:rgba(0,0,0,.05);border-radius:99px;padding:1px 6px;margin-left:4px}
-.dark .tab .cnt{background:rgba(255,255,255,.09)}
-.crumbs{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--label-2)}
-.crumbs svg{width:11px;height:11px;color:var(--label-3)}
-.crumbs .cur{color:var(--label);font-weight:600}
-.pagenav{display:flex;align-items:center;gap:4px}
-.pg{min-width:28px;height:28px;border-radius:8px;display:inline-flex;align-items:center;justify-content:center;
-  font-size:12px;color:var(--label-2);padding:0 6px;cursor:pointer}
-.pg:hover{background:rgba(0,0,0,.05)}
-.dark .pg:hover{background:rgba(255,255,255,.07)}
-.pg.on{background:var(--accent);color:#fff;font-weight:600}
-.pg svg{width:13px;height:13px}
+/* ---- 导航（页签/面包屑/分页归 00B 区 .ltabs/.crumbs/.pager，此处仅手风琴） ---- */
 .acc{border:1px solid var(--separator);border-radius:13px;overflow:hidden;background:var(--surface)}
 .acc-item+.acc-item{border-top:1px solid var(--separator)}
 .acc-h{display:flex;align-items:center;gap:8px;padding:12px 14px;font-size:13px;font-weight:600;cursor:pointer}
@@ -952,3 +915,32 @@ body{font-family:var(--font);background:var(--board);color:var(--label);
 .err-banner{display:flex;gap:10px;align-items:flex-start;border-radius:12px;padding:12px 14px;
   font-size:12.5px;color:var(--label);background:var(--red-soft);border:1px solid var(--red)}
 .err-banner .code{font-family:var(--mono);font-size:11px;color:var(--red)}
+
+/* Tooltip / Popover（与样式库 patterns.css 同源） */
+.tooltip{position:relative;display:inline-block}
+.tooltip .tip{position:absolute;bottom:calc(100% + 8px);left:50%;transform:translateX(-50%);
+  background:var(--surface);color:var(--label);font-size:11px;font-weight:500;line-height:1.5;
+  border:1px solid var(--separator);border-radius:8px;padding:6px 10px;box-shadow:var(--sh-card);
+  white-space:nowrap;z-index:10;visibility:hidden;opacity:0;
+  transition:opacity var(--dur-1) var(--ease),transform var(--dur-1) var(--ease)}
+.tooltip .tip::after{content:"";position:absolute;top:100%;left:50%;transform:translateX(-50%);
+  border:5px solid transparent;border-top-color:var(--surface)}
+.tooltip:hover .tip{visibility:visible;opacity:1;transform:translateX(-50%) translateY(-2px)}
+.popover{width:260px;border-radius:14px;padding:14px;
+  background:linear-gradient(135deg,var(--glass-tint),transparent 42%),var(--glass-regular);
+  -webkit-backdrop-filter:blur(24px) saturate(220%);backdrop-filter:blur(24px) saturate(220%);
+  border:1px solid var(--glass-border);
+  box-shadow:inset 0 1px 0 var(--glass-hi),var(--sh-float)}
+.popover .p-title{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:700;margin-bottom:6px}
+.popover .p-body{font-size:12px;color:var(--label-2);line-height:1.6}
+.popover .p-acts{display:flex;gap:6px;justify-content:flex-end;margin-top:10px}
+/* 轨迹回放页（TrajectoryView 宿主，24 篇 §3.2） */
+.traj-wrap{display:flex;flex-direction:column;gap:0}
+.traj-controls{display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid var(--separator)}
+.traj-play{width:30px;height:30px;border-radius:50%;background:var(--accent);color:var(--on-accent);
+  display:flex;align-items:center;justify-content:center;cursor:pointer}
+.traj-play svg{width:12px;height:12px}
+.traj-speed{font-family:var(--mono);font-size:11px;color:var(--label-2)}
+.traj-tree{font-family:var(--mono);font-size:11.5px;line-height:1.9;color:var(--label)}
+.traj-tree .branch{color:var(--label-3);padding-left:18px}
+.audit-filter{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px}

@@ -43,3 +43,20 @@ export const graphCategoryColor = (mode: ThemeMode) => ({
   标准: token(mode).accent, 对象: token(mode).purple, 特性: token(mode).teal,
   约束: token(mode).orange, 行动: token(mode).green, 机构: token(mode).indigo,
 });
+
+/** ECharts Apple 主题（registerTheme("oa", echartsTheme)）——图表不引入第二套配色 */
+export const echartsTheme = {
+  color: ["#0071e3", "#30b0c7", "#af52de", "#34c759", "#ff9500", "#5856d6"],
+  backgroundColor: "transparent",
+  textStyle: { fontFamily: "-apple-system, 'PingFang SC', 'Microsoft YaHei', sans-serif" },
+  axis: { line: "rgba(0,0,0,0.18)", label: "#6e6e73" },
+  grid: { dark: "rgba(255,255,255,0.12)" },
+} as const;
+
+/** 暗色版（切换主题时 registerTheme("oa-dark", ...) 或 setOption 覆盖） */
+export const echartsThemeDark = {
+  ...echartsTheme,
+  color: ["#0a84ff", "#40c8e0", "#bf5af2", "#30d158", "#ff9f0a", "#7d7aff"],
+  axis: { line: "rgba(255,255,255,0.22)", label: "#a1a1a6" },
+  grid: { dark: "rgba(255,255,255,0.12)" },
+} as const;

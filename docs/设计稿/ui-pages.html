@@ -59,7 +59,7 @@
       <a href="#p-review">抽取审核</a><a href="#p-kb">知识库</a><a href="#p-explore">图谱</a>
       <a href="#p-memory">记忆</a><a href="#p-agents">Agent</a><a href="#p-market">插件市场</a>
       <a href="#p-tools">工具技能</a><a href="#p-mcp">MCP</a><a href="#p-approve">审批中心</a>
-      <a href="#p-admin">系统</a><a href="#p-status">状态页</a><a href="#p-empty-skel">空态骨架</a><a href="#p-axiom-diff">公理版本</a>
+      <a href="#p-admin">系统</a><a href="#p-status">状态页</a><a href="#p-empty-skel">空态骨架</a><a href="#p-axiom-diff">公理版本</a><a href="#p-auditlog">审计</a><a href="#p-trajectory">轨迹</a>
     </nav>
     <button class="theme-btn" onclick="document.documentElement.classList.toggle('dark')">切换亮 / 暗</button>
   </header>
@@ -1289,6 +1289,141 @@
                   引用该类的实例：<b style="color:var(--label)">3</b> 个（自动列出）<br>
                   下游 GraphRAG 索引：<b style="color:var(--label)">需重建</b>（预计 40s）<br>
                   关联工具语义标注：<b style="color:var(--label)">2</b> 个（erp.freezeAccount 等）</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="frame" id="p-auditlog">
+    <div class="frame-head">
+      <div class="fnum">20</div>
+      <div><h2>审计日志 /admin?tab=audit（A4）</h2>
+        <p>"全程可追溯"宪法的前端呈现：谁在何时对什么做了什么，trace_id 一键跳转观测页。筛选组合（操作人/动作/资源/时间范围）+ 导出 CSV。</p>
+        <div class="jumps"><span class="jump-chip">trace_id → 观测页（12/14 篇） <svg><use href="#i-arrow-r"/></svg></span></div>
+      </div>
+    </div>
+    <div class="browser"><div class="bbar"><span class="bdot" style="background:#ff5f57"></span><span class="bdot" style="background:#febc2e"></span><span class="bdot" style="background:#28c840"></span><span class="burl">ontology.local/admin?tab=audit</span></div>
+      <div class="app">
+        <aside class="sb">
+          <div class="sb-brand"><span class="sb-logo"><svg><use href="#i-cube"/></svg></span><b>ontology-agent</b></div>
+          <a class="sb-item" href="#p-dashboard"><svg><use href="#i-grid"/></svg>工作台</a>
+          <a class="sb-item" href="#p-chat"><svg><use href="#i-chat"/></svg>对话</a>
+          <div class="sb-label">语义资产</div>
+          <a class="sb-item" href="#p-onto"><svg><use href="#i-cube"/></svg>本体工作台</a>
+          <a class="sb-item" href="#p-kb"><svg><use href="#i-book"/></svg>知识库</a>
+          <a class="sb-item" href="#p-memory"><svg><use href="#i-layers"/></svg>记忆管理</a>
+          <div class="sb-label">能力</div>
+          <a class="sb-item" href="#p-agents"><svg><use href="#i-bot"/></svg>Agent 管理</a>
+          <a class="sb-item" href="#p-market"><svg><use href="#i-puzzle"/></svg>插件市场</a>
+          <a class="sb-item" href="#p-tools"><svg><use href="#i-wrench"/></svg>工具与技能</a>
+          <a class="sb-item" href="#p-mcp"><svg><use href="#i-plug"/></svg>MCP 管理</a>
+          <div class="sb-label">治理</div>
+          <a class="sb-item" href="#p-approve"><svg><use href="#i-shield"/></svg>审批中心<span class="sb-badge">5</span></a>
+          <a class="sb-item active" href="#p-admin"><svg><use href="#i-gear"/></svg>系统管理</a>
+          <div class="sb-foot"><span class="sb-ava">刘</span><small><b>刘以在</b>管理员 · 默认租户</small></div>
+        </aside>
+        <div class="main">
+          <div class="topbar"><span class="tb-title">审计日志</span>
+            <div class="tb-actions"><button class="btn btn-g btn-sm"><svg><use href="#i-doc"/></svg>导出 CSV</button><span class="avatar">刘</span></div></div>
+          <div class="content">
+            <div class="audit-filter">
+              <span class="fselect"><input class="input" style="width:150px" value="全部操作人"><svg><use href="#i-chev-d"/></svg></span>
+              <span class="fselect"><input class="input" style="width:130px" value="全部动作"><svg><use href="#i-chev-d"/></svg></span>
+              <span class="fselect"><input class="input" style="width:140px" value="近 7 天"><svg><use href="#i-chev-d"/></svg></span>
+              <span class="search" style="width:180px"><svg><use href="#i-search"/></svg>搜索资源 / trace_id</span>
+              <span style="margin-left:auto;font-size:11px;color:var(--label-3)">共 1,284 条</span>
+            </div>
+            <div class="card" style="padding:6px 14px">
+              <table class="tbl">
+                <tr><th>时间</th><th>操作者</th><th>动作</th><th>资源</th><th>结果</th><th>trace_id</th></tr>
+                <tr><td class="mono" style="font-size:11px">14:22:08</td><td>刘以在</td><td>审批通过 · CR-031</td><td>本体 v1.5 发布</td><td><span class="badge b-green">成功</span></td><td class="mono" style="font-size:11px;color:var(--accent)">8f2a…c41</td></tr>
+                <tr><td class="mono" style="font-size:11px">14:20:51</td><td>Agent · 原生</td><td>action.invoke</td><td>erp.freezeAccount(C-20481)</td><td><span class="badge b-orange">待确认</span></td><td class="mono" style="font-size:11px;color:var(--accent)">b71c…9e2</td></tr>
+                <tr><td class="mono" style="font-size:11px">14:18:33</td><td>王工</td><td>候选终审 ×12</td><td>JOB #218 · 人工归档</td><td><span class="badge b-green">成功</span></td><td class="mono" style="font-size:11px;color:var(--accent)">3d9f…77a</td></tr>
+                <tr><td class="mono" style="font-size:11px">14:15:02</td><td>系统</td><td>记忆失效 · invalidation</td><td>mem:31486-2015 依据</td><td><span class="badge b-gray">自动</span></td><td class="mono" style="font-size:11px;color:var(--accent)">e05b…1d8</td></tr>
+                <tr><td class="mono" style="font-size:11px">14:12:47</td><td>李倩</td><td>登录</td><td>session · IP 10.2.**</td><td><span class="badge b-green">成功</span></td><td class="mono" style="font-size:11px;color:var(--accent)">a6c3…f04</td></tr>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="frame" id="p-trajectory">
+    <div class="frame-head">
+      <div class="fnum">21</div>
+      <div><h2>会话轨迹回放 /chat/:id/trajectory（A3）</h2>
+        <p>TrajectoryView 宿主页：模型看到的一切按只追加事件流回放——按来源过滤（系统/用户/工具/子Agent/上下文注入），树形缩进表达委托关系；回放控制条支持倍速与分叉点跳转。与审计、恢复共享同一事件流（08 篇）。</p>
+        <div class="jumps"><span class="jump-chip">来源着色体系 → theme.ts --src-* <svg><use href="#i-arrow-r"/></svg></span><span class="jump-chip">事件协议 → 08 篇 <svg><use href="#i-arrow-r"/></svg></span></div>
+      </div>
+    </div>
+    <div class="browser"><div class="bbar"><span class="bdot" style="background:#ff5f57"></span><span class="bdot" style="background:#febc2e"></span><span class="bdot" style="background:#28c840"></span><span class="burl">ontology.local/chat/s-2481/trajectory</span></div>
+      <div class="app">
+        <aside class="sb">
+          <div class="sb-brand"><span class="sb-logo"><svg><use href="#i-cube"/></svg></span><b>ontology-agent</b></div>
+          <a class="sb-item" href="#p-dashboard"><svg><use href="#i-grid"/></svg>工作台</a>
+          <a class="sb-item active" href="#p-chat"><svg><use href="#i-chat"/></svg>对话</a>
+          <div class="sb-label">语义资产</div>
+          <a class="sb-item" href="#p-onto"><svg><use href="#i-cube"/></svg>本体工作台</a>
+          <a class="sb-item" href="#p-kb"><svg><use href="#i-book"/></svg>知识库</a>
+          <a class="sb-item" href="#p-memory"><svg><use href="#i-layers"/></svg>记忆管理</a>
+          <div class="sb-label">能力</div>
+          <a class="sb-item" href="#p-agents"><svg><use href="#i-bot"/></svg>Agent 管理</a>
+          <a class="sb-item" href="#p-market"><svg><use href="#i-puzzle"/></svg>插件市场</a>
+          <a class="sb-item" href="#p-tools"><svg><use href="#i-wrench"/></svg>工具与技能</a>
+          <a class="sb-item" href="#p-mcp"><svg><use href="#i-plug"/></svg>MCP 管理</a>
+          <div class="sb-label">治理</div>
+          <a class="sb-item" href="#p-approve"><svg><use href="#i-shield"/></svg>审批中心<span class="sb-badge">5</span></a>
+          <a class="sb-item" href="#p-admin"><svg><use href="#i-gear"/></svg>系统管理</a>
+          <div class="sb-foot"><span class="sb-ava">刘</span><small><b>刘以在</b>管理员 · 默认租户</small></div>
+        </aside>
+        <div class="main">
+          <div class="topbar"><span class="tb-title">轨迹回放 · 动力电池标准对比</span>
+            <div class="tb-actions"><span class="chipmodel">42 事件 · 2 分叉点</span><button class="btn btn-g btn-sm">导出</button><span class="avatar">刘</span></div></div>
+          <div class="content" style="display:grid;grid-template-columns:1fr 250px;gap:16px;align-items:start">
+            <div class="card traj-wrap" style="padding:0">
+              <div class="traj-controls">
+                <span class="traj-play"><svg><use href="#i-play"/></svg></span>
+                <span class="traj-speed">1.0×</span>
+                <span style="font-size:11px;color:var(--label-3)">回放至 18/42</span>
+                <span style="margin-left:auto;display:flex;gap:5px">
+                  <span class="badge b-gray" style="background:var(--indigo-soft);color:var(--indigo)">系统 3</span>
+                  <span class="badge b-gray" style="background:var(--accent-soft);color:var(--accent)">用户 4</span>
+                  <span class="badge b-gray" style="background:var(--teal-soft);color:var(--teal)">工具 9</span>
+                  <span class="badge b-gray" style="background:var(--purple-soft);color:var(--purple)">子Agent 2</span>
+                  <span class="badge b-gray" style="background:var(--orange-soft);color:var(--orange)">上下文 5</span>
+                </span>
+              </div>
+              <div class="traj-tree" style="padding:14px 18px">
+                <div><span style="color:var(--indigo)">[系统]</span> 任务模板注入（prompt v12 · 标准领域）</div>
+                <div><span style="color:var(--orange)">[上下文]</span> L2 记忆召回 1 条 · GraphRAG 路径 2 条</div>
+                <div><span style="color:var(--accent)">[用户]</span> 对比 GB/T 31486 与 36276 循环寿命…</div>
+                <div><span style="color:var(--teal)">[工具]</span> knowledge.search(local) → 6 实体 / 842ms</div>
+                <div class="branch">├─ 子Agent · 条款抽取 ×2 → 完成（各 4 事件）</div>
+                <div class="branch">└─ 术语对齐命中：循环寿命 = cycle life</div>
+                <div><span style="color:var(--teal)">[工具]</span> ontology.validate → SHACL 0 违规</div>
+                <div><span style="color:var(--purple)">[思维链]</span> 归纳三点差异 → 过 SHACL 校验后输出</div>
+                <div><span style="color:var(--accent)">[助手]</span> 流式回复 218 tokens · 引用 3 条</div>
+              </div>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:16px">
+              <div class="card">
+                <div class="card-h"><h3>来源过滤</h3></div>
+                <div style="display:flex;flex-direction:column;gap:9px;font-size:12px">
+                  <label class="fcheck"><input type="checkbox" checked><span class="box"><svg><use href="#i-check"/></svg></span>系统提示词（3）</label>
+                  <label class="fcheck"><input type="checkbox" checked><span class="box"><svg><use href="#i-check"/></svg></span>用户输入（4）</label>
+                  <label class="fcheck"><input type="checkbox" checked><span class="box"><svg><use href="#i-check"/></svg></span>工具调用（9）</label>
+                  <label class="fcheck"><input type="checkbox"><span class="box"><svg><use href="#i-check"/></svg></span>子 Agent（2）</label>
+                  <label class="fcheck"><input type="checkbox" checked><span class="box"><svg><use href="#i-check"/></svg></span>上下文注入（5）</label>
+                </div>
+              </div>
+              <div class="card">
+                <div class="card-h"><h3>分叉与恢复</h3></div>
+                <div style="font-size:12px;color:var(--label-2);line-height:1.8">分叉点 2 处（事件 12 / 27）。<br>从任一分叉点可恢复会话——回放、分叉、恢复共享同一事件流。</div>
+                <div style="display:flex;gap:8px;margin-top:10px"><button class="btn btn-s btn-sm">从此分叉</button><button class="btn btn-g btn-sm">导出轨迹</button></div>
               </div>
             </div>
           </div>

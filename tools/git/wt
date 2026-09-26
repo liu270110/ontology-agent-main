@@ -46,6 +46,8 @@ case "$cmd" in
     echo "✓ 已对齐 $base"
     ;;
   finish)
+    # 集成基准 = 本地 develop（v1.1 修正：origin 常落后于本地，rebase 到 origin 会把 develop 独有提交线性化重放，造成假 add/add 冲突）
+    integrate_base=develop
     shift
     do_push=0; keep=0
     for a in "$@"; do
@@ -75,7 +77,7 @@ case "$cmd" in
     fi
     # ── 对齐基线 ──
     git fetch origin develop 2>/dev/null || true
-    base="$(git rev-parse --verify --quiet origin/develop 2>/dev/null || echo develop)"
+    base="$integrate_base"
     git rebase "$base" || { git rebase --abort; die "rebase 冲突：解决后重跑 wt finish"; }
     # ── 主工作区（develop）合入，--no-ff 保留集成痕 ──
     [ "$(git -C "$main" symbolic-ref --quiet --short HEAD)" = "develop" ] || die "主工作区不在 develop 上，请人工检查"

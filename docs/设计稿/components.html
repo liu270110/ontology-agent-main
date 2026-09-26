@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ontology-agent · 前端组件库（设计系统）</title>
+<link rel="stylesheet" href="./assets/board.css">
+</head>
+<body>
+<!-- ============ 图标库（内联 SVG sprite，线性 1.5px，Apple SF Symbols 风） ============ -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <symbol id="i-grid" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="3.5" width="7" height="7" rx="2"/><rect x="13.5" y="3.5" width="7" height="7" rx="2"/><rect x="3.5" y="13.5" width="7" height="7" rx="2"/><rect x="13.5" y="13.5" width="7" height="7" rx="2"/></symbol>
+    <symbol id="i-chat" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a8 8 0 0 1-8 8H4l2.3-2.9A8 8 0 1 1 21 12z"/></symbol>
+    <symbol id="i-cube" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2.7 20.5 7v10L12 21.3 3.5 17V7L12 2.7z"/><path d="M3.5 7 12 11.5 20.5 7M12 11.5v9.8"/></symbol>
+    <symbol id="i-book" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v15.5H6.5A2.5 2.5 0 0 0 4 21V5.5z"/><path d="M4 18.5A2.5 2.5 0 0 1 6.5 16H20"/></symbol>
+    <symbol id="i-layers" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3 9 5-9 5-9-5 9-5z"/><path d="m4.2 12.5-.2.1 8 4.4 8-4.4-.2-.1M4.2 16.5l-.2.1 8 4.4 8-4.4-.2-.1"/></symbol>
+    <symbol id="i-bot" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="4.5" y="8" width="15" height="11" rx="3"/><path d="M12 8V4.5M12 4.5h3M9 13h.01M15 13h.01M9.5 16.5h5"/></symbol>
+    <symbol id="i-puzzle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9 4.5a2 2 0 1 1 4 0H15a1.5 1.5 0 0 1 1.5 1.5v3a2 2 0 1 1 0 4v3A1.5 1.5 0 0 1 15 17.5h-3a2 2 0 1 0-4 0H6A1.5 1.5 0 0 1 4.5 16v-3a2 2 0 1 1 0-4V6A1.5 1.5 0 0 1 6 4.5h3z"/></symbol>
+    <symbol id="i-wrench" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 6.5a4.5 4.5 0 0 0-6 5.6L3.6 17a2 2 0 1 0 2.8 2.8l4.9-4.9a4.5 4.5 0 0 0 5.7-6L13.6 12l-1.6-1.6 2.5-3.9z"/></symbol>
+    <symbol id="i-plug" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9 7V3.5M15 7V3.5M7 7h10l-.5 5a4.5 4.5 0 0 1-9 0L7 7zM12 16.5V21"/></symbol>
+    <symbol id="i-shield" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 5 5.8v5.4c0 4.4 3 8.1 7 9.3 4-1.2 7-4.9 7-9.3V5.8L12 3z"/><path d="m9 11.5 2.2 2.2L15.5 9"/></symbol>
+    <symbol id="i-gear" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3.2"/><path d="M12 2.8v2.4M12 18.8v2.4M2.8 12h2.4M18.8 12h2.4M5.5 5.5l1.7 1.7M16.8 16.8l1.7 1.7M18.5 5.5l-1.7 1.7M7.2 16.8l-1.7 1.7"/></symbol>
+    <symbol id="i-search" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><circle cx="11" cy="11" r="6.5"/><path d="m20 20-4.4-4.4"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></symbol>
+    <symbol id="i-send" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M21 3 10.5 13.5M21 3l-7 18-3.5-7.5L3 10l18-7z"/></symbol>
+    <symbol id="i-bell" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M18 9a6 6 0 1 0-12 0c0 6-2.5 7-2.5 7h17S18 15 18 9zM10 20a2.2 2.2 0 0 0 4 0"/></symbol>
+    <symbol id="i-doc" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M13.5 3H7a1.5 1.5 0 0 0-1.5 1.5v15A1.5 1.5 0 0 0 7 21h10a1.5 1.5 0 0 0 1.5-1.5V8L13.5 3z"/><path d="M13.5 3v5h5M9 13h6M9 16.5h4"/></symbol>
+    <symbol id="i-upload" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4m0 0L7.5 8.5M12 4l4.5 4.5M4 16.5v2A2.5 2.5 0 0 0 6.5 21h11a2.5 2.5 0 0 0 2.5-2.5v-2"/></symbol>
+    <symbol id="i-arrow-r" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12h15M13 6l6 6-6 6"/></symbol>
+    <symbol id="i-chev-d" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></symbol>
+    <symbol id="i-chev-r" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m4.5 12.5 5 5 10-11"/></symbol>
+    <symbol id="i-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></symbol>
+    <symbol id="i-clock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></symbol>
+    <symbol id="i-spark" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5c.6 3.8 2.7 5.9 6.5 6.5-3.8.6-5.9 2.7-6.5 6.5-.6-3.8-2.7-5.9-6.5-6.5 3.8-.6 5.9-2.7 6.5-6.5zM19 15.5c.3 1.7 1.3 2.7 3 3-1.7.3-2.7 1.3-3 3-.3-1.7-1.3-2.7-3-3 1.7-.3 2.7-1.3 3-3z"/></symbol>
+    <symbol id="i-db" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><ellipse cx="12" cy="5.5" rx="7.5" ry="2.8"/><path d="M4.5 5.5V12c0 1.5 3.4 2.8 7.5 2.8s7.5-1.3 7.5-2.8V5.5M4.5 12v6.5C4.5 20 7.9 21.3 12 21.3s7.5-1.3 7.5-2.8V12"/></symbol>
+    <symbol id="i-refresh" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12a8 8 0 1 1-2.3-5.6M20 3.5V8h-4.5"/></symbol>
+    <symbol id="i-play" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M7 5.5v13l11-6.5-11-6.5z"/></symbol>
+    <symbol id="i-warn" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4 2.8 19.5h18.4L12 4z"/><path d="M12 10v4.5M12 17.2h.01"/></symbol>
+    <symbol id="i-trend" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m4 16 5-5 3.5 3.5L20 7.5"/><path d="M14.5 7.5H20V13"/></symbol>
+    <symbol id="i-filter" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5.5h16l-6.2 7.2v5.1l-3.6 1.7v-6.8L4 5.5z"/></symbol>
+    <symbol id="i-zoom-in" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><circle cx="11" cy="11" r="6.5"/><path d="m20 20-4.4-4.4M11 8.5v5M8.5 11h5"/></symbol>
+    <symbol id="i-zoom-out" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><circle cx="11" cy="11" r="6.5"/><path d="m20 20-4.4-4.4M8.5 11h5"/></symbol>
+    <symbol id="i-move" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18M3 12h18M12 3 9.5 5.5M12 3l2.5 2.5M12 21l-2.5-2.5M12 21l2.5-2.5M3 12l2.5-2.5M3 12l2.5 2.5M21 12l-2.5-2.5M21 12l-2.5 2.5"/></symbol>
+    <symbol id="i-more" viewBox="0 0 24 24" fill="currentColor"><circle cx="5.5" cy="12" r="1.4"/><circle cx="12" cy="12" r="1.4"/><circle cx="18.5" cy="12" r="1.4"/></symbol>
+  </defs>
+</svg>
+
+<div class="board">
+  <header class="board-head">
+    <div class="bh-title">ontology-agent · 前端组件库
+      <small>设计令牌 · 玻璃三档 · 基元/模式组件 · 动效 · 依据 docs/架构设计/03+24 篇 · 2026-09-26</small>
+    </div>
+    <nav class="bh-nav">
+      <a href="#p-system">组件总览</a><a href="#sec-glass">液态玻璃</a><a href="#sec-ext">扩充组件</a><a href="#motion-demo">动效展演</a>
+      <a href="./ui-pages.html" style="color:var(--accent);font-weight:600">UI 设计稿 →</a>
+    </nav>
+    <button class="theme-btn" onclick="document.documentElement.classList.toggle('dark')">切换亮 / 暗</button>
+  </header>
+<section class="frame" id="p-system">
+    <div class="frame-head">
+      <div class="fnum">00</div>
+      <div>
+        <h2>设计系统组件库</h2>
+        <p>主题先行：以下基元全部只消费设计令牌（03 篇 §2）。开发时它们对应 components/ui/ 的 shadcn 定制基元——页面只允许组合这些，不允许另起炉灶。</p>
+        <div class="jumps"><span class="jump-chip">扩充组件与借鉴来源 → docs/架构设计/24 篇</span><span class="jump-chip">动效层 → styles/motion.css</span></div>
+      </div>
+    </div>
+    <div class="browser"><div class="bbar"><span class="bdot" style="background:#ff5f57"></span><span class="bdot" style="background:#febc2e"></span><span class="bdot" style="background:#28c840"></span><span class="burl">design tokens · theme/tokens.css</span></div>
+    <div style="background:var(--bg);padding:28px;color:var(--label);font-size:13px">
+      <div class="grid3">
+        <div class="card">
+          <div class="card-h"><h3>按钮 Button</h3></div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+            <button class="btn btn-p"><svg><use href="#i-plus"/></svg>新建本体</button>
+            <button class="btn btn-s">导入文档</button>
+            <button class="btn btn-g">取消</button>
+            <button class="btn btn-d">删除项目</button>
+            <button class="btn btn-gl">玻璃操作</button>
+            <button class="btn btn-dis">已禁用</button>
+          </div>
+          <div style="display:flex;gap:8px;margin-top:12px;align-items:center">
+            <button class="btn btn-p btn-sm">通过</button>
+            <button class="btn btn-d btn-sm">驳回</button>
+            <button class="btn btn-g btn-sm">查看详情</button>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-h"><h3>输入 Input</h3></div>
+          <div class="field"><label class="field-label">本体命名空间</label>
+            <input class="input" value="http://example.org/standard-ontology#" style="font-family:var(--mono);font-size:12px"></div>
+          <div class="field" style="margin-bottom:0"><label class="field-label">实体类型名称</label>
+            <input class="input err" value="Standrd"><div class="field-err">术语唯一性校验失败：已存在近似术语 Standard（相似度 0.96）</div></div>
+        </div>
+        <div class="card">
+          <div class="card-h"><h3>分段控件 Segmented</h3></div>
+          <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px">
+            <div class="seg"><button class="seg-btn on">全部</button><button class="seg-btn">已发布</button><button class="seg-btn">草稿</button></div>
+          </div>
+          <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px">
+            <div class="seg"><button class="seg-btn on">L1 会话</button><button class="seg-btn">L2 用户</button><button class="seg-btn">L3 组织</button><button class="seg-btn">L4 知识</button></div>
+          </div>
+          <div class="card-h" style="margin:0"><h3>徽标 Badge / 状态点</h3></div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+            <span class="badge b-green">已发布</span><span class="badge b-orange">审核中</span>
+            <span class="badge b-red">已驳回</span><span class="badge b-blue">官方认证</span>
+            <span class="badge b-purple">重型本体</span><span class="badge b-gray">草稿</span>
+            <span class="dot d-green"></span><span class="dot d-orange"></span><span class="dot d-red"></span>
+          </div>
+        </div>
+      </div>
+      <div class="grid3" style="margin-top:16px">
+        <div class="card">
+          <div class="card-h"><h3>提示 Toast</h3></div>
+          <div class="toast"><svg><use href="#i-check"/></svg>SHACL 校验通过，版本 v1.4.0 已归档</div>
+          <div class="toast" style="margin-top:10px;max-width:300px"><svg style="color:var(--orange)"><use href="#i-warn"/></svg>检测到 2 处术语冲突，已生成工单</div>
+        </div>
+        <div class="card">
+          <div class="card-h"><h3>证据链 EvidenceChip</h3></div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap">
+            <span class="ev-chip"><svg><use href="#i-doc"/></svg>GB/T 31486-2024 · §6.2.3</span>
+            <span class="ev-chip"><svg><use href="#i-cube"/></svg>标准实体：循环寿命</span>
+            <span class="ev-chip"><svg><use href="#i-shield"/></svg>约束逻辑 CL-012</span>
+          </div>
+          <p style="font-size:11px;color:var(--label-2);margin-top:12px;line-height:1.6">点击证据片打开原文抽屉或跳转图谱浏览——这是"可信上下文"卖点的最小 UI 单元。</p>
+          <div class="card-h" style="margin:14px 0 8px"><h3>骨架屏 Skeleton</h3></div>
+          <div class="skel" style="width:70%"></div><div class="skel" style="width:90%;margin-top:8px"></div><div class="skel" style="width:45%;margin-top:8px"></div>
+        </div>
+        <div class="card">
+          <div class="card-h"><h3>Turtle 制品（mono 令牌）</h3></div>
+          <div style="background:var(--surface-2);border:1px solid var(--separator);border-radius:12px;padding:12px 14px;line-height:1.8">
+            <div class="mono" style="color:var(--label-2)">gb:31486-2024 a onto:Standard ;</div>
+            <div class="mono" style="color:var(--label-2)">&nbsp;&nbsp;onto:issuedBy gb: SAC ;</div>
+            <div class="mono" style="color:var(--accent)">gb:31486-2024 onto:replaces</div>
+            <div class="mono" style="color:var(--accent)">&nbsp;&nbsp;gb:31486-2015 .</div>
+          </div>
+          <p style="font-size:11px;color:var(--label-2);margin-top:10px;line-height:1.6">IRI / SPARQL / diff 一律 mono 令牌（SF Mono），12px 起步。</p>
+        </div>
+      </div>
+      <!-- 液态玻璃展示：彩色内容衬底上才能看到折射与高光 -->
+      <div class="card" style="margin-top:16px;padding:0;overflow:hidden">
+        <div style="display:flex;align-items:center;gap:10px;padding:16px 22px 12px;flex-wrap:wrap">
+          <h3 style="font-size:15px;font-weight:700">液态玻璃 Liquid Glass</h3>
+          <span class="badge b-blue">Regular · 承载文字</span><span class="badge b-gray">Clear · 悬浮控件</span>
+          <span style="margin-left:auto;font-size:11px;color:var(--label-3)">玻璃只给控制/导航层 · 内容层实底 · 玻璃不叠玻璃 · 同心圆角</span>
+        </div>
+        <div class="lg-stage">
+          <span class="lg-blob" style="width:200px;height:200px;background:var(--accent);left:5%;top:-46px;opacity:.55"></span>
+          <span class="lg-blob" style="width:150px;height:150px;background:var(--teal);left:31%;top:150px;opacity:.5"></span>
+          <span class="lg-blob" style="width:180px;height:180px;background:var(--purple);right:16%;top:-40px;opacity:.45"></span>
+          <span class="lg-blob" style="width:140px;height:140px;background:var(--indigo);right:3%;bottom:-50px;opacity:.5"></span>
+          <span class="lg-blob" style="width:90px;height:90px;background:var(--green);left:52%;top:26px;opacity:.4"></span>
+          <div class="glass" style="position:absolute;left:26px;top:28px;width:300px;border-radius:16px;padding:14px 16px">
+            <b style="font-size:13px">Regular · 侧边栏 / 顶栏 / 对话框 / 输入栏</b>
+            <p style="font-size:11.5px;color:var(--label-2);margin-top:5px;line-height:1.65">着色 60–72%，承载文字可读；背后内容以高饱和折射透出，顶部镜面高光、底部内阴影勾勒玻璃厚度。</p>
+          </div>
+          <div style="position:absolute;right:26px;top:28px;display:flex;gap:8px">
+            <button class="btn btn-gl-p"><svg><use href="#i-spark"/></svg>玻璃主操作</button>
+            <button class="btn btn-gl">玻璃按钮</button>
+          </div>
+          <div class="glass-clear" style="position:absolute;left:50%;transform:translateX(-50%);bottom:22px;display:flex;align-items:center;gap:6px;border-radius:999px;padding:7px 10px">
+            <span class="ct-btn" style="box-shadow:none;background:transparent;border:none;backdrop-filter:none"><svg><use href="#i-move"/></svg></span>
+            <span class="ct-btn" style="box-shadow:none;background:transparent;border:none;backdrop-filter:none"><svg><use href="#i-zoom-in"/></svg></span>
+            <span class="ct-btn" style="box-shadow:none;background:transparent;border:none;backdrop-filter:none"><svg><use href="#i-zoom-out"/></svg></span>
+            <span style="width:1px;height:16px;background:var(--separator);margin:0 3px"></span>
+            <button class="btn btn-p btn-sm">运行推理</button>
+          </div>
+        </div>
+      </div>
+      <!-- 扩充组件预览 v1.2（24 篇 §3，借鉴 Linear/Geist/DSH/Semi 后令牌化） -->
+      <div style="display:flex;align-items:center;gap:10px;padding:20px 4px 2px">
+        <h3 style="font-size:15px;font-weight:700">扩充组件预览</h3>
+        <span class="badge b-blue">v1.2 · 24 篇 §3</span>
+        <span style="font-size:11px;color:var(--label-3)">借鉴 Linear / Vercel Geist / DeepSeek Harness / Semi，全部令牌化</span>
+      </div>
+      <div class="card" style="margin-top:12px">
+        <div class="card-h"><h3>CommandPalette ⌘K</h3><span class="badge b-gray">借鉴 Linear · P0</span>
+          <span style="margin-left:auto;display:flex;gap:4px"><span class="kbd">⌘</span><span class="kbd">K</span></span></div>
+        <div class="glass cmdk">
+          <div class="cmdk-input"><svg style="width:14px;height:14px;color:var(--label-3)"><use href="#i-search"/></svg>
+            <span style="font-size:13px;color:var(--label-3)">搜索页面、本体类、工具、会话、技能…</span></div>
+          <div class="cmdk-list">
+            <div class="cmdk-group">页面</div>
+            <div class="cmdk-item on"><svg><use href="#i-cube"/></svg>本体工作台 · 动力电池标准本体<span class="sub" style="margin-left:auto">/ontology/battery-std</span><span class="kbd">↵</span></div>
+            <div class="cmdk-item"><svg><use href="#i-book"/></svg>抽取审核台 · 待审 41<span class="kbd">G R</span></div>
+            <div class="cmdk-group">本体类</div>
+            <div class="cmdk-item"><svg><use href="#i-cube"/></svg>约束逻辑 ConstraintLogic<span class="sub" style="margin-left:auto">14 实例</span></div>
+            <div class="cmdk-group">操作</div>
+            <div class="cmdk-item"><svg><use href="#i-spark"/></svg>新建对话（Claude · 原生 Agent）<span class="kbd">⌘ N</span></div>
+          </div>
+        </div>
+      </div>
+      <div class="grid3" style="margin-top:16px">
+        <div class="card">
+          <div class="card-h"><h3>DataTable</h3><span class="badge b-gray">Semi/TDesign · P0</span></div>
+          <table class="tbl">
+            <tr><th style="width:20px"><span style="display:inline-block;width:12px;height:12px;border:1px solid var(--label-3);border-radius:3px"></span></th>
+              <th>候选实例 <span class="sortic">↑↓</span></th><th>置信度 <span class="sortic">↑↓</span></th><th>状态</th></tr>
+            <tr><td><span style="display:inline-block;width:12px;height:12px;border:1px solid var(--label-3);border-radius:3px"></span></td><td>replaces 关系</td><td class="mono">0.97</td><td><span class="badge b-green">SHACL 通过</span></td></tr>
+            <tr style="background:var(--surface-2)"><td><span style="display:inline-block;width:12px;height:12px;background:var(--accent);border-radius:3px"></span></td><td>实体：循环寿命</td><td class="mono">0.95</td><td><span class="badge b-green">SHACL 通过</span></td></tr>
+            <tr><td><span style="display:inline-block;width:12px;height:12px;border:1px solid var(--label-3);border-radius:3px"></span></td><td>实体：热失控预警</td><td class="mono">0.62</td><td><span class="badge b-orange">低置信</span></td></tr>
+          </table>
+          <div class="glass" style="margin-top:10px;display:flex;align-items:center;gap:8px;border-radius:999px;padding:7px 14px;font-size:12px;justify-content:center">
+            已选 <b>1</b> 项<button class="btn btn-p btn-sm" style="margin-left:6px">批量通过</button><button class="btn btn-g btn-sm">驳回</button>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-h"><h3>TrajectoryView 轨迹</h3><span class="badge b-gray">DeepSeek Harness · P1</span></div>
+          <div class="traj-item"><span class="traj-badge" style="background:var(--indigo-soft);color:var(--indigo)">系统</span><span style="color:var(--label-2)">标准领域任务模板已注入（prompt v12）</span></div>
+          <div class="traj-item"><span class="traj-badge" style="background:var(--accent-soft);color:var(--accent)">用户</span><span>对比 31486 与 36276 循环寿命…</span></div>
+          <div class="traj-item"><span class="traj-badge" style="background:var(--teal-soft);color:var(--teal)">工具</span><span style="color:var(--label-2)">knowledge.search(local) → 6 实体</span></div>
+          <div class="traj-item"><span class="traj-badge" style="background:var(--purple-soft);color:var(--purple)">子Agent</span><span style="color:var(--label-2)">条款抽取并行任务 ×2</span></div>
+          <div class="traj-item"><span class="traj-badge" style="background:var(--orange-soft);color:var(--orange)">上下文</span><span style="color:var(--label-2)">L2 记忆召回 1 条 · 图谱路径 2 条</span></div>
+          <p style="font-size:11px;color:var(--label-3);margin-top:8px">只追加事件流 · 按来源过滤 · 回放/分叉同源（08 篇）</p>
+        </div>
+        <div class="card">
+          <div class="card-h"><h3>Timeline + Meter</h3><span class="badge b-gray">Geist · P1</span></div>
+          <div class="tl" style="margin-bottom:14px">
+            <div class="tl-item" style="padding-bottom:10px"><span class="tl-dot" style="background:var(--green)"></span>
+              <div class="tl-c" style="padding:8px 12px"><div class="tlt" style="font-size:12px">版本 v1.4.0 发布 · SHACL 0 违规</div>
+              <div class="tl-meta">8 分钟前</div></div></div>
+            <div class="tl-item" style="padding-bottom:0"><span class="tl-dot" style="background:var(--orange)"></span>
+              <div class="tl-c" style="padding:8px 12px"><div class="tlt" style="font-size:12px">CL-014 变更请求待审</div>
+              <div class="tl-meta">1 小时前</div></div></div>
+          </div>
+          <div style="font-size:11px;color:var(--label-2);margin-bottom:5px">本月 Token 预算</div>
+          <div class="membar" style="height:8px"><i style="width:62%;background:linear-gradient(90deg,var(--accent),var(--teal))"></i></div>
+          <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--label-3);margin-top:4px"><span>6.2M / 10M</span><span style="color:var(--orange)">62%</span></div>
+        </div>
+      </div>
+      <div class="grid3" style="margin-top:16px">
+        <div class="card">
+          <div class="card-h"><h3>PluginCard</h3><span class="badge b-gray">DSH Plugin Hub · P1</span></div>
+          <div style="display:flex;gap:12px"><span class="pic" style="background:var(--accent-soft);color:var(--accent)"><svg><use href="#i-wrench"/></svg></span>
+            <div><div class="pname">cli-anything <span class="badge b-green">已验证</span></div>
+            <div style="font-size:10.5px;color:var(--label-3)">HKUDS · v2.1.0 · 兼容 ≥2025-06-18 协议</div></div></div>
+          <div style="font-size:11px;color:var(--label-2);line-height:1.6;margin:10px 0">任意命令行工具 → 受治理 MCP 工具；出网白名单默认全拒。</div>
+          <div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:10px"><span class="badge b-purple">本体标注：行动类 cli.*</span><span class="badge b-red">默认禁出网</span></div>
+          <div class="pfoot"><span style="color:var(--label-3)">↗ github.com/HKUDS</span><span>Star 48.5k</span><span style="margin-left:auto"></span><button class="btn btn-g btn-sm">管理</button></div>
+        </div>
+        <div class="card">
+          <div class="card-h"><h3>UploadZone</h3><span class="badge b-gray">TDesign · P1</span></div>
+          <div class="upzone"><svg style="width:22px;height:22px;color:var(--label-3)"><use href="#i-upload"/></svg>
+            <div style="margin-top:6px">拖拽文件到此处，或 <span style="color:var(--accent);font-weight:600">浏览</span></div>
+            <div style="font-size:10px;color:var(--label-3);margin-top:3px">PDF / Word / 图片 · 单文件 ≤ 200MB · 直传 MinIO</div></div>
+          <div style="display:flex;align-items:center;gap:8px;margin-top:10px;font-size:11px">
+            <svg style="width:13px;height:13px;color:var(--accent)"><use href="#i-doc"/></svg>标准汇编 v3.pdf
+            <span class="membar" style="height:5px;flex:1"><i style="width:72%"></i></span><span class="mono" style="color:var(--label-2)">72%</span></div>
+        </div>
+        <div class="card">
+          <div class="card-h"><h3>终端命令卡</h3><span class="badge b-gray">DSH 官网 · P0</span></div>
+          <div class="term mono" style="font-size:12px"><span class="ps">$</span><span>oa login --tenant default</span>
+            <svg style="width:13px;height:13px;color:var(--label-3);margin-left:auto"><use href="#i-doc"/></svg></div>
+          <div class="term mono" style="font-size:12px;margin-top:8px"><span class="ps">$</span><span>oa ontology validate battery-std</span>
+            <span class="kbd" style="margin-left:auto">⌘C</span></div>
+          <p style="font-size:11px;color:var(--label-3);margin-top:8px">CLI `oa` 全集见 13 篇；复制按钮 hover 显现。</p>
+        </div>
+      </div>
+      <!-- 动效展演（实时循环，motion.css 同源） -->
+      <div style="display:flex;align-items:center;gap:10px;padding:20px 4px 2px">
+        <h3 style="font-size:15px;font-weight:700">动效展演</h3>
+        <span class="badge b-blue">motion.css 实时循环</span>
+        <span style="margin-left:auto"><button class="btn btn-g btn-sm" onclick="replayMotion()">重播入场</button></span>
+      </div>
+      <div class="grid3 stagger" style="margin-top:12px" id="motion-demo">
+        <div class="card">
+          <div class="card-h" style="margin-bottom:10px"><h3 style="font-size:13.5px">加载态</h3><span class="badge b-gray">skel-animated / indeterminate</span></div>
+          <div class="skel skel-animated" style="width:70%"></div><div class="skel skel-animated" style="width:90%;margin-top:8px"></div><div class="skel skel-animated" style="width:50%;margin-top:8px"></div>
+          <div style="font-size:11px;color:var(--label-2);margin:14px 0 5px">流水线心跳（不确定进度）</div>
+          <div class="indeterminate"></div>
+          <div style="display:flex;align-items:center;gap:8px;margin-top:14px;font-size:12px;color:var(--label-2)">
+            <svg class="spin" style="width:13px;height:13px;color:var(--accent)"><use href="#i-refresh"/></svg>批量抽取运行中…</div>
+        </div>
+        <div class="card">
+          <div class="card-h" style="margin-bottom:10px"><h3 style="font-size:13.5px">运行态 / 流式</h3><span class="badge b-gray">pulse-ring / stream-caret</span></div>
+          <div style="display:flex;align-items:center;gap:8px;font-size:13px"><span class="dot d-green pulse-ring"></span>原生 Agent 运行中</div>
+          <div style="margin-top:14px;background:var(--surface-2);border:1px solid var(--separator);border-radius:12px;padding:10px 12px;font-size:12.5px;line-height:1.7">
+            两个标准在循环寿命上的核心差异…<span class="stream-caret"></span></div>
+          <div style="font-size:11px;color:var(--label-3);margin-top:10px">对话生成中：光标闪烁直到 RUN_FINISHED</div>
+        </div>
+        <div class="card">
+          <div class="card-h" style="margin-bottom:10px"><h3 style="font-size:13.5px">玻璃氛围 / 反馈</h3><span class="badge b-gray">sheen-loop / hover-lift</span></div>
+          <div class="glass glass-sheen-loop" style="border-radius:14px;padding:12px 14px;font-size:12px"><b>Regular 光扫循环</b><div class="text-dim" style="margin-top:3px">登录卡 / 空态插图用</div></div>
+          <div class="row" style="margin-top:10px;display:flex;gap:8px">
+            <button class="btn btn-gl-p">Tinted 主操作</button>
+            <button class="btn btn-gl hover-lift pressable">hover / press</button></div>
+          <div style="font-size:11px;color:var(--label-3);margin-top:10px">Tinted 着色玻璃：iOS 26 第三档，每屏至多一处</div>
+        </div>
+      </div>
+    </div></div>
+  </section>
+  <p style="text-align:center;margin-top:64px;font-size:11px;color:var(--label-3);line-height:1.8">
+    ontology-agent 设计稿 v1.5 · 主题令牌与组件样式共享于 assets/board.css（与 frontend/src/design-system/ 同源）<br>
+    <a href="./index.html" style="color:var(--accent)">← 返回设计稿入口</a> · 验收依据 23 篇 DoD · 审计报告 ui-audit.md
+  </p>
+</div>
+
+<script>
+const io = new IntersectionObserver(es => es.forEach(e => {
+  if (e.isIntersecting) { e.target.classList.add('in-view'); io.unobserve(e.target); }
+}), {threshold: .12});
+document.querySelectorAll('.frame').forEach(f => io.observe(f));
+
+function replayMotion(){
+  const d = document.getElementById('motion-demo');
+  if (!d) return;
+  d.classList.remove('stagger'); void d.offsetWidth; d.classList.add('stagger');
+}
+const _toggle = document.querySelector('.theme-btn');
+_toggle.addEventListener('click', () => {
+  document.documentElement.classList.add('theme-fading');
+  setTimeout(() => document.documentElement.classList.remove('theme-fading'), 300);
+});
+</script>
+</body>
+</html>

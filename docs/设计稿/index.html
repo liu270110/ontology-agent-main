@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ontology-agent · 设计稿入口</title>
+<link rel="stylesheet" href="./assets/board.css">
+<style>
+  body{font-family:var(--font);background:var(--bg);color:var(--label);-webkit-font-smoothing:antialiased;
+    min-height:100vh;display:flex;align-items:center;justify-content:center}
+  .hub{display:grid;grid-template-columns:1fr 1fr;gap:20px;max-width:820px;padding:32px;width:100%}
+  .hub a.card{display:block;text-decoration:none;color:var(--label);transition:transform var(--dur-1) var(--ease),box-shadow var(--dur-1) var(--ease)}
+  .hub a.card:hover{transform:translateY(-3px);box-shadow:var(--sh-float)}
+  .hub .t{font-size:18px;font-weight:700;letter-spacing:-.3px;margin-bottom:6px}
+  .hub .d{font-size:12.5px;color:var(--label-2);line-height:1.6}
+  .hub .head{grid-column:1/-1;text-align:center;margin-bottom:8px}
+  .hub .head h1{font-size:26px;font-weight:700;letter-spacing:-.5px}
+  .hub .head p{font-size:12.5px;color:var(--label-2);margin-top:6px}
+</style>
+</head>
+<body>
+<div class="hub">
+  <div class="head">
+    <h1>ontology-agent 设计稿</h1>
+    <p>v1.5 · Apple 液态玻璃 · 主题令牌唯一来源 assets/board.css（与 frontend/src/design-system/ 同源）</p>
+  </div>
+  <a class="card card" href="./components.html">
+    <div class="t">前端组件库</div>
+    <div class="d">设计令牌 · 玻璃三档（Regular/Clear/Tinted）· 基元与模式组件 · 扩充组件 · 动效展演（实时循环）<br>主题与样式约束的物理载体</div>
+  </a>
+  <a class="card" href="./ui-pages.html">
+    <div class="t">UI 设计稿（页面）</div>
+    <div class="d">03 篇路由表 15 页全覆盖：登录/工作台/对话/本体工作台/知识库/图谱/记忆/Agent/市场/工具技能/MCP/审批/系统 + 分辨率适配<br>页面结构与跳转关系的物理载体</div>
+  </a>
+  <div class="head" style="margin-top:4px">
+    <p><a href="./ui-audit.md" style="color:var(--accent)">元素级审计报告</a> · <a href="../../frontend/src/design-system/styles/preview.html" style="color:var(--accent)">样式库冒烟页</a> · preview/ 截图基线</p>
+  </div>
+</div>
+</body>
+</html>

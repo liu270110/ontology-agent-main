@@ -41,12 +41,12 @@
   padding:12px 14px;display:flex;align-items:center;gap:10px;
   font-family:var(--mono);font-size:12px;color:var(--label)}
 .term .ps{color:var(--label-3);user-select:none}
-.term .term-copy{margin-left:auto;color:var(--label-3);opacity:0;transition:opacity .15s var(--ease);cursor:pointer}
+.term .term-copy{margin-left:auto;color:var(--label-3);opacity:0;transition:opacity var(--dur-1) var(--ease);cursor:pointer}
 .term:hover .term-copy{opacity:1}
 
 /* ---- 上传区（借鉴 TDesign） ---- */
 .upzone{border:1.5px dashed var(--separator);border-radius:14px;padding:20px 14px;text-align:center;
-  color:var(--label-2);font-size:12px;background:var(--surface-2);transition:.18s var(--ease)}
+  color:var(--label-2);font-size:12px;background:var(--surface-2);transition:border-color var(--dur-1) var(--ease),background var(--dur-1) var(--ease)}
 .upzone:hover,.upzone.drag{border-color:var(--accent);background:var(--accent-soft)}
 
 /* ---- 批量操作浮条（玻璃 Regular 胶囊，弹簧出现） ---- */
@@ -57,7 +57,7 @@
   border:1px solid var(--glass-border);
   box-shadow:inset 0 1px 0 var(--glass-hi),var(--sh-float)}
 @media (prefers-reduced-motion:no-preference){
-  .batchbar{animation:batchbar-in .35s var(--spring)}
+  .batchbar{animation:batchbar-in var(--dur-3) var(--spring)}
   @keyframes batchbar-in{from{transform:translateY(16px) scale(.96);opacity:0}to{transform:none;opacity:1}}
 }
 

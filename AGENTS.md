@@ -1,6 +1,8 @@
 # AGENTS.md — ontology-agent 平台开发规范（AI 代理入口）
 
 > 本文件是任何 AI 代理（Claude Code / pi / openclaw / 平台自托管 agent）在本仓库工作的上下文入口。保持精简：细节按下面的地图按需读取，不要整篇粘贴。
+>
+> ⚠ **2026-09-26 路线裁决（用户拍板）**：现行唯一权威 = **docs/架构设计/ 00~24**（React + Tailwind + shadcn/ui + Apple 液态玻璃）。Vue/Onto Blue 路线产物已归档于 `docs/archive/Vue路线-OntoBlue-2026-09/`，禁止引用、禁止恢复。多会话并行纪律：动手前先读本文件与 docs/架构设计/README 索引；新文档编号 = 当期最大 +1；**禁止移动、归档、删除他人未裁决的产物**，路线冲突提交用户裁决。
 
 ## 项目是什么
 

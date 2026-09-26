@@ -414,21 +414,29 @@ body{font-family:var(--font);background:var(--board);color:var(--label);
 .m-u{align-self:flex-end;flex-direction:row-reverse;max-width:60%}
 .bubble{border-radius:18px;padding:11px 15px;font-size:13px;line-height:1.65}
 .bubble-u{background:var(--accent);color:var(--on-accent);border-bottom-right-radius:6px}
-.bubble-a{background:var(--surface);box-shadow:var(--sh-card);border-bottom-left-radius:6px}
+.bubble-a{border-bottom-left-radius:6px;
+  background:linear-gradient(135deg,var(--glass-tint),transparent 42%),var(--glass-regular);
+  -webkit-backdrop-filter:blur(24px) saturate(220%);backdrop-filter:blur(24px) saturate(220%);
+  border:1px solid var(--glass-border);
+  box-shadow:inset 0 1px 0 var(--glass-hi),inset 0 -1px 1px var(--glass-lo),var(--sh-card)}
 .bubble-a p+p{margin-top:8px}
 .ev-row{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}
 .ev-chip{display:inline-flex;align-items:center;gap:4px;font-size:10px;font-weight:600;
   color:var(--accent);background:var(--accent-soft);border-radius:var(--r-pill);padding:3px 9px;
   font-family:var(--mono)}
 .ev-chip svg{width:9px;height:9px}
-.toolcard{display:flex;align-items:center;gap:9px;background:var(--surface);border:1px solid var(--separator);
-  border-radius:12px;padding:9px 13px;font-family:var(--mono);font-size:11px;color:var(--label-2)}
+.toolcard{display:flex;align-items:center;gap:9px;
+  background:linear-gradient(135deg,var(--glass-tint),transparent 42%),var(--glass-clear);
+  -webkit-backdrop-filter:blur(24px) saturate(220%);backdrop-filter:blur(24px) saturate(220%);
+  border:1px solid var(--glass-border);border-radius:13px;padding:9px 13px;
+  font-family:var(--mono);font-size:11px;color:var(--label-2);
+  box-shadow:inset 0 1px 0 var(--glass-hi)}
 .toolcard .tn{color:var(--label);font-weight:600}
 .input-bar{flex:none;display:flex;align-items:center;gap:10px;margin:0 28px 20px;
   background:linear-gradient(135deg,var(--glass-tint),transparent 42%),var(--glass-regular);
   backdrop-filter:blur(24px) saturate(200%);-webkit-backdrop-filter:blur(24px) saturate(200%);
-  border:1px solid var(--glass-border);border-radius:16px;
-  padding:10px 12px;box-shadow:inset 0 1px 0 var(--glass-hi),inset 0 -1px 1px var(--glass-lo),var(--sh-card)}
+  border:1px solid var(--glass-border);border-radius:var(--r-pill);
+  padding:8px 14px;box-shadow:inset 0 1px 0 var(--glass-hi),inset 0 -1px 1px var(--glass-lo),var(--sh-card)}
 .input-bar .fakeinput{flex:1;font-size:13px;color:var(--label-3)}
 .chipmodel{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:600;
   color:var(--label-2);background:var(--glass-clear);border:1px solid var(--glass-border);

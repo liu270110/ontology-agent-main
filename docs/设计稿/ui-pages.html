@@ -59,7 +59,7 @@
       <a href="#p-review">抽取审核</a><a href="#p-kb">知识库</a><a href="#p-explore">图谱</a>
       <a href="#p-memory">记忆</a><a href="#p-agents">Agent</a><a href="#p-market">插件市场</a>
       <a href="#p-tools">工具技能</a><a href="#p-mcp">MCP</a><a href="#p-approve">审批中心</a>
-      <a href="#p-admin">系统</a>
+      <a href="#p-admin">系统</a><a href="#p-status">状态页</a><a href="#p-empty-skel">空态骨架</a><a href="#p-axiom-diff">公理版本</a>
     </nav>
     <button class="theme-btn" onclick="document.documentElement.classList.toggle('dark')">切换亮 / 暗</button>
   </header>
@@ -1151,6 +1151,152 @@
       </div>
     </div>
   </section>
+  <section class="frame" id="p-status">
+    <div class="frame-head">
+      <div class="fnum">17</div>
+      <div><h2>全局系统状态页（A1）</h2>
+        <p>404 走丢 / 403 无权限（附申请入口）/ 500 服务异常（幂等重试）/ 网络断开（自动重连中）——四态共用一套插画语言与动作位，错误码对齐 13 篇 51 码。</p>
+        <div class="jumps"><span class="jump-chip">错误码全集 → 13 篇 <svg><use href="#i-arrow-r"/></svg></span><span class="jump-chip">权限申请 → 审批中心 <svg><use href="#i-arrow-r"/></svg></span></div>
+      </div>
+    </div>
+    <div class="browser"><div class="bbar"><span class="bdot" style="background:#ff5f57"></span><span class="bdot" style="background:#febc2e"></span><span class="bdot" style="background:#28c840"></span><span class="burl">ontology.local/status/{404,403,500,offline}</span></div>
+      <div class="app" style="display:grid;grid-template-columns:1fr 1fr;height:auto">
+        <div style="min-height:330px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;padding:32px;border-right:1px solid var(--separator);border-bottom:1px solid var(--separator);background:radial-gradient(40% 35% at 80% 10%,var(--accent-soft),transparent 60%),var(--bg)">
+          <div class="mono" style="font-size:44px;font-weight:700;letter-spacing:-2px;color:var(--label-3)">404</div>
+          <b style="font-size:15px">页面走丢了</b><span class="text-dim" style="font-size:12px">您访问的地址不存在或已被移动</span>
+          <div style="display:flex;gap:8px;margin-top:6px"><button class="btn btn-p btn-sm">回工作台</button><button class="btn btn-g btn-sm">搜索内容</button></div></div>
+        <div style="min-height:330px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;padding:32px;border-bottom:1px solid var(--separator);background:var(--bg)">
+          <div class="mono" style="font-size:44px;font-weight:700;letter-spacing:-2px;color:var(--label-3)">403</div>
+          <b style="font-size:15px">没有访问权限</b><span class="text-dim" style="font-size:12px">该操作需要 <b style="color:var(--label)">ontology:write</b> 权限，可向管理员申请</span>
+          <div style="display:flex;gap:8px;margin-top:6px"><button class="btn btn-p btn-sm">申请权限</button><button class="btn btn-g btn-sm">返回</button></div></div>
+        <div style="min-height:330px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;padding:32px;border-right:1px solid var(--separator);background:var(--bg)">
+          <div class="mono" style="font-size:44px;font-weight:700;letter-spacing:-2px;color:var(--label-3)">500</div>
+          <b style="font-size:15px">语义层服务开小差了</b><span class="text-dim" style="font-size:12px">工程师已被通知 · 重试是幂等安全的（trace: 8f2a…）</span>
+          <div style="display:flex;gap:8px;margin-top:6px"><button class="btn btn-p btn-sm">重试</button><button class="btn btn-g btn-sm">查看状态页</button></div></div>
+        <div style="min-height:330px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;padding:32px;background:var(--bg)">
+          <div class="mono" style="font-size:44px;font-weight:700;letter-spacing:-2px;color:var(--label-3)">OFF</div>
+          <b style="font-size:15px">网络连接已断开</b><span class="text-dim" style="font-size:12px"><span class="dot d-orange" style="display:inline-block;vertical-align:middle;margin-right:4px"></span>正在自动重连（第 2 次）· 本地草稿已保存</span>
+          <div style="display:flex;gap:8px;margin-top:6px"><button class="btn btn-p btn-sm">立即重连</button></div></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="frame" id="p-empty-skel">
+    <div class="frame-head">
+      <div class="fnum">18</div>
+      <div><h2>空态 / 页面骨架 / 错误态（C1–C3）</h2>
+        <p>15 页的三个非理想态基准：首次使用空态（必给下一步动作）、数据加载骨架（页面级布局占位）、API 失败横幅（原因+建议+重试）。各页按此规范替换理想态内容。</p>
+        <div class="jumps"><span class="jump-chip">空态组件 → 组件库页 00B <svg><use href="#i-arrow-r"/></svg></span><span class="jump-chip">骨架 shimmer → motion.css <svg><use href="#i-arrow-r"/></svg></span></div>
+      </div>
+    </div>
+    <div class="browser"><div class="bbar"><span class="bdot" style="background:#ff5f57"></span><span class="bdot" style="background:#febc2e"></span><span class="bdot" style="background:#28c840"></span><span class="burl">empty · loading · error</span></div>
+      <div class="app" style="display:grid;grid-template-columns:1fr 1fr;height:auto">
+        <div style="min-height:340px;padding:40px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;border-right:1px solid var(--separator);border-bottom:1px solid var(--separator);background:radial-gradient(35% 30% at 75% 15%,var(--accent-soft),transparent 60%),var(--bg)">
+          <div class="empty" style="padding:0">
+            <svg><use href="#i-book"/></svg><span class="t">知识库还是空的</span>
+            <span class="d">上传第一份领域文档，抽取流水线将自动构建图谱</span>
+            <div class="acts"><button class="btn btn-p btn-sm">上传文档</button><button class="btn btn-g btn-sm">查看示例</button></div></div>
+          <span class="badge b-gray">知识库 · 空态</span></div>
+        <div style="min-height:340px;padding:40px;display:flex;flex-direction:column;gap:14px;border-bottom:1px solid var(--separator);background:var(--bg)">
+          <div style="display:flex;gap:12px;align-items:center"><span class="skel" style="width:180px;height:26px;border-radius:8px"></span><span style="margin-left:auto"></span><span class="skel" style="width:90px;height:30px;border-radius:99px"></span></div>
+          <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px"><div class="skel skel-animated" style="height:74px;border-radius:14px"></div><div class="skel skel-animated" style="height:74px;border-radius:14px"></div><div class="skel skel-animated" style="height:74px;border-radius:14px"></div><div class="skel skel-animated" style="height:74px;border-radius:14px"></div></div>
+          <div class="skel skel-animated" style="height:150px;border-radius:16px"></div>
+          <span class="badge b-gray" style="align-self:center">工作台 · 页面骨架（加载中，shimmer）</span></div>
+        <div style="min-height:340px;padding:40px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;border-right:1px solid var(--separator);background:var(--bg)">
+          <div class="empty" style="padding:0">
+            <svg><use href="#i-layers"/></svg><span class="t">还没有任何记忆</span>
+            <span class="d">与 Agent 对话后，候选记忆会经沉淀管线出现在这里</span>
+            <div class="acts"><button class="btn btn-p btn-sm">开始对话</button><button class="btn btn-g btn-sm">了解记忆分层</button></div></div>
+          <span class="badge b-gray">记忆管理 · 空态</span></div>
+        <div style="min-height:340px;padding:40px;display:flex;flex-direction:column;justify-content:center;gap:12px;background:var(--bg)">
+          <div class="page-h"><h1 style="font-size:24px">抽取审核台</h1></div>
+          <div class="err-banner"><svg style="width:14px;height:14px;color:var(--red);flex:none;margin-top:1px"><use href="#i-warn"/></svg>
+            <div><b>候选队列加载失败 · ERR-4101</b><div style="color:var(--label-2);margin-top:2px">Neo4j 投影延迟，历史审核不受影响</div></div></div>
+          <div style="font-size:12px;color:var(--label-2);line-height:1.7">错误态规范：保留页面骨架 → 错误横幅置顶（原因+建议）→ 主操作给"重试"，次操作给"联系管理员"。<br>禁止：整页白屏、只显示"出错了"三个字、把堆栈抛给用户。</div>
+          <span class="badge b-gray" style="align-self:center">错误态 · 原因 + 建议 + 重试</span></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="frame" id="p-axiom-diff">
+    <div class="frame-head">
+      <div class="fnum">19</div>
+      <div><h2>本体工作台 · 公理编辑与版本对比（A2）</h2>
+        <p>深层 Tab 设计：公理/规则编辑器（SPARQL CONSTRUCT / SHACL 双语言，实时校验）+ 版本 Diff 与回滚（变更影响面提示）。编辑不直写 TBox——保存即变更请求。</p>
+        <div class="jumps"><span class="jump-chip">保存 → 审批中心 <svg><use href="#i-arrow-r"/></svg></span><span class="jump-chip">回滚 → 审批中心 <svg><use href="#i-arrow-r"/></svg></span></div>
+      </div>
+    </div>
+    <div class="browser"><div class="bbar"><span class="bdot" style="background:#ff5f57"></span><span class="bdot" style="background:#febc2e"></span><span class="bdot" style="background:#28c840"></span><span class="burl">ontology.local/ontology/battery-std?tab=axioms</span></div>
+      <div class="app">
+        <aside class="sb">
+          <div class="sb-brand"><span class="sb-logo"><svg><use href="#i-cube"/></svg></span><b>ontology-agent</b></div>
+          <a class="sb-item" href="#p-dashboard"><svg><use href="#i-grid"/></svg>工作台</a>
+          <a class="sb-item" href="#p-chat"><svg><use href="#i-chat"/></svg>对话</a>
+          <div class="sb-label">语义资产</div>
+          <a class="sb-item active" href="#p-onto"><svg><use href="#i-cube"/></svg>本体工作台</a>
+          <a class="sb-item" href="#p-kb"><svg><use href="#i-book"/></svg>知识库</a>
+          <a class="sb-item" href="#p-memory"><svg><use href="#i-layers"/></svg>记忆管理</a>
+          <div class="sb-label">能力</div>
+          <a class="sb-item" href="#p-agents"><svg><use href="#i-bot"/></svg>Agent 管理</a>
+          <a class="sb-item" href="#p-market"><svg><use href="#i-puzzle"/></svg>插件市场</a>
+          <a class="sb-item" href="#p-tools"><svg><use href="#i-wrench"/></svg>工具与技能</a>
+          <a class="sb-item" href="#p-mcp"><svg><use href="#i-plug"/></svg>MCP 管理</a>
+          <div class="sb-label">治理</div>
+          <a class="sb-item" href="#p-approve"><svg><use href="#i-shield"/></svg>审批中心<span class="sb-badge">5</span></a>
+          <a class="sb-item" href="#p-admin"><svg><use href="#i-gear"/></svg>系统管理</a>
+          <div class="sb-foot"><span class="sb-ava">刘</span><small><b>刘以在</b>管理员 · 默认租户</small></div>
+        </aside>
+        <div class="main">
+          <div class="topbar"><span class="tb-title">公理与规则</span><span class="badge b-purple">重型本体</span>
+            <div class="seg" style="margin-left:8px"><button class="seg-btn on">SPARQL CONSTRUCT</button><button class="seg-btn">SHACL</button></div>
+            <div class="tb-actions"><button class="btn btn-g btn-sm"><svg><use href="#i-play"/></svg>试运行</button><button class="btn btn-p btn-sm">保存为变更请求</button></div></div>
+          <div class="content" style="display:grid;grid-template-columns:1.4fr 1fr;gap:16px;align-items:start">
+            <div class="card" style="padding:0;overflow:hidden">
+              <div style="display:flex;align-items:center;gap:8px;padding:10px 14px;border-bottom:1px solid var(--separator)">
+                <span class="mono" style="font-size:11px;color:var(--label-2)">CL-012 · 循环次数下限.rq</span>
+                <span class="badge b-green" style="margin-left:auto">语法通过</span><span class="badge b-gray">预计物化 +38 三元组</span></div>
+              <div style="font-family:var(--mono);font-size:12px;line-height:2;padding:14px 16px;color:var(--label)">
+                <div><span style="color:var(--purple)">PREFIX</span> gb: &lt;http://example.org/battery-std#&gt;</div>
+                <div><span style="color:var(--purple)">PREFIX</span> onto: &lt;http://example.org/ontology#&gt;</div>
+                <div style="height:8px"></div>
+                <div><span style="color:var(--accent)">CONSTRUCT</span> {'</div>
+                <div>&nbsp;&nbsp;?std onto:imposesConstraint ?cl .</div>
+                <div style="height:8px"></div>
+                <div><span style="color:var(--accent)">WHERE</span> {'</div>
+                <div>&nbsp;&nbsp;?std a onto:Standard ;</div>
+                <div>&nbsp;&nbsp;&nbsp;&nbsp;onto:specifiesCharacteristic ?c .</div>
+                <div>&nbsp;&nbsp;<span style="color:var(--orange)">FILTER</span>(?cycles &lt; 500)</div>
+                <div>}</div>
+              </div>
+              <div style="display:flex;gap:8px;padding:10px 14px;border-top:1px solid var(--separator)">
+                <button class="btn btn-p btn-sm"><svg><use href="#i-play"/></svg>校验并试运行</button>
+                <button class="btn btn-g btn-sm">格式化</button><button class="btn btn-g btn-sm">历史版本</button></div>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:16px">
+              <div class="card">
+                <div class="card-h"><h3>版本对比 v1.4 → v1.5-draft</h3><span class="badge b-orange">待审</span></div>
+                <div style="background:var(--surface-2);border:1px solid var(--separator);border-radius:10px;padding:8px 10px">
+                  <div class="diffline del">- gb:31486-2024 onto:hasPart gb: AnnexA .</div>
+                  <div class="diffline add">+ gb:31486-2024 onto:imposesConstraint cl:CL-012 .</div>
+                  <div class="diffline add">+ cl:CL-012 onto:constrainsObject "电池单体" .</div>
+                </div>
+                <div style="display:flex;gap:5px;margin-top:10px;flex-wrap:wrap"><span class="badge b-green">+2 三元组</span><span class="badge b-red">-1 三元组</span><span class="badge b-gray">影响 3 实例</span></div>
+                <div style="display:flex;gap:8px;margin-top:12px"><button class="btn btn-p btn-sm" style="white-space:nowrap">送审 v1.5</button><button class="btn btn-g btn-sm">回滚 v1.4</button></div>
+              </div>
+              <div class="card">
+                <div class="card-h"><h3>变更影响面</h3></div>
+                <div style="font-size:12px;color:var(--label-2);line-height:1.9">
+                  引用该类的实例：<b style="color:var(--label)">3</b> 个（自动列出）<br>
+                  下游 GraphRAG 索引：<b style="color:var(--label)">需重建</b>（预计 40s）<br>
+                  关联工具语义标注：<b style="color:var(--label)">2</b> 个（erp.freezeAccount 等）</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
   <p style="text-align:center;margin-top:64px;font-size:11px;color:var(--label-3);line-height:1.8">
     ontology-agent 设计稿 v1.5 · 主题令牌与组件样式共享于 assets/board.css（与 frontend/src/design-system/ 同源）<br>
     <a href="./index.html" style="color:var(--accent)">← 返回设计稿入口</a> · 验收依据 23 篇 DoD · 审计报告 ui-audit.md

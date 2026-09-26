@@ -412,6 +412,91 @@
     </div>
   </section>
 
+  <section class="frame" id="p-forms">
+    <div class="frame-head">
+      <div class="fnum">00B</div>
+      <div><h2>表单 / 导航 / 反馈与状态组件</h2>
+        <p>P0 缺口补齐：表单控件族（复选/单选/开关/下拉/日期/滑杆/多行）、导航件（分页/面包屑/行内页签）、危险操作确认与空态·加载·错误三态设计。</p>
+        <div class="jumps"><span class="jump-chip">清单对应 <svg><use href="#i-arrow-r"/></svg> docs/架构设计/24 篇 §3</span></div>
+      </div>
+    </div>
+    <div class="browser"><div class="bbar"><span class="bdot" style="background:#ff5f57"></span><span class="bdot" style="background:#febc2e"></span><span class="bdot" style="background:#28c840"></span><span class="burl">forms · navigation · states</span></div>
+      <div style="background:var(--bg);padding:28px;color:var(--label);font-size:13px">
+        <div class="grid3">
+          <div class="card"><div class="card-h"><h3>复选 / 单选</h3></div>
+            <div style="display:flex;flex-direction:column;gap:10px">
+              <label class="fcheck"><input type="checkbox" checked><span class="box"><svg><use href="#i-check"/></svg></span>本体校验门禁（SHACL）</label>
+              <label class="fcheck"><input type="checkbox"><span class="box"><svg><use href="#i-check"/></svg></span>术语对齐（0.92 阈值）</label>
+              <label class="fcheck radio"><input type="radio" name="r1" checked><span class="box"></span>词汇表</label>
+              <label class="fcheck radio"><input type="radio" name="r1"><span class="box"></span>轻量图谱</label>
+              <label class="fcheck radio"><input type="radio" name="r1"><span class="box"></span>重型本体</label>
+            </div></div>
+          <div class="card"><div class="card-h"><h3>开关 / 下拉 / 日期</h3></div>
+            <div style="display:flex;flex-direction:column;gap:14px">
+              <div style="display:flex;align-items:center;gap:10px;justify-content:space-between"><span style="font-size:13px">自动触发审批</span><span class="fswitch on"></span></div>
+              <div style="display:flex;align-items:center;gap:10px;justify-content:space-between"><span style="font-size:13px">允许 L2 静默写入</span><span class="fswitch"></span></div>
+              <div class="field" style="margin:0"><label class="field-label">方案档次</label><span class="fselect" style="width:100%"><input class="input" value="重型本体"><svg><use href="#i-chev-d"/></svg></span></div>
+              <div class="field" style="margin:0"><label class="field-label">实施日期</label><span class="fselect" style="width:100%"><input class="input" value="2026-11-01"><svg><use href="#i-clock"/></svg></span></div>
+            </div></div>
+          <div class="card"><div class="card-h"><h3>滑杆 / 多行文本</h3></div>
+            <div class="field"><label class="field-label">术语对齐阈值 · 0.92</label>
+              <div class="fslider"><span class="track"></span><span class="fill" style="width:78%"></span><span class="thumb" style="left:78%"></span></div>
+              <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--label-3);margin-top:4px"><span>0.80</span><span>0.92</span><span>1.00</span></div></div>
+            <div class="field" style="margin:0"><label class="field-label">Definition（定义）</label>
+              <textarea class="input" rows="3" style="height:auto;padding:9px 12px;resize:vertical;line-height:1.6">具有唯一标识的标准化文件实体…</textarea></div></div>
+        </div>
+        <div class="grid2" style="margin-top:16px;align-items:start">
+          <div class="card">
+            <div class="card-h"><h3>危险操作确认</h3><span class="badge b-red">硬门禁 · 不可跳过</span></div>
+            <div style="position:relative;height:230px;border-radius:14px;background:var(--surface-2);display:flex;align-items:center;justify-content:center">
+              <div class="modal-mask"><div class="modal">
+                <div class="m-head"><span class="m-ic"><svg><use href="#i-warn"/></svg></span>
+                  <div><div class="m-title">删除本体项目？</div><div style="font-size:11px;color:var(--label-3)">battery-std · v1.4</div></div></div>
+                <div class="m-desc">将删除 41 个类、128 个实例与 14 条规则的历史版本。此操作进入审计日志，7 天内可回滚。</div>
+                <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px">
+                  <button class="btn btn-g btn-sm">取消</button>
+                  <button class="btn btn-d btn-sm">确认删除</button></div>
+              </div></div>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-h"><h3>导航件</h3><span class="badge b-gray">分页 / 面包屑 / 行内页签</span></div>
+            <div style="font-size:11px;color:var(--label-2);margin-bottom:6px">分页器（DataTable 配套）</div>
+            <div class="pager"><span class="pg dis">‹</span><span class="pg on">1</span><span class="pg">2</span><span class="pg">3</span><span class="pg">…</span><span class="pg">12</span><span class="pg">›</span></div>
+            <div style="font-size:11px;color:var(--label-2);margin:14px 0 6px">面包屑（深层路由）</div>
+            <div class="crumbs"><a href="#">本体工作台</a><svg><use href="#i-chev-r"/></svg><a href="#">动力电池标准本体</a><svg><use href="#i-chev-r"/></svg><span class="cur">循环寿命 CycleLife</span></div>
+            <div style="font-size:11px;color:var(--label-2);margin:14px 0 6px">行内页签（内容区分页）</div>
+            <div class="ltabs"><span class="lt on">图谱</span><span class="lt">公理与规则</span><span class="lt">版本</span><span class="lt">引用</span></div>
+          </div>
+        </div>
+        <div class="grid3" style="margin-top:16px">
+          <div class="card" style="padding:0;overflow:hidden;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:190px">
+            <div class="empty" style="padding:24px">
+              <svg><use href="#i-cube"/></svg><span class="t">还没有本体项目</span>
+              <span class="d">从一份领域文档开始，七步构建可推理的业务本体</span>
+              <div class="acts"><button class="btn btn-p btn-sm">新建本体项目</button><button class="btn btn-g btn-sm">导入文档</button></div></div>
+            <span class="badge b-gray" style="margin-bottom:14px">空态 · 必给下一步动作</span></div>
+          <div class="card" style="padding:0;overflow:hidden;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:190px">
+            <div class="empty" style="padding:24px">
+              <svg><use href="#i-shield"/></svg><span class="t">没有待审批事项</span>
+              <span class="d">新的审批到达时会在这里出现，并通知相关成员</span>
+              <div class="acts"><button class="btn btn-g btn-sm">查看已办</button></div></div>
+            <span class="badge b-gray" style="margin-bottom:14px">空态 · 零负载也是信息</span></div>
+          <div class="card" style="padding:16px">
+            <div class="card-h" style="margin-bottom:10px"><h3 style="font-size:13.5px">API 错误 / 重试</h3><span class="badge b-gray">C3 错误态</span></div>
+            <div class="err-banner"><svg style="width:14px;height:14px;color:var(--red);flex:none;margin-top:1px"><use href="#i-warn"/></svg>
+              <div><b>加载失败 · ERR-5002</b><div style="color:var(--label-2);margin-top:2px">语义层服务暂时不可用（幂等重试安全）</div>
+              <div style="display:flex;gap:6px;margin-top:8px"><button class="btn btn-p btn-sm">重试</button><button class="btn btn-g btn-sm">查看状态页</button></div></div></div>
+            <div style="font-size:11px;color:var(--label-3);margin-top:10px">错误文案 = 原因 + 建议；错误码全集见 13 篇（51 码）。</div>
+            <div class="card-h" style="margin:14px 0 8px;padding:0"><h3 style="font-size:13.5px">页面骨架（加载态）</h3></div>
+            <div style="display:flex;gap:10px"><div class="skel skel-animated" style="width:33%;height:88px;border-radius:12px"></div><div class="skel skel-animated" style="width:33%;height:88px;border-radius:12px"></div><div class="skel skel-animated" style="width:33%;height:88px;border-radius:12px"></div></div>
+            <div class="skel skel-animated" style="width:60%;height:12px;margin-top:10px"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
   <p style="text-align:center;margin-top:64px;font-size:11px;color:var(--label-3);line-height:1.8">
     ontology-agent 设计稿 v1.5 · 主题令牌与组件样式共享于 assets/board.css（与 frontend/src/design-system/ 同源）<br>
     <a href="./index.html" style="color:var(--accent)">← 返回设计稿入口</a> · 验收依据 23 篇 DoD · 审计报告 ui-audit.md

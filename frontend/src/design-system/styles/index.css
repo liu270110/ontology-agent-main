@@ -5,6 +5,7 @@
    React 基元（shadcn 定制）组合这些类，业务代码禁止重复定义样式
    ============================================================= */
 @import "../tokens/tokens.css";
+@import "../tokens/shadcn-mapping.css";
 @import "./glass.css";
 @import "./elements.css";
 @import "./patterns.css";

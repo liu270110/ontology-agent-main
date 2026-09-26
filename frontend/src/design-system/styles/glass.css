@@ -70,3 +70,73 @@
   box-shadow:inset 0 1px 0 rgba(255,255,255,.4),inset 0 -1px 1px rgba(0,0,0,.15),var(--glow-accent);
 }
 @media (prefers-reduced-transparency:reduce){.glass-tinted{background:var(--accent)}}
+
+/* =============================================================
+   液态玻璃进阶效果 v1.5 —— 开源社区配方（24 篇 §4.10）
+   来源：shuding/liquid-glass（SVG 噪点）、Magic UI（Aurora）、
+        Aceternity（Spotlight/BorderBeam）、Hyalite（透镜 bevel）、
+        AetherCSS（生成器配方）；全部令牌化 + reduce-motion 降级
+   ============================================================= */
+
+/* 1) Aurora 极光玻璃：玻璃内多色极光流动 */
+.glass-aurora{position:relative;overflow:hidden}
+.glass-aurora::before{content:"";position:absolute;inset:-40%;pointer-events:none;opacity:.55;filter:blur(28px);
+  background:
+    radial-gradient(35% 35% at 30% 30%, var(--aurora-1), transparent 70%),
+    radial-gradient(30% 30% at 70% 40%, var(--aurora-2), transparent 70%),
+    radial-gradient(35% 35% at 50% 75%, var(--aurora-3), transparent 70%);
+  animation:oa-aurora 14s ease-in-out infinite alternate}
+@keyframes oa-aurora{0%{transform:translate(-4%,-2%) rotate(0deg) scale(1)}50%{transform:translate(3%,3%) rotate(8deg) scale(1.08)}100%{transform:translate(-2%,4%) rotate(-6deg) scale(1.02)}}
+
+/* 2) 流光描边：conic 渐变绕边旋转（Aceternity BorderBeam 改造；不支持 @property 时静默降级为静态弧光） */
+@property --oa-angle{syntax:"<angle>";initial-value:0deg;inherits:false}
+.border-flow{position:relative}
+.border-flow::after{content:"";position:absolute;inset:-1px;border-radius:inherit;padding:1.5px;pointer-events:none;
+  background:conic-gradient(from var(--oa-angle), transparent 0%, var(--accent) 10%, var(--teal) 20%, transparent 32%);
+  -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);
+  -webkit-mask-composite:xor;mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);mask-composite:exclude;
+  animation:oa-border-spin 4s linear infinite}
+@keyframes oa-border-spin{to{--oa-angle:360deg}}
+
+/* 3) 噪点磨砂：SVG feTurbulence 颗粒（shuding/liquid-glass 配方） */
+.glass-noise::after{content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none;
+  opacity:.5;mix-blend-mode:overlay;
+  background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='120' height='120'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/><feColorMatrix type='saturate' values='0'/></filter><rect width='120' height='120' filter='url(%23n)' opacity='0.28'/></svg>")}
+
+/* 4) 指针追光：radial 高光跟随鼠标（需 JS 写入 --mx/--my；Aceternity Spotlight 改造） */
+.glass-spotlight::before{content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none;
+  opacity:0;transition:opacity var(--dur-2) var(--ease);
+  background:radial-gradient(240px circle at var(--mx,50%) var(--my,50%),var(--spotlight),transparent 65%)}
+.glass-spotlight:hover::before{opacity:1}
+
+/* 5) 幻彩流光：全息渐变缓慢流动（低透明度叠加，勿用于文字底） */
+.iridescent{position:relative;overflow:hidden}
+.iridescent::after{content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none;
+  opacity:.14;mix-blend-mode:screen;
+  background:linear-gradient(115deg,var(--accent),var(--purple),var(--teal),var(--green),var(--accent));
+  background-size:300% 100%;animation:oa-iri 8s linear infinite}
+@keyframes oa-iri{to{background-position:300% 0}}
+
+/* 6) 透镜 bevel：四向镜面内阴影（Hyalite 思路，配合 .glass 用） */
+.glass-lens{box-shadow:
+  inset 0 1px 1px var(--glass-hi),
+  inset 0 -1px 2px var(--glass-lo),
+  inset 1px 0 1px rgba(255,255,255,.28),
+  inset -1px 0 1px rgba(255,255,255,.28),
+  0 12px 40px rgba(0,0,0,.10)}
+
+/* 7) 深色媒体玻璃：媒体/插画之上的深色档 */
+.glass-deep{background:linear-gradient(135deg,rgba(8,10,20,.38),rgba(8,10,20,.16)),rgba(0,0,0,.28);
+  -webkit-backdrop-filter:blur(24px) saturate(180%);backdrop-filter:blur(24px) saturate(180%);
+  border:1px solid rgba(255,255,255,.18);color:#fff;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.25),0 12px 40px rgba(0,0,0,.25)}
+
+/* 8) 氛围：blob 形变 + 轻浮动 */
+@keyframes oa-blob{0%,100%{border-radius:60% 40% 55% 45%/50% 60% 40% 50%}33%{border-radius:45% 55% 40% 60%/55% 45% 60% 40%}66%{border-radius:55% 45% 60% 40%/40% 55% 45% 55%}}
+.blob-morph{animation:oa-blob 10s ease-in-out infinite}
+@keyframes oa-float{0%,100%{transform:translateY(0)}50%{transform:translateY(-6px)}}
+.float-y{animation:oa-float 6s ease-in-out infinite}
+
+@media (prefers-reduced-motion:reduce){
+  .glass-aurora::before,.border-flow::after,.iridescent::after,.blob-morph,.float-y{animation:none!important}
+}

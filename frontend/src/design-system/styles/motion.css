@@ -1,0 +1,92 @@
+/* =============================================================
+   动效层 v1.5 —— 液态玻璃动效 + 平台微交互（24 篇 §4.9）
+   原则（03 篇 §2.1）：
+   1. 动效传递状态不抢戏：入场用位移+透明度，弹簧只给形态变化；
+   2. 时长令牌 --dur-1..4，禁止裸写 ms；
+   3. 无限循环动画仅限"运行中"状态与氛围层，且全部被
+      prefers-reduced-motion 全局关闭（utilities.css）。
+   液态玻璃进阶动效（aurora/border-flow/iridescent/blob/float）
+   的 keyframes 位于 glass.css 效果库内（随效果就近维护）。
+   ============================================================= */
+
+/* ---- 入场/出场（一次性，传递层级与来源） ---- */
+@keyframes oa-fade-up{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+@keyframes oa-fade-in{from{opacity:0}to{opacity:1}}
+@keyframes oa-scale-in{from{opacity:0;transform:scale(.96) translateY(4px)}to{opacity:1;transform:none}}
+@keyframes oa-slide-in-right{from{opacity:0;transform:translateX(24px)}to{opacity:1;transform:none}}
+@keyframes oa-slide-in-left{from{opacity:0;transform:translateX(-24px)}to{opacity:1;transform:none}}
+@keyframes oa-slide-in-up{from{opacity:0;transform:translateY(24px)}to{opacity:1;transform:none}}
+
+.anim-fade-up{animation:oa-fade-up var(--dur-3) var(--ease) both}
+.anim-fade-in{animation:oa-fade-in var(--dur-2) var(--ease) both}
+.anim-scale-in{animation:oa-scale-in var(--dur-3) var(--spring) both}   /* Dialog/Popover/⌘K */
+.anim-slide-in-right{animation:oa-slide-in-right var(--dur-2) var(--ease) both}  /* 右侧 Sheet/Inspector */
+.anim-slide-in-left{animation:oa-slide-in-left var(--dur-2) var(--ease) both}    /* 侧边栏抽屉 */
+.anim-slide-in-up{animation:oa-slide-in-up var(--dur-2) var(--ease) both}        /* 底部 Sheet/批量条 */
+
+/* 列表 stagger：父容器加 .stagger，子项依次入场（≤10 项，超出全部同帧） */
+.stagger>*{animation:oa-fade-up var(--dur-3) var(--ease) both}
+.stagger>*:nth-child(1){animation-delay:0ms}
+.stagger>*:nth-child(2){animation-delay:40ms}
+.stagger>*:nth-child(3){animation-delay:80ms}
+.stagger>*:nth-child(4){animation-delay:120ms}
+.stagger>*:nth-child(5){animation-delay:160ms}
+.stagger>*:nth-child(6){animation-delay:200ms}
+.stagger>*:nth-child(7){animation-delay:240ms}
+.stagger>*:nth-child(8){animation-delay:280ms}
+.stagger>*:nth-child(n+9){animation-delay:320ms}
+
+/* ---- 交互反馈（hover/按下，微交互层） ---- */
+.hover-lift{transition:transform var(--dur-1) var(--ease),box-shadow var(--dur-1) var(--ease)}
+.hover-lift:hover{transform:translateY(-2px);box-shadow:var(--sh-float)}
+.pressable{transition:transform var(--dur-1) var(--ease)}
+.pressable:active{transform:scale(.97)}
+
+/* ---- 运行状态（无限循环，仅"进行中"语义） ---- */
+@keyframes oa-pulse-ring{0%{box-shadow:0 0 0 0 var(--accent-soft)}70%{box-shadow:0 0 0 6px transparent}100%{box-shadow:0 0 0 0 transparent}}
+.pulse-ring{animation:oa-pulse-ring 2s var(--ease) infinite}
+/* 流式输出光标（对话生成中） */
+@keyframes oa-caret{0%,45%{opacity:1}50%,100%{opacity:0}}
+.stream-caret{display:inline-block;width:2px;height:1em;vertical-align:-2px;background:var(--accent);
+  margin-left:2px;animation:oa-caret 1s steps(1) infinite}
+/* 加载旋转（图标级） */
+@keyframes oa-spin{to{transform:rotate(360deg)}}
+.spin{animation:oa-spin .9s linear infinite}
+
+/* ---- 加载/进度（shimmer 家族：磨砂面板标配） ---- */
+@keyframes oa-shimmer{from{background-position:200% 0}to{background-position:-200% 0}}
+.skel-animated{background:linear-gradient(90deg,rgba(0,0,0,.06) 25%,rgba(0,0,0,.12) 50%,rgba(0,0,0,.06) 75%);
+  background-size:200% 100%;animation:oa-shimmer 1.4s linear infinite}
+.dark .skel-animated{background:linear-gradient(90deg,rgba(255,255,255,.08) 25%,rgba(255,255,255,.16) 50%,rgba(255,255,255,.08) 75%);
+  background-size:200% 100%}
+/* 不确定进度条（流水线心跳） */
+.indeterminate{position:relative;overflow:hidden;background:var(--accent-soft);border-radius:3px}
+.indeterminate::after{content:"";position:absolute;inset:0;width:40%;border-radius:3px;background:var(--accent);
+  animation:oa-indet 1.2s var(--ease) infinite}
+@keyframes oa-indet{from{left:-40%}to{left:100%}}
+
+/* ---- 液态玻璃氛围（环境层，不承载信息；仅登录页/空态插图使用） ---- */
+@keyframes oa-sheen-loop{0%{background-position:220% 0}55%,100%{background-position:-120% 0}}
+.glass-sheen-loop{position:relative;overflow:hidden}
+.glass-sheen-loop::after{content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none;
+  background:linear-gradient(115deg,transparent 38%,var(--glass-hi) 50%,transparent 62%);
+  background-size:220% 100%;background-position:220% 0;opacity:.4;mix-blend-mode:screen;
+  animation:oa-sheen-loop 5.5s var(--ease) infinite}
+@keyframes oa-blob-drift{0%,100%{transform:translate(0,0) scale(1)}33%{transform:translate(3%,-4%) scale(1.04)}66%{transform:translate(-3%,3%) scale(.97)}}
+.blob-drift{animation:oa-blob-drift 14s ease-in-out infinite}
+
+/* ---- 数字变化提示（统计卡刷新时的 tick） ---- */
+@keyframes oa-tick{0%{transform:translateY(0)}35%{transform:translateY(-3px);color:var(--accent)}100%{transform:translateY(0)}}
+.tick{animation:oa-tick .4s var(--ease)}
+
+/* ---- 主题切换交叉淡化（html 加 .theme-fading 时全局过渡一帧） ---- */
+.theme-fading *{transition:background-color var(--dur-2) var(--ease),color var(--dur-2) var(--ease),border-color var(--dur-2) var(--ease)!important}
+
+/* 降级兜底（utilities.css 已有全局 reduce-motion；此处再关无限动画与氛围层） */
+@media (prefers-reduced-motion:reduce){
+  .pulse-ring,.stream-caret,.spin,.skel-animated,.indeterminate::after,
+  .glass-sheen-loop::after,.blob-drift{animation:none!important}
+  .indeterminate::after{left:30%}
+}
+
+/* aurora/border-flow/iridescent/blob/float 的 keyframes 位于 glass.css 效果库内（随效果就近维护） */

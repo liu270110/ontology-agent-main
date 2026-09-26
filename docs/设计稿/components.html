@@ -138,7 +138,7 @@
           <p style="font-size:11px;color:var(--label-2);margin-top:10px;line-height:1.6">IRI / SPARQL / diff 一律 mono 令牌（SF Mono），12px 起步。</p>
         </div>
       </div>
-      <!-- 液态玻璃展示：彩色内容衬底上才能看到折射与高光 -->
+      <span id="sec-glass"></span><!-- 液态玻璃展示：彩色内容衬底上才能看到折射与高光 -->
       <div class="card" style="margin-top:16px;padding:0;overflow:hidden">
         <div style="display:flex;align-items:center;gap:10px;padding:16px 22px 12px;flex-wrap:wrap">
           <h3 style="font-size:15px;font-weight:700">液态玻璃 Liquid Glass</h3>
@@ -170,7 +170,7 @@
       </div>
       <!-- 扩充组件预览 v1.2（24 篇 §3，借鉴 Linear/Geist/DSH/Semi 后令牌化） -->
       <div style="display:flex;align-items:center;gap:10px;padding:20px 4px 2px">
-        <h3 style="font-size:15px;font-weight:700">扩充组件预览</h3>
+        <span id="sec-ext" style="position:absolute"></span><h3 style="font-size:15px;font-weight:700">扩充组件预览</h3>
         <span class="badge b-blue">v1.2 · 24 篇 §3</span>
         <span style="font-size:11px;color:var(--label-3)">借鉴 Linear / Vercel Geist / DeepSeek Harness / Semi，全部令牌化</span>
       </div>
@@ -258,6 +258,45 @@
         </div>
       </div>
       <!-- 动效展演（实时循环，motion.css 同源） -->
+      <!-- 液态玻璃效果库（开源社区配方，24 篇 §4.10） -->
+      <div style="display:flex;align-items:center;gap:10px;padding:20px 4px 2px">
+        <h3 style="font-size:15px;font-weight:700">液态玻璃效果库</h3>
+        <span class="badge b-blue">开源社区配方 · 已令牌化</span>
+        <span style="font-size:11px;color:var(--label-3)">来源：shuding/liquid-glass · Magic UI · Aceternity · Hyalite · AetherCSS</span>
+      </div>
+      <div class="grid3" style="margin-top:12px">
+        <div class="card"><div class="card-h" style="margin-bottom:10px"><h3 style="font-size:13.5px">Aurora 极光玻璃</h3><span class="badge b-gray" style="margin-left:auto">Magic UI</span></div>
+          <div class="glass glass-aurora" style="height:120px;border-radius:12px;position:relative;overflow:hidden;background:linear-gradient(135deg,var(--purple-soft),var(--teal-soft) 60%,var(--accent-soft))"><div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600">极光在玻璃内流动</div></div>
+          <p class="text-faint" style="font-size:10.5px;margin-top:8px">.glass-aurora · 多色 radial + blur(28px) 交替漂移</p></div>
+        <div class="card"><div class="card-h" style="margin-bottom:10px"><h3 style="font-size:13.5px">流光描边</h3><span class="badge b-gray" style="margin-left:auto">Aceternity BorderBeam</span></div>
+          <div class="glass border-flow" style="height:120px;border-radius:12px;position:relative;overflow:hidden;background:linear-gradient(135deg,var(--purple-soft),var(--teal-soft) 60%,var(--accent-soft))"><div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600">conic 光弧绕边旋转</div></div>
+          <p class="text-faint" style="font-size:10.5px;margin-top:8px">.border-flow · @property 角度动画 + mask 描边</p></div>
+        <div class="card"><div class="card-h" style="margin-bottom:10px"><h3 style="font-size:13.5px">噪点磨砂</h3><span class="badge b-gray" style="margin-left:auto">shuding/liquid-glass</span></div>
+          <div class="glass glass-noise" style="height:120px;border-radius:12px;position:relative;overflow:hidden;background:linear-gradient(135deg,var(--purple-soft),var(--teal-soft) 60%,var(--accent-soft))"><div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600">feTurbulence 颗粒消 Bands</div></div>
+          <p class="text-faint" style="font-size:10.5px;margin-top:8px">.glass-noise · SVG 噪点 overlay，磨砂不塑料</p></div>
+        <div class="card"><div class="card-h" style="margin-bottom:10px"><h3 style="font-size:13.5px">指针追光</h3><span class="badge b-gray" style="margin-left:auto">Aceternity Spotlight</span></div>
+          <div class="glass glass-spotlight" style="height:120px;border-radius:12px;position:relative;overflow:hidden;background:linear-gradient(135deg,var(--purple-soft),var(--teal-soft) 60%,var(--accent-soft))" style="height:120px;border-radius:12px;position:relative;overflow:hidden;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;background:var(--glass-regular)">把鼠标移到我上面</div>
+          <p class="text-faint" style="font-size:10.5px;margin-top:8px">.glass-spotlight · --mx/--my 高光跟随（JS 三行）</p></div>
+        <div class="card"><div class="card-h" style="margin-bottom:10px"><h3 style="font-size:13.5px">幻彩流光</h3><span class="badge b-gray" style="margin-left:auto">社区全息配方</span></div>
+          <div class="glass iridescent" style="height:120px;border-radius:12px;position:relative;overflow:hidden;background:linear-gradient(135deg,var(--purple-soft),var(--teal-soft) 60%,var(--accent-soft))"><div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600">全息渐变缓慢流动</div></div>
+          <p class="text-faint" style="font-size:10.5px;margin-top:8px">.iridescent · 五色 linear 流动，screen 混合 14%</p></div>
+        <div class="card"><div class="card-h" style="margin-bottom:10px"><h3 style="font-size:13.5px">透镜 Bevel + 深色档</h3><span class="badge b-gray" style="margin-left:auto">Hyalite / vaso</span></div>
+          <div style="display:flex;gap:8px">
+            <div class="glass glass-lens" style="flex:1;height:120px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:11.5px;font-weight:600;background:var(--glass-regular)">四向 bevel</div>
+            <div class="glass-deep" style="flex:1;height:120px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:11.5px;font-weight:600">媒体深色档</div>
+          </div>
+          <p class="text-faint" style="font-size:10.5px;margin-top:8px">.glass-lens 四向镜面内阴影 · .glass-deep 媒体之上</p></div>
+        <div class="card"><div class="card-h" style="margin-bottom:10px"><h3 style="font-size:13.5px">Blob 形变 + 浮动</h3><span class="badge b-gray" style="margin-left:auto">氛围层</span></div>
+          <div style="height:120px;border-radius:12px;position:relative;overflow:hidden;background:linear-gradient(135deg,var(--purple-soft),var(--teal-soft) 60%,var(--accent-soft))">
+            <div class="blob-morph" style="position:absolute;left:12%;top:14%;width:74px;height:74px;background:var(--accent-soft);filter:blur(2px)"></div>
+            <div class="blob-morph float-y" style="position:absolute;right:14%;top:26%;width:60px;height:60px;background:var(--teal-soft);filter:blur(2px);animation-delay:-3s"></div>
+            <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600">登录页/空态氛围位</div></div>
+          <p class="text-faint" style="font-size:10.5px;margin-top:8px">.blob-morph · .float-y · 仅氛围不承载信息</p></div>
+        <div class="card"><div class="card-h" style="margin-bottom:10px"><h3 style="font-size:13.5px">组合技：玻璃卡</h3><span class="badge b-green" style="margin-left:auto">推荐主卡形态</span></div>
+          <div class="glass glass-aurora glass-lens" style="height:120px;border-radius:14px;display:flex;flex-direction:column;align-items:flex-start;justify-content:center;padding:0 16px">
+            <b style="font-size:13px">aurora + lens 组合</b><span style="font-size:11px;color:var(--label-2)">统计卡/项目卡主形态</span></div>
+          <p class="text-faint" style="font-size:10.5px;margin-top:8px">.glass.glass-aurora.glass-lens · 全站主卡升级为该形态</p></div>
+      </div>
       <div style="display:flex;align-items:center;gap:10px;padding:20px 4px 2px">
         <h3 style="font-size:15px;font-weight:700">动效展演</h3>
         <span class="badge b-blue">motion.css 实时循环</span>
@@ -307,6 +346,11 @@ function replayMotion(){
   if (!d) return;
   d.classList.remove('stagger'); void d.offsetWidth; d.classList.add('stagger');
 }
+document.querySelectorAll('.glass-spotlight').forEach(el => el.addEventListener('pointermove', e => {
+  const r = el.getBoundingClientRect();
+  el.style.setProperty('--mx', (e.clientX - r.left) + 'px');
+  el.style.setProperty('--my', (e.clientY - r.top) + 'px');
+}));
 const _toggle = document.querySelector('.theme-btn');
 _toggle.addEventListener('click', () => {
   document.documentElement.classList.add('theme-fading');

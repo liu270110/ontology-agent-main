@@ -88,6 +88,7 @@
       <a href="#ix-cht-05">CHT-05 工具详情</a>
       <a href="#ix-cht-06">CHT-06 停止生成</a>
       <a href="#ix-cht-07">CHT-07 重新生成</a>
+      <a href="#ix-cht-08">分享</a>
       <a href="#ix-tsk-01">TSK-01 任务详情</a>
       <a href="#ix-tsk-02">TSK-02 日志抽屉</a>
       <a href="#ix-tsk-03">TSK-03 重试确认</a>
@@ -603,6 +604,112 @@
   </div>
 </section>
 
+<!-- ============ CHT-08 会话分享弹窗 ============ -->
+<section class="frame" id="ix-cht-08">
+  <div class="frame-head">
+    <div class="fnum">CHT-08</div>
+    <div>
+      <h2>会话分享弹窗 ShareDialog · /chat/:sessionId</h2>
+      <p>只读快照分享：生成快照链接（有效期 / 水印策略），快照路由独立于会话权限体系，过期即失效（02 篇 P1 F-07 / 24 篇 §3.8 ShareDialog 规格）。</p>
+      <div class="jumps">
+        <span class="jump-chip">触发：对话顶栏「分享」</span>
+        <span class="jump-chip">生成 <svg><use href="#i-arrow-r"/></svg> 复制只读快照链接</span>
+        <span class="jump-chip">端点：api/01 §5.2/§5.10（2026-09-26 预登记 POST/DELETE /sessions/{id}/share）</span>
+      </div>
+    </div>
+  </div>
+  <div class="browser"><div class="bbar"><span class="bdot" style="background:#ff5f57"></span><span class="bdot" style="background:#febc2e"></span><span class="bdot" style="background:#28c840"></span><span class="burl">ontology.local/chat/s-9107</span></div>
+    <div class="app" style="position:relative;overflow:hidden">
+      <aside class="sb" style="opacity:.55">
+        <div class="sb-brand"><span class="sb-logo"><svg><use href="#i-cube"/></svg></span><b>ontology-agent</b></div>
+        <a class="sb-item"><svg><use href="#i-grid"/></svg>工作台</a>
+        <a class="sb-item active"><svg><use href="#i-chat"/></svg>对话</a>
+        <a class="sb-item"><svg><use href="#i-list"/></svg>任务中心</a>
+        <div class="sb-foot"><span class="sb-ava">刘</span><small><b>刘以在</b>调度班长 · 默认租户</small></div>
+      </aside>
+      <div class="main" style="opacity:.55">
+        <div class="topbar">
+          <span class="tb-title">梳理 3 号机组停电影响范围</span>
+          <div class="tb-actions">
+            <span class="chipmodel">Claude Sonnet</span>
+            <span class="icobtn" style="background:var(--accent-soft);color:var(--accent)" title="分享"><svg><use href="#i-share"/></svg></span>
+          </div>
+        </div>
+        <div class="chat-body">
+          <div class="session-col">
+            <div class="sc-head"><b>会话</b></div>
+            <div class="skel" style="height:38px;border-radius:0;margin:2px 0"></div>
+            <div class="skel" style="height:38px;border-radius:0;opacity:.6"></div>
+            <div class="skel" style="height:38px;border-radius:0;opacity:.4"></div>
+          </div>
+          <div class="chat-main">
+            <div class="msgs">
+              <div class="skel" style="width:58%;margin-left:auto"></div>
+              <div class="skel" style="width:76%"></div>
+              <div class="skel" style="width:44%"></div>
+            </div>
+            <div class="input-bar"><span class="fakeinput">继续提问，或输入 / 调用技能…</span><span class="sendbtn"><svg><use href="#i-send"/></svg></span></div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-mask"><div class="modal" style="width:520px">
+        <div class="m-head">
+          <span class="m-ic" style="background:var(--accent-soft);color:var(--accent)"><svg><use href="#i-share"/></svg></span>
+          <div><div class="m-title">分享会话</div>
+            <div class="m-desc">生成只读快照链接；快照为生成时刻的静态副本，不随会话继续更新。</div></div>
+          <span class="icobtn" style="margin-left:auto;flex:none" title="关闭"><svg><use href="#i-x"/></svg></span>
+        </div>
+        <div class="field" style="margin-bottom:12px">
+          <label class="field-label">快照链接（已生成）</label>
+          <div style="display:flex;align-items:center;gap:8px">
+            <span class="mono" style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;background:var(--surface-2);border:1px solid var(--separator);border-radius:10px;padding:9px 12px;font-size:12px;color:var(--label)">https://ontology.local/s/r-7f31c9</span>
+            <button class="btn btn-s" style="flex:none"><svg><use href="#i-copy"/></svg>复制</button>
+          </div>
+          <div class="fhint">快照路由独立于会话权限体系 · 仅查看 · 过期即失效；持有链接即可阅读，请勿外传含敏感数据的会话。</div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
+          <div class="field" style="margin:0">
+            <label class="field-label">有效期</label>
+            <span class="fselect" style="width:100%"><input class="input" style="width:100%" value="7 天"><svg><use href="#i-chev-d"/></svg></span>
+            <div class="fhint">7 天 / 30 天 / 永久；到期链接自动失效。</div>
+          </div>
+          <div class="field" style="margin:0">
+            <label class="field-label">水印策略</label>
+            <div style="display:flex;align-items:center;gap:8px;height:38px">
+              <span class="fswitch on"></span><span style="font-size:12px;color:var(--label-2)">导出图片带访问者水印</span>
+            </div>
+            <div class="fhint">水印含访问者与时间，泄露可溯源。</div>
+          </div>
+        </div>
+        <div class="field" style="margin-bottom:4px">
+          <label class="field-label">已创建链接（2）</label>
+          <div style="display:flex;flex-direction:column;gap:8px">
+            <div style="display:flex;align-items:center;gap:10px;border:1px solid var(--separator);border-radius:10px;padding:8px 12px">
+              <label class="fcheck" style="flex:none"><input type="checkbox"><span class="box"><svg><use href="#i-check"/></svg></span></label>
+              <span class="mono" style="color:var(--label)">/s/r-7f31c9</span>
+              <span style="font-size:11px;color:var(--label-3)">创建 09-26 14:02</span>
+              <span class="badge b-green" style="margin-left:auto"><span class="dot d-green" style="width:5px;height:5px"></span>生效中</span>
+              <span class="icobtn" style="width:26px;height:26px" title="删除此链接"><svg><use href="#i-trash"/></svg></span>
+            </div>
+            <div style="display:flex;align-items:center;gap:10px;border:1px solid var(--separator);border-radius:10px;padding:8px 12px;opacity:.55">
+              <label class="fcheck" style="flex:none"><input type="checkbox"><span class="box"><svg><use href="#i-check"/></svg></span></label>
+              <span class="mono" style="color:var(--label)">/s/r-5a02bd</span>
+              <span style="font-size:11px;color:var(--label-3)">创建 09-18 10:35</span>
+              <span class="badge b-gray" style="margin-left:auto">已过期</span>
+              <span class="icobtn" style="width:26px;height:26px" title="删除此链接"><svg><use href="#i-trash"/></svg></span>
+            </div>
+          </div>
+          <div class="fhint">删除勾选项走 DELETE /sessions/{id}/share 并写审计；过期链接保留 30 天供追溯后自动清理。</div>
+        </div>
+        <div class="m-acts">
+          <button class="btn btn-g" style="margin-right:auto"><svg><use href="#i-trash"/></svg>删除所选</button>
+          <button class="btn btn-p"><svg><use href="#i-plus"/></svg>生成新链接</button>
+        </div>
+      </div></div>
+    </div>
+  </div>
+</section>
+
 <!-- ============ TSK-01 任务详情抽屉 ============ -->
 <section class="frame" id="ix-tsk-01">
   <div class="frame-head">
@@ -1013,7 +1120,7 @@
 </section>
 
   <p style="text-align:center;margin-top:64px;font-size:11px;color:var(--label-3);line-height:1.8">
-    ontology-agent 交互态画板 · 对话 / 任务 / 轨迹回放（IX-CHT-01~07 · IX-TSK-01~04 · IX-TRAJ-01~02，共 13 框）<br>
+    ontology-agent 交互态画板 · 对话 / 任务 / 轨迹回放（IX-CHT-01~08 · IX-TSK-01~04 · IX-TRAJ-01~02，共 14 框）<br>
     依据 <a href="../../架构设计/26-前端页面交互态详细设计.md" style="color:var(--accent)">docs/架构设计/26 篇 §4 矩阵</a> · <a href="../index.html" style="color:var(--accent)">← 设计稿入口</a> · <a href="../ui-pages.html" style="color:var(--accent)">页面主视图画板</a> · <a href="../components.html" style="color:var(--accent)">组件库</a>
   </p>
 </div>

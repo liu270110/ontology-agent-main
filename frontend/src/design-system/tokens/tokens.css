@@ -36,7 +36,7 @@
 
   /* Aurora 极光/幻彩/追光（液态玻璃进阶效果） */
   --aurora-1:rgba(10,132,255,.5);
-  --aurora-2:rgba(175,45,222,.38);
+  --aurora-2:rgba(88,86,214,.38);
   --aurora-3:rgba(48,176,199,.45);
   --spotlight:rgba(255,255,255,.35);
   --glass-tinted:rgba(0,113,227,.78);       /* Tinted：强调色着色玻璃（主操作/选中，iOS 26） */

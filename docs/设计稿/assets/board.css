@@ -130,9 +130,8 @@ body{font-family:var(--font);background:var(--board);color:var(--label);
 /* ============ 应用骨架 ============ */
 .app{display:flex;height:720px;color:var(--label);font-size:14px;text-align:left;
   background:
-    radial-gradient(55% 45% at 88% 0%, var(--purple-soft), transparent 62%),
-    radial-gradient(45% 40% at 0% 100%, var(--teal-soft), transparent 60%),
-    radial-gradient(40% 35% at 25% 15%, var(--accent-soft), transparent 55%),
+    radial-gradient(50% 40% at 88% 0%, var(--accent-soft), transparent 60%),
+    radial-gradient(40% 35% at 0% 100%, var(--teal-soft), transparent 58%),
     var(--bg)}
 .sb{width:228px;flex:none;display:flex;flex-direction:column;
   background:linear-gradient(135deg,var(--glass-tint),transparent 42%),var(--glass-regular);

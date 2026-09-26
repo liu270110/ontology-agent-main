@@ -268,3 +268,32 @@
 @media (prefers-reduced-motion:reduce){
   .beam,.glare-hover::after{animation:none!important;transition:none!important}
 }
+
+/* =============================================================
+   v1.7 键鼠交互模式（24 篇 §3.9/§4.15；画板 00K 同名同源）
+   ============================================================= */
+.board :focus-visible,.ds :focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:6px}
+.rov-item{display:flex;align-items:center;gap:9px;height:36px;padding:0 10px;border-radius:9px;
+  font-size:12.5px;cursor:pointer;color:var(--label)}
+.rov-item svg{width:14px;height:14px;color:var(--label-2)}
+.rov-item[aria-selected="true"]{background:var(--accent-soft);color:var(--accent)}
+.rov-item[aria-selected="true"] svg{color:var(--accent)}
+.jk-row{transition:background var(--dur-1) var(--ease),box-shadow var(--dur-1) var(--ease)}
+.jk-row.on{background:var(--accent-soft);box-shadow:inset 2px 0 0 var(--accent)}
+.dbl-edit{font-size:12.5px;height:26px;padding:0 6px}
+.drop-li{transition:transform .25s var(--spring-soft),opacity .2s var(--ease)}
+.drop-li.dragging{opacity:.35}
+.drop-li.over{box-shadow:0 -2px 0 0 var(--accent)}
+.drop-li.picked{transform:scale(1.02);box-shadow:var(--sh-float)}
+.sel-toolbar{position:absolute;display:flex;gap:2px;padding:4px;border-radius:11px;z-index:5;
+  background:linear-gradient(135deg,var(--glass-tint),transparent 42%),var(--glass-regular);
+  -webkit-backdrop-filter:blur(24px) saturate(200%);backdrop-filter:blur(24px) saturate(200%);
+  border:1px solid var(--glass-border);box-shadow:inset 0 1px 0 var(--glass-hi),var(--sh-float);
+  transform:translate(-50%,-100%)}
+.sel-toolbar .st-b{width:28px;height:26px;border-radius:7px;display:flex;align-items:center;justify-content:center;
+  color:var(--label-2);cursor:pointer;border:none;background:transparent;font-size:12px}
+.sel-toolbar .st-b:hover{background:var(--accent-soft);color:var(--accent)}
+.split-handle{width:6px;flex:none;cursor:col-resize;border-radius:3px;position:relative;
+  background:transparent;border-left:1px solid var(--separator);transition:background var(--dur-1) var(--ease)}
+.split-handle:hover,.split-handle.active{background:linear-gradient(180deg,transparent,var(--accent-soft),transparent)}
+body.ix-dragging{user-select:none;cursor:col-resize}

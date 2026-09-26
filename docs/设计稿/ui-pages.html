@@ -104,7 +104,7 @@
           <div class="field"><label class="field-label">邮箱</label><input class="input" placeholder="name@company.com"></div>
           <div class="field"><label class="field-label">密码</label><input class="input" type="password" value="········"></div>
           <button class="btn btn-p" style="width:100%;justify-content:center;height:40px;margin-top:6px">登 录</button>
-          <p style="font-size:11px;color:var(--label-3);text-align:center;margin-top:16px">登录即代表同意平台使用条款与审计策略</p>
+          <p style="font-size:11px;color:var(--label-2);text-align:center;margin-top:16px">登录即代表同意平台使用条款与审计策略</p>
           <div class="login-meta">v0.1.0-m1 · build 20260926</div>
         </div>
       </div>
@@ -138,10 +138,10 @@
           <a class="sb-item" href="#p-playground"><svg><use href="#i-flask"/></svg>检索 Playground</a>
           <a class="sb-item" href="#p-memory"><svg><use href="#i-layers"/></svg>记忆管理</a>
           <div class="sb-label">能力</div>
-          <a class="sb-item"><svg><use href="#i-bot"/></svg>Agent 管理</a>
+          <a class="sb-item" href="#p-agents"><svg><use href="#i-bot"/></svg>Agent 管理</a>
           <a class="sb-item" href="#p-market"><svg><use href="#i-puzzle"/></svg>插件市场</a>
-          <a class="sb-item"><svg><use href="#i-wrench"/></svg>工具与技能</a>
-          <a class="sb-item"><svg><use href="#i-plug"/></svg>MCP 管理</a>
+          <a class="sb-item" href="#p-tools"><svg><use href="#i-wrench"/></svg>工具与技能</a>
+          <a class="sb-item" href="#p-mcp"><svg><use href="#i-plug"/></svg>MCP 管理</a>
           <div class="sb-label">治理</div>
           <a class="sb-item" href="#p-analytics"><svg><use href="#i-activity"/></svg>数据分析</a>
           <a class="sb-item" href="#p-approve"><svg><use href="#i-shield"/></svg>审批中心<span class="sb-badge">5</span></a>
@@ -226,10 +226,10 @@
           <a class="sb-item" href="#p-playground"><svg><use href="#i-flask"/></svg>检索 Playground</a>
           <a class="sb-item" href="#p-memory"><svg><use href="#i-layers"/></svg>记忆管理</a>
           <div class="sb-label">能力</div>
-          <a class="sb-item"><svg><use href="#i-bot"/></svg>Agent 管理</a>
+          <a class="sb-item" href="#p-agents"><svg><use href="#i-bot"/></svg>Agent 管理</a>
           <a class="sb-item" href="#p-market"><svg><use href="#i-puzzle"/></svg>插件市场</a>
-          <a class="sb-item"><svg><use href="#i-wrench"/></svg>工具与技能</a>
-          <a class="sb-item"><svg><use href="#i-plug"/></svg>MCP 管理</a>
+          <a class="sb-item" href="#p-tools"><svg><use href="#i-wrench"/></svg>工具与技能</a>
+          <a class="sb-item" href="#p-mcp"><svg><use href="#i-plug"/></svg>MCP 管理</a>
           <div class="sb-label">治理</div>
           <a class="sb-item" href="#p-analytics"><svg><use href="#i-activity"/></svg>数据分析</a>
           <a class="sb-item" href="#p-approve"><svg><use href="#i-shield"/></svg>审批中心<span class="sb-badge">5</span></a>
@@ -249,7 +249,7 @@
           <div class="chat-body">
             <div class="session-col">
               <div class="sc-head"><b>会话</b><span class="icobtn" style="width:24px;height:24px"><svg><use href="#i-plus"/></svg></span></div>
-              <div class="sc-item on"><div class="sc-t">动力电池标准对比</div><div class="sc-s"><span class="dot d-green" style="width:5px;height:5px"></span>刚刚 · 12 条消息</div></div>
+              <div class="sc-item on"><div class="sc-t">动力电池标准对比</div><div class="sc-s"><span class="dot d-green" style="width:5px;height:5px"></span>刚刚 · 12 条消息 · 已压缩 1 次</div></div>
               <div class="sc-item"><div class="sc-t">CL-014 约束逻辑评审准备</div><div class="sc-s">1 小时前</div></div>
               <div class="sc-item"><div class="sc-t">退单分析：宽带业务流程</div><div class="sc-s">昨天 · 已归档记忆 6 条</div></div>
               <div class="sc-item"><div class="sc-t">供应链本体试点访谈纪要</div><div class="sc-s">周一</div></div>
@@ -269,10 +269,13 @@
                         <span class="ev-chip"><svg><use href="#i-doc"/></svg>GB/T 36276-2018 §5.2.4</span>
                         <span class="ev-chip"><svg><use href="#i-cube"/></svg>图谱路径：循环寿命 ←特性— 对象：电池单体</span>
                       </div>
-                      <p style="font-size:11px;color:var(--label-2);margin-top:10px">以上结论经本体约束过滤（术语对齐 0.92+），推理路径可追溯。<span class=\"stream-caret\"></span></p>
+                      <p style="font-size:11px;color:var(--label-2);margin-top:10px">以上结论经本体约束过滤（术语对齐 0.92+），推理路径可追溯。<span class="stream-caret"></span></p>
                     </div>
                   </div></div>
               </div>
+              <div class="err-banner" style="margin:0 28px 14px"><svg style="width:14px;height:14px;color:var(--red);flex:none;margin-top:1px"><use href="#i-warn"/></svg>
+                <div style="flex:1"><b>上一轮生成中断 · ERR-5002</b>（已保留 218 tokens）<span class="mono" style="font-size:10px;color:var(--label-3);margin-left:6px">trace b71c…9e2</span>
+                <div style="display:flex;gap:6px;margin-top:6px"><button class="btn btn-p btn-sm">重试该轮</button><button class="btn btn-g btn-sm">继续生成</button></div></div></div>
               <div class="input-bar">
                 <span class="fakeinput">继续提问，或输入 / 调用技能…</span>
                 <span class="chipmodel">标准领域模板</span>
@@ -282,11 +285,11 @@
             <div class="ctx">
               <h4><svg><use href="#i-spark"/></svg>本次回答的上下文</h4>
               <div class="ctx-sec"><div class="ctx-t">记忆召回</div>
-                <div class="ctx-item"><span class="dot d-blue" style="margin-top:5px"></span><span><b>L2 用户</b>· 关注动力电池领域，偏好给出条款级依据</span></div>
-                <div class="ctx-item"><span class="dot d-purple" style="margin-top:5px;background:var(--purple)"></span><span><b>L3 组织</b>· 团队正在做电池标准本体试点（v1.4）</span></div>
+                <div class="ctx-item"><span class="dot d-blue" style="margin-top:5px"></span><span><b title="仅本人可见的记忆层">L2 用户</b>· 关注动力电池领域，偏好给出条款级依据</span></div>
+                <div class="ctx-item"><span class="dot d-purple" style="margin-top:5px;background:var(--purple)"></span><span><b title="团队内 17 人共享的记忆层">L3 组织</b>· 团队正在做电池标准本体试点（v1.4）</span></div>
               </div>
               <div class="ctx-sec"><div class="ctx-t">GraphRAG 路径</div>
-                <div class="ctx-item"><span class="dot d-teal" style="margin-top:5px;background:var(--teal)"></span><span><b>Local Search</b>· 6 实体 / 4 关系 / 2 社区摘要</span></div>
+                <div class="ctx-item"><span class="dot d-teal" style="margin-top:5px;background:var(--teal)"></span><span><b title="围绕具体实体的精准检索">Local Search</b>· 6 实体 / 4 关系 / 2 社区摘要</span></div>
               </div>
               <div class="ctx-sec"><div class="ctx-t">推理分级</div>
                 <div class="ctx-item"><span class="dot d-green" style="margin-top:5px"></span><span><b>规则命中</b>· 术语对齐「循环寿命 = cycle life」唯一</span></div>
@@ -328,10 +331,10 @@
           <a class="sb-item" href="#p-playground"><svg><use href="#i-flask"/></svg>检索 Playground</a>
           <a class="sb-item" href="#p-memory"><svg><use href="#i-layers"/></svg>记忆管理</a>
           <div class="sb-label">能力</div>
-          <a class="sb-item"><svg><use href="#i-bot"/></svg>Agent 管理</a>
+          <a class="sb-item" href="#p-agents"><svg><use href="#i-bot"/></svg>Agent 管理</a>
           <a class="sb-item" href="#p-market"><svg><use href="#i-puzzle"/></svg>插件市场</a>
-          <a class="sb-item"><svg><use href="#i-wrench"/></svg>工具与技能</a>
-          <a class="sb-item"><svg><use href="#i-plug"/></svg>MCP 管理</a>
+          <a class="sb-item" href="#p-tools"><svg><use href="#i-wrench"/></svg>工具与技能</a>
+          <a class="sb-item" href="#p-mcp"><svg><use href="#i-plug"/></svg>MCP 管理</a>
           <div class="sb-label">治理</div>
           <a class="sb-item" href="#p-analytics"><svg><use href="#i-activity"/></svg>数据分析</a>
           <a class="sb-item" href="#p-approve"><svg><use href="#i-shield"/></svg>审批中心<span class="sb-badge">5</span></a>
@@ -449,10 +452,10 @@
           <a class="sb-item" href="#p-playground"><svg><use href="#i-flask"/></svg>检索 Playground</a>
           <a class="sb-item" href="#p-memory"><svg><use href="#i-layers"/></svg>记忆管理</a>
           <div class="sb-label">能力</div>
-          <a class="sb-item"><svg><use href="#i-bot"/></svg>Agent 管理</a>
+          <a class="sb-item" href="#p-agents"><svg><use href="#i-bot"/></svg>Agent 管理</a>
           <a class="sb-item" href="#p-market"><svg><use href="#i-puzzle"/></svg>插件市场</a>
-          <a class="sb-item"><svg><use href="#i-wrench"/></svg>工具与技能</a>
-          <a class="sb-item"><svg><use href="#i-plug"/></svg>MCP 管理</a>
+          <a class="sb-item" href="#p-tools"><svg><use href="#i-wrench"/></svg>工具与技能</a>
+          <a class="sb-item" href="#p-mcp"><svg><use href="#i-plug"/></svg>MCP 管理</a>
           <div class="sb-label">治理</div>
           <a class="sb-item" href="#p-analytics"><svg><use href="#i-activity"/></svg>数据分析</a>
           <a class="sb-item" href="#p-approve"><svg><use href="#i-shield"/></svg>审批中心<span class="sb-badge">5</span></a>
@@ -535,10 +538,10 @@
           <a class="sb-item" href="#p-review"><svg><use href="#i-book"/></svg>知识库</a>
           <a class="sb-item active" href="#p-memory"><svg><use href="#i-layers"/></svg>记忆管理</a>
           <div class="sb-label">能力</div>
-          <a class="sb-item"><svg><use href="#i-bot"/></svg>Agent 管理</a>
+          <a class="sb-item" href="#p-agents"><svg><use href="#i-bot"/></svg>Agent 管理</a>
           <a class="sb-item" href="#p-market"><svg><use href="#i-puzzle"/></svg>插件市场</a>
-          <a class="sb-item"><svg><use href="#i-wrench"/></svg>工具与技能</a>
-          <a class="sb-item"><svg><use href="#i-plug"/></svg>MCP 管理</a>
+          <a class="sb-item" href="#p-tools"><svg><use href="#i-wrench"/></svg>工具与技能</a>
+          <a class="sb-item" href="#p-mcp"><svg><use href="#i-plug"/></svg>MCP 管理</a>
           <div class="sb-label">治理</div>
           <a class="sb-item" href="#p-analytics"><svg><use href="#i-activity"/></svg>数据分析</a>
           <a class="sb-item" href="#p-approve"><svg><use href="#i-shield"/></svg>审批中心<span class="sb-badge">5</span></a>
@@ -576,7 +579,7 @@
                   <div class="memstat"><span style="width:64px;color:var(--label-2)">L1 会话</span><span class="membar"><i style="width:38%;background:var(--accent)"></i></span><b>12</b></div>
                   <div class="memstat"><span style="width:64px;color:var(--label-2)">L2 用户</span><span class="membar"><i style="width:64%;background:var(--teal)"></i></span><b>23</b></div>
                   <div class="memstat"><span style="width:64px;color:var(--label-2)">L3 组织</span><span class="membar"><i style="width:48%;background:var(--purple)"></i></span><b>17</b></div>
-                  <div class="memstat"><span style="width:64px;color:var(--label-2)">L4 知识</span><span class="membar"><i style="width:92%;background:var(--green)"></i></span><b>41</b></div>
+                  <div class="memstat"><span style="width:64px;color:var(--label-2)">L4 知识</span><span class="membar"><i style="width:92%;background:var(--indigo)"></i></span><b>41</b></div>
                 </div>
                 <div class="card" style="border:1.5px solid var(--orange)">
                   <div class="card-h"><h3>待升级审批</h3><span class="badge b-orange">2</span></div>
@@ -618,10 +621,10 @@
           <a class="sb-item" href="#p-playground"><svg><use href="#i-flask"/></svg>检索 Playground</a>
           <a class="sb-item" href="#p-memory"><svg><use href="#i-layers"/></svg>记忆管理</a>
           <div class="sb-label">能力</div>
-          <a class="sb-item"><svg><use href="#i-bot"/></svg>Agent 管理</a>
+          <a class="sb-item" href="#p-agents"><svg><use href="#i-bot"/></svg>Agent 管理</a>
           <a class="sb-item active" href="#p-market"><svg><use href="#i-puzzle"/></svg>插件市场</a>
-          <a class="sb-item"><svg><use href="#i-wrench"/></svg>工具与技能</a>
-          <a class="sb-item"><svg><use href="#i-plug"/></svg>MCP 管理</a>
+          <a class="sb-item" href="#p-tools"><svg><use href="#i-wrench"/></svg>工具与技能</a>
+          <a class="sb-item" href="#p-mcp"><svg><use href="#i-plug"/></svg>MCP 管理</a>
           <div class="sb-label">治理</div>
           <a class="sb-item" href="#p-analytics"><svg><use href="#i-activity"/></svg>数据分析</a>
           <a class="sb-item" href="#p-approve"><svg><use href="#i-shield"/></svg>审批中心<span class="sb-badge">5</span></a>
@@ -697,10 +700,10 @@
           <a class="sb-item" href="#p-playground"><svg><use href="#i-flask"/></svg>检索 Playground</a>
           <a class="sb-item" href="#p-memory"><svg><use href="#i-layers"/></svg>记忆管理</a>
           <div class="sb-label">能力</div>
-          <a class="sb-item"><svg><use href="#i-bot"/></svg>Agent 管理</a>
+          <a class="sb-item" href="#p-agents"><svg><use href="#i-bot"/></svg>Agent 管理</a>
           <a class="sb-item" href="#p-market"><svg><use href="#i-puzzle"/></svg>插件市场</a>
-          <a class="sb-item"><svg><use href="#i-wrench"/></svg>工具与技能</a>
-          <a class="sb-item"><svg><use href="#i-plug"/></svg>MCP 管理</a>
+          <a class="sb-item" href="#p-tools"><svg><use href="#i-wrench"/></svg>工具与技能</a>
+          <a class="sb-item" href="#p-mcp"><svg><use href="#i-plug"/></svg>MCP 管理</a>
           <div class="sb-label">治理</div>
           <a class="sb-item" href="#p-analytics"><svg><use href="#i-activity"/></svg>数据分析</a>
           <a class="sb-item active" href="#p-approve"><svg><use href="#i-shield"/></svg>审批中心<span class="sb-badge">5</span></a>
@@ -711,6 +714,7 @@
           <div class="topbar">
             <span class="tb-title">审批中心</span>
             <div class="seg" style="margin-left:8px"><button class="seg-btn on">待办 5</button><button class="seg-btn">已办</button></div>
+            <span style="margin-left:10px;font-size:11px;color:var(--label-3)">发布/删除类操作点击后弹出确认（复用组件库 00B 危险确认）</span>
           </div>
           <div class="content" style="max-width:860px">
             <div class="acard">
@@ -743,6 +747,15 @@
               </div>
               <div style="display:flex;flex-direction:column;gap:6px;justify-content:center">
                 <button class="btn btn-p btn-sm">批准上架</button><button class="btn btn-d btn-sm">驳回</button></div>
+            </div>
+            <div class="acard">
+              <span class="aic" style="background:var(--orange-soft);color:var(--orange)"><svg><use href="#i-db"/></svg></span>
+              <div style="flex:1">
+                <div style="display:flex;align-items:center;gap:8px"><b style="font-size:13.5px">冲突裁决：新旧事实矛盾</b><span class="badge b-orange">知识 · T2-003</span><span style="font-size:11px;color:var(--label-3)">今天 08:40 · 评分差 0.31 ≥ 阈值</span></div>
+                <div style="margin-top:8px;font-size:12px;color:var(--label-2);line-height:1.7">「循环寿命 500 次」（31486-2024）与「循环寿命 1000 次」（36276-2018）并存冲突，需裁决以 31486 为准并生成 supersedes 边。</div>
+              </div>
+              <div style="display:flex;flex-direction:column;gap:6px;justify-content:center">
+                <button class="btn btn-p btn-sm">以新版本为准</button><button class="btn btn-g btn-sm">两者共存</button></div>
             </div>
             <div class="acard" style="border:1.5px solid var(--red)">
               <span class="aic" style="background:var(--red-soft);color:var(--red)"><svg><use href="#i-warn"/></svg></span>
@@ -872,11 +885,11 @@
             <div class="card" style="padding:6px 14px">
               <table class="tbl">
                 <tr><th>文档名称</th><th>类型</th><th>大小</th><th>切片</th><th>流水线</th><th>更新</th><th></th></tr>
-                <tr><td style="font-weight:600">动力电池标准汇编 v3.pdf</td><td><span class="badge b-gray">PDF</span></td><td class="mono">18.2MB</td><td class="mono">412</td><td><span class="badge b-orange"><span class="dot d-orange pulse-ring" style="width:5px;height:5px"></span>抽取中 · JOB #218</span></td><td class="text-dim">10 分钟前</td><td><span class="icobtn" style="width:24px;height:24px"><svg><use href="#i-more"/></svg></span></td></tr>
+                <tr><td style="font-weight:600">动力电池标准汇编 v3.pdf</td><td><span class="badge b-gray">PDF</span></td><td class="mono">18.2MB</td><td class="mono">412</td><td><span class="badge b-orange"><span class="dot d-orange pulse-ring" style="width:5px;height:5px"></span>抽取中 · JOB #218 · 212/412 分片</span></td><td class="text-dim">10 分钟前</td><td><span class="icobtn" style="width:24px;height:24px"><svg><use href="#i-more"/></svg></span></td></tr>
                 <tr><td style="font-weight:600">GB送审稿-热失控专题.docx</td><td><span class="badge b-gray">Word</span></td><td class="mono">2.4MB</td><td class="mono">58</td><td><span class="badge b-blue">预处理</span></td><td class="text-dim">1 小时前</td><td><span class="icobtn" style="width:24px;height:24px"><svg><use href="#i-more"/></svg></span></td></tr>
                 <tr><td style="font-weight:600">循环寿命测试数据.xlsx</td><td><span class="badge b-gray">Excel</span></td><td class="mono">860KB</td><td class="mono">31</td><td><span class="badge b-green">已入库</span></td><td class="text-dim">昨天</td><td><span class="icobtn" style="width:24px;height:24px"><svg><use href="#i-more"/></svg></span></td></tr>
                 <tr><td style="font-weight:600">退单流程图（扫描）.png</td><td><span class="badge b-gray">图片</span></td><td class="mono">4.1MB</td><td class="mono">6</td><td><span class="badge b-green">已入库 · OCR 复核完成</span></td><td class="text-dim">周一</td><td><span class="icobtn" style="width:24px;height:24px"><svg><use href="#i-more"/></svg></span></td></tr>
-                <tr><td style="font-weight:600">旧版标准汇编 v2.pdf</td><td><span class="badge b-gray">PDF</span></td><td class="mono">15.7MB</td><td class="mono">380</td><td><span class="badge b-red">抽取失败 · 可重试</span></td><td class="text-dim">上周</td><td><span class="icobtn" style="width:24px;height:24px"><svg><use href="#i-more"/></svg></span></td></tr>
+                <tr><td style="font-weight:600">旧版标准汇编 v2.pdf</td><td><span class="badge b-gray">PDF</span></td><td class="mono">15.7MB</td><td class="mono">380</td><td><span class="badge b-red">抽取失败 · 解析超时</span></td><td class="text-dim">上周</td><td style="white-space:nowrap"><button class="btn btn-s btn-sm">重试</button> <button class="btn btn-g btn-sm">日志</button></td></td></tr>
               </table>
             </div>
           </div>
@@ -933,6 +946,7 @@
                 <text class="elabel" x="72%" y="26%">cites</text>
               </svg>
               <div class="canvas-tools"><span class="ct-btn"><svg><use href="#i-move"/></svg></span><span class="ct-btn"><svg><use href="#i-zoom-in"/></svg></span><span class="ct-btn"><svg><use href="#i-zoom-out"/></svg></span></div>
+              <button class="btn btn-p btn-sm" style="position:absolute;top:14px;right:14px;box-shadow:var(--sh-float)">引用此证据回到对话</button>
               <div class="gnode" style="left:8%;top:12%"><div class="gt"><span class="gd" style="background:var(--indigo)"></span>机构 SAC</div><div class="ge">org:SAC · 发布机构</div></div>
               <div class="gnode sel" style="left:28%;top:34%"><div class="gt"><span class="gd" style="background:var(--accent)"></span>GB/T 31486-2024</div><div class="ge">标准 · 焦点实体（深链进入）</div></div>
               <div class="gnode" style="left:54%;top:10%"><div class="gt"><span class="gd" style="background:var(--accent)"></span>GB/T 36276-2018</div><div class="ge">标准 · 被引用</div></div>
@@ -992,7 +1006,7 @@
 <div class="grid3" style="margin-bottom:16px">
               <div class="card" style="padding:14px 18px"><div class="stat-num" style="font-size:24px">2<span style="font-size:14px;color:var(--label-3)">/3</span></div><div class="stat-label">在线插槽</div></div>
               <div class="card" style="padding:14px 18px"><div class="stat-num" style="font-size:24px">24</div><div class="stat-label">今日会话</div></div>
-              <div class="card" style="padding:14px 18px"><div class="stat-num" style="font-size:24px;color:var(--green)">98.2%</div><div class="stat-label">工具调用成功率</div></div>
+              <div class="card" style="padding:14px 18px;border:1.5px solid var(--green)"><div class="stat-num" style="font-size:24px;color:var(--green)">98.2%</div><div class="stat-label">工具调用成功率</div></div>
             </div>
             <div class="grid3 stagger">
               <div class="card">
@@ -1060,16 +1074,16 @@
           <div class="sb-foot"><span class="sb-ava">刘</span><small><b>刘以在</b>管理员 · 默认租户</small></div>
         </aside>
         <div class="main">
-          <div class="topbar"><span class="tb-title">工具与技能</span><div class="seg" style="margin-left:8px"><button class="seg-btn on">工具注册表 41</button><button class="seg-btn">技能库 23</button></div><div class="tb-actions"><button class="btn btn-g btn-sm"><svg><use href="#i-plus"/></svg>注册 OpenAPI</button><span class="avatar">刘</span></div></div>
+          <div class="topbar"><span class="tb-title">工具与技能</span><div class="seg" style="margin-left:8px"><button class="seg-btn on">工具注册表 41</button><button class="seg-btn">技能库 23</button></div><div class="tb-actions"><button class="btn btn-p btn-sm"><svg><use href="#i-plus"/></svg>注册 OpenAPI</button><span class="avatar">刘</span></div></div>
           <div class="content">
 <div class="card" style="padding:6px 14px;margin-bottom:16px">
               <table class="tbl">
                 <tr><th>工具</th><th>来源</th><th>提供方</th><th>调用 · 30d</th><th>权限 scope</th><th>状态</th></tr>
-                <tr><td style="font-weight:600;font-family:var(--mono);font-size:12px">knowledge.search</td><td><span class="badge b-blue">MCP</span></td><td>内置 core-knowledge</td><td class="mono">3,204</td><td><span class="badge b-gray">只读</span></td><td><span class="dot d-green"></span></td></tr>
-                <tr><td style="font-weight:600;font-family:var(--mono);font-size:12px">ontology.validate</td><td><span class="badge b-blue">MCP</span></td><td>内置 core-ontology</td><td class="mono">1,877</td><td><span class="badge b-gray">只读</span></td><td><span class="dot d-green"></span></td></tr>
-                <tr><td style="font-weight:600;font-family:var(--mono);font-size:12px">memory.write</td><td><span class="badge b-blue">MCP</span></td><td>内置 core-memory</td><td class="mono">942</td><td><span class="badge b-orange">按层授权</span></td><td><span class="dot d-green"></span></td></tr>
-                <tr><td style="font-weight:600;font-family:var(--mono);font-size:12px">erp.freezeAccount</td><td><span class="badge b-purple">业务 API</span></td><td>ERP 适配器</td><td class="mono">37</td><td><span class="badge b-red">需审批 · CL-007</span></td><td><span class="dot d-green"></span></td></tr>
-                <tr><td style="font-weight:600;font-family:var(--mono);font-size:12px">web.search</td><td><span class="badge b-blue">MCP</span></td><td>官方认证插件</td><td class="mono">615</td><td><span class="badge b-gray">网络 · 只读</span></td><td><span class="dot d-orange"></span></td></tr>
+                <tr><td style="font-weight:600;font-family:var(--mono);font-size:12px">knowledge.search</td><td><span class="badge b-blue">MCP</span></td><td>内置 core-knowledge</td><td class="mono">3,204</td><td><span class="badge b-gray">只读</span></td><td><span class="dot d-green"></span> 启用</td></tr>
+                <tr><td style="font-weight:600;font-family:var(--mono);font-size:12px">ontology.validate</td><td><span class="badge b-blue">MCP</span></td><td>内置 core-ontology</td><td class="mono">1,877</td><td><span class="badge b-gray">只读</span></td><td><span class="dot d-green"></span> 启用</td></tr>
+                <tr><td style="font-weight:600;font-family:var(--mono);font-size:12px">memory.write</td><td><span class="badge b-blue">MCP</span></td><td>内置 core-memory</td><td class="mono">942</td><td><span class="badge b-orange">按层授权</span></td><td><span class="dot d-green"></span> 启用</td></tr>
+                <tr><td style="font-weight:600;font-family:var(--mono);font-size:12px">erp.freezeAccount</td><td><span class="badge b-purple">业务 API</span></td><td>ERP 适配器</td><td class="mono">37</td><td><span class="badge b-red">需审批 · CL-007</span></td><td><span class="dot d-green"></span> 启用</td></tr>
+                <tr><td style="font-weight:600;font-family:var(--mono);font-size:12px">web.search</td><td><span class="badge b-blue">MCP</span></td><td>官方认证插件</td><td class="mono">615</td><td><span class="badge b-gray">网络 · 只读</span></td><td><span class="dot d-orange"></span> 限流中</td></tr>
               </table>
             </div>
             <div class="grid3 stagger">
@@ -1131,7 +1145,7 @@
             </div>
             <div class="grid2" style="grid-template-columns:1.3fr 1fr;align-items:start">
               <div class="card" style="padding:6px 14px">
-                <div class="card-h" style="padding:10px 4px 0"><h3>已接入外部 Server</h3><button class="btn btn-g btn-sm" style="margin-left:auto">接入新的 Server</button></div>
+                <div class="card-h" style="padding:10px 4px 0"><h3>已接入外部 Server</h3><button class="btn btn-p btn-sm" style="margin-left:auto">接入新的 Server</button></div>
                 <table class="tbl">
                   <tr><th>Server</th><th>传输</th><th>工具</th><th>最近同步</th><th>状态</th><th></th></tr>
                   <tr><td style="font-weight:600">figma-mcp</td><td class="mono" style="font-size:11px">streamable http</td><td class="mono">12</td><td class="text-dim">2 分钟前</td><td><span class="badge b-green">已启用</span></td><td><button class="btn btn-g btn-sm">停用</button></td></tr>
@@ -1198,17 +1212,17 @@
                 <div class="card-h" style="padding:10px 4px 0"><h3>租户与用户</h3><button class="btn btn-s btn-sm" style="margin-left:auto">邀请成员</button></div>
                 <table class="tbl">
                   <tr><th>成员</th><th>角色</th><th>状态</th></tr>
-                  <tr><td style="font-weight:600">刘以在</td><td><span class="badge b-blue">管理员</span></td><td><span class="dot d-green"></span></td></tr>
-                  <tr><td style="font-weight:600">王工</td><td><span class="badge b-purple">知识工程师</span></td><td><span class="dot d-green"></span></td></tr>
-                  <tr><td style="font-weight:600">李倩</td><td><span class="badge b-gray">业务专家</span></td><td><span class="dot d-orange"></span></td></tr>
+                  <tr><td style="font-weight:600">刘以在</td><td><span class="badge b-blue">管理员</span></td><td><span class="dot d-green"></span> 启用</td></tr>
+                  <tr><td style="font-weight:600">王工</td><td><span class="badge b-purple">知识工程师</span></td><td><span class="dot d-green"></span> 启用</td></tr>
+                  <tr><td style="font-weight:600">李倩</td><td><span class="badge b-gray">业务专家</span></td><td><span class="dot d-orange"></span> 邀请中</td></tr>
                 </table>
               </div>
               <div class="card" style="padding:6px 14px">
                 <div class="card-h" style="padding:10px 4px 0"><h3>模型渠道（LiteLLM）</h3><button class="btn btn-g btn-sm" style="margin-left:auto">渠道管理</button></div>
                 <table class="tbl">
                   <tr><th>渠道</th><th>协议</th><th>优先级</th><th>今日成本</th><th>状态</th></tr>
-                  <tr><td style="font-weight:600">Qwen3-30B · 本地 vLLM</td><td>OpenAI 兼容</td><td><span class="badge b-green">本地默认</span></td><td class="mono">¥0</td><td><span class="dot d-green"></span></td></tr>
-                  <tr><td style="font-weight:600">Claude 直连</td><td>Anthropic</td><td>云溢出 1</td><td class="mono">$4.21</td><td><span class="dot d-green"></span></td></tr>
+                  <tr><td style="font-weight:600">Qwen3-30B · 本地 vLLM</td><td>OpenAI 兼容</td><td><span class="badge b-green">本地默认</span></td><td class="mono">¥0</td><td><span class="dot d-green"></span> 启用</td></tr>
+                  <tr><td style="font-weight:600">Claude 直连</td><td>Anthropic</td><td>云溢出 1</td><td class="mono">$4.21</td><td><span class="dot d-green"></span> 启用</td></tr>
                   <tr><td style="font-weight:600">GPT 兜底</td><td>OpenAI 兼容</td><td>降级备用</td><td class="mono">$0</td><td><span class="dot" style="background:var(--label-3)"></span></td></tr>
                 </table>
               </div>
@@ -1495,7 +1509,7 @@
                 <div class="branch">└─ 术语对齐命中：循环寿命 = cycle life</div>
                 <div><span style="color:var(--teal)">[工具]</span> ontology.validate → SHACL 0 违规</div>
                 <div><span style="color:var(--purple)">[思维链]</span> 归纳三点差异 → 过 SHACL 校验后输出</div>
-                <div><span style="color:var(--accent)">[助手]</span> 流式回复 218 tokens · 引用 3 条</div>
+                <div><span style="color:var(--green)">[助手]</span> 流式回复 218 tokens · 引用 3 条</div>
               </div>
             </div>
             <div style="display:flex;flex-direction:column;gap:16px">

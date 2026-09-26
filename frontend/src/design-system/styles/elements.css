@@ -15,6 +15,7 @@
 .btn-g{background:rgba(0,0,0,.05);color:var(--label)}
 .dark .btn-g{background:rgba(255,255,255,.1)}
 .btn-d{background:var(--red-soft);color:var(--red)}
+/* 豁免登记：!important 用于压制 .btn:hover 的抬升，属状态强制而非降级路径 */
 .btn-dis{background:rgba(0,0,0,.04);color:var(--label-3);cursor:not-allowed!important;transform:none!important;box-shadow:none!important}
 .dark .btn-dis{background:rgba(255,255,255,.06)}
 .btn-sm{font-size:12px;padding:4px 12px}
@@ -30,6 +31,11 @@
 .input:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
 .input.err{border-color:var(--red);box-shadow:0 0 0 3px var(--red-soft)}
 .field-err{font-size:11px;color:var(--red);margin-top:5px}
+/* 模型/上下文芯片（对话页顶栏；与设计稿 board.css 同源） */
+.chipmodel{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:600;
+  color:var(--label-2);background:var(--glass-clear);border:1px solid var(--glass-border);
+  border-radius:var(--r-pill);padding:4px 10px;box-shadow:inset 0 1px 0 var(--glass-hi)}
+.chipmodel svg{width:11px;height:11px}
 
 /* ---- 徽标 / 状态点 ---- */
 .badge{display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:600;

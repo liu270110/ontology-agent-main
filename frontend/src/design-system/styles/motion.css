@@ -90,3 +90,57 @@
 }
 
 /* aurora/border-flow/iridescent/blob/float 的 keyframes 位于 glass.css 效果库内（随效果就近维护） */
+
+/* =============================================================
+   v1.7 动效实验室（24 篇 §3.9/§4.15；画板 00J 同名同源）
+   缓动令牌：--spring-soft（linear() 物理弹簧）与 --expo-out
+   （Linear 标志曲线）定义在 tokens.css；本层只含 keyframes/类。
+   ============================================================= */
+@keyframes oa-grow{from{scale:0 1}to{scale:1 1}}
+@keyframes oa-reveal{from{opacity:0;translate:0 36px}to{opacity:1;translate:0}}
+@supports (animation-timeline: scroll()){
+  .scroll-progress{position:fixed;inset:0 0 auto 0;height:3px;z-index:99;
+    background:linear-gradient(90deg,var(--accent),var(--teal));transform-origin:0 50%;
+    animation:oa-grow linear;animation-timeline:scroll(root block)}
+  .reveal{animation:oa-reveal linear both;animation-timeline:view();animation-range:entry 0% cover 38%}
+}
+@keyframes oa-boxpop{40%{transform:scale(1.14)}}
+.chk-draw{border-radius:8px;transition:transform .3s var(--spring-soft)}
+.chk-draw svg path{stroke-dasharray:1;stroke-dashoffset:1;transition:stroke-dashoffset .32s var(--ease) .06s}
+.chk-draw.on{animation:oa-boxpop .32s var(--spring-soft)}
+.chk-draw.on svg path{stroke-dashoffset:0}
+@keyframes oa-type{to{width:100%}}
+@keyframes oa-caretblink{50%{border-color:transparent}}
+.tw{display:inline-block;overflow:hidden;white-space:nowrap;vertical-align:bottom;
+  border-right:2px solid var(--accent);padding-right:1px;width:0;
+  animation:oa-type 2.2s steps(24,end) .25s forwards,oa-caretblink .8s step-end infinite}
+@keyframes oa-rip{to{transform:scale(2.4);opacity:0}}
+.ripple-btn{position:relative;overflow:hidden}
+.ripple-btn .rp{position:absolute;border-radius:50%;background:var(--glass-hi);opacity:.45;
+  transform:scale(0);animation:oa-rip .6s var(--ease) forwards;pointer-events:none}
+.tilt{transform:perspective(900px) rotateX(var(--rx,0deg)) rotateY(var(--ry,0deg));
+  transition:transform .15s ease-out;will-change:transform}
+.magnetic{transition:transform .35s cubic-bezier(.3,1.5,.5,1)}
+@keyframes oa-pop{from{opacity:0;transform:translateY(8px) scale(.92)}to{opacity:1;transform:none}}
+.pop-in{animation:oa-pop .3s var(--spring-soft) both}
+.toaststack{position:relative}
+.toaststack .tst{position:absolute;left:0;right:0;top:0;
+  transform:translateY(calc(var(--i)*46px)) scale(calc(1 - var(--i)*.05));
+  transform-origin:50% 0;transition:transform .35s var(--spring-soft),opacity .3s var(--ease)}
+.toaststack:hover .tst{transform:translateY(calc(var(--i)*56px)) scale(1)}
+.toaststack .tst.bye{opacity:0;transform:translateX(110%)!important}
+
+/* ---- scroll-snap 卡带（24 篇 §4.15） ---- */
+.snap-row{display:flex;gap:12px;overflow-x:auto;scroll-snap-type:x mandatory;scroll-padding-inline:2px;
+  scrollbar-width:none;padding:2px;
+  -webkit-mask-image:linear-gradient(90deg,transparent,#000 22px calc(100% - 22px),transparent);
+  mask-image:linear-gradient(90deg,transparent,#000 22px calc(100% - 22px),transparent)}
+.snap-row::-webkit-scrollbar{display:none}
+.snap-card{flex:0 0 172px;scroll-snap-align:start}
+
+@media (prefers-reduced-motion:reduce){
+  .tw{animation:none!important;width:100%!important;border-right:none}
+  .chk-draw.on{animation:none}
+  .pop-in,.tilt,.magnetic{animation:none!important;transition:none!important;transform:none!important}
+  .toaststack .tst{transition:none}
+}

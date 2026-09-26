@@ -75,7 +75,8 @@
       <a href="#p-system">组件总览</a><a href="#sec-glass">液态玻璃</a><a href="#sec-ext">扩充组件</a>
       <a href="#sec-dataviz">数据分析</a><a href="#sec-admin">系统管理</a><a href="#sec-ai">AI 对话</a>
       <a href="#sec-overlay">覆盖层</a><a href="#sec-consumer">消费级</a><a href="#sec-form2">表单补充</a>
-      <a href="#motion-demo">动效展演</a><a href="#p-responsive">分辨率适配</a><a href="#p-feedback">反馈浮层</a><a href="#p-feedback">反馈浮层</a>
+      <a href="#sec-motion">动效实验室</a><a href="#sec-ix">键鼠交互场</a>
+      <a href="#motion-demo">动效展演</a><a href="#p-responsive">分辨率适配</a><a href="#p-feedback">反馈浮层</a>
       <a href="./ui-pages.html" style="color:var(--accent);font-weight:600">UI 设计稿 →</a>
     </nav>
     <button class="theme-btn" onclick="document.documentElement.classList.toggle('dark')">切换亮 / 暗</button>
@@ -325,7 +326,7 @@
             <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;gap:14px;font-size:11.5px;font-weight:600"><span id="fuseTL">工具 A</span><span id="fuseTR">工具 B</span></div>
           </div>
           <input type="range" min="0" max="100" value="55" style="width:100%;margin-top:10px;accent-color:var(--accent)"
-            oninput="const g=+this.value;const off=8+g*1.6;L.style.transform=`translateX(${-off}px)`;R.style.transform=`translateX(${off}px)`;TL.style.transform=`translateX(${-off*0.72}px)`;TR.style.transform=`translateX(${off*0.72}px)`"
+            oninput="const L=document.getElementById('fuseL'),R=document.getElementById('fuseR'),TL=document.getElementById('fuseTL'),TR=document.getElementById('fuseTR');const g=+this.value;const off=8+g*1.6;L.style.transform=`translateX(${-off}px)`;R.style.transform=`translateX(${off}px)`;TL.style.transform=`translateX(${-off*0.72}px)`;TR.style.transform=`translateX(${off*0.72}px)`"
             onload="this.dispatchEvent(new Event('input'))">
           <p class="text-faint" style="font-size:10.5px;margin-top:8px">距离越近玻璃越融合（gooey 滤镜作用于形状层；文字独立其上）</p></div>
         <div class="card"><div class="card-h" style="margin-bottom:10px"><h3 style="font-size:13.5px">Interactive 交互玻璃</h3><span class="badge b-gray" style="margin-left:auto">.interactive() 对应</span></div>
@@ -1080,7 +1081,7 @@
 
   <section class="frame" id="p-feedback">
     <div class="frame-head">
-      <div class="fnum">00C</div>
+      <div class="fnum">00I</div>
       <div><h2>反馈浮层：Tooltip / Popover / Toast</h2>
         <p>浮层三件套：Tooltip（纯提示，无动作）、Popover（玻璃 Clear 档，带标题与动作）、Toast（右上/底部通知，自动消失）。全站浮层统一玻璃材质与 8px 箭头。</p>
         <div class="jumps"><span class="jump-chip">样式 → patterns.css .tooltip/.popover</span></div>
@@ -1122,8 +1123,193 @@
   </section>
 
   
+<!-- ============ v1.7 动效实验室 + 键鼠交互场（可运行 demo，依据 24 篇 v1.2 §3.8/§4.14） ============ -->
+  <div class="scroll-progress" aria-hidden="true"></div>
+  <section class="frame" id="sec-motion">
+    <div class="frame-head">
+      <div class="fnum">00J</div>
+      <div><h2>动效实验室（全部可交互）</h2>
+        <p>开源配方落地：SVG 打勾描边（pathLength 归一化）、数字滚动（rAF easeOutCubic）、打字机 steps()、克制版水波纹、3D tilt（倾角 ≤8°）、磁吸按钮、弹出弹簧 pop-in（linear() 弹簧，overshoot ≤5%）、sonner 式 toast 堆栈物理、FLIP 列表重排、scroll-snap 卡带、scroll()/view() 滚动驱动。编排纪律见 24 篇 §4.14。</p>
+        <div class="jumps"><span class="jump-chip">来源 <svg><use href="#i-arrow-r"/></svg> MDN · Magic UI 源码 · sonner · @formkit/auto-animate · Easing Wizard</span><span class="jump-chip">reduced-motion 全量降级</span></div>
+      </div>
+    </div>
+    <div class="browser"><div class="bbar"><span class="bdot" style="background:#ff5f57"></span><span class="bdot" style="background:#febc2e"></span><span class="bdot" style="background:#28c840"></span><span class="burl">motion lab · 全部可直接操作</span></div>
+      <div style="background:var(--bg);padding:28px;color:var(--label);font-size:13px">
+        <div class="grid3 stagger">
+          <div class="card"><div class="card-h"><h3>打勾描边</h3><span class="badge b-gray">pathLength=1 · 点击试试</span></div>
+            <div style="display:flex;gap:14px;flex-wrap:wrap">
+              <span class="fcheck"><input type="checkbox" hidden><span class="box chk-draw" onclick="this.classList.toggle('on');this.previousElementSibling.checked=this.classList.contains('on')"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path pathLength="1" d="M5 13l4 4L19 7"/></svg></span>终审通过</span>
+              <span class="fcheck"><input type="checkbox" hidden><span class="box chk-draw" onclick="this.classList.toggle('on');this.previousElementSibling.checked=this.classList.contains('on')"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path pathLength="1" d="M5 13l4 4L19 7"/></svg></span>SHACL 校验</span>
+              <span class="fcheck"><input type="checkbox" hidden><span class="box chk-draw" onclick="this.classList.toggle('on');this.previousElementSibling.checked=this.classList.contains('on')"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path pathLength="1" d="M5 13l4 4L19 7"/></svg></span>发布 v1.5</span>
+            </div>
+            <p class="fhint" style="margin-top:10px">勾线 stroke-dashoffset 1→0（.32s 延迟 .06s）+ 盒子 1.14 倍回弹；用于终审/发布确认瞬间。</p></div>
+          <div class="card"><div class="card-h"><h3>数字滚动</h3><button class="btn btn-g btn-sm" style="margin-left:auto" onclick="countUp(this.closest('.card').querySelector('.cnt-v'),412)">重播</button></div>
+            <div class="stat-num cnt-v" style="font-size:34px">0</div>
+            <div class="stat-label">本季度终审通过（条）</div>
+            <p class="fhint" style="margin-top:10px">rAF + easeOutCubic（1-(1-p)³），tabular-nums 防抖动；reduced-motion 直接显示终值。进入视口自动播放。</p></div>
+          <div class="card"><div class="card-h"><h3>打字机</h3><span class="badge b-gray">steps(24) · P2 限量</span></div>
+            <div style="font-size:14px;font-weight:600;min-height:44px;padding-top:6px"><span class="tw">以本体为语义基座的智能体平台。</span></div>
+            <p class="fhint" style="margin-top:6px">仅用于登录页/空态营销文案；生产界面禁用——避免与真实流式输出混淆。</p></div>
+        </div>
+        <div class="grid3" style="margin-top:16px">
+          <div class="card"><div class="card-h"><h3>水波纹</h3><span class="badge b-gray">点击主按钮</span></div>
+            <div style="display:flex;gap:10px;justify-content:center;padding:14px 0 8px">
+              <button class="btn btn-p ripple-btn" style="min-width:120px;justify-content:center"><svg><use href="#i-play"/></svg>运行推理</button>
+              <button class="btn btn-gl-p ripple-btn" style="min-width:120px;justify-content:center"><svg><use href="#i-spark"/></svg>玻璃主操作</button>
+            </div>
+            <p class="fhint" style="margin-top:8px">点击点定位 span，scale 0→2.4 / opacity .45→0，600ms 移除；只给主按钮，不做全站 ripple。</p></div>
+          <div class="card"><div class="card-h"><h3>3D Tilt 卡片</h3><span class="badge b-gray">倾角 ≤8°</span></div>
+            <div class="glass glass-lens tilt glare-hover" style="border-radius:14px;padding:18px 16px;text-align:center">
+              <b style="font-size:13px">精选本体项目</b><div style="font-size:11px;color:var(--label-2);margin-top:4px">动力电池标准 · 41 类</div>
+              <div style="font-size:10px;color:var(--label-3);margin-top:8px">移动鼠标感受倾斜</div></div>
+            <p class="fhint" style="margin-top:8px">pointermove 同时喂 --rx/--ry 与眩光坐标；仅 bento 精选卡启用，列表卡禁用（监听税）。</p></div>
+          <div class="card"><div class="card-h"><h3>磁吸按钮</h3><span class="badge b-gray">命中区外扩 40%</span></div>
+            <div id="mag-zone" style="display:flex;justify-content:center;padding:22px 0 10px">
+              <button class="btn btn-p magnetic"><svg><use href="#i-plus"/></svg>新建 Agent</button></div>
+            <p class="fhint" style="margin-top:6px">位移 = 偏移 × 0.3，离开回弹 cubic-bezier(.3,1.5,.5,1)；仅 CTA 主按钮，不再叠加 tilt。</p></div>
+        </div>
+        <div class="grid2" style="margin-top:16px;align-items:stretch">
+          <div class="card"><div class="card-h"><h3>Toast 堆栈物理</h3><button class="btn btn-p btn-sm" style="margin-left:auto" onclick="addToast()">推入一条</button></div>
+            <div class="toaststack" id="toast-stack">
+              <div class="tst toast" style="--i:0"><svg><use href="#i-check"/></svg>SHACL 校验通过 · v1.5-draft 已归档</div>
+            </div>
+            <p class="fhint">sonner 配方：--i 驱动 translateY/scale，hover 展开；退场从当前位置被"甩出"；位移 ≥45px 或速度阈值判定。</p></div>
+          <div class="card"><div class="card-h"><h3>FLIP 列表重排</h3><button class="btn btn-s btn-sm" style="margin-left:auto" onclick="flipShuffle()">打乱顺序</button></div>
+            <ul id="flip-list" style="list-style:none;display:flex;flex-direction:column;gap:6px">
+              <li class="rov-item"><span class="dot d-blue"></span>候选 #128 · replaces · 0.97</li>
+              <li class="rov-item"><span class="dot d-green"></span>候选 #129 · 循环寿命 · 0.95</li>
+              <li class="rov-item"><span class="dot d-orange"></span>候选 #133 · 热失控预警 · 0.62</li>
+              <li class="rov-item"><span class="dot d-teal"></span>候选 #132 · issuedBy · 0.99</li>
+            </ul>
+            <p class="fhint" style="margin-top:8px">First-Last-Invert-Play：getBoundingClientRect 存位 → 重排 → 反向 transform → el.animate 归位；@formkit/auto-animate 同原理。</p></div>
+        </div>
+        <div class="card" style="margin-top:16px">
+          <div class="card-h"><h3>scroll-snap 卡片带 + 滚动驱动</h3><span class="badge b-gray">scroll-snap / scroll()/view() · @supports 降级</span></div>
+          <div class="snap-row">
+            <div class="card snap-card" style="padding:12px 14px"><b style="font-size:12px">词汇表</b><div style="font-size:11px;color:var(--label-2);margin-top:3px">86 术语 · 0 公理</div></div>
+            <div class="card snap-card" style="padding:12px 14px"><b style="font-size:12px">轻量图谱</b><div style="font-size:11px;color:var(--label-2);margin-top:3px">17 类 · 2 规则</div></div>
+            <div class="card snap-card" style="padding:12px 14px"><b style="font-size:12px">重型本体</b><div style="font-size:12px;color:var(--label-2);margin-top:3px">41 类 · 14 规则</div></div>
+            <div class="card snap-card" style="padding:12px 14px"><b style="font-size:12px">抽取模板</b><div style="font-size:11px;color:var(--label-2);margin-top:3px">v13 · 负样本反哺</div></div>
+            <div class="card snap-card" style="padding:12px 14px"><b style="font-size:12px">评测集</b><div style="font-size:11px;color:var(--label-2);margin-top:3px">holdout 盲测 200 条</div></div>
+            <div class="card snap-card" style="padding:12px 14px"><b style="font-size:12px">模型渠道</b><div style="font-size:11px;color:var(--label-2);margin-top:3px">本地默认 + 云溢出</div></div>
+          </div>
+          <p class="fhint" style="margin-top:8px">滚动驱动：页顶阅读进度条已启用（本页滚动即见）；<span class="reveal" style="display:inline-block;color:var(--accent);font-weight:600">本段文字由 view() 时间轴揭示</span>——animation-range: entry 0% cover 38%，不支持时静态显示。卡带 = scroll-snap mandatory + 两侧渐隐 mask。</p>
+          <p class="fhint" style="margin-top:6px;color:var(--label-3)">reveal 元素随滚动进入视口逐渐显现；静态截图若取到半透明中间帧属预期行为，验收请以浏览器实际滚动为准。</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="frame" id="sec-ix">
+    <div class="frame-head">
+      <div class="fnum">00K</div>
+      <div><h2>键鼠交互场（可运行 demo）</h2>
+        <p>键盘：roving tabindex（↑↓/Home/End）、J/K 线性导航、g→x 键序列 chord、Esc 层叠关闭（Radix DismissableLayer 栈模型）、? 快捷键速查（原生 popover + @starting-style 进场）。鼠标：HTML5 拖拽重排（落点插入光条）、Notion 式文本选中工具条、双击行内编辑、可拖拽分隔条、focus-visible 对比。键盘监听仅在鼠标移入本区后启用，避免干扰页面滚动。</p>
+        <div class="jumps"><span class="jump-chip">来源 <svg><use href="#i-arrow-r"/></svg> Radix primitives · dnd-kit · WAI-ARIA APG · Gmail/Linear/GitHub 键盘模型</span></div>
+      </div>
+    </div>
+    <div class="browser"><div class="bbar"><span class="bdot" style="background:#ff5f57"></span><span class="bdot" style="background:#febc2e"></span><span class="bdot" style="background:#28c840"></span><span class="burl">keyboard &amp; pointer · 全部真实可操作</span></div>
+      <div id="sec-ix-body" style="background:var(--bg);padding:28px;color:var(--label);font-size:13px">
+        <div class="grid2 stagger">
+          <div class="card"><div class="card-h"><h3>Roving Tabindex 列表</h3><span class="badge b-gray">Tab 进入 · ↑↓/Home/End</span></div>
+            <ul id="rov-list" role="listbox" aria-label="知识库列表" style="list-style:none;display:flex;flex-direction:column;gap:2px">
+              <li class="rov-item" role="option" tabindex="0" aria-selected="true"><svg><use href="#i-book"/></svg>动力电池标准汇编（128 文档）</li>
+              <li class="rov-item" role="option" tabindex="-1"><svg><use href="#i-book"/></svg>退单流程知识库（56 文档）</li>
+              <li class="rov-item" role="option" tabindex="-1"><svg><use href="#i-book"/></svg>供应链协同图谱（203 实例）</li>
+              <li class="rov-item" role="option" tabindex="-1"><svg><use href="#i-doc"/></svg>客服领域术语表（86 术语）</li>
+            </ul>
+            <p class="fhint" style="margin-top:8px">整个列表只占一个 Tab 停靠点；方向键移动真焦点并 scrollIntoView(nearest)——Radix RovingFocusGroup 模式。</p></div>
+          <div class="card"><div class="card-h"><h3>J / K 线性导航</h3><span class="badge b-gray">Gmail/Linear 模型</span></div>
+            <div id="jk-list" style="display:flex;flex-direction:column;gap:2px">
+              <div class="jk-row rov-item"><span class="traj-badge" style="background:var(--indigo-soft);color:var(--indigo)">系统</span>ontology.publish · tr-8f2a…e1</div>
+              <div class="jk-row rov-item"><span class="traj-badge" style="background:var(--accent-soft);color:var(--accent)">用户</span>kb.document.delete · tr-4b19…c7</div>
+              <div class="jk-row rov-item on"><span class="traj-badge" style="background:var(--teal-soft);color:var(--teal)">工具</span>erp.freezeAccount · tr-c02d…9a</div>
+              <div class="jk-row rov-item"><span class="traj-badge" style="background:var(--purple-soft);color:var(--purple)">子Agent</span>memory.promote · tr-71aa…34</div>
+            </div>
+            <p class="fhint" style="margin-top:8px">J/K 移动高亮（不抢焦点），Enter 打开详情（右下角 toast 反馈）；输入框聚焦时自动跳过监听。</p></div>
+        </div>
+        <div class="grid2" style="margin-top:16px;align-items:stretch">
+          <div class="card"><div class="card-h"><h3>键序列 chord（g→x）</h3><span class="badge b-gray">1.5s 窗口期</span></div>
+            <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">
+              <span class="kbd">g</span><span style="align-self:center;color:var(--label-3)">then</span><span class="kbd">d</span><span style="font-size:12px;color:var(--label-2)">工作台</span>
+              <span class="kbd">g</span><span style="align-self:center;color:var(--label-3)">then</span><span class="kbd">k</span><span style="font-size:12px;color:var(--label-2)">知识库</span>
+              <span class="kbd">g</span><span style="align-self:center;color:var(--label-3)">then</span><span class="kbd">a</span><span style="font-size:12px;color:var(--label-2)">审核队列</span></div>
+            <div id="chord-status" class="term mono" style="font-size:12px"><span class="ps">$</span><span id="chord-out">按 g 再按 d / k / a 试试（先移入本卡区域）</span></div>
+            <p class="fhint" style="margin-top:8px">g 按下进入 armed 态记时，第二键在窗口期内触发；armed 时右下角浮出 <span class="kbd">g _</span> 提示气泡。</p></div>
+          <div class="card"><div class="card-h"><h3>Esc 层叠关闭</h3><span class="badge b-gray">DismissableLayer 栈</span></div>
+            <div style="display:flex;gap:8px;align-items:center">
+              <button class="btn btn-p btn-sm" onclick="ixOpenModal()">打开模态</button>
+              <span id="esc-depth" class="mono" style="font-size:11px;color:var(--label-3)">栈深 0</span></div>
+            <div id="ix-modal" class="ov-stage" style="display:none;height:170px;margin-top:12px">
+              <div class="ov-dim"></div>
+              <div class="modal-mask" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center">
+                <div class="modal" style="position:static;transform:none">
+                  <div class="m-head"><span class="m-ic"><svg><use href="#i-warn"/></svg></span>
+                    <div><div class="m-title">删除本体项目？</div><div style="font-size:11px;color:var(--label-3)">battery-std · v1.4</div></div></div>
+                  <div class="m-desc">模态之上再点下方按钮打开 popover——Esc 只关栈顶层。</div>
+                  <button class="btn btn-s btn-sm" style="margin-top:10px" onclick="ixOpenPop(this)">打开筛选 popover</button>
+                  <div id="ix-pop" class="menu" style="position:absolute;right:14px;bottom:12px;display:none">
+                    <div class="menu-i">只看低置信度</div><div class="menu-i">只看冲突项</div><div class="menu-sep"></div><div class="menu-i">重置</div></div>
+                </div></div></div>
+            <p class="fhint" style="margin-top:8px">Esc 命中栈顶：popover → 模态 → 无；关闭后焦点归还触发元素（Radix DismissableLayer + FocusScope 规范）。</p></div>
+        </div>
+        <div class="grid3" style="margin-top:16px;align-items:stretch">
+          <div class="card"><div class="card-h"><h3>? 快捷键速查</h3><span class="badge b-gray">原生 popover</span></div>
+            <button class="btn btn-g btn-sm" popovertarget="ix-cheat">按 <span class="kbd">?</span> 或点我</button>
+            <p class="fhint" style="margin-top:10px">Popover API + @starting-style 进场 + display/overlay allow-discrete 退场——液态玻璃弹层的纯 CSS 底座（Linear/Notion/GitHub 同模式）。</p></div>
+          <div class="card"><div class="card-h"><h3>拖拽重排</h3><span class="badge b-gray">HTML5 DnD · 落点光条</span></div>
+            <ul id="drag-list" style="list-style:none;display:flex;flex-direction:column;gap:5px">
+              <li class="drop-li rov-item" draggable="true"><svg><use href="#i-list"/></svg>① 预处理</li>
+              <li class="drop-li rov-item" draggable="true"><svg><use href="#i-list"/></svg>② 批量抽取</li>
+              <li class="drop-li rov-item" draggable="true"><svg><use href="#i-list"/></svg>③ 术语对齐</li>
+              <li class="drop-li rov-item" draggable="true"><svg><use href="#i-list"/></svg>④ SHACL 校验</li>
+            </ul>
+            <p class="fhint" style="margin-top:8px">dragover 必须 preventDefault 才允许 drop；落点顶部 2px accent 光条。生产实现须配 dnd-kit 键盘替代（Space 拾起+方向键）达可及性门槛。</p></div>
+          <div class="card"><div class="card-h"><h3>双击行内编辑</h3><span class="badge b-gray">Enter 提交 · Esc 还原</span></div>
+            <div style="display:flex;flex-direction:column;gap:6px;font-size:12.5px">
+              <div>名称：<span class="dbl" tabindex="0">循环寿命 CycleLife</span></div>
+              <div>阈值：<span class="dbl" tabindex="0">0.92</span></div>
+              <div>负责人：<span class="dbl" tabindex="0">王工</span></div></div>
+            <p class="fhint" style="margin-top:10px">双击切受控 input 并全选；Enter/blur 提交、Esc 还原；失败回滚配 2px shake 一次。</p></div>
+        </div>
+        <div class="grid2" style="margin-top:16px;align-items:stretch">
+          <div class="card"><div class="card-h"><h3>文本选中工具条</h3><span class="badge b-gray">Notion 式 · selectionchange</span></div>
+            <div id="ix-editor" style="position:relative;font-size:13px;line-height:2;color:var(--label);padding:4px 2px">31486 要求单体电池经受 500 次循环后容量保持率不低于 80%，36276 则要求 1000 次循环后 ≥80% 并增加内阻增长率辅助判定。用鼠标选中任意一段文字试试。</div>
+            <p class="fhint" style="margin-top:8px">selectionchange + 选区矩形定位，非折叠且在容器内才显示；AI 内联操作（解释/改写/入本体）的高价值载体。</p></div>
+          <div class="card"><div class="card-h"><h3>可拖拽分隔条 + focus-visible</h3></div>
+            <div id="split-box" style="display:flex;height:110px;gap:0">
+              <div style="flex:0 0 38%;background:var(--surface-2);border:1px solid var(--separator);border-radius:10px 0 0 10px;display:flex;align-items:center;justify-content:center;font-size:11px;color:var(--label-2)" id="split-l">图谱画布 38%</div>
+              <div class="split-handle" role="separator" aria-orientation="vertical" aria-valuenow="38" tabindex="0" title="拖动或左右方向键；双击重置"></div>
+              <div style="flex:1;background:var(--surface);border:1px solid var(--separator);border-radius:0 10px 10px 0;display:flex;align-items:center;justify-content:center;font-size:11px;color:var(--label-2)" id="split-r">详情面板 62%</div></div>
+            <div style="display:flex;gap:10px;margin-top:12px">
+              <button class="btn btn-g btn-sm">鼠标点我（无环）</button>
+              <button class="btn btn-g btn-sm">Tab 到我（focus-visible 环）</button></div>
+            <p class="fhint" style="margin-top:8px">分隔条 = setPointerCapture 拖出仍收事件 + 双击重置 + 左右键步进（role=separator）；focus-visible 仅键盘触发，环在玻璃边缘外。</p></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <div popover class="cheat" id="ix-cheat">
+    <div style="display:flex;align-items:center;gap:8px;padding:14px 18px;border-bottom:1px solid var(--separator)">
+      <b style="font-size:13px">键盘快捷键</b><span class="badge b-gray">与实现同源生成</span>
+      <button class="btn btn-g btn-sm" style="margin-left:auto" popovertarget="ix-cheat" popovertargetaction="hide">关闭 <span class="kbd">Esc</span></button></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px 24px;padding:12px 18px 16px">
+      <div><div class="cmdk-group">全局</div>
+        <div class="fold-row"><b>命令面板</b><span class="kbd">⌘</span><span class="kbd">K</span></div>
+        <div class="fold-row"><b>快捷键速查</b><span class="kbd">?</span></div>
+        <div class="fold-row"><b>跳转工作台</b><span class="kbd">g</span><span class="kbd">d</span></div>
+        <div class="fold-row"><b>跳转知识库</b><span class="kbd">g</span><span class="kbd">k</span></div></div>
+      <div><div class="cmdk-group">列表与审核</div>
+        <div class="fold-row"><b>上/下一项</b><span class="kbd">J</span><span class="kbd">K</span></div>
+        <div class="fold-row"><b>打开</b><span class="kbd">↵</span></div>
+        <div class="fold-row"><b>批量通过</b><span class="kbd">⇧</span><span class="kbd">A</span></div>
+        <div class="fold-row"><b>关闭层</b><span class="kbd">Esc</span></div></div>
+    </div>
+  </div>
+
   <p style="text-align:center;margin-top:64px;font-size:11px;color:var(--label-3);line-height:1.8">
-    ontology-agent 设计稿 v1.6 · 主题令牌与组件样式共享于 assets/board.css（与 frontend/src/design-system/ 同源）<br>
+    ontology-agent 设计稿 v1.7 · 主题令牌与组件样式共享于 assets/board.css（与 frontend/src/design-system/ 同源）<br>
     <a href="./index.html" style="color:var(--accent)">← 返回设计稿入口</a> · 验收依据 23 篇 DoD · 审计报告 ui-audit.md
   </p>
 </div>
@@ -1149,6 +1335,289 @@ _toggle.addEventListener('click', () => {
   document.documentElement.classList.add('theme-fading');
   setTimeout(() => document.documentElement.classList.remove('theme-fading'), 300);
 });
+
+/* ============ v1.7 动效实验室 + 键鼠交互场 JS ============ */
+const RM = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const ixBody = document.getElementById('sec-ix-body');
+let ixHot = false; // 键盘监听仅在指针位于交互场内时启用
+if (ixBody) {
+  ixBody.addEventListener('pointerenter', () => ixHot = true);
+  ixBody.addEventListener('pointerleave', () => ixHot = false);
+}
+const isTyping = e => /^(input|textarea|select)$/i.test(e.target.tagName) || e.target.isContentEditable;
+
+/* 数字滚动（rAF + easeOutCubic） */
+function countUp(el, to, dur = 1200) {
+  if (!el) return;
+  if (RM) { el.textContent = to; return; }
+  const t0 = performance.now();
+  (function tick(now) {
+    const p = Math.min((now - t0) / dur, 1), e = 1 - Math.pow(1 - p, 3);
+    el.textContent = Math.round(to * e);
+    if (p < 1) requestAnimationFrame(tick);
+  })(t0);
+}
+document.querySelectorAll('#sec-motion .cnt-v').forEach(el => {
+  new IntersectionObserver((es, o) => es.forEach(e => {
+    if (e.isIntersecting) { countUp(el, 412); o.disconnect(); }
+  }), { threshold: .4 }).observe(el);
+});
+
+/* 水波纹（事件委托；reduced-motion 不播） */
+document.addEventListener('click', e => {
+  const b = e.target.closest('.ripple-btn');
+  if (!b || RM) return;
+  const r = b.getBoundingClientRect(), size = Math.max(r.width, r.height);
+  const s = document.createElement('span');
+  s.className = 'rp';
+  s.style.cssText = `width:${size}px;height:${size}px;left:${e.clientX - r.left - size / 2}px;top:${e.clientY - r.top - size / 2}px`;
+  b.appendChild(s);
+  setTimeout(() => s.remove(), 620);
+});
+
+/* 3D tilt（单 handler 同时喂倾角与眩光） */
+document.querySelectorAll('.tilt').forEach(el => {
+  el.addEventListener('pointermove', e => {
+    if (RM) return;
+    const r = el.getBoundingClientRect();
+    const px = (e.clientX - r.left) / r.width - .5, py = (e.clientY - r.top) / r.height - .5;
+    el.style.setProperty('--ry', `${px * 8}deg`);
+    el.style.setProperty('--rx', `${-py * 8}deg`);
+  });
+  el.addEventListener('pointerleave', () => { el.style.setProperty('--rx', '0deg'); el.style.setProperty('--ry', '0deg'); });
+});
+
+/* 磁吸按钮 */
+const mag = document.querySelector('.magnetic'), mz = document.getElementById('mag-zone');
+if (mag && mz) {
+  mz.addEventListener('pointermove', e => {
+    if (RM) return;
+    const r = mag.getBoundingClientRect();
+    mag.style.transform = `translate(${(e.clientX - r.left - r.width / 2) * .3}px,${(e.clientY - r.top - r.height / 2) * .3}px)`;
+  });
+  mz.addEventListener('pointerleave', () => mag.style.transform = '');
+}
+
+/* sonner 式 toast 堆栈 */
+const tstack = document.getElementById('toast-stack');
+function addToast() {
+  if (!tstack) return;
+  const n = tstack.querySelectorAll('.tst:not(.bye)').length;
+  if (n >= 3) return;
+  const d = document.createElement('div');
+  d.className = 'tst toast pop-in';
+  d.style.setProperty('--i', n);
+  d.innerHTML = '<svg><use href="#i-check"/></svg>任务完成 · 候选 41 条进入审核队列';
+  tstack.appendChild(d);
+  setTimeout(() => { d.classList.add('bye'); setTimeout(() => d.remove(), 350); }, 3200);
+}
+
+/* FLIP 重排 */
+function flipShuffle() {
+  const list = document.getElementById('flip-list');
+  if (!list) return;
+  const items = [...list.children];
+  const first = items.map(el => el.getBoundingClientRect());
+  list.append(...items.sort(() => Math.random() - .5));
+  if (RM) return;
+  items.forEach(el => {
+    const f = first[items.indexOf(el)], n = el.getBoundingClientRect();
+    el.animate([{ transform: `translate(${f.x - n.x}px,${f.y - n.y}px)` }, { transform: 'none' }],
+      { duration: 280, easing: 'cubic-bezier(.2,.8,.2,1)' });
+  });
+}
+
+/* Roving tabindex 列表（↑↓/Home/End） */
+const rov = document.getElementById('rov-list');
+if (rov) {
+  const setSel = i => {
+    const its = [...rov.children];
+    its.forEach((el, k) => { el.setAttribute('aria-selected', k === i); el.tabIndex = k === i ? 0 : -1; });
+    its[i].focus();
+    its[i].scrollIntoView({ block: 'nearest' });
+  };
+  rov.addEventListener('keydown', e => {
+    const its = [...rov.children], cur = its.findIndex(el => el.getAttribute('aria-selected') === 'true');
+    let to = null;
+    if (e.key === 'ArrowDown') to = Math.min(cur + 1, its.length - 1);
+    else if (e.key === 'ArrowUp') to = Math.max(cur - 1, 0);
+    else if (e.key === 'Home') to = 0;
+    else if (e.key === 'End') to = its.length - 1;
+    if (to !== null) { e.preventDefault(); setSel(to); }
+  });
+}
+
+/* J/K 线性导航（区域热启用 + Enter 反馈） */
+const jkList = document.getElementById('jk-list');
+function jkMove(d) {
+  const rows = [...jkList.querySelectorAll('.jk-row')];
+  let cur = rows.findIndex(r => r.classList.contains('on'));
+  cur = (cur + d + rows.length) % rows.length;
+  rows.forEach((r, i) => r.classList.toggle('on', i === cur));
+  rows[cur].scrollIntoView({ block: 'nearest' });
+  toastMini(`选中第 ${cur + 1} 行 · 按 Enter 打开`);
+}
+function toastMini(msg) {
+  let t = document.getElementById('ix-mini-toast');
+  if (!t) {
+    t = document.createElement('div');
+    t.id = 'ix-mini-toast';
+    t.style.cssText = 'position:fixed;right:22px;bottom:22px;z-index:98;border-radius:12px;padding:10px 14px;font-size:12px;font-weight:500;color:var(--label);background:linear-gradient(135deg,var(--glass-tint),transparent 42%),var(--glass-regular);backdrop-filter:blur(24px) saturate(200%);border:1px solid var(--glass-border);box-shadow:inset 0 1px 0 var(--glass-hi),var(--sh-float);transition:opacity .25s var(--ease),transform .3s var(--spring-soft)';
+    document.body.appendChild(t);
+  }
+  t.textContent = msg;
+  t.style.opacity = '1'; t.style.transform = 'none';
+  clearTimeout(t._tm);
+  t._tm = setTimeout(() => { t.style.opacity = '0'; t.style.transform = 'translateY(6px)'; }, 1800);
+}
+
+/* Esc 层叠（栈模型）+ chord + J/K + ? 统一键盘入口 */
+const escStack = [];
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && escStack.length) {
+    e.preventDefault();
+    escStack.pop()(); // 弹出栈顶并关闭——Esc 只命中顶层，逐层退出
+    escDepth();
+    return;
+  }
+  if (isTyping(e) || !ixHot) return;
+  if (e.key === '?') { e.preventDefault(); document.getElementById('ix-cheat')?.showPopover(); return; }
+  /* chord 判定先于单键导航：armed 期间的 j/k 是 chord 第二键（Radix/链接键位冲突规则） */
+  const now = Date.now();
+  if (window._chordG && now - window._chordG < 1500) {
+    const map = { d: '工作台', k: '知识库', a: '审核队列' };
+    const dst = map[e.key.toLowerCase()];
+    window._chordG = null;
+    document.getElementById('chord-out').textContent = dst ? `g → ${e.key.toLowerCase()} · 跳转 ${dst}` : `g → ${e.key} · 未绑定`;
+    if (dst) toastMini(`已跳转：${dst}`);
+    return;
+  }
+  if (e.key.toLowerCase() === 'j' && jkList) { jkMove(1); return; }
+  if (e.key.toLowerCase() === 'k' && jkList) { jkMove(-1); return; }
+  if (e.key.toLowerCase() === 'g') {
+    window._chordG = now;
+    document.getElementById('chord-out').textContent = 'g _（等待第二键，1.5s 内）';
+  }
+});
+function ixOpenModal() {
+  const m = document.getElementById('ix-modal');
+  m.style.display = 'block';
+  const close = () => { m.style.display = 'none'; escDepth(); };
+  escStack.push(close);
+  escDepth();
+}
+function ixOpenPop(trigger) {
+  const p = document.getElementById('ix-pop');
+  p.style.display = 'block';
+  const close = () => { p.style.display = 'none'; trigger.focus(); escDepth(); };
+  escStack.push(close);
+  escDepth();
+}
+function escDepth() {
+  const el = document.getElementById('esc-depth');
+  if (el) el.textContent = `栈深 ${escStack.length}`;
+}
+
+/* HTML5 拖拽重排 */
+const dlist = document.getElementById('drag-list');
+if (dlist) {
+  let dragEl = null;
+  dlist.addEventListener('dragstart', e => {
+    dragEl = e.target.closest('.drop-li');
+    dragEl.classList.add('dragging');
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', '');
+  });
+  dlist.addEventListener('dragend', () => {
+    dlist.querySelectorAll('.drop-li').forEach(li => li.classList.remove('dragging', 'over', 'picked'));
+    dragEl = null;
+  });
+  dlist.addEventListener('dragover', e => {
+    e.preventDefault();
+    const over = e.target.closest('.drop-li');
+    dlist.querySelectorAll('.drop-li').forEach(li => li.classList.toggle('over', li === over && li !== dragEl));
+  });
+  dlist.addEventListener('drop', e => {
+    e.preventDefault();
+    const over = e.target.closest('.drop-li');
+    if (over && over !== dragEl) dlist.insertBefore(dragEl, over);
+  });
+}
+
+/* 双击行内编辑 */
+document.addEventListener('dblclick', e => {
+  const span = e.target.closest('.dbl');
+  if (!span || span.querySelector('input')) return;
+  const old = span.textContent;
+  span.innerHTML = `<input class="input dbl-edit" value="${old}" style="width:${Math.max(90, old.length * 9)}px">`;
+  const input = span.querySelector('input');
+  input.focus(); input.select();
+  const done = commit => { span.textContent = commit ? input.value : old; };
+  input.addEventListener('keydown', ev => {
+    if (ev.key === 'Enter') done(true);
+    else if (ev.key === 'Escape') done(false);
+    ev.stopPropagation();
+  });
+  input.addEventListener('blur', () => done(true));
+});
+
+/* 文本选中工具条（Notion 式） */
+const editor = document.getElementById('ix-editor');
+if (editor) {
+  const bar = document.createElement('div');
+  bar.className = 'sel-toolbar';
+  bar.style.display = 'none';
+  bar.innerHTML = '<button class="st-b" title="AI 解释">✦</button><button class="st-b" title="改写">改</button><button class="st-b" title="入本体">＋</button><button class="st-b" title="引用">引</button>';
+  editor.appendChild(bar);
+  const onSel = () => {
+    const s = window.getSelection();
+    if (!s || s.isCollapsed || !editor.contains(s.anchorNode)) { bar.style.display = 'none'; return; }
+    const r = s.getRangeAt(0).getBoundingClientRect(), er = editor.getBoundingClientRect();
+    bar.style.display = 'flex';
+    bar.style.left = `${r.left + r.width / 2 - er.left}px`;
+    bar.style.top = `${r.top - er.top - 6}px`;
+  };
+  document.addEventListener('selectionchange', onSel);
+  window.addEventListener('resize', onSel);
+}
+
+/* 分隔条（pointer capture + 键盘步进 + 双击重置） */
+const handle = document.querySelector('.split-handle');
+if (handle) {
+  const box = document.getElementById('split-box'), L = document.getElementById('split-l'), R = document.getElementById('split-r');
+  let pct = 38;
+  const render = () => {
+    L.style.flex = `0 0 ${pct}%`;
+    L.textContent = `图谱画布 ${Math.round(pct)}%`;
+    R.textContent = `详情面板 ${Math.round(100 - pct)}%`;
+    handle.setAttribute('aria-valuenow', Math.round(pct));
+  };
+  const setFrom = x => {
+    const r = box.getBoundingClientRect();
+    pct = Math.min(80, Math.max(20, (x - r.left) / r.width * 100));
+    render();
+  };
+  handle.addEventListener('pointerdown', e => {
+    handle.setPointerCapture(e.pointerId);
+    handle.classList.add('active');
+    document.body.classList.add('ix-dragging');
+    const mv = ev => setFrom(ev.clientX);
+    const up = ev => {
+      handle.releasePointerCapture(ev.pointerId);
+      handle.classList.remove('active');
+      document.body.classList.remove('ix-dragging');
+      handle.removeEventListener('pointermove', mv);
+      handle.removeEventListener('pointerup', up);
+    };
+    handle.addEventListener('pointermove', mv);
+    handle.addEventListener('pointerup', up);
+  });
+  handle.addEventListener('keydown', e => {
+    if (e.key === 'ArrowLeft') { pct = Math.max(20, pct - 2); render(); }
+    else if (e.key === 'ArrowRight') { pct = Math.min(80, pct + 2); render(); }
+  });
+  handle.addEventListener('dblclick', () => { pct = 38; render(); });
+}
 </script>
 </body>
 </html>

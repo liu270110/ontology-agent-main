@@ -1,0 +1,880 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ontology-agent · 交互态画板（审批中心 / 系统管理）</title>
+<link rel="stylesheet" href="../assets/board.css">
+</head>
+<body>
+<!-- ============ 图标库（内联 SVG sprite，线性 1.5px，Apple SF Symbols 风） ============ -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <symbol id="i-grid" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="3.5" width="7" height="7" rx="2"/><rect x="13.5" y="3.5" width="7" height="7" rx="2"/><rect x="3.5" y="13.5" width="7" height="7" rx="2"/><rect x="13.5" y="13.5" width="7" height="7" rx="2"/></symbol>
+    <symbol id="i-chat" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a8 8 0 0 1-8 8H4l2.3-2.9A8 8 0 1 1 21 12z"/></symbol>
+    <symbol id="i-cube" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2.7 20.5 7v10L12 21.3 3.5 17V7L12 2.7z"/><path d="M3.5 7 12 11.5 20.5 7M12 11.5v9.8"/></symbol>
+    <symbol id="i-book" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v15.5H6.5A2.5 2.5 0 0 0 4 21V5.5z"/><path d="M4 18.5A2.5 2.5 0 0 1 6.5 16H20"/></symbol>
+    <symbol id="i-layers" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3 9 5-9 5-9-5 9-5z"/><path d="m4.2 12.5-.2.1 8 4.4 8-4.4-.2-.1M4.2 16.5l-.2.1 8 4.4 8-4.4-.2-.1"/></symbol>
+    <symbol id="i-bot" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="4.5" y="8" width="15" height="11" rx="3"/><path d="M12 8V4.5M12 4.5h3M9 13h.01M15 13h.01M9.5 16.5h5"/></symbol>
+    <symbol id="i-puzzle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9 4.5a2 2 0 1 1 4 0H15a1.5 1.5 0 0 1 1.5 1.5v3a2 2 0 1 1 0 4v3A1.5 1.5 0 0 1 15 17.5h-3a2 2 0 1 0-4 0H6A1.5 1.5 0 0 1 4.5 16v-3a2 2 0 1 1 0-4V6A1.5 1.5 0 0 1 6 4.5h3z"/></symbol>
+    <symbol id="i-wrench" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 6.5a4.5 4.5 0 0 0-6 5.6L3.6 17a2 2 0 1 0 2.8 2.8l4.9-4.9a4.5 4.5 0 0 0 5.7-6L13.6 12l-1.6-1.6 2.5-3.9z"/></symbol>
+    <symbol id="i-plug" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9 7V3.5M15 7V3.5M7 7h10l-.5 5a4.5 4.5 0 0 1-9 0L7 7zM12 16.5V21"/></symbol>
+    <symbol id="i-shield" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 5 5.8v5.4c0 4.4 3 8.1 7 9.3 4-1.2 7-4.9 7-9.3V5.8L12 3z"/><path d="m9 11.5 2.2 2.2L15.5 9"/></symbol>
+    <symbol id="i-gear" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3.2"/><path d="M12 2.8v2.4M12 18.8v2.4M2.8 12h2.4M18.8 12h2.4M5.5 5.5l1.7 1.7M16.8 16.8l1.7 1.7M18.5 5.5l-1.7 1.7M7.2 16.8l-1.7 1.7"/></symbol>
+    <symbol id="i-search" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><circle cx="11" cy="11" r="6.5"/><path d="m20 20-4.4-4.4"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></symbol>
+    <symbol id="i-send" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M21 3 10.5 13.5M21 3l-7 18-3.5-7.5L3 10l18-7z"/></symbol>
+    <symbol id="i-bell" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M18 9a6 6 0 1 0-12 0c0 6-2.5 7-2.5 7h17S18 15 18 9zM10 20a2.2 2.2 0 0 0 4 0"/></symbol>
+    <symbol id="i-doc" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M13.5 3H7a1.5 1.5 0 0 0-1.5 1.5v15A1.5 1.5 0 0 0 7 21h10a1.5 1.5 0 0 0 1.5-1.5V8L13.5 3z"/><path d="M13.5 3v5h5M9 13h6M9 16.5h4"/></symbol>
+    <symbol id="i-upload" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4m0 0L7.5 8.5M12 4l4.5 4.5M4 16.5v2A2.5 2.5 0 0 0 6.5 21h11a2.5 2.5 0 0 0 2.5-2.5v-2"/></symbol>
+    <symbol id="i-arrow-r" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12h15M13 6l6 6-6 6"/></symbol>
+    <symbol id="i-chev-d" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></symbol>
+    <symbol id="i-chev-r" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m4.5 12.5 5 5 10-11"/></symbol>
+    <symbol id="i-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></symbol>
+    <symbol id="i-clock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></symbol>
+    <symbol id="i-spark" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5c.6 3.8 2.7 5.9 6.5 6.5-3.8.6-5.9 2.7-6.5 6.5-.6-3.8-2.7-5.9-6.5-6.5 3.8-.6 5.9-2.7 6.5-6.5zM19 15.5c.3 1.7 1.3 2.7 3 3-1.7.3-2.7 1.3-3 3-.3-1.7-1.3-2.7-3-3 1.7-.3 2.7-1.3 3-3z"/></symbol>
+    <symbol id="i-db" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><ellipse cx="12" cy="5.5" rx="7.5" ry="2.8"/><path d="M4.5 5.5V12c0 1.5 3.4 2.8 7.5 2.8s7.5-1.3 7.5-2.8V5.5M4.5 12v6.5C4.5 20 7.9 21.3 12 21.3s7.5-1.3 7.5-2.8V12"/></symbol>
+    <symbol id="i-refresh" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12a8 8 0 1 1-2.3-5.6M20 3.5V8h-4.5"/></symbol>
+    <symbol id="i-play" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M7 5.5v13l11-6.5-11-6.5z"/></symbol>
+    <symbol id="i-warn" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4 2.8 19.5h18.4L12 4z"/><path d="M12 10v4.5M12 17.2h.01"/></symbol>
+    <symbol id="i-trend" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m4 16 5-5 3.5 3.5L20 7.5"/><path d="M14.5 7.5H20V13"/></symbol>
+    <symbol id="i-filter" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5.5h16l-6.2 7.2v5.1l-3.6 1.7v-6.8L4 5.5z"/></symbol>
+    <symbol id="i-zoom-in" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><circle cx="11" cy="11" r="6.5"/><path d="m20 20-4.4-4.4M11 8.5v5M8.5 11h5"/></symbol>
+    <symbol id="i-zoom-out" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><circle cx="11" cy="11" r="6.5"/><path d="m20 20-4.4-4.4M8.5 11h5"/></symbol>
+    <symbol id="i-move" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18M3 12h18M12 3 9.5 5.5M12 3l2.5 2.5M12 21l-2.5-2.5M12 21l2.5-2.5M3 12l2.5-2.5M3 12l2.5 2.5M21 12l-2.5-2.5M21 12l-2.5 2.5"/></symbol>
+    <symbol id="i-more" viewBox="0 0 24 24" fill="currentColor"><circle cx="5.5" cy="12" r="1.4"/><circle cx="12" cy="12" r="1.4"/><circle cx="18.5" cy="12" r="1.4"/></symbol>
+    <symbol id="i-user" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.6"/><path d="M5 20c.8-3.6 3.6-5.5 7-5.5s6.2 1.9 7 5.5"/></symbol>
+    <symbol id="i-users" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8.5" r="3.2"/><path d="M3.5 19.5c.7-3.2 3-4.9 5.5-4.9s4.8 1.7 5.5 4.9M15.5 5.6a3.2 3.2 0 0 1 0 5.8M17 14.8c2 .6 3.2 2.2 3.7 4.7"/></symbol>
+    <symbol id="i-key" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="14.5" r="3.8"/><path d="m11 12 8.5-8.5M16 7l2.5 2.5M13.5 9.5 16 12"/></symbol>
+    <symbol id="i-list" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6h11M9 12h11M9 18h11M3.5 6l1.2 1.2L7 4.8M3.5 12l1.2 1.2L7 10.8M3.5 18l1.2 1.2L7 16.8"/></symbol>
+    <symbol id="i-branch" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="6.5" cy="5.5" r="2.2"/><circle cx="6.5" cy="18.5" r="2.2"/><circle cx="17.5" cy="9" r="2.2"/><path d="M6.5 7.7v8.6M17.5 11.2c0 3.5-3 4.3-6.5 4.6-1.8.2-3.2.7-4 1.6"/></symbol>
+    <symbol id="i-flask" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M10 3.5h4M10.8 3.5v5.2L5.6 17a2.5 2.5 0 0 0 2.2 3.7h8.4a2.5 2.5 0 0 0 2.2-3.7l-5.2-8.3V3.5M8 14h8"/></symbol>
+    <symbol id="i-activity" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h4l2.5-6 5 12 2.5-6h4"/></symbol>
+    <symbol id="i-code" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="m8.5 7.5-5 4.5 5 4.5M15.5 7.5l5 4.5-5 4.5M13.2 5.2l-2.4 13.6"/></symbol>
+    <symbol id="i-lock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="5.5" y="10.5" width="13" height="9.5" rx="2.5"/><path d="M8.5 10.5V8a3.5 3.5 0 0 1 7 0v2.5M12 14.5v2"/></symbol>
+    <symbol id="i-copy" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2.5"/><path d="M5.5 14.5h-.4a1.6 1.6 0 0 1-1.6-1.6V5.1a1.6 1.6 0 0 1 1.6-1.6h7.8a1.6 1.6 0 0 1 1.6 1.6v.4"/></symbol>
+    <symbol id="i-trash" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 6.5h15M9.5 6V4.5a1.5 1.5 0 0 1 1.5-1.5h2a1.5 1.5 0 0 1 1.5 1.5V6M7 6.5l.8 12a2 2 0 0 0 2 1.9h4.4a2 2 0 0 0 2-1.9l.8-12M10 10.5v6M14 10.5v6"/></symbol>
+    <symbol id="i-logout" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M14 4.5H7A2.5 2.5 0 0 0 4.5 7v10A2.5 2.5 0 0 0 7 19.5h7M10 12h10.5M17 8.5l3.5 3.5-3.5 3.5"/></symbol>
+    <symbol id="i-globe" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><path d="M3.5 12h17M12 3.5c2.6 2.3 3.9 5.1 3.9 8.5s-1.3 6.2-3.9 8.5c-2.6-2.3-3.9-5.1-3.9-8.5s1.3-6.2 3.9-8.5z"/></symbol>
+    <symbol id="i-zap" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M13 3 5 13.5h6L11 21l8-10.5h-6L13 3z"/></symbol>
+    <symbol id="i-device" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="5" width="16" height="11" rx="2"/><path d="M2.5 19.5h19"/></symbol>
+    <symbol id="i-mobile" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="7.5" y="3.5" width="9" height="17" rx="2.5"/><path d="M11 17.5h2"/></symbol>
+    <symbol id="i-download" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v12m0 0 4.5-4.5M12 16l-4.5-4.5M4 16.5v2A2.5 2.5 0 0 0 6.5 21h11a2.5 2.5 0 0 0 2.5-2.5v-2"/></symbol>
+    <symbol id="i-eye" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 12S6 5.8 12 5.8 21.5 12 21.5 12 18 18.2 12 18.2 2.5 12 2.5 12z"/><circle cx="12" cy="12" r="2.8"/></symbol>
+    <symbol id="i-share" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="12" r="2.6"/><circle cx="17.5" cy="5.5" r="2.6"/><circle cx="17.5" cy="18.5" r="2.6"/><path d="m8.4 10.7 6.8-3.9M8.4 13.3l6.8 3.9"/></symbol>
+    <!-- ix-08 追加图标（i- 前缀 · 1.5px 线性 · 不与上文重名） -->
+    <symbol id="i-mail" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="5.5" width="17" height="13" rx="2.5"/><path d="m4.5 7.5 7.5 5.5 7.5-5.5"/></symbol>
+    <symbol id="i-org" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="3.5" width="14" height="17" rx="1.8"/><path d="M9 7.5h2M13 7.5h2M9 11h2M13 11h2M9 14.5h2M13 14.5h2M10.5 20.5v-3h3v3"/></symbol>
+    <symbol id="i-cloud" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6.8 18.5h10.4a4 4 0 0 0 .6-7.96A5.5 5.5 0 0 0 7.1 9.4 4.55 4.55 0 0 0 6.8 18.5z"/></symbol>
+    <symbol id="i-cpu" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="7" width="10" height="10" rx="2"/><rect x="10.3" y="10.3" width="3.4" height="3.4" rx="1"/><path d="M10 7V4.5M14 7V4.5M10 19.5V17M14 19.5V17M7 10H4.5M7 14H4.5M19.5 10H17M19.5 14H17"/></symbol>
+    <symbol id="i-cal" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="5.5" width="16" height="15" rx="2.5"/><path d="M4 10.5h16M8.5 3.5v4M15.5 3.5v4"/></symbol>
+  </defs>
+</svg>
+
+<div class="board">
+  <header class="board-head">
+    <div class="bh-title">ontology-agent · 交互态画板
+      <small>交互态画板 · 审批中心/系统管理 · 依据 docs/架构设计/26 篇 · v1.0 · 2026-09-26</small>
+    </div>
+    <nav class="bh-nav">
+      <a href="../ui-pages.html" style="color:var(--accent);font-weight:600">← 页面主视图</a>
+      <a href="../components.html" style="color:var(--accent);font-weight:600">← 组件库</a>
+      <a href="#ix-apr-01">APR-01 详情</a><a href="#ix-apr-02">APR-02 批量</a>
+      <a href="#ix-adm-01">ADM-01 邀请</a><a href="#ix-adm-02">ADM-02 用户</a><a href="#ix-adm-03">ADM-03 租户</a>
+      <a href="#ix-adm-04">ADM-04 矩阵</a><a href="#ix-adm-05">ADM-05 渠道</a><a href="#ix-adm-06">ADM-06 删除</a>
+      <a href="#ix-adm-07">ADM-07 Trace</a><a href="#ix-adm-08">ADM-08 导出</a>
+    </nav>
+    <button class="theme-btn" onclick="document.documentElement.classList.toggle('dark')">切换亮 / 暗</button>
+  </header>
+
+<!-- ==================== APR-01 审批对象详情弹窗 ==================== -->
+<section class="frame" id="ix-apr-01">
+  <div class="frame-head"><div class="fnum">APR-01</div>
+    <div><h2>审批对象详情弹窗 · /approvals</h2>
+      <p>意图：点开一张待办卡即可完成终审——五类对象共用一个弹窗骨架，摘要区按类型内嵌对应域的只读视图；本框主画「变更发布」形态。端点：api/01 §5.8 POST /admin/reviews/{id}/decision（经 review_workflow）。</p>
+      <div class="jumps"><span class="jump-chip">通过 <svg><use href="#i-arrow-r"/></svg> 按类型写回对应域（本体物化）</span><span class="jump-chip">驳回（意见必填）→ 提交人</span><span class="jump-chip">其余四类 = 抽取候选 / 插件 scope / MCP 工具清单 / 记忆对照 只读内嵌</span></div>
+    </div></div>
+  <div class="browser"><div class="bbar"><span class="bdot" style="background:#ff5f57"></span><span class="bdot" style="background:#febc2e"></span><span class="bdot" style="background:#28c840"></span><span class="burl">ontology.local/approvals?review=CR-031</span></div>
+    <div class="app" style="position:relative">
+      <aside class="sb">
+        <div class="sb-brand"><span class="sb-logo"><svg><use href="#i-cube"/></svg></span><b>ontology-agent</b></div>
+        <a class="sb-item"><svg><use href="#i-grid"/></svg>工作台</a>
+        <a class="sb-item"><svg><use href="#i-chat"/></svg>对话</a>
+        <a class="sb-item"><svg><use href="#i-list"/></svg>任务中心</a>
+        <div class="sb-label">治理</div>
+        <a class="sb-item active"><svg><use href="#i-shield"/></svg>审批中心<span class="sb-badge">5</span></a>
+        <a class="sb-item"><svg><use href="#i-gear"/></svg>系统管理</a>
+        <div class="sb-foot"><span class="sb-ava">刘</span><small><b>刘以在</b>管理员 · 默认租户</small></div>
+      </aside>
+      <div class="main">
+        <div class="topbar"><span class="tb-title">审批中心</span><div class="seg" style="margin-left:8px"><button class="seg-btn on">待办 5</button><button class="seg-btn">已办</button></div></div>
+        <div class="content" style="opacity:.45;max-width:860px">
+          <div class="acard"><span class="aic" style="background:var(--accent-soft);color:var(--accent)"><svg><use href="#i-cube"/></svg></span>
+            <div style="flex:1"><b style="font-size:13px">本体变更：停电分析术语整改</b><span class="badge b-blue" style="margin-left:8px">本体 · CR-031</span>
+              <div class="skel" style="width:72%;margin-top:12px"></div><div class="skel" style="width:48%;margin-top:8px"></div></div>
+            <div style="display:flex;flex-direction:column;gap:6px;justify-content:center"><span class="btn btn-p btn-sm btn-dis">通过并发布</span><span class="btn btn-d btn-sm btn-dis">驳回</span></div></div>
+          <div class="acard"><span class="aic" style="background:var(--purple-soft);color:var(--purple)"><svg><use href="#i-layers"/></svg></span>
+            <div style="flex:1"><b style="font-size:13px">记忆升级：L2 → L3</b><span class="badge b-purple" style="margin-left:8px">记忆 · MP-009</span>
+              <div class="skel" style="width:64%;margin-top:12px"></div><div class="skel" style="width:40%;margin-top:8px"></div></div>
+            <div style="display:flex;flex-direction:column;gap:6px;justify-content:center"><span class="btn btn-p btn-sm btn-dis">通过升级</span><span class="btn btn-g btn-sm btn-dis">查看来源</span></div></div>
+          <div class="acard"><span class="aic" style="background:var(--teal-soft);color:var(--teal)"><svg><use href="#i-puzzle"/></svg></span>
+            <div style="flex:1"><b style="font-size:13px">插件上架：pdf-ocr v0.9.0-beta</b><span class="badge b-orange" style="margin-left:8px">插件 · PR-014</span>
+              <div class="skel" style="width:58%;margin-top:12px"></div></div></div>
+        </div>
+        <div class="modal-mask">
+          <div class="modal" style="width:720px;max-height:calc(100% - 44px);overflow:auto">
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+              <span class="aic" style="width:36px;height:36px;background:var(--accent-soft);color:var(--accent)"><svg><use href="#i-cube"/></svg></span>
+              <div style="flex:1">
+                <b style="font-size:15px">审批 · 本体变更发布 CR-031</b>
+                <div style="font-size:11px;color:var(--label-2);margin-top:2px">电力停电分析本体 v1.4.2 → v1.5.0 · 提交人：知识工程师 王工 · 昨天 16:40 · 治理档位 team（单审批人终审）</div>
+              </div>
+              <span class="badge b-blue">待终审</span>
+            </div>
+            <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px">
+              <span class="badge b-blue">变更发布 · 本例</span>
+              <span class="badge b-gray">抽取终审</span>
+              <span class="badge b-gray">插件安装</span>
+              <span class="badge b-gray">MCP 接入</span>
+              <span class="badge b-gray">记忆升级</span>
+            </div>
+            <div style="border:1px solid var(--separator);border-radius:12px;overflow:hidden;margin-bottom:12px">
+              <div style="display:flex;align-items:center;gap:8px;padding:9px 12px;background:var(--surface-2);font-size:12px;flex-wrap:wrap">
+                <b>changeset 摘要（只读对照）</b>
+                <span class="mono"><span style="color:var(--green)">+12</span> / <span style="color:var(--red)">−3</span> / <span style="color:var(--orange)">~4</span></span>
+                <span style="margin-left:auto;display:flex;gap:5px"><span class="badge b-green">SHACL 0 违例</span><span class="badge b-green">owlrl 推理通过</span></span>
+              </div>
+              <div style="padding:10px 12px">
+                <div class="diffline add">+ gb:OutageScope rdfs:label "停电范围"@zh</div>
+                <div class="diffline add">+ gb:outageScopeOf rdfs:domain gb:OutageScope · rdfs:range gb:Feeder</div>
+                <div class="diffline del">− gb:CycleLife500 rdfs:label "500次循环寿命"（术语唯一性整改）</div>
+                <div class="diffline" style="background:var(--orange-soft);color:var(--orange)">~ gb:FeederBreaker rdfs:comment 基数约束 1..n → 0..n（允许无断路器馈线）</div>
+                <div class="fhint" style="margin-top:6px">典型三元组示例 · 完整 19 条差异可跳转 Diff 视图（/ontology/p-2/versions?doc=CR-031）</div>
+              </div>
+            </div>
+            <div class="grid2" style="gap:16px;grid-template-columns:0.9fr 1.1fr;margin-bottom:6px">
+              <div>
+                <div class="field-label">审批信息</div>
+                <div class="kv"><span class="k">提交人</span><span class="v">王工 · 知识工程师</span></div>
+                <div class="kv"><span class="k">提交时间</span><span class="v mono">2026-09-25 16:40</span></div>
+                <div class="kv"><span class="k">关联工单</span><span class="v">术语委员会 TC-07（唯一性整改）</span></div>
+                <div class="kv"><span class="k">发布预案</span><span class="v">SHACL 复检 → Neo4j 物化 → Milvus 同步</span></div>
+                <div class="kv"><span class="k">回滚预留</span><span class="v">逆向 changeset 自动生成，走评审</span></div>
+              </div>
+              <div>
+                <div class="field-label">审批链</div>
+                <div class="tl">
+                  <div class="tl-item"><span class="tl-dot" style="background:var(--green)"></span>
+                    <div class="tl-c">提交 · 王工<div class="tl-meta"><span class="mono">09-25 16:40</span><span>变更说明：停电术语唯一性整改</span></div></div></div>
+                  <div class="tl-item"><span class="tl-dot" style="background:var(--green)"></span>
+                    <div class="tl-c">自动门禁 · SHACL 复检 0 违例<div class="tl-meta"><span class="mono">09-25 16:41</span><span class="badge b-green">通过</span></div></div></div>
+                  <div class="tl-item"><span class="tl-dot" style="background:var(--green)"></span>
+                    <div class="tl-c">会签 · 李倩（业务专家）<div class="tl-meta"><span class="mono">09-26 09:05</span><span>同意 · 停电范围口径已确认</span></div></div></div>
+                  <div class="tl-item" style="padding-bottom:2px"><span class="tl-dot" style="background:var(--accent);box-shadow:0 0 0 1.5px var(--accent)"></span>
+                    <div class="tl-c" style="border:1px solid var(--accent)">终审 · 当前节点 · 刘以在（管理员）<div class="tl-meta"><span>team 档 · 单审批人终审 · 硬门禁不可跳过</span></div></div></div>
+                </div>
+              </div>
+            </div>
+            <div style="border-top:1px solid var(--separator);padding-top:12px;margin-top:6px">
+              <div class="field-label">决议（操作即写入审计，who / what / trace_id）</div>
+              <div class="field"><input class="input" placeholder="通过说明（可选）：如「同意发布，随周五变更窗口生效」"></div>
+              <div class="field" style="margin-bottom:12px"><input class="input err" placeholder="驳回意见（驳回时必填）：如「停电范围定义需先过术语委员会复审」"><div class="field-err">驳回必须附意见，提交后 changeset 退回王工并通知</div></div>
+              <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+                <button class="btn btn-p"><svg><use href="#i-check"/></svg>通过并发布 v1.5.0</button>
+                <button class="btn btn-d"><svg><use href="#i-x"/></svg>驳回（意见必填）</button>
+                <span class="fhint mono" style="margin-left:auto">POST /admin/reviews/r-031/decision</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ==================== APR-02 批量审批确认 ==================== -->
+<section class="frame" id="ix-apr-02">
+  <div class="frame-head"><div class="fnum">APR-02</div>
+    <div><h2>批量审批确认 · /approvals</h2>
+      <p>意图：勾选多张同类型待办后一键通过，逐项列摘要与入库影响；高危类对象一律禁止批量、灰态禁用并说明。端点：api/01 §5.4 review batch-decision（26 篇 §10 同源 batch 语义）。</p>
+      <div class="jumps"><span class="jump-chip">仅同类型可批量 <svg><use href="#i-arrow-r"/></svg> 混选时置灰</span><span class="jump-chip">高危类禁止批量（灰态示例）</span><span class="jump-chip">确认 → 逐条写回 + 通知提交人</span></div>
+    </div></div>
+  <div class="browser"><div class="bbar"><span class="bdot" style="background:#ff5f57"></span><span class="bdot" style="background:#febc2e"></span><span class="bdot" style="background:#28c840"></span><span class="burl">ontology.local/approvals?batch=3</span></div>
+    <div class="app" style="position:relative">
+      <aside class="sb">
+        <div class="sb-brand"><span class="sb-logo"><svg><use href="#i-cube"/></svg></span><b>ontology-agent</b></div>
+        <a class="sb-item"><svg><use href="#i-grid"/></svg>工作台</a>
+        <a class="sb-item"><svg><use href="#i-chat"/></svg>对话</a>
+        <a class="sb-item"><svg><use href="#i-list"/></svg>任务中心</a>
+        <div class="sb-label">治理</div>
+        <a class="sb-item active"><svg><use href="#i-shield"/></svg>审批中心<span class="sb-badge">5</span></a>
+        <a class="sb-item"><svg><use href="#i-gear"/></svg>系统管理</a>
+        <div class="sb-foot"><span class="sb-ava">刘</span><small><b>刘以在</b>管理员 · 默认租户</small></div>
+      </aside>
+      <div class="main">
+        <div class="topbar"><span class="tb-title">审批中心</span><div class="seg" style="margin-left:8px"><button class="seg-btn on">待办 5</button><button class="seg-btn">已办</button></div>
+          <div class="tb-actions"><span class="btn btn-p btn-sm btn-dis">批量通过（3）</span></div></div>
+        <div class="content" style="opacity:.45;max-width:860px">
+          <div class="acard"><span class="fcheck" style="align-self:center"><input type="checkbox" checked><span class="box"><svg><use href="#i-check"/></svg></span></span>
+            <span class="aic" style="background:var(--accent-soft);color:var(--accent)"><svg><use href="#i-book"/></svg></span>
+            <div style="flex:1"><b style="font-size:13px">抽取终审 · JOB #218 候选 ×3</b><div class="skel" style="width:60%;margin-top:10px"></div></div></div>
+          <div class="acard"><span class="fcheck"><input type="checkbox"><span class="box"><svg><use href="#i-check"/></svg></span></span>
+            <span class="aic" style="background:var(--red-soft);color:var(--red)"><svg><use href="#i-warn"/></svg></span>
+            <div style="flex:1"><b style="font-size:13px;color:var(--red)">高风险动作确认 · ACT-002</b><div class="skel" style="width:52%;margin-top:10px"></div></div></div>
+        </div>
+        <div class="modal-mask">
+          <div class="modal" style="width:480px;max-height:calc(100% - 44px);overflow:auto">
+            <div class="m-head">
+              <span class="m-ic" style="background:var(--accent-soft);color:var(--accent)"><svg><use href="#i-check"/></svg></span>
+              <div><div class="m-title">批量审批确认 · 抽取终审 ×3</div>
+                <div class="m-desc">仅允许同类型对象批量通过；本批类型：抽取终审（JOB #218 · 配电规程文档），通过后逐条写入知识库并通知提交人。</div></div>
+            </div>
+            <div style="border:1px solid var(--separator);border-radius:12px;overflow:hidden;margin-bottom:10px">
+              <div style="padding:8px 12px;background:var(--surface-2);font-size:11px;color:var(--label-2)">已选 3 条摘要</div>
+              <div style="padding:4px 12px 8px">
+                <div style="display:flex;gap:8px;align-items:center;padding:6px 0;border-bottom:1px solid var(--separator);font-size:12px"><span class="mono" style="color:var(--label-3)">#129</span><span>循环寿命（CycleLife）实体属性</span><span class="badge b-gray" style="margin-left:auto">置信 0.95</span></div>
+                <div style="display:flex;gap:8px;align-items:center;padding:6px 0;border-bottom:1px solid var(--separator);font-size:12px"><span class="mono" style="color:var(--label-3)">#142</span><span>馈线负载率（FeederLoadRate）实体</span><span class="badge b-gray" style="margin-left:auto">置信 0.93</span></div>
+                <div style="display:flex;gap:8px;align-items:center;padding:6px 0;font-size:12px"><span class="mono" style="color:var(--label-3)">#167</span><span>配变停运（TransformerOutage）事件类</span><span class="badge b-gray" style="margin-left:auto">置信 0.91</span></div>
+              </div>
+              <div style="padding:8px 12px;background:var(--surface-2);font-size:11px;color:var(--label-2)">入库影响：预计写入 Neo4j <b class="mono">12 节点 · 15 关系</b>；全部带出处（chunk_042 / chunk_043）</div>
+            </div>
+            <div style="border:1px dashed var(--separator);border-radius:12px;padding:10px 12px;margin-bottom:12px;display:flex;gap:10px;align-items:center;background:var(--surface-2)">
+              <span class="aic" style="width:32px;height:32px;background:var(--red-soft);color:var(--red);opacity:.6"><svg><use href="#i-warn"/></svg></span>
+              <div style="flex:1;font-size:12px"><b style="color:var(--label-2)">高风险动作确认 · ACT-002</b>
+                <div style="color:var(--label-3);margin-top:2px" class="mono">erp.freezeAccount(C-20481)</div></div>
+              <span class="badge b-red">高危类 · 禁止批量</span>
+              <span class="btn btn-dis btn-sm">批量通过</span>
+            </div>
+            <div class="fhint" style="margin-bottom:12px">高风险动作、渠道删除等高危类须逐条双确认（输入确认或理由必填），任何治理档位不可跳过。</div>
+            <div class="m-acts" style="align-items:center">
+              <span class="fhint mono" style="margin-right:auto">batch-decision · api/01 §5.4</span>
+              <button class="btn btn-g">取消</button>
+              <button class="btn btn-p"><svg><use href="#i-check"/></svg>确认通过（3 条）</button>
+            </div>
+            <div class="fhint" style="text-align:right;margin-top:8px">快捷键 <span class="kbd">↵</span> 确认 · <span class="kbd">Esc</span> 取消</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ==================== ADM-01 邀请成员 ==================== -->
+<section class="frame" id="ix-adm-01">
+  <div class="frame-head"><div class="fnum">ADM-01</div>
+    <div><h2>邀请成员弹窗 · /admin?tab=users</h2>
+      <p>意图：批量邀请团队成员——邮箱 chip 化多输入（支持整段粘贴自动解析）、五角色下拉默认 member、附言可选；已存在账号即时检测并标注跳过。端点：api/01 §5.8 POST /admin/users。</p>
+      <div class="jumps"><span class="jump-chip">发送 <svg><use href="#i-arrow-r"/></svg> 用户列表「已邀请」态</span><span class="jump-chip">已存在账号自动跳过并标注（橙）</span></div>
+    </div></div>
+  <div class="browser"><div class="bbar"><span class="bdot" style="background:#ff5f57"></span><span class="bdot" style="background:#febc2e"></span><span class="bdot" style="background:#28c840"></span><span class="burl">ontology.local/admin?tab=users（邀请成员）</span></div>
+    <div class="app" style="position:relative">
+      <aside class="sb">
+        <div class="sb-brand"><span class="sb-logo"><svg><use href="#i-cube"/></svg></span><b>ontology-agent</b></div>
+        <a class="sb-item"><svg><use href="#i-grid"/></svg>工作台</a>
+        <a class="sb-item"><svg><use href="#i-chat"/></svg>对话</a>
+        <a class="sb-item"><svg><use href="#i-list"/></svg>任务中心</a>
+        <div class="sb-label">治理</div>
+        <a class="sb-item"><svg><use href="#i-shield"/></svg>审批中心<span class="sb-badge">5</span></a>
+        <a class="sb-item active"><svg><use href="#i-gear"/></svg>系统管理</a>
+        <div class="sb-foot"><span class="sb-ava">刘</span><small><b>刘以在</b>管理员 · 默认租户</small></div>
+      </aside>
+      <div class="main">
+        <div class="topbar"><span class="tb-title">系统管理</span><div class="seg" style="margin-left:8px"><button class="seg-btn">概览</button><button class="seg-btn on">租户与用户</button><button class="seg-btn">模型渠道</button><button class="seg-btn">审计日志</button></div></div>
+        <div class="content" style="opacity:.45;max-width:820px">
+          <div class="card" style="padding:6px 14px">
+            <table class="tbl">
+              <tr><th>成员</th><th>角色</th><th>状态</th></tr>
+              <tr><td style="font-weight:600">刘以在</td><td><span class="badge b-blue">管理员</span></td><td><span class="dot d-green"></span></td></tr>
+              <tr><td style="font-weight:600">王工</td><td><span class="badge b-purple">知识工程师</span></td><td><span class="dot d-green"></span></td></tr>
+              <tr><td style="font-weight:600"><span class="skel" style="display:inline-block;width:64px"></span></td><td><span class="skel" style="display:inline-block;width:52px"></span></td><td><span class="skel" style="display:inline-block;width:12px"></span></td></tr>
+            </table>
+          </div>
+        </div>
+        <div class="modal-mask">
+          <div class="modal" style="width:520px;max-height:calc(100% - 44px);overflow:auto">
+            <div class="m-head">
+              <span class="m-ic" style="background:var(--accent-soft);color:var(--accent)"><svg><use href="#i-mail"/></svg></span>
+              <div><div class="m-title">邀请成员</div>
+                <div class="m-desc">邀请链接 7 天有效；被邀请人首次登录强制改密并绑定 2FA（可选）。</div></div>
+            </div>
+            <div class="field">
+              <label class="field-label">邮箱（可多个 · 支持整段粘贴自动解析）</label>
+              <div style="display:flex;flex-wrap:wrap;gap:6px;padding:7px 8px;border:1px solid var(--separator);border-radius:10px;background:var(--surface)">
+                <span class="mono" style="display:inline-flex;align-items:center;gap:5px;font-size:11.5px;background:var(--accent-soft);color:var(--accent);border-radius:999px;padding:4px 6px 4px 10px">wangg@hn-dp.cn<svg style="width:10px;height:10px"><use href="#i-x"/></svg></span>
+                <span class="mono" style="display:inline-flex;align-items:center;gap:5px;font-size:11.5px;background:var(--accent-soft);color:var(--accent);border-radius:999px;padding:4px 6px 4px 10px">xulei@hn-dp.cn<svg style="width:10px;height:10px"><use href="#i-x"/></svg></span>
+                <span class="mono" style="display:inline-flex;align-items:center;gap:5px;font-size:11.5px;background:var(--accent-soft);color:var(--accent);border-radius:999px;padding:4px 6px 4px 10px">zhoukt@hn-dp.cn<svg style="width:10px;height:10px"><use href="#i-x"/></svg></span>
+                <input class="input" style="flex:1;min-width:150px;border:none;box-shadow:none;height:26px;padding:0 4px;font-size:12px" placeholder="继续输入，回车生成 chip">
+              </div>
+              <div class="fhint">已解析 3 个邮箱 · 粘贴多行 / 逗号 / 分号分隔文本将自动拆分</div>
+            </div>
+            <div class="alert al-warn" style="margin-bottom:14px"><svg><use href="#i-warn"/></svg>
+              <div><b>1 个邮箱已存在</b>zhaom@hn-dp.cn 已是本租户成员（业务专家 · 在线）——发送时将自动跳过并在结果中标注。</div></div>
+            <div class="grid2" style="gap:12px">
+              <div class="field" style="margin-bottom:0">
+                <label class="field-label">角色（默认 member）</label>
+                <div class="fselect" style="width:100%"><input class="input" value="业务专家（member）"><svg><use href="#i-chev-d"/></svg></div>
+                <div class="fhint">五角色：super_admin / admin / 知识工程师 / 业务专家 / 访客</div>
+              </div>
+              <div class="field" style="margin-bottom:0">
+                <label class="field-label">所属部门</label>
+                <input class="input" value="配电运检一处">
+              </div>
+            </div>
+            <div class="field" style="margin-top:14px">
+              <label class="field-label">附言（可选，随邀请邮件展示）</label>
+              <input class="input" placeholder="如：配电运检知识库已就绪，请本周内完成首次登录并完成 2FA 绑定">
+            </div>
+            <div class="m-acts" style="align-items:center">
+              <span class="fhint mono" style="margin-right:auto">POST /admin/users</span>
+              <button class="btn btn-g">取消</button>
+              <button class="btn btn-p"><svg><use href="#i-send"/></svg>发送邀请（3 封）</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ==================== ADM-02 用户编辑 / 停用 ==================== -->
+<section class="frame" id="ix-adm-02">
+  <div class="frame-head"><div class="fnum">ADM-02</div>
+    <div><h2>用户编辑 / 停用 · /admin?tab=users</h2>
+      <p>意图：行「编辑」打开资料与角色调整弹窗，角色变更即时提示将失去 / 获得的菜单与权限；停用走独立 danger 弹窗（输入用户名确认，软删不物理删除）。端点：api/01 §5.8 PATCH、DELETE /admin/users/{user_id}。</p>
+      <div class="jumps"><span class="jump-chip">保存 <svg><use href="#i-arrow-r"/></svg> 菜单与路由即时生效 · 写审计</span><span class="jump-chip">停用 → danger 弹窗 · 会话保留 · 立即下线 · 输入用户名确认</span></div>
+    </div></div>
+  <div class="browser"><div class="bbar"><span class="bdot" style="background:#ff5f57"></span><span class="bdot" style="background:#febc2e"></span><span class="bdot" style="background:#28c840"></span><span class="burl">ontology.local/admin?tab=users&amp;user=u-0142</span></div>
+    <div class="app" style="position:relative">
+      <aside class="sb">
+        <div class="sb-brand"><span class="sb-logo"><svg><use href="#i-cube"/></svg></span><b>ontology-agent</b></div>
+        <a class="sb-item"><svg><use href="#i-grid"/></svg>工作台</a>
+        <a class="sb-item"><svg><use href="#i-chat"/></svg>对话</a>
+        <a class="sb-item"><svg><use href="#i-list"/></svg>任务中心</a>
+        <div class="sb-label">治理</div>
+        <a class="sb-item"><svg><use href="#i-shield"/></svg>审批中心<span class="sb-badge">5</span></a>
+        <a class="sb-item active"><svg><use href="#i-gear"/></svg>系统管理</a>
+        <div class="sb-foot"><span class="sb-ava">刘</span><small><b>刘以在</b>管理员 · 默认租户</small></div>
+      </aside>
+      <div class="main">
+        <div class="topbar"><span class="tb-title">系统管理</span><div class="seg" style="margin-left:8px"><button class="seg-btn">概览</button><button class="seg-btn on">租户与用户</button><button class="seg-btn">模型渠道</button><button class="seg-btn">审计日志</button></div></div>
+        <div class="content" style="opacity:.45;max-width:820px">
+          <div class="card" style="padding:6px 14px">
+            <table class="tbl">
+              <tr><th>成员</th><th>角色</th><th>状态</th><th>最后登录</th></tr>
+              <tr><td style="font-weight:600">陈昊</td><td><span class="badge b-blue">管理员</span></td><td><span class="dot d-green"></span> 在线</td><td class="mono" style="font-size:11px">今天 08:52</td></tr>
+              <tr><td style="font-weight:600">李倩</td><td><span class="badge b-gray">业务专家</span></td><td><span class="dot d-orange"></span> 邀请中</td><td class="mono" style="font-size:11px">未登录</td></tr>
+            </table>
+          </div>
+        </div>
+        <div class="modal-mask">
+          <div class="modal" style="width:520px;max-height:calc(100% - 44px);overflow:auto">
+            <div class="m-head">
+              <span class="m-ic" style="background:var(--accent-soft);color:var(--accent)"><svg><use href="#i-user"/></svg></span>
+              <div><div class="m-title">编辑用户 · 陈昊</div>
+                <div class="m-desc">chenhao@hn-dp.cn · 管理员 · 最后登录 今天 08:52 · IP 10.2.8.31</div></div>
+            </div>
+            <div class="grid2" style="gap:12px">
+              <div class="field" style="margin-bottom:0"><label class="field-label">姓名</label><input class="input" value="陈昊"></div>
+              <div class="field" style="margin-bottom:0"><label class="field-label">账号（只读）</label><input class="input" value="chenhao@hn-dp.cn" readonly style="background:var(--surface-2);color:var(--label-2)"></div>
+            </div>
+            <div class="grid2" style="gap:12px;margin-top:14px">
+              <div class="field" style="margin-bottom:0"><label class="field-label">部门</label><input class="input" value="配电运检一处"></div>
+              <div class="field" style="margin-bottom:0"><label class="field-label">角色（调整）</label>
+                <div class="fselect" style="width:100%"><input class="input" value="知识工程师（原：管理员）"><svg><use href="#i-chev-d"/></svg></div></div>
+            </div>
+            <div class="alert al-warn" style="margin-top:14px"><svg><use href="#i-warn"/></svg>
+              <div><b>角色变更影响（保存后菜单与路由即时生效）</b>将失去：系统管理菜单 · 模型渠道管理 · 审批终审权；将获得：本体工作台编辑 · 变更提交评审。变更写入审计日志（who / what / trace_id）。</div></div>
+            <div class="m-acts" style="align-items:center">
+              <span style="margin-right:auto;font-size:12px;color:var(--red);cursor:pointer;border-bottom:1px dashed var(--red)">停用该账号（danger 弹窗 · 输入用户名确认）</span>
+              <button class="btn btn-g">取消</button>
+              <button class="btn btn-p"><svg><use href="#i-check"/></svg>保存变更</button>
+            </div>
+            <div class="fhint mono" style="text-align:right;margin-top:8px">PATCH /admin/users/u-0142 · DELETE（软删 status=disabled）</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ==================== ADM-03 租户创建 ==================== -->
+<section class="frame" id="ix-adm-03">
+  <div class="frame-head"><div class="fnum">ADM-03</div>
+    <div><h2>租户创建弹窗 · /admin?tab=users</h2>
+      <p>意图：super_admin 为新单位开租——名称 / 命名空间 / 管理员初始账号（一次性密码仅显示一次，可复制）+ 治理档位三卡（solo / team / enterprise，调节审批强度，硬门禁任何档不可跳过）。端点：api/01 §5.8 POST /admin/tenants · 201。</p>
+      <div class="jumps"><span class="jump-chip">创建 <svg><use href="#i-arrow-r"/></svg> 租户切换器可见（IX-G-03）</span><span class="jump-chip">一次性密码仅显示一次（Stripe 模式）</span></div>
+    </div></div>
+  <div class="browser"><div class="bbar"><span class="bdot" style="background:#ff5f57"></span><span class="bdot" style="background:#febc2e"></span><span class="bdot" style="background:#28c840"></span><span class="burl">ontology.local/admin?tab=users（新建租户）</span></div>
+    <div class="app" style="position:relative">
+      <aside class="sb">
+        <div class="sb-brand"><span class="sb-logo"><svg><use href="#i-cube"/></svg></span><b>ontology-agent</b></div>
+        <a class="sb-item"><svg><use href="#i-grid"/></svg>工作台</a>
+        <a class="sb-item"><svg><use href="#i-chat"/></svg>对话</a>
+        <a class="sb-item"><svg><use href="#i-list"/></svg>任务中心</a>
+        <div class="sb-label">治理</div>
+        <a class="sb-item"><svg><use href="#i-shield"/></svg>审批中心<span class="sb-badge">5</span></a>
+        <a class="sb-item active"><svg><use href="#i-gear"/></svg>系统管理</a>
+        <div class="sb-foot"><span class="sb-ava">刘</span><small><b>刘以在</b>super_admin · 平台</small></div>
+      </aside>
+      <div class="main">
+        <div class="topbar"><span class="tb-title">系统管理</span><div class="seg" style="margin-left:8px"><button class="seg-btn">概览</button><button class="seg-btn on">租户与用户</button><button class="seg-btn">模型渠道</button><button class="seg-btn">审计日志</button></div></div>
+        <div class="content" style="opacity:.45;max-width:820px">
+          <div class="card" style="padding:6px 14px">
+            <table class="tbl">
+              <tr><th>租户</th><th>命名空间</th><th>治理档位</th><th>成员</th></tr>
+              <tr><td style="font-weight:600">默认租户</td><td class="mono" style="font-size:11px">default-tenant</td><td><span class="badge b-blue">team</span></td><td>6</td></tr>
+              <tr><td><span class="skel" style="display:inline-block;width:96px"></span></td><td><span class="skel" style="display:inline-block;width:120px"></span></td><td><span class="skel" style="display:inline-block;width:40px"></span></td><td><span class="skel" style="display:inline-block;width:14px"></span></td></tr>
+            </table>
+          </div>
+        </div>
+        <div class="modal-mask">
+          <div class="modal" style="width:520px;max-height:calc(100% - 44px);overflow:auto">
+            <div class="m-head">
+              <span class="m-ic" style="background:var(--indigo-soft);color:var(--indigo)"><svg><use href="#i-org"/></svg></span>
+              <div><div class="m-title">新建租户</div>
+                <div class="m-desc">命名空间将作为本体 IRI 前缀与知识库隔离边界，创建后不可修改。</div></div>
+            </div>
+            <div class="field"><label class="field-label">租户名称</label><input class="input" value="国网湖南电力 · 配电运检中心"></div>
+            <div class="field"><label class="field-label">命名空间</label><input class="input mono" value="https://onto.gridops.cn/hn-dp">
+              <div class="fhint">全局唯一 · 校验通过（zod：小写字母数字与连字符）</div></div>
+            <div class="field"><label class="field-label">管理员初始账号</label><input class="input" value="admin@hn-dp.cn"></div>
+            <div class="field">
+              <label class="field-label">一次性初始密码（仅显示一次）</label>
+              <div class="term" style="justify-content:space-between">
+                <span class="mono" style="font-size:14px;letter-spacing:1.5px;color:var(--label)">Hn#dp7Kq2m9vR</span>
+                <span style="display:flex;align-items:center;gap:8px">
+                  <span class="badge b-orange">仅显示一次</span>
+                  <span class="icobtn" style="width:28px;height:28px"><svg><use href="#i-copy"/></svg></span>
+                </span>
+              </div>
+              <div class="fhint">密码哈希入库（不存明文）· 管理员首次登录强制改密；关闭本弹窗后不可再次查看</div>
+            </div>
+            <div class="field" style="margin-bottom:10px">
+              <label class="field-label">治理档位（调节审批强度）</label>
+              <div class="grid3" style="gap:10px">
+                <div class="price" style="border:1.5px solid var(--separator);border-radius:12px;padding:10px 12px">
+                  <div class="p-name" style="font-size:12px">solo</div>
+                  <div style="font-size:10.5px;color:var(--label-2);line-height:1.6;margin-top:4px">个人工作台 · 单人即终审 · 审批即时生效</div></div>
+                <div class="price on" style="border-radius:12px;padding:10px 12px">
+                  <div class="p-name" style="font-size:12px">team<span class="badge b-blue" style="margin-left:6px">推荐</span></div>
+                  <div style="font-size:10.5px;color:var(--label-2);line-height:1.6;margin-top:4px">5-50 人 · 单审批人 + 四眼抽审 · 变更走评审队列</div></div>
+                <div class="price" style="border:1.5px solid var(--separator);border-radius:12px;padding:10px 12px">
+                  <div class="p-name" style="font-size:12px">enterprise</div>
+                  <div style="font-size:10.5px;color:var(--label-2);line-height:1.6;margin-top:4px">双负责人四眼 · 全量审计导出 · 专属 SLA</div></div>
+              </div>
+              <div class="fhint">硬门禁（高危动作双确认、LLM 产物过审）在任何档位均不可跳过</div>
+            </div>
+            <div class="m-acts" style="align-items:center">
+              <span class="fhint mono" style="margin-right:auto">POST /admin/tenants · 201</span>
+              <button class="btn btn-g">取消</button>
+              <button class="btn btn-p"><svg><use href="#i-check"/></svg>创建租户</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ==================== ADM-04 角色权限矩阵编辑（面板态） ==================== -->
+<section class="frame" id="ix-adm-04">
+  <div class="frame-head"><div class="fnum">ADM-04</div>
+    <div><h2>角色权限矩阵编辑（面板态完整视图） · /admin?tab=roles</h2>
+      <p>意图：角色 Tab 常驻面板——勾选即时乐观更新（本例 2 格新增高亮、1 格移除标红），底部浮出变更摘要条（+2 / −1 权限点 · 影响 3 用户），保存后菜单与路由即时生效并写审计，还原则丢弃乐观态。端点：api/01 §5.8 admin 角色矩阵。</p>
+      <div class="jumps"><span class="jump-chip">保存 <svg><use href="#i-arrow-r"/></svg> 菜单与路由即时生效 · 写审计</span><span class="jump-chip">还原 → 丢弃乐观更新</span><span class="jump-chip">权限点全集对齐 frontend/02 §2 路由表</span></div>
+    </div></div>
+  <div class="browser"><div class="bbar"><span class="bdot" style="background:#ff5f57"></span><span class="bdot" style="background:#febc2e"></span><span class="bdot" style="background:#28c840"></span><span class="burl">ontology.local/admin?tab=roles</span></div>
+    <div class="app">
+      <aside class="sb">
+        <div class="sb-brand"><span class="sb-logo"><svg><use href="#i-cube"/></svg></span><b>ontology-agent</b></div>
+        <a class="sb-item"><svg><use href="#i-grid"/></svg>工作台</a>
+        <a class="sb-item"><svg><use href="#i-chat"/></svg>对话</a>
+        <a class="sb-item"><svg><use href="#i-list"/></svg>任务中心</a>
+        <div class="sb-label">治理</div>
+        <a class="sb-item"><svg><use href="#i-shield"/></svg>审批中心<span class="sb-badge">5</span></a>
+        <a class="sb-item active"><svg><use href="#i-gear"/></svg>系统管理</a>
+        <div class="sb-foot"><span class="sb-ava">刘</span><small><b>刘以在</b>管理员 · 默认租户</small></div>
+      </aside>
+      <div class="main">
+        <div class="topbar"><span class="tb-title">系统管理</span><div class="seg" style="margin-left:8px"><button class="seg-btn">概览</button><button class="seg-btn">租户与用户</button><button class="seg-btn on">角色权限</button><button class="seg-btn">模型渠道</button><button class="seg-btn">审计日志</button></div></div>
+        <div class="content">
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap">
+            <b style="font-size:15px">RBAC 权限矩阵</b>
+            <span class="badge b-gray">5 角色 × 9 权限点</span>
+            <span style="margin-left:auto;display:flex;gap:10px;font-size:11px;color:var(--label-2);align-items:center">
+              <span style="display:inline-flex;align-items:center;gap:5px"><span style="width:10px;height:10px;border-radius:3px;background:var(--accent-soft);box-shadow:inset 0 0 0 1.5px var(--accent)"></span>本次新增</span>
+              <span style="display:inline-flex;align-items:center;gap:5px"><span style="width:10px;height:10px;border-radius:3px;background:var(--red-soft);box-shadow:inset 0 0 0 1.5px var(--red)"></span>本次移除</span>
+            </span>
+          </div>
+          <div class="card" style="padding:6px 16px 10px">
+            <table class="tbl perm" style="font-size:12px">
+              <tr>
+                <th style="width:216px">权限点 \ 角色</th>
+                <th>超级管理员<div class="mono" style="font-weight:400;font-size:9.5px;color:var(--label-3)">super_admin</div></th>
+                <th>管理员<div class="mono" style="font-weight:400;font-size:9.5px;color:var(--label-3)">admin</div></th>
+                <th>知识工程师<div class="mono" style="font-weight:400;font-size:9.5px;color:var(--label-3)">curator</div></th>
+                <th>业务专家<div class="mono" style="font-weight:400;font-size:9.5px;color:var(--label-3)">member</div></th>
+                <th>访客<div class="mono" style="font-weight:400;font-size:9.5px;color:var(--label-3)">viewer</div></th>
+              </tr>
+              <tr><td>工作台看板 <span class="mono" style="font-size:10px;color:var(--label-3)">dashboard:read</span></td><td><span class="fcheck"><input type="checkbox" checked><span class="box"><svg><use href="#i-check"/></svg></span></span></td><td><span class="fcheck"><input type="checkbox" checked><span class="box"><svg><use href="#i-check"/></svg></span></span></td><td><span class="fcheck"><input type="checkbox" checked><span class="box"><svg><use href="#i-check"/></svg></span></span></td><td><span class="fcheck"><input type="checkbox" checked><span class="box"><svg><use href="#i-check"/></svg></span></span></td><td><span class="fcheck"><input type="checkbox" checked><span class="box"><svg><use href="#i-check"/></svg></span></span></td></tr>
+              <tr><td>对话与会话 <span class="mono" style="font-size:10px;color:var(--label-3)">chat:use</span></td><td><span class="fcheck"><input type="checkbox" checked><span class="box"><svg><use href="#i-check"/></svg></span></span></td><td><span class="fcheck"><input type="checkbox" checked><span class="box"><svg><use href="#i-check"/></svg></span></span></td><td><span class="fcheck"><input type="checkbox" checked><span class="box"><svg><use href="#i-check"/></svg></span></span></td><td><span class="fcheck"><input type="checkbox" checked><span class="box"><svg><use href="#i-check"/></svg></span></span></td><td><span class="fcheck"><input type="checkbox"><span class="box"><svg><use href="#i-check"/></svg></span></span></td></tr>
+              <tr><td>检索 Playground <span class="mono" style="font-size:10px;color:var(--label-3)">playground:use</span></td><td><span class="fcheck"><input type="checkbox" checked><span class="box"><svg><use href="#i-check"/></svg></span></span></td><td><span class="fcheck"><input type="checkbox" checked><span class="box"><svg><use href="#i-check"/></svg></span></span></td><td><span class="fcheck"><input type="checkbox" checked><span class="box"><svg><use href="#i-check"/></svg></span></span></td><td><span class="fcheck"><input type="checkbox" checked><span class="box"><svg><use href="#i-check"/></svg></span></span></td><td><span style="display:inline-flex;padding:3px 7px;border-radius:8px;background:var(--accent-soft);box-shadow:inset 0 0 0 1.5px var(--accent)"><span class="fcheck"><input type="checkbox" checked><span class="box"><svg><use href="#i-check"/></svg></span></span></span></td></tr>
+              <tr><td>本体编辑 <span class="mono" style="font-size:10px;color:var(--label-3)">ontology:edit</span></td><td><span class="fcheck"><input type="checkbox" checked><span class="box"><svg><use href="#i-check"/></svg></span></span></td><td><span class="fcheck"><input type="checkbox" checked><span class="box"><svg><use href="#i-check"/></svg></span></span></td><td><span class="fcheck"><input type="checkbox" checked><span class="box"><svg><use href="#i-check"/></svg></span></span></td><td><span class="fcheck"><input type="checkbox"><span class="box"><svg><use href="#i-check"/></svg></span></span></td><td><span class="fcheck"><input type="checkbox"><span class="box"><svg><use href="#i-check"/></svg></span></span></td></tr>
+              <tr><td>变更提交评审 <span class="mono" style="font-size:10px;color:var(--label-3)">ontology:submit</span></td><td><span class="fcheck"><input type="checkbox" checked><span class="box"><svg><use href="#i-check"/></svg></span></span></td><td><span class="fcheck"><input type="checkbox" checked><span class="box"><svg><use href="#i-check"/></svg></span></span></td><td><span class="fcheck"><input type="checkbox" checked><span class="box"><svg><use href="#i-check"/></svg></span></span></td><td><span style="display:inline-flex;padding:3px 7px;border-radius:8px;background:var(--accent-soft);box-shadow:inset 0 0 0 1.5px var(--accent)"><span class="fcheck"><input type="checkbox" checked><span class="box"><svg><use href="#i-check"/></svg></span></span></span></td><td><span class="fcheck"><input type="checkbox"><span class="box"><svg><use href="#i-check"/></svg></span></span></td></tr>
+              <tr><td>审批终审 <span class="mono" style="font-size:10px;color:var(--label-3)">review:approve</span></td><td><span class="fcheck"><input type="checkbox" checked><span class="box"><svg><use href="#i-check"/></svg></span></span></td><td><span class="fcheck"><input type="checkbox" checked><span class="box"><svg><use href="#i-check"/></svg></span></span></td><td><span class="fcheck"><input type="checkbox"><span class="box"><svg><use href="#i-check"/></svg></span></span></td><td><span class="fcheck"><input type="checkbox"><span class="box"><svg><use href="#i-check"/></svg></span></span></td><td><span class="fcheck"><input type="checkbox"><span class="box"><svg><use href="#i-check"/></svg></span></span></td></tr>
+              <tr><td>Agent 与工具管理 <span class="mono" style="font-size:10px;color:var(--label-3)">agent:manage</span></td><td><span class="fcheck"><input type="checkbox" checked><span class="box"><svg><use href="#i-check"/></svg></span></span></td><td><span class="fcheck"><input type="checkbox" checked><span class="box"><svg><use href="#i-check"/></svg></span></span></td><td><span class="fcheck"><input type="checkbox"><span class="box"><svg><use href="#i-check"/></svg></span></span></td><td><span class="fcheck"><input type="checkbox"><span class="box"><svg><use href="#i-check"/></svg></span></span></td><td><span class="fcheck"><input type="checkbox"><span class="box"><svg><use href="#i-check"/></svg></span></span></td></tr>
+              <tr><td>系统管理菜单 <span class="mono" style="font-size:10px;color:var(--label-3)">admin:access</span></td><td><span class="fcheck"><input type="checkbox" checked><span class="box"><svg><use href="#i-check"/></svg></span></span></td><td><span class="fcheck"><input type="checkbox" checked><span class="box"><svg><use href="#i-check"/></svg></span></span></td><td><span style="display:inline-flex;padding:3px 7px;border-radius:8px;background:var(--red-soft);box-shadow:inset 0 0 0 1.5px var(--red)"><span class="fcheck"><input type="checkbox"><span class="box"><svg><use href="#i-check"/></svg></span></span></span></td><td><span class="fcheck"><input type="checkbox"><span class="box"><svg><use href="#i-check"/></svg></span></span></td><td><span class="fcheck"><input type="checkbox"><span class="box"><svg><use href="#i-check"/></svg></span></span></td></tr>
+              <tr><td>审计日志查看 <span class="mono" style="font-size:10px;color:var(--label-3)">audit:read</span></td><td><span class="fcheck"><input type="checkbox" checked><span class="box"><svg><use href="#i-check"/></svg></span></span></td><td><span class="fcheck"><input type="checkbox" checked><span class="box"><svg><use href="#i-check"/></svg></span></span></td><td><span class="fcheck"><input type="checkbox"><span class="box"><svg><use href="#i-check"/></svg></span></span></td><td><span class="fcheck"><input type="checkbox"><span class="box"><svg><use href="#i-check"/></svg></span></span></td><td><span class="fcheck"><input type="checkbox"><span class="box"><svg><use href="#i-check"/></svg></span></span></td></tr>
+            </table>
+          </div>
+          <div class="banner" style="margin-top:14px;border-radius:12px">
+            <svg style="color:var(--accent)"><use href="#i-warn"/></svg>
+            <span><b>变更摘要</b>· <span class="mono" style="color:var(--green)">+2</span>（业务专家·变更提交评审；访客·Playground）/ <span class="mono" style="color:var(--red)">−1</span>（知识工程师·系统管理菜单）· 影响 <b>3 名用户</b>（李倩 · 王工 · guest-audit）</span>
+            <button class="btn btn-g btn-sm">还原</button>
+            <button class="btn btn-p btn-sm">保存变更</button>
+          </div>
+          <div class="fhint" style="margin-top:8px">勾选即时乐观更新；保存后菜单与路由即时生效并写入审计日志（26 篇 §10.2 ADM-04 · api/01 §5.8 admin 角色矩阵）。</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ==================== ADM-05 模型渠道接入弹窗 ==================== -->
+<section class="frame" id="ix-adm-05">
+  <div class="frame-head"><div class="fnum">ADM-05</div>
+    <div><h2>模型渠道接入弹窗 · /admin?tab=models</h2>
+      <p>意图：LiteLLM 网关新增渠道——提供商三选一（DeepSeek / Qwen 云 / Ollama 本地）、密钥脱敏只写哈希、优先级与预算上限；连通性测试成功（列出可用模型与配额）才放开保存。端点：api/01 §5.8 /admin/models 渠道 CRUD + 测试。</p>
+      <div class="jumps"><span class="jump-chip">连通成功才可保存 <svg><use href="#i-arrow-r"/></svg> 渠道列表新行</span><span class="jump-chip">密钥仅写哈希与长度（api/01 §5.8）</span></div>
+    </div></div>
+  <div class="browser"><div class="bbar"><span class="bdot" style="background:#ff5f57"></span><span class="bdot" style="background:#febc2e"></span><span class="bdot" style="background:#28c840"></span><span class="burl">ontology.local/admin?tab=models（接入渠道）</span></div>
+    <div class="app" style="position:relative">
+      <aside class="sb">
+        <div class="sb-brand"><span class="sb-logo"><svg><use href="#i-cube"/></svg></span><b>ontology-agent</b></div>
+        <a class="sb-item"><svg><use href="#i-grid"/></svg>工作台</a>
+        <a class="sb-item"><svg><use href="#i-chat"/></svg>对话</a>
+        <a class="sb-item"><svg><use href="#i-list"/></svg>任务中心</a>
+        <div class="sb-label">治理</div>
+        <a class="sb-item"><svg><use href="#i-shield"/></svg>审批中心<span class="sb-badge">5</span></a>
+        <a class="sb-item active"><svg><use href="#i-gear"/></svg>系统管理</a>
+        <div class="sb-foot"><span class="sb-ava">刘</span><small><b>刘以在</b>管理员 · 默认租户</small></div>
+      </aside>
+      <div class="main">
+        <div class="topbar"><span class="tb-title">系统管理</span><div class="seg" style="margin-left:8px"><button class="seg-btn">概览</button><button class="seg-btn">租户与用户</button><button class="seg-btn">角色权限</button><button class="seg-btn on">模型渠道</button><button class="seg-btn">审计日志</button></div></div>
+        <div class="content" style="opacity:.45;max-width:860px">
+          <div class="card" style="padding:6px 14px">
+            <table class="tbl">
+              <tr><th>渠道</th><th>协议</th><th>优先级</th><th>今日成本</th><th>状态</th></tr>
+              <tr><td style="font-weight:600">Qwen3-30B · 本地 vLLM</td><td>OpenAI 兼容</td><td><span class="badge b-green">本地默认</span></td><td class="mono">¥0</td><td><span class="dot d-green"></span></td></tr>
+              <tr><td style="font-weight:600">Claude 直连</td><td>Anthropic</td><td>云溢出 1</td><td class="mono">¥3.16</td><td><span class="dot d-green"></span></td></tr>
+            </table>
+          </div>
+        </div>
+        <div class="modal-mask">
+          <div class="modal" style="width:600px;max-height:calc(100% - 44px);overflow:auto">
+            <div class="m-head">
+              <span class="m-ic" style="background:var(--teal-soft);color:var(--teal)"><svg><use href="#i-plug"/></svg></span>
+              <div><div class="m-title">接入模型渠道（LiteLLM 网关）</div>
+                <div class="m-desc">路由顺序：本地默认 → 云溢出按优先级 → 降级备用；密钥类只写哈希与长度，不落明文。</div></div>
+            </div>
+            <div class="field">
+              <label class="field-label">提供商</label>
+              <div class="grid3" style="gap:10px">
+                <div class="price on" style="border-radius:12px;padding:10px 12px">
+                  <div class="p-name" style="font-size:12px"><svg style="color:var(--accent)"><use href="#i-spark"/></svg>DeepSeek<span class="badge b-blue" style="margin-left:4px">官方 API</span></div>
+                  <div style="font-size:10.5px;color:var(--label-2);line-height:1.6;margin-top:4px">OpenAI 兼容 · 推理性价比高</div></div>
+                <div class="price" style="border:1.5px solid var(--separator);border-radius:12px;padding:10px 12px">
+                  <div class="p-name" style="font-size:12px"><svg style="color:var(--teal)"><use href="#i-cloud"/></svg>Qwen 云</div>
+                  <div style="font-size:10.5px;color:var(--label-2);line-height:1.6;margin-top:4px">百炼 / DashScope · 兼容模式</div></div>
+                <div class="price" style="border:1.5px solid var(--separator);border-radius:12px;padding:10px 12px">
+                  <div class="p-name" style="font-size:12px"><svg style="color:var(--indigo)"><use href="#i-cpu"/></svg>Ollama 本地</div>
+                  <div style="font-size:10.5px;color:var(--label-2);line-height:1.6;margin-top:4px">内网离线 · 数据不出域</div></div>
+              </div>
+            </div>
+            <div class="grid2" style="gap:12px">
+              <div class="field" style="margin-bottom:0"><label class="field-label">模型 id</label>
+                <div class="fselect" style="width:100%"><input class="input mono" value="deepseek-chat（备选 deepseek-reasoner）"><svg><use href="#i-chev-d"/></svg></div></div>
+              <div class="field" style="margin-bottom:0"><label class="field-label">API Key（脱敏）</label>
+                <div style="display:flex;align-items:center;gap:8px"><span class="keymask">sk-ds-••••••••••••7f3a</span><span class="badge b-gray">已保存 · 只写哈希</span></div></div>
+            </div>
+            <div class="grid2" style="gap:12px;margin-top:14px">
+              <div class="field" style="margin-bottom:0"><label class="field-label">优先级</label>
+                <div class="fselect" style="width:100%"><input class="input" value="云溢出 2（本地默认 Qwen3-30B 之后）"><svg><use href="#i-chev-d"/></svg></div></div>
+              <div class="field" style="margin-bottom:0"><label class="field-label">预算上限</label>
+                <div class="igroup"><input class="input" value="¥200 / 日"><button class="btn btn-g" style="font-size:12px">应用</button></div>
+                <div class="fhint">超出自动降级回本地渠道并告警（通知中心）</div></div>
+            </div>
+            <div style="border:1px solid var(--separator);border-radius:12px;padding:12px 14px;margin-top:14px;background:var(--surface-2)">
+              <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+                <span class="dot d-green"></span><b style="font-size:12.5px">连通性测试 · 成功</b>
+                <span class="mono" style="font-size:11px;color:var(--label-2)">延迟 412ms · 今天 14:05</span>
+                <button class="btn btn-g btn-sm" style="margin-left:auto"><svg><use href="#i-refresh"/></svg>重测</button>
+              </div>
+              <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px">
+                <span class="badge b-green mono">deepseek-chat · 128K ctx</span>
+                <span class="badge b-green mono">deepseek-reasoner · 64K ctx</span>
+              </div>
+              <div style="font-size:11px;color:var(--label-2)">配额：RPM 3,000 · TPM 500K · 本月已用 ¥86.20 / ¥6,000</div>
+              <div class="fhint" style="margin-top:6px">失败态将给出诊断建议：密钥无效 / 网络不通 / 模型名不存在，失败时保存按钮保持禁用。</div>
+            </div>
+            <div class="m-acts" style="align-items:center">
+              <span class="fhint mono" style="margin-right:auto">POST /admin/models · PUT /admin/models/{id}</span>
+              <button class="btn btn-g">取消</button>
+              <button class="btn btn-p"><svg><use href="#i-check"/></svg>保存渠道</button>
+            </div>
+            <div class="fhint" style="text-align:right;margin-top:8px">连通性测试成功后才可保存（当前为可用态）</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ==================== ADM-06 渠道删除确认（danger） ==================== -->
+<section class="frame" id="ix-adm-06">
+  <div class="frame-head"><div class="fnum">ADM-06</div>
+    <div><h2>渠道删除确认（danger） · /admin?tab=models</h2>
+      <p>意图：删除模型渠道前列出级联影响——引用该渠道的 Agent 插槽与近 30 天用量；提供迁移建议（引用自动切至默认渠道），输入渠道名确认，操作全程进审计。端点：api/01 §5.8 /admin/models 删除。</p>
+      <div class="jumps"><span class="jump-chip">级联改写 Agent 插槽引用 <svg><use href="#i-arrow-r"/></svg> 切至默认渠道</span><span class="jump-chip">输入渠道名确认 · 审计留痕</span></div>
+    </div></div>
+  <div class="browser"><div class="bbar"><span class="bdot" style="background:#ff5f57"></span><span class="bdot" style="background:#febc2e"></span><span class="bdot" style="background:#28c840"></span><span class="burl">ontology.local/admin?tab=models（删除确认）</span></div>
+    <div class="app" style="position:relative">
+      <aside class="sb">
+        <div class="sb-brand"><span class="sb-logo"><svg><use href="#i-cube"/></svg></span><b>ontology-agent</b></div>
+        <a class="sb-item"><svg><use href="#i-grid"/></svg>工作台</a>
+        <a class="sb-item"><svg><use href="#i-chat"/></svg>对话</a>
+        <a class="sb-item"><svg><use href="#i-list"/></svg>任务中心</a>
+        <div class="sb-label">治理</div>
+        <a class="sb-item"><svg><use href="#i-shield"/></svg>审批中心<span class="sb-badge">5</span></a>
+        <a class="sb-item active"><svg><use href="#i-gear"/></svg>系统管理</a>
+        <div class="sb-foot"><span class="sb-ava">刘</span><small><b>刘以在</b>管理员 · 默认租户</small></div>
+      </aside>
+      <div class="main">
+        <div class="topbar"><span class="tb-title">系统管理</span><div class="seg" style="margin-left:8px"><button class="seg-btn">概览</button><button class="seg-btn">租户与用户</button><button class="seg-btn">角色权限</button><button class="seg-btn on">模型渠道</button><button class="seg-btn">审计日志</button></div></div>
+        <div class="content" style="opacity:.45;max-width:860px">
+          <div class="card" style="padding:6px 14px">
+            <table class="tbl">
+              <tr><th>渠道</th><th>优先级</th><th>近 30 天</th><th>状态</th></tr>
+              <tr style="outline:1.5px solid var(--red);outline-offset:-1.5px"><td style="font-weight:600">Claude 直连</td><td>云溢出 1</td><td class="mono">¥126.40</td><td><span class="dot d-green"></span></td></tr>
+              <tr><td style="font-weight:600">Qwen3-30B · 本地 vLLM</td><td><span class="badge b-green">本地默认</span></td><td class="mono">¥0</td><td><span class="dot d-green"></span></td></tr>
+            </table>
+          </div>
+        </div>
+        <div class="modal-mask">
+          <div class="modal" style="width:520px;max-height:calc(100% - 44px);overflow:auto">
+            <div class="m-head">
+              <span class="m-ic"><svg><use href="#i-warn"/></svg></span>
+              <div><div class="m-title">删除渠道「Claude 直连」</div>
+                <div class="m-desc">删除后不可恢复；存在引用时必须先确认迁移目标，操作全程写入审计日志。</div></div>
+            </div>
+            <div class="danger-zone" style="margin-bottom:14px">
+              <h4><svg><use href="#i-warn"/></svg>级联影响</h4>
+              <div style="font-size:12px;color:var(--label-2);line-height:1.7">引用该渠道的 Agent 插槽 <b class="mono" style="color:var(--red)">2 个</b>：</div>
+              <div style="margin-top:8px">
+                <div class="keyrow"><span class="aic" style="width:28px;height:28px;background:var(--red-soft);color:var(--red)"><svg><use href="#i-bot"/></svg></span>
+                  <b style="font-size:12px">配电故障研判 Agent</b><span class="badge b-red" style="margin-left:4px">主推理渠道</span></div>
+                <div class="keyrow"><span class="aic" style="width:28px;height:28px;background:var(--red-soft);color:var(--red)"><svg><use href="#i-bot"/></svg></span>
+                  <b style="font-size:12px">95598 工单摘要 Agent</b><span class="badge b-orange" style="margin-left:4px">降级备选</span></div>
+              </div>
+              <div style="font-size:12px;color:var(--label-2);margin-top:8px">近 30 天用量：<b class="mono" style="color:var(--label)">¥126.40</b> · 1.8M tokens · 412 次调用</div>
+            </div>
+            <div class="field">
+              <label class="field-label">迁移建议（删除后引用自动切至）</label>
+              <div class="fselect" style="width:100%"><input class="input" value="Qwen3-30B · 本地 vLLM（本地默认）"><svg><use href="#i-chev-d"/></svg></div>
+              <div class="fhint">存量会话的渠道引用与新请求统一改写；不选迁移目标则阻断删除</div>
+            </div>
+            <div class="field">
+              <label class="field-label">确认操作</label>
+              <input class="input err" placeholder='输入 "Claude 直连" 以确认'>
+              <div class="field-err">名称不一致时确认按钮保持禁用</div>
+            </div>
+            <div class="m-acts" style="align-items:center">
+              <span class="fhint mono" style="margin-right:auto">DELETE /admin/models/ch-claude-01</span>
+              <button class="btn btn-g">取消</button>
+              <button class="btn btn-dis">确认删除</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ==================== ADM-07 审计 trace 展开（行展开态） ==================== -->
+<section class="frame" id="ix-adm-07">
+  <div class="frame-head"><div class="fnum">ADM-07</div>
+    <div><h2>审计 trace 展开（行展开态完整视图） · /admin?tab=audit</h2>
+      <p>意图：点击审计行 trace_id 在行下展开全链路面板——网关 / 权限 / 工具调用 / LLM 各级耗时瀑布、关联成本（Token / 费用）、writeback 台账关联行；可复制 trace_id 或跳转轨迹回放。端点：api/01 §5.8 /admin/audit-logs + /admin/writeback/ledger/{id}。</p>
+      <div class="jumps"><span class="jump-chip">复制 trace_id</span><span class="jump-chip">查看对话 <svg><use href="#i-arrow-r"/></svg> /chat/s-20481/trajectory</span><span class="jump-chip">writeback 台账 → 人工处置</span></div>
+    </div></div>
+  <div class="browser"><div class="bbar"><span class="bdot" style="background:#ff5f57"></span><span class="bdot" style="background:#febc2e"></span><span class="bdot" style="background:#28c840"></span><span class="burl">ontology.local/admin?tab=audit&amp;trace=tr-b71c9e2d</span></div>
+    <div class="app">
+      <aside class="sb">
+        <div class="sb-brand"><span class="sb-logo"><svg><use href="#i-cube"/></svg></span><b>ontology-agent</b></div>
+        <a class="sb-item"><svg><use href="#i-grid"/></svg>工作台</a>
+        <a class="sb-item"><svg><use href="#i-chat"/></svg>对话</a>
+        <a class="sb-item"><svg><use href="#i-list"/></svg>任务中心</a>
+        <div class="sb-label">治理</div>
+        <a class="sb-item"><svg><use href="#i-shield"/></svg>审批中心<span class="sb-badge">5</span></a>
+        <a class="sb-item active"><svg><use href="#i-gear"/></svg>系统管理</a>
+        <div class="sb-foot"><span class="sb-ava">刘</span><small><b>刘以在</b>管理员 · 默认租户</small></div>
+      </aside>
+      <div class="main">
+        <div class="topbar"><span class="tb-title">审计日志</span>
+          <div class="tb-actions"><button class="btn btn-g btn-sm"><svg><use href="#i-download"/></svg>导出</button><span class="avatar">刘</span></div></div>
+        <div class="content">
+          <div class="audit-filter">
+            <span class="fselect"><input class="input" style="width:140px" value="全部操作人"><svg><use href="#i-chev-d"/></svg></span>
+            <span class="fselect"><input class="input" style="width:150px" value="动作：action.invoke"><svg><use href="#i-chev-d"/></svg></span>
+            <span class="fselect"><input class="input" style="width:110px" value="近 7 天"><svg><use href="#i-chev-d"/></svg></span>
+            <span class="search" style="width:190px"><svg><use href="#i-search"/></svg>搜索资源 / trace_id</span>
+            <span style="margin-left:auto;font-size:11px;color:var(--label-3)">共 1,284 条 · 点击 trace_id 展开</span>
+          </div>
+          <div class="card" style="padding:6px 14px">
+            <table class="tbl">
+              <tr><th>时间</th><th>操作者</th><th>动作</th><th>资源</th><th>结果</th><th>trace_id</th></tr>
+              <tr><td class="mono" style="font-size:11px">14:22:08</td><td>刘以在</td><td>审批通过 · CR-031</td><td>本体 v1.5.0 发布</td><td><span class="badge b-green">成功</span></td><td class="mono" style="font-size:11px;color:var(--accent)">tr-8f2ac41e</td></tr>
+              <tr style="background:var(--accent-soft)">
+                <td class="mono" style="font-size:11px;font-weight:700">14:20:51</td><td>Agent · 原生</td><td><span class="mono" style="font-weight:700">action.invoke</span></td><td class="mono" style="font-size:11px">erp.freezeAccount(C-20481)</td>
+                <td><span class="badge b-orange">待确认</span></td>
+                <td><span class="mono" style="font-size:11px;color:var(--accent);font-weight:700">tr-b71c9e2d</span> <svg style="width:11px;height:11px;color:var(--accent)"><use href="#i-chev-d"/></svg></td></tr>
+              <tr><td colspan="6" style="padding:0">
+                <div style="display:grid;grid-template-columns:1.15fr 1fr;gap:18px;padding:14px 16px;background:var(--surface-2)">
+                  <div>
+                    <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px"><b style="font-size:12.5px">请求瀑布 · 总耗时 4.04s</b><span class="badge b-gray mono">2026-09-26 14:20:47 起</span></div>
+                    <div style="display:grid;grid-template-columns:112px 1fr 52px;gap:8px;align-items:center;margin-bottom:7px;font-size:11px">
+                      <span class="mono" style="color:var(--label-2)">网关路由</span>
+                      <span style="position:relative;height:13px"><span style="position:absolute;left:0;top:0;height:13px;width:2%;min-width:12px;border-radius:4px;background:var(--indigo)"></span></span>
+                      <span class="mono" style="text-align:right">12ms</span></div>
+                    <div style="display:grid;grid-template-columns:112px 1fr 52px;gap:8px;align-items:center;margin-bottom:7px;font-size:11px">
+                      <span class="mono" style="color:var(--label-2)">权限校验</span>
+                      <span style="position:relative;height:13px"><span style="position:absolute;left:2%;top:0;height:13px;width:2%;min-width:8px;border-radius:4px;background:var(--orange)"></span></span>
+                      <span class="mono" style="text-align:right">3ms</span></div>
+                    <div style="display:grid;grid-template-columns:112px 1fr 52px;gap:8px;align-items:center;margin-bottom:7px;font-size:11px">
+                      <span class="mono" style="color:var(--label-2)">工具调用</span>
+                      <span style="position:relative;height:13px"><span style="position:absolute;left:4%;top:0;height:13px;width:29%;border-radius:4px;background:var(--teal)"></span></span>
+                      <span class="mono" style="text-align:right">1.2s</span></div>
+                    <div style="display:grid;grid-template-columns:112px 1fr 52px;gap:8px;align-items:center;margin-bottom:8px;font-size:11px">
+                      <span class="mono" style="color:var(--label-2)">LLM 推理</span>
+                      <span style="position:relative;height:13px"><span style="position:absolute;left:33.5%;top:0;height:13px;width:66%;border-radius:4px;background:var(--accent)"></span></span>
+                      <span class="mono" style="text-align:right">2.8s</span></div>
+                    <div class="fhint">网关 12ms → 权限 3ms → 工具调用 1.2s（erp.freezeAccount）→ LLM 2.8s（Claude 直连 · 云溢出）· trace_id 贯穿全链路</div>
+                  </div>
+                  <div>
+                    <b style="font-size:12.5px">关联成本</b>
+                    <div style="margin-top:6px">
+                      <div class="kv"><span class="k">Token</span><span class="v mono">输入 12,480 · 输出 3,206</span></div>
+                      <div class="kv"><span class="k">费用</span><span class="v mono">¥0.31（Claude 直连 · 云溢出）</span></div>
+                    </div>
+                    <b style="font-size:12.5px;display:block;margin:10px 0 6px">writeback 台账关联行</b>
+                    <div style="border:1px solid var(--separator);border-radius:10px;background:var(--surface);padding:9px 12px;font-size:11.5px">
+                      <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap"><span class="mono" style="font-weight:700">WB-0311</span><span class="mono">erp.freezeAccount(C-20481)</span><span class="badge b-orange">needs_human</span></div>
+                      <div class="mono" style="color:var(--label-2);margin-top:5px;font-size:10.5px">confirm_token 已签发 · attempts 1/3 · 幂等键 idem-9f2a</div>
+                      <div style="margin-top:7px;font-size:11px;color:var(--accent)">人工处置（重发 / 冲正 / 关闭）→ GET /admin/writeback/ledger/WB-0311</div>
+                    </div>
+                    <div style="display:flex;gap:8px;margin-top:10px">
+                      <button class="btn btn-g btn-sm"><svg><use href="#i-copy"/></svg>复制 trace_id</button>
+                      <button class="btn btn-s btn-sm"><svg><use href="#i-branch"/></svg>查看对话</button>
+                    </div>
+                  </div>
+                </div>
+              </td></tr>
+              <tr><td class="mono" style="font-size:11px">14:18:33</td><td>王工</td><td>候选终审 ×12</td><td>JOB #218 · 人工归档</td><td><span class="badge b-green">成功</span></td><td class="mono" style="font-size:11px;color:var(--accent)">tr-3d9f77ab</td></tr>
+              <tr><td class="mono" style="font-size:11px">14:15:02</td><td>系统</td><td>记忆失效 · invalidation</td><td class="mono" style="font-size:11px">mem:31486-2015 依据</td><td><span class="badge b-gray">自动</span></td><td class="mono" style="font-size:11px;color:var(--accent)">tr-e05b1d83</td></tr>
+            </table>
+          </div>
+          <div class="fhint" style="margin-top:8px">「查看对话」携带会话与消息定位参数跳转轨迹回放页（26 篇 §10.2 · /chat/s-20481/trajectory?seq=142）。</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ==================== ADM-08 审计导出弹窗 ==================== -->
+<section class="frame" id="ix-adm-08">
+  <div class="frame-head"><div class="fnum">ADM-08</div>
+    <div><h2>审计导出弹窗 · /admin?tab=audit</h2>
+      <p>意图：导出审计日志——范围默认继承当前过滤态并可改时间区间，格式二选一（CSV / JSON）；导出走异步任务，创建后在任务中心看进度，完成后站内通知。端点：api/01 §5.8 admin 导出 → §5.2 任务中心。</p>
+      <div class="jumps"><span class="jump-chip">创建任务 <svg><use href="#i-arrow-r"/></svg> /tasks?job=</span><span class="jump-chip">完成后站内通知并下载</span></div>
+    </div></div>
+  <div class="browser"><div class="bbar"><span class="bdot" style="background:#ff5f57"></span><span class="bdot" style="background:#febc2e"></span><span class="bdot" style="background:#28c840"></span><span class="burl">ontology.local/admin?tab=audit（导出）</span></div>
+    <div class="app" style="position:relative">
+      <aside class="sb">
+        <div class="sb-brand"><span class="sb-logo"><svg><use href="#i-cube"/></svg></span><b>ontology-agent</b></div>
+        <a class="sb-item"><svg><use href="#i-grid"/></svg>工作台</a>
+        <a class="sb-item"><svg><use href="#i-chat"/></svg>对话</a>
+        <a class="sb-item"><svg><use href="#i-list"/></svg>任务中心</a>
+        <div class="sb-label">治理</div>
+        <a class="sb-item"><svg><use href="#i-shield"/></svg>审批中心<span class="sb-badge">5</span></a>
+        <a class="sb-item active"><svg><use href="#i-gear"/></svg>系统管理</a>
+        <div class="sb-foot"><span class="sb-ava">刘</span><small><b>刘以在</b>管理员 · 默认租户</small></div>
+      </aside>
+      <div class="main">
+        <div class="topbar"><span class="tb-title">审计日志</span>
+          <div class="tb-actions"><button class="btn btn-g btn-sm btn-dis"><svg><use href="#i-download"/></svg>导出</button><span class="avatar">刘</span></div></div>
+        <div class="content" style="opacity:.45;max-width:860px">
+          <div class="audit-filter">
+            <span class="fselect"><input class="input" style="width:140px" value="全部操作人"><svg><use href="#i-chev-d"/></svg></span>
+            <span class="fselect"><input class="input" style="width:110px" value="全部动作"><svg><use href="#i-chev-d"/></svg></span>
+            <span class="fselect"><input class="input" style="width:110px" value="近 7 天"><svg><use href="#i-chev-d"/></svg></span>
+          </div>
+          <div class="card" style="padding:6px 14px"><div class="skel" style="height:64px;border-radius:8px"></div></div>
+        </div>
+        <div class="modal-mask">
+          <div class="modal" style="width:440px;max-height:calc(100% - 44px);overflow:auto">
+            <div class="m-head">
+              <span class="m-ic" style="background:var(--indigo-soft);color:var(--indigo)"><svg><use href="#i-download"/></svg></span>
+              <div><div class="m-title">导出审计日志</div>
+                <div class="m-desc">导出文件含 who / what / trace_id 与耗时列，仅租户内数据（admin:read 边界）。</div></div>
+            </div>
+            <div class="alert al-info" style="margin-bottom:14px"><svg><use href="#i-filter"/></svg>
+              <div><b>范围继承当前过滤态</b>操作人 = 全部 · 动作 = 全部 · 近 7 天 · 共 <b class="mono">1,284</b> 条（下方时间区间可收窄）</div></div>
+            <div class="field">
+              <label class="field-label">时间区间</label>
+              <div style="display:flex;align-items:center;gap:8px">
+                <span class="dpick"><svg><use href="#i-cal"/></svg>2026-09-19</span>
+                <span style="color:var(--label-3);font-size:12px">至</span>
+                <span class="dpick"><svg><use href="#i-cal"/></svg>2026-09-26</span>
+              </div>
+            </div>
+            <div class="field">
+              <label class="field-label">格式</label>
+              <div style="display:flex;gap:18px">
+                <label class="fcheck"><input type="radio" name="expfmt" checked><span class="box radio" style="border-radius:50%"><svg><use href="#i-check"/></svg></span>CSV（含 trace_id 与耗时列）</label>
+                <label class="fcheck"><input type="radio" name="expfmt"><span class="box radio" style="border-radius:50%"><svg><use href="#i-check"/></svg></span>JSON（含 payload 快照）</label>
+              </div>
+            </div>
+            <div class="alert al-info" style="margin-bottom:4px"><svg><use href="#i-clock"/></svg>
+              <div><b>导出走异步任务</b>创建后在任务中心查看进度，完成后站内通知并下载；大范围导出预计 1-3 分钟。</div></div>
+            <div class="m-acts" style="align-items:center">
+              <span class="fhint mono" style="margin-right:auto">api/01 §5.8 → §5.2 任务中心</span>
+              <button class="btn btn-g">取消</button>
+              <button class="btn btn-p"><svg><use href="#i-arrow-r"/></svg>创建导出任务</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+  <p style="text-align:center;margin-top:64px;font-size:11px;color:var(--label-3);line-height:1.8">
+    ontology-agent 交互态画板 · ix-08 审批中心 / 系统管理 · 画框 id 与 docs/架构设计/26 篇 §10 矩阵编号一一对应<br>
+    <a href="../ui-pages.html" style="color:var(--accent)">← 页面主视图</a> · <a href="../components.html" style="color:var(--accent)">← 组件库</a> · 样式共享 assets/board.css（与 frontend/src/design-system/ 同源）
+  </p>
+</div>
+
+<script>
+const io = new IntersectionObserver(es => es.forEach(e => {
+  if (e.isIntersecting) { e.target.classList.add('in-view'); io.unobserve(e.target); }
+}), {threshold: .12});
+document.querySelectorAll('.frame').forEach(f => io.observe(f));
+const _toggle = document.querySelector('.theme-btn');
+_toggle.addEventListener('click', () => {
+  document.documentElement.classList.add('theme-fading');
+  setTimeout(() => document.documentElement.classList.remove('theme-fading'), 300);
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,1033 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ontology-agent · 交互态画板 · 对话 / 任务 / 轨迹回放</title>
+<link rel="stylesheet" href="../assets/board.css">
+</head>
+<body>
+<!-- ============ 图标库（内联 SVG sprite，线性 1.5px，Apple SF Symbols 风） ============ -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <symbol id="i-grid" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="3.5" width="7" height="7" rx="2"/><rect x="13.5" y="3.5" width="7" height="7" rx="2"/><rect x="3.5" y="13.5" width="7" height="7" rx="2"/><rect x="13.5" y="13.5" width="7" height="7" rx="2"/></symbol>
+    <symbol id="i-chat" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a8 8 0 0 1-8 8H4l2.3-2.9A8 8 0 1 1 21 12z"/></symbol>
+    <symbol id="i-cube" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2.7 20.5 7v10L12 21.3 3.5 17V7L12 2.7z"/><path d="M3.5 7 12 11.5 20.5 7M12 11.5v9.8"/></symbol>
+    <symbol id="i-book" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v15.5H6.5A2.5 2.5 0 0 0 4 21V5.5z"/><path d="M4 18.5A2.5 2.5 0 0 1 6.5 16H20"/></symbol>
+    <symbol id="i-layers" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3 9 5-9 5-9-5 9-5z"/><path d="m4.2 12.5-.2.1 8 4.4 8-4.4-.2-.1M4.2 16.5l-.2.1 8 4.4 8-4.4-.2-.1"/></symbol>
+    <symbol id="i-bot" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="4.5" y="8" width="15" height="11" rx="3"/><path d="M12 8V4.5M12 4.5h3M9 13h.01M15 13h.01M9.5 16.5h5"/></symbol>
+    <symbol id="i-puzzle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9 4.5a2 2 0 1 1 4 0H15a1.5 1.5 0 0 1 1.5 1.5v3a2 2 0 1 1 0 4v3A1.5 1.5 0 0 1 15 17.5h-3a2 2 0 1 0-4 0H6A1.5 1.5 0 0 1 4.5 16v-3a2 2 0 1 1 0-4V6A1.5 1.5 0 0 1 6 4.5h3z"/></symbol>
+    <symbol id="i-wrench" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 6.5a4.5 4.5 0 0 0-6 5.6L3.6 17a2 2 0 1 0 2.8 2.8l4.9-4.9a4.5 4.5 0 0 0 5.7-6L13.6 12l-1.6-1.6 2.5-3.9z"/></symbol>
+    <symbol id="i-plug" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9 7V3.5M15 7V3.5M7 7h10l-.5 5a4.5 4.5 0 0 1-9 0L7 7zM12 16.5V21"/></symbol>
+    <symbol id="i-shield" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 5 5.8v5.4c0 4.4 3 8.1 7 9.3 4-1.2 7-4.9 7-9.3V5.8L12 3z"/><path d="m9 11.5 2.2 2.2L15.5 9"/></symbol>
+    <symbol id="i-gear" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3.2"/><path d="M12 2.8v2.4M12 18.8v2.4M2.8 12h2.4M18.8 12h2.4M5.5 5.5l1.7 1.7M16.8 16.8l1.7 1.7M18.5 5.5l-1.7 1.7M7.2 16.8l-1.7 1.7"/></symbol>
+    <symbol id="i-search" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><circle cx="11" cy="11" r="6.5"/><path d="m20 20-4.4-4.4"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></symbol>
+    <symbol id="i-send" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M21 3 10.5 13.5M21 3l-7 18-3.5-7.5L3 10l18-7z"/></symbol>
+    <symbol id="i-bell" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M18 9a6 6 0 1 0-12 0c0 6-2.5 7-2.5 7h17S18 15 18 9zM10 20a2.2 2.2 0 0 0 4 0"/></symbol>
+    <symbol id="i-doc" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M13.5 3H7a1.5 1.5 0 0 0-1.5 1.5v15A1.5 1.5 0 0 0 7 21h10a1.5 1.5 0 0 0 1.5-1.5V8L13.5 3z"/><path d="M13.5 3v5h5M9 13h6M9 16.5h4"/></symbol>
+    <symbol id="i-upload" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4m0 0L7.5 8.5M12 4l4.5 4.5M4 16.5v2A2.5 2.5 0 0 0 6.5 21h11a2.5 2.5 0 0 0 2.5-2.5v-2"/></symbol>
+    <symbol id="i-arrow-r" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12h15M13 6l6 6-6 6"/></symbol>
+    <symbol id="i-chev-d" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></symbol>
+    <symbol id="i-chev-r" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m4.5 12.5 5 5 10-11"/></symbol>
+    <symbol id="i-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></symbol>
+    <symbol id="i-clock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></symbol>
+    <symbol id="i-spark" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5c.6 3.8 2.7 5.9 6.5 6.5-3.8.6-5.9 2.7-6.5 6.5-.6-3.8-2.7-5.9-6.5-6.5 3.8-.6 5.9-2.7 6.5-6.5zM19 15.5c.3 1.7 1.3 2.7 3 3-1.7.3-2.7 1.3-3 3-.3-1.7-1.3-2.7-3-3 1.7-.3 2.7-1.3 3-3z"/></symbol>
+    <symbol id="i-db" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><ellipse cx="12" cy="5.5" rx="7.5" ry="2.8"/><path d="M4.5 5.5V12c0 1.5 3.4 2.8 7.5 2.8s7.5-1.3 7.5-2.8V5.5M4.5 12v6.5C4.5 20 7.9 21.3 12 21.3s7.5-1.3 7.5-2.8V12"/></symbol>
+    <symbol id="i-refresh" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12a8 8 0 1 1-2.3-5.6M20 3.5V8h-4.5"/></symbol>
+    <symbol id="i-play" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M7 5.5v13l11-6.5-11-6.5z"/></symbol>
+    <symbol id="i-warn" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4 2.8 19.5h18.4L12 4z"/><path d="M12 10v4.5M12 17.2h.01"/></symbol>
+    <symbol id="i-trend" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m4 16 5-5 3.5 3.5L20 7.5"/><path d="M14.5 7.5H20V13"/></symbol>
+    <symbol id="i-filter" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5.5h16l-6.2 7.2v5.1l-3.6 1.7v-6.8L4 5.5z"/></symbol>
+    <symbol id="i-zoom-in" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><circle cx="11" cy="11" r="6.5"/><path d="m20 20-4.4-4.4M11 8.5v5M8.5 11h5"/></symbol>
+    <symbol id="i-zoom-out" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><circle cx="11" cy="11" r="6.5"/><path d="m20 20-4.4-4.4M8.5 11h5"/></symbol>
+    <symbol id="i-move" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18M3 12h18M12 3 9.5 5.5M12 3l2.5 2.5M12 21l-2.5-2.5M12 21l2.5-2.5M3 12l2.5-2.5M3 12l2.5 2.5M21 12l-2.5-2.5M21 12l-2.5 2.5"/></symbol>
+    <symbol id="i-more" viewBox="0 0 24 24" fill="currentColor"><circle cx="5.5" cy="12" r="1.4"/><circle cx="12" cy="12" r="1.4"/><circle cx="18.5" cy="12" r="1.4"/></symbol>
+    <symbol id="i-user" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.6"/><path d="M5 20c.8-3.6 3.6-5.5 7-5.5s6.2 1.9 7 5.5"/></symbol>
+    <symbol id="i-users" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8.5" r="3.2"/><path d="M3.5 19.5c.7-3.2 3-4.9 5.5-4.9s4.8 1.7 5.5 4.9M15.5 5.6a3.2 3.2 0 0 1 0 5.8M17 14.8c2 .6 3.2 2.2 3.7 4.7"/></symbol>
+    <symbol id="i-key" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="14.5" r="3.8"/><path d="m11 12 8.5-8.5M16 7l2.5 2.5M13.5 9.5 16 12"/></symbol>
+    <symbol id="i-list" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6h11M9 12h11M9 18h11M3.5 6l1.2 1.2L7 4.8M3.5 12l1.2 1.2L7 10.8M3.5 18l1.2 1.2L7 16.8"/></symbol>
+    <symbol id="i-branch" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="6.5" cy="5.5" r="2.2"/><circle cx="6.5" cy="18.5" r="2.2"/><circle cx="17.5" cy="9" r="2.2"/><path d="M6.5 7.7v8.6M17.5 11.2c0 3.5-3 4.3-6.5 4.6-1.8.2-3.2.7-4 1.6"/></symbol>
+    <symbol id="i-flask" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M10 3.5h4M10.8 3.5v5.2L5.6 17a2.5 2.5 0 0 0 2.2 3.7h8.4a2.5 2.5 0 0 0 2.2-3.7l-5.2-8.3V3.5M8 14h8"/></symbol>
+    <symbol id="i-activity" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h4l2.5-6 5 12 2.5-6h4"/></symbol>
+    <symbol id="i-code" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="m8.5 7.5-5 4.5 5 4.5M15.5 7.5l5 4.5-5 4.5M13.2 5.2l-2.4 13.6"/></symbol>
+    <symbol id="i-lock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="5.5" y="10.5" width="13" height="9.5" rx="2.5"/><path d="M8.5 10.5V8a3.5 3.5 0 0 1 7 0v2.5M12 14.5v2"/></symbol>
+    <symbol id="i-copy" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2.5"/><path d="M5.5 14.5h-.4a1.6 1.6 0 0 1-1.6-1.6V5.1a1.6 1.6 0 0 1 1.6-1.6h7.8a1.6 1.6 0 0 1 1.6 1.6v.4"/></symbol>
+    <symbol id="i-trash" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 6.5h15M9.5 6V4.5a1.5 1.5 0 0 1 1.5-1.5h2a1.5 1.5 0 0 1 1.5 1.5V6M7 6.5l.8 12a2 2 0 0 0 2 1.9h4.4a2 2 0 0 0 2-1.9l.8-12M10 10.5v6M14 10.5v6"/></symbol>
+    <symbol id="i-logout" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M14 4.5H7A2.5 2.5 0 0 0 4.5 7v10A2.5 2.5 0 0 0 7 19.5h7M10 12h10.5M17 8.5l3.5 3.5-3.5 3.5"/></symbol>
+    <symbol id="i-globe" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><path d="M3.5 12h17M12 3.5c2.6 2.3 3.9 5.1 3.9 8.5s-1.3 6.2-3.9 8.5c-2.6-2.3-3.9-5.1-3.9-8.5s1.3-6.2 3.9-8.5z"/></symbol>
+    <symbol id="i-zap" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M13 3 5 13.5h6L11 21l8-10.5h-6L13 3z"/></symbol>
+    <symbol id="i-device" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="5" width="16" height="11" rx="2"/><path d="M2.5 19.5h19"/></symbol>
+    <symbol id="i-mobile" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="7.5" y="3.5" width="9" height="17" rx="2.5"/><path d="M11 17.5h2"/></symbol>
+    <symbol id="i-download" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v12m0 0 4.5-4.5M12 16l-4.5-4.5M4 16.5v2A2.5 2.5 0 0 0 6.5 21h11a2.5 2.5 0 0 0 2.5-2.5v-2"/></symbol>
+    <symbol id="i-eye" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 12S6 5.8 12 5.8 21.5 12 21.5 12 18 18.2 12 18.2 2.5 12 2.5 12z"/><circle cx="12" cy="12" r="2.8"/></symbol>
+    <symbol id="i-share" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="12" r="2.6"/><circle cx="17.5" cy="5.5" r="2.6"/><circle cx="17.5" cy="18.5" r="2.6"/><path d="m8.4 10.7 6.8-3.9M8.4 13.3l6.8 3.9"/></symbol>
+    <symbol id="i-pin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9.5 3.5h5l-.6 5.6 2.8 2.9H7.3l2.8-2.9-.6-5.6z"/><path d="M12 12v8.5"/></symbol>
+    <symbol id="i-pencil" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M15.8 5.2l3 3L8.5 18.5l-4 1 1-4L15.8 5.2z"/><path d="m13.8 7.2 3 3"/></symbol>
+    <symbol id="i-stop" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="6.5" y="6.5" width="11" height="11" rx="2.5"/></symbol>
+    <symbol id="i-thumb-up" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M7 11 10.9 4.3c.9-.3 2.1.4 2.1 1.6V9h4.2a1.7 1.7 0 0 1 1.7 2l-1 5.5a2.2 2.2 0 0 1-2.2 1.9H7.5"/><path d="M7 11v8.4H4.6A1.6 1.6 0 0 1 3 17.8v-4.7A1.6 1.6 0 0 1 4.6 11H7z"/></symbol>
+    <symbol id="i-thumb-down" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M17 13l-3.9 6.7c-.9.3-2.1-.4-2.1-1.6V15H6.8a1.7 1.7 0 0 1-1.7-2l1-5.5A2.2 2.2 0 0 1 8.3 5.5h6.2"/><path d="M17 13V4.6h2.4A1.6 1.6 0 0 1 21 6.2v4.7a1.6 1.6 0 0 1-1.6 2.1H17z"/></symbol>
+    <symbol id="i-quote" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9.8 7.5C7 8.2 5.5 10 5.5 12.8v3.7h4.6v-4.6H7.6c.1-1.5.9-2.5 2.5-3.1l-.3-1.3z"/><path d="M18.8 7.5C16 8.2 14.5 10 14.5 12.8v3.7h4.6v-4.6h-2.5c.1-1.5.9-2.5 2.5-3.1l-.3-1.3z"/></symbol>
+    <symbol id="i-terminal" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4.5" width="18" height="15" rx="2.5"/><path d="m7 9.5 3 2.5-3 2.5M12.5 14.5H17"/></symbol>
+  </defs>
+</svg>
+
+<div class="board">
+  <header class="board-head">
+    <div class="bh-title">ontology-agent · UI 设计稿
+      <small>交互态画板 · 对话/任务/轨迹回放 · 依据 docs/架构设计/26 篇 · v1.0 · 2026-09-26</small>
+    </div>
+    <nav class="bh-nav">
+      <a href="../ui-pages.html" style="color:var(--accent);font-weight:600">← 页面主视图</a>
+      <a href="../components.html" style="color:var(--accent);font-weight:600">← 组件库</a>
+      <a href="#ix-cht-01">CHT-01 会话菜单</a>
+      <a href="#ix-cht-02">CHT-02 新对话</a>
+      <a href="#ix-cht-03">CHT-03 证据抽屉</a>
+      <a href="#ix-cht-04">CHT-04 溯源</a>
+      <a href="#ix-cht-05">CHT-05 工具详情</a>
+      <a href="#ix-cht-06">CHT-06 停止生成</a>
+      <a href="#ix-cht-07">CHT-07 重新生成</a>
+      <a href="#ix-tsk-01">TSK-01 任务详情</a>
+      <a href="#ix-tsk-02">TSK-02 日志抽屉</a>
+      <a href="#ix-tsk-03">TSK-03 重试确认</a>
+      <a href="#ix-tsk-04">TSK-04 取消确认</a>
+      <a href="#ix-traj-01">TRAJ-01 事件详情</a>
+      <a href="#ix-traj-02">TRAJ-02 分叉恢复</a>
+    </nav>
+    <button class="theme-btn" onclick="document.documentElement.classList.toggle('dark')">切换亮 / 暗</button>
+  </header>
+
+<!-- ============ CHT-01 会话项菜单 ============ -->
+<section class="frame" id="ix-cht-01">
+  <div class="frame-head">
+    <div class="fnum">CHT-01</div>
+    <div>
+      <h2>会话项菜单 · /chat/:sessionId</h2>
+      <p>会话列表项「⋯」唤起轻量菜单：置顶 / 重命名（行内输入态）/ 导出 Markdown / 删除（危险色，二次确认后方可清除会话及其消息与证据引用）；全部动作留审计。</p>
+      <div class="jumps">
+        <span class="jump-chip">触发：会话项 ⋯ 按钮</span>
+        <span class="jump-chip">删除 <svg><use href="#i-arrow-r"/></svg> 危险确认（输入会话名 · 审计留痕）</span>
+        <span class="jump-chip">端点：api/01 §5.2 sessions CRUD</span>
+      </div>
+    </div>
+  </div>
+  <div class="browser"><div class="bbar"><span class="bdot" style="background:#ff5f57"></span><span class="bdot" style="background:#febc2e"></span><span class="bdot" style="background:#28c840"></span><span class="burl">ontology.local/chat/s-9107</span></div>
+    <div class="app" style="position:relative;overflow:hidden">
+      <aside class="sb">
+        <div class="sb-brand"><span class="sb-logo"><svg><use href="#i-cube"/></svg></span><b>ontology-agent</b></div>
+        <a class="sb-item"><svg><use href="#i-grid"/></svg>工作台</a>
+        <a class="sb-item active"><svg><use href="#i-chat"/></svg>对话</a>
+        <a class="sb-item"><svg><use href="#i-list"/></svg>任务中心</a>
+        <div class="sb-label">语义资产</div>
+        <a class="sb-item"><svg><use href="#i-cube"/></svg>本体工作台</a>
+        <a class="sb-item"><svg><use href="#i-book"/></svg>知识库</a>
+        <a class="sb-item"><svg><use href="#i-layers"/></svg>记忆管理</a>
+        <div class="sb-foot"><span class="sb-ava">刘</span><small><b>刘以在</b>调度班长 · 默认租户</small></div>
+      </aside>
+      <div class="main">
+        <div class="topbar">
+          <span class="tb-title">梳理 3 号机组停电影响范围</span>
+          <span class="badge b-green"><span class="dot d-green" style="width:6px;height:6px"></span>运行中</span>
+          <div class="tb-actions">
+            <span class="chipmodel">Claude Sonnet</span>
+            <span class="icobtn"><svg><use href="#i-more"/></svg></span>
+          </div>
+        </div>
+        <div class="chat-body">
+          <div class="session-col">
+            <div class="sc-head"><b>会话</b><span class="icobtn" style="width:24px;height:24px"><svg><use href="#i-plus"/></svg></span></div>
+            <div class="sc-item on"><div style="display:flex;align-items:center;gap:6px"><span class="sc-t" style="flex:1">梳理 3 号机组停电影响范围</span><span class="icobtn" style="width:22px;height:22px;background:var(--accent-soft);color:var(--accent)"><svg><use href="#i-more"/></svg></span></div><div class="sc-s"><span class="dot d-green" style="width:5px;height:5px"></span>刚刚 · 12 条消息</div></div>
+            <div class="sc-item"><div style="display:flex;align-items:center;gap:5px"><input class="input" style="height:28px;font-size:12px;flex:1;padding:0 8px" value="馈线 F12 故障研判 · 复盘"><span class="icobtn" style="width:22px;height:22px;color:var(--green)"><svg><use href="#i-check"/></svg></span><span class="icobtn" style="width:22px;height:22px;color:var(--label-3)"><svg><use href="#i-x"/></svg></span></div><div class="sc-s">重命名中 · ↵ 确认 · Esc 取消</div></div>
+            <div class="sc-item"><div class="sc-t">停电工单回写对账</div><div class="sc-s">昨天 · 8 条消息</div></div>
+            <div class="sc-item"><div style="display:flex;align-items:center;gap:5px"><svg style="width:11px;height:11px;color:var(--orange)"><use href="#i-pin"/></svg><span class="sc-t" style="flex:1">变压器油温异常分析</span></div><div class="sc-s">已置顶 · 周四</div></div>
+          </div>
+          <div class="chat-main">
+            <div class="msgs" style="opacity:.55">
+              <div class="msg m-u"><span class="avatar" style="background:var(--accent-soft);color:var(--accent)">刘</span>
+                <div class="bubble bubble-u">梳理 3 号机组停役检修的影响范围：受影响馈线、重要用户与恢复顺序。</div></div>
+              <div class="msg"><span class="avatar"><svg style="width:13px;height:13px"><use href="#i-spark"/></svg></span>
+                <div style="flex:1">
+                  <div class="skel" style="width:88%"></div>
+                  <div class="skel" style="width:72%;margin-top:8px"></div>
+                  <div class="skel" style="width:40%;margin-top:8px"></div>
+                </div></div>
+            </div>
+            <div class="input-bar" style="opacity:.55">
+              <span class="fakeinput">继续提问，或输入 / 调用技能…</span>
+              <span class="chipmodel">配网检修域模板</span>
+              <span class="sendbtn"><svg><use href="#i-send"/></svg></span>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="menu" style="position:absolute;left:246px;top:118px;z-index:5">
+        <div class="menu-i"><svg><use href="#i-pin"/></svg>置顶会话</div>
+        <div class="menu-i"><svg><use href="#i-pencil"/></svg>重命名</div>
+        <div class="menu-i"><svg><use href="#i-download"/></svg>导出 Markdown<span class="menu-k">.md</span></div>
+        <div class="menu-sep"></div>
+        <div class="menu-i danger"><svg><use href="#i-trash"/></svg>删除会话…</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ CHT-02 新对话配置 ============ -->
+<section class="frame" id="ix-cht-02">
+  <div class="frame-head">
+    <div class="fnum">CHT-02</div>
+    <div>
+      <h2>新对话配置 · /chat（Modal 520）</h2>
+      <p>「＋新对话」先选执行体再开会话：Agent 插槽卡（运行中优先 + 状态徽标）、模型渠道下拉（含成本档提示）、开场提示词与知识库绑定多选，创建后直达新会话。</p>
+      <div class="jumps">
+        <span class="jump-chip">触发：会话栏「＋新对话」</span>
+        <span class="jump-chip">创建 <svg><use href="#i-arrow-r"/></svg> /chat/:newId</span>
+        <span class="jump-chip">端点：api/01 §5.1 agents + §5.2 sessions 创建</span>
+      </div>
+    </div>
+  </div>
+  <div class="browser"><div class="bbar"><span class="bdot" style="background:#ff5f57"></span><span class="bdot" style="background:#febc2e"></span><span class="bdot" style="background:#28c840"></span><span class="burl">ontology.local/chat/new</span></div>
+    <div class="app" style="position:relative;overflow:hidden">
+      <aside class="sb" style="opacity:.55">
+        <div class="sb-brand"><span class="sb-logo"><svg><use href="#i-cube"/></svg></span><b>ontology-agent</b></div>
+        <a class="sb-item"><svg><use href="#i-grid"/></svg>工作台</a>
+        <a class="sb-item active"><svg><use href="#i-chat"/></svg>对话</a>
+        <a class="sb-item"><svg><use href="#i-list"/></svg>任务中心</a>
+        <div class="sb-foot"><span class="sb-ava">刘</span><small><b>刘以在</b>调度班长 · 默认租户</small></div>
+      </aside>
+      <div class="main" style="opacity:.55">
+        <div class="topbar"><span class="tb-title">对话</span></div>
+        <div class="chat-body">
+          <div class="session-col">
+            <div class="sc-head"><b>会话</b><span class="icobtn" style="width:24px;height:24px;background:var(--accent-soft);color:var(--accent)"><svg><use href="#i-plus"/></svg></span></div>
+            <div class="skel" style="height:38px;border-radius:0;margin:2px 0"></div>
+            <div class="skel" style="height:38px;border-radius:0;opacity:.6"></div>
+            <div class="skel" style="height:38px;border-radius:0;opacity:.4"></div>
+          </div>
+          <div class="chat-main">
+            <div class="msgs">
+              <div class="skel" style="width:60%;margin-left:auto"></div>
+              <div class="skel" style="width:78%"></div>
+              <div class="skel" style="width:46%"></div>
+            </div>
+            <div class="input-bar"><span class="fakeinput">新对话创建后即可提问</span><span class="sendbtn"><svg><use href="#i-send"/></svg></span></div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-mask"><div class="modal" style="width:520px">
+        <div class="m-head">
+          <span class="m-ic" style="background:var(--accent-soft);color:var(--accent)"><svg><use href="#i-chat"/></svg></span>
+          <div><div class="m-title">新建对话</div>
+            <div class="m-desc">先选执行体再开会话；模型渠道与知识库绑定可稍后在会话内调整。</div></div>
+        </div>
+        <div class="field">
+          <label class="field-label">Agent 插槽</label>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+            <div style="border:1.5px solid var(--accent);border-radius:12px;padding:10px 12px;background:var(--accent-soft)">
+              <div style="display:flex;align-items:center;gap:7px"><svg style="width:15px;height:15px;color:var(--accent)"><use href="#i-bot"/></svg><b style="font-size:13px">电网调度助手</b><span class="badge b-green" style="margin-left:auto"><span class="dot d-green" style="width:5px;height:5px"></span>运行中</span></div>
+              <div style="font-size:11px;color:var(--label-2);margin-top:5px">原生 Agent · v2.1 · 已挂工具 6 项</div>
+            </div>
+            <div style="border:1.5px solid var(--separator);border-radius:12px;padding:10px 12px;opacity:.62">
+              <div style="display:flex;align-items:center;gap:7px"><svg style="width:15px;height:15px;color:var(--label-3)"><use href="#i-bot"/></svg><b style="font-size:13px">设备手册问答</b><span class="badge b-gray" style="margin-left:auto">已停止</span></div>
+              <div style="font-size:11px;color:var(--label-2);margin-top:5px">nanobot 适配 · 需先启动方可选</div>
+            </div>
+          </div>
+          <div class="fhint">列表按「运行中优先」排序，状态徽标实时同步 Agent 心跳（api/01 §5.1 health-check）。</div>
+        </div>
+        <div class="field">
+          <label class="field-label">模型渠道</label>
+          <span class="fselect" style="width:100%"><input class="input" style="width:100%" value="Claude Sonnet · 成本档：高（按 token 计费）"><svg><use href="#i-chev-d"/></svg></span>
+          <div class="fhint">成本档：高 ¥ · 中 ¥¥ · 低 ¥¥¥；预算触顶自动降级本地渠道（Qwen，零外呼成本）。</div>
+        </div>
+        <div class="field">
+          <label class="field-label">开场提示词（可选）</label>
+          <input class="input" placeholder="例如：聚焦 3 号机组停役检修，先给受影响馈线清单再给恢复顺序…">
+        </div>
+        <div class="field" style="margin-bottom:4px">
+          <label class="field-label">知识库绑定（多选）</label>
+          <div style="display:flex;flex-direction:column;gap:8px">
+            <label class="fcheck"><input type="checkbox" checked><span class="box"><svg><use href="#i-check"/></svg></span>配网检修规程库 v2.3 · 412 文档</label>
+            <label class="fcheck"><input type="checkbox" checked><span class="box"><svg><use href="#i-check"/></svg></span>设备手册库 · 抽取候选待审 12 条</label>
+            <label class="fcheck"><input type="checkbox"><span class="box"><svg><use href="#i-check"/></svg></span>停电预案知识库 · 只读归档</label>
+          </div>
+        </div>
+        <div class="m-acts">
+          <button class="btn btn-g">取消</button>
+          <button class="btn btn-p">创建并进入<svg><use href="#i-arrow-r"/></svg></button>
+        </div>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ CHT-03 证据原文抽屉 ============ -->
+<section class="frame" id="ix-cht-03">
+  <div class="frame-head">
+    <div class="fnum">CHT-03</div>
+    <div>
+      <h2>证据原文抽屉 · /chat/:sessionId（Drawer 480）</h2>
+      <p>点击消息流内 EvidenceCard / 引用角标滑出原文抽屉：命中句高亮、出处三元组（mono）、置信度徽标与来源文档元数据；知识带出处，「在图谱中查看」一路下钻到实体。</p>
+      <div class="jumps">
+        <span class="jump-chip">触发：EvidenceCard / 引用角标点击</span>
+        <span class="jump-chip">在图谱中查看 <svg><use href="#i-arrow-r"/></svg> /kb/explore?focus={entity_iri}</span>
+        <span class="jump-chip">端点：api/01 §5.4 kb 检索 source_ref</span>
+      </div>
+    </div>
+  </div>
+  <div class="browser"><div class="bbar"><span class="bdot" style="background:#ff5f57"></span><span class="bdot" style="background:#febc2e"></span><span class="bdot" style="background:#28c840"></span><span class="burl">ontology.local/chat/s-9107</span></div>
+    <div class="app" style="position:relative;overflow:hidden">
+      <aside class="sb" style="opacity:.55">
+        <div class="sb-brand"><span class="sb-logo"><svg><use href="#i-cube"/></svg></span><b>ontology-agent</b></div>
+        <a class="sb-item active"><svg><use href="#i-chat"/></svg>对话</a>
+        <a class="sb-item"><svg><use href="#i-list"/></svg>任务中心</a>
+        <div class="sb-foot"><span class="sb-ava">刘</span><small><b>刘以在</b>调度班长 · 默认租户</small></div>
+      </aside>
+      <div class="main" style="opacity:.55">
+        <div class="topbar"><span class="tb-title">梳理 3 号机组停电影响范围</span><span class="badge b-green">运行中</span></div>
+        <div class="chat-body">
+          <div class="session-col">
+            <div class="sc-head"><b>会话</b></div>
+            <div class="sc-item on"><div class="sc-t">梳理 3 号机组停电影响范围</div><div class="sc-s">刚刚</div></div>
+            <div class="sc-item"><div class="sc-t">馈线 F12 故障研判</div><div class="sc-s">1 小时前</div></div>
+          </div>
+          <div class="chat-main">
+            <div class="msgs">
+              <div class="msg m-u"><span class="avatar" style="background:var(--accent-soft);color:var(--accent)">刘</span>
+                <div class="bubble bubble-u">3 号机组停役检修期间，馈线 F12 需要做什么？依据是哪条规程？</div></div>
+              <div class="msg"><span class="avatar"><svg style="width:13px;height:13px"><use href="#i-spark"/></svg></span>
+                <div>
+                  <div class="toolcard"><span class="dot d-blue"></span><span class="tn">knowledge.search</span>(local)&nbsp;·&nbsp;842ms&nbsp;·&nbsp;命中 6 实体</div>
+                  <div class="bubble bubble-a" style="margin-top:10px">
+                    <p>F12 应转入检修状态并挂牌；3 号机组厂用电切换至备用段。</p>
+                    <div class="ev-row">
+                      <span class="ev-chip" style="box-shadow:0 0 0 1.5px var(--accent)"><svg><use href="#i-doc"/></svg>配网检修规程 §4.2</span>
+                      <span class="ev-chip"><svg><use href="#i-cube"/></svg>图谱：馈线F12 ←状态— 检修中</span>
+                    </div>
+                  </div>
+                </div></div>
+            </div>
+            <div class="input-bar"><span class="fakeinput">继续提问…</span><span class="sendbtn"><svg><use href="#i-send"/></svg></span></div>
+          </div>
+        </div>
+      </div>
+      <div class="ov-dim" style="opacity:.22"></div>
+      <div class="drawer" style="width:480px;display:flex;flex-direction:column;z-index:6;font-size:13px">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
+          <h4 style="margin:0">证据原文</h4>
+          <span class="badge b-green"><svg style="width:10px;height:10px"><use href="#i-check"/></svg>置信度 0.92</span>
+          <span class="icobtn" style="margin-left:auto"><svg><use href="#i-x"/></svg></span>
+        </div>
+        <div style="flex:1;overflow:auto;padding-right:2px">
+          <div class="kv"><span class="k">来源文档</span><span class="v">配网检修规程（2024 修订）§4.2</span></div>
+          <div class="kv"><span class="k">分片定位</span><span class="v mono">chunk_042 · 第 3 页 · 语义切片</span></div>
+          <div class="kv"><span class="k">抽取任务</span><span class="v">JOB #217 · 已终审入库</span></div>
+          <div style="font-size:12px;font-weight:600;color:var(--label-2);margin:14px 0 6px">原文片段（命中句高亮）</div>
+          <div class="docpane" style="background:var(--surface-2);border:1px solid var(--separator);border-radius:12px;padding:12px 14px;line-height:2">3 号机组停役检修期间，<span class="hl">其 10kV 馈线 F12 应转入检修状态，并在操作把手上悬挂「禁止合闸，线路有人工作」标示牌</span>；恢复送电前应核对接地线已全部拆除。</div>
+          <div style="font-size:12px;font-weight:600;color:var(--label-2);margin:14px 0 8px">出处三元组</div>
+          <div class="tri"><span>power-ont#馈线F12</span><span class="arrow">—</span><span class="rel">转入状态</span><span class="arrow">→</span><span>检修中（挂牌）</span></div>
+          <div class="tri"><span>power-ont#馈线F12</span><span class="arrow">—</span><span class="rel">属于</span><span class="arrow">→</span><span>power-ont#3号机组</span></div>
+          <div class="tri"><span>power-ont#3号机组</span><span class="arrow">—</span><span class="rel">影响</span><span class="arrow">→</span><span>重要用户 17 户</span></div>
+          <div class="kv" style="margin-top:12px"><span class="k">图谱实体</span><span class="v mono" style="word-break:break-all">power-ont#馈线F12</span></div>
+          <div class="kv"><span class="k">命中得分</span><span class="v mono">0.92（向量 0.89 + 术语对齐 1.00）</span></div>
+        </div>
+        <div style="display:flex;gap:8px;margin-top:14px;padding-top:12px;border-top:1px solid var(--separator)">
+          <button class="btn btn-p"><svg><use href="#i-cube"/></svg>在图谱中查看</button>
+          <button class="btn btn-g">关闭</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ CHT-04 上下文溯源 Popover ============ -->
+<section class="frame" id="ix-cht-04">
+  <div class="frame-head">
+    <div class="fnum">CHT-04</div>
+    <div>
+      <h2>上下文面板溯源 Popover · /chat/:sessionId（320）</h2>
+      <p>右侧 ContextPanel 四类来源条目点击即悬浮溯源：来源类型徽标（L1/L2/L3 记忆 · GraphRAG 路径 · 规则命中）+ 内容摘要 + 命中得分，可查看全部或跳转对应管理页。</p>
+      <div class="jumps">
+        <span class="jump-chip">触发：ContextPanel 来源条目点击</span>
+        <span class="jump-chip">记忆类 <svg><use href="#i-arrow-r"/></svg> /memory?fact=</span>
+        <span class="jump-chip">图谱类 <svg><use href="#i-arrow-r"/></svg> 抽屉 IX-CHT-03</span>
+        <span class="jump-chip">端点：api/01 §5.5 memory + §5.4 kb</span>
+      </div>
+    </div>
+  </div>
+  <div class="browser"><div class="bbar"><span class="bdot" style="background:#ff5f57"></span><span class="bdot" style="background:#febc2e"></span><span class="bdot" style="background:#28c840"></span><span class="burl">ontology.local/chat/s-9107</span></div>
+    <div class="app" style="position:relative;overflow:hidden">
+      <aside class="sb" style="opacity:.5">
+        <div class="sb-brand"><span class="sb-logo"><svg><use href="#i-cube"/></svg></span><b>ontology-agent</b></div>
+        <a class="sb-item active"><svg><use href="#i-chat"/></svg>对话</a>
+        <a class="sb-item"><svg><use href="#i-layers"/></svg>记忆管理</a>
+      </aside>
+      <div class="main" style="opacity:.6">
+        <div class="topbar"><span class="tb-title">梳理 3 号机组停电影响范围</span></div>
+        <div class="chat-body">
+          <div class="chat-main">
+            <div class="msgs">
+              <div class="msg m-u"><span class="avatar" style="background:var(--accent-soft);color:var(--accent)">刘</span>
+                <div class="bubble bubble-u">按影响范围从大到小，列出 3 号机组停役的影响。</div></div>
+              <div class="msg"><span class="avatar"><svg style="width:13px;height:13px"><use href="#i-spark"/></svg></span>
+                <div class="bubble bubble-a"><p>按「设备 → 馈线 → 用户」顺序：3 号机组厂用电切换，馈线 F12 全线转检修，17 户重要用户受影响…</p></div></div>
+            </div>
+            <div class="input-bar"><span class="fakeinput">继续提问…</span><span class="sendbtn"><svg><use href="#i-send"/></svg></span></div>
+          </div>
+          <div class="ctx">
+            <h4><svg><use href="#i-spark"/></svg>本次回答的上下文</h4>
+            <div class="ctx-sec"><div class="ctx-t">记忆召回</div>
+              <div class="ctx-item" style="background:var(--accent-soft);border-radius:8px;padding:6px 8px;margin:0 -8px"><span class="dot" style="background:var(--orange);margin-top:5px"></span><span><b>L2 用户</b>· 城区配网抢修视角，偏好设备→馈线→用户顺序</span></div>
+              <div class="ctx-item"><span class="dot" style="background:var(--purple);margin-top:5px"></span><span><b>L3 组织</b>· 团队正做配网停电本体试点（v1.4）</span></div>
+            </div>
+            <div class="ctx-sec"><div class="ctx-t">GraphRAG 路径</div>
+              <div class="ctx-item"><span class="dot" style="background:var(--teal);margin-top:5px"></span><span><b>Local Search</b>· 6 实体 / 4 关系 / 2 社区摘要</span></div>
+            </div>
+            <div class="ctx-sec"><div class="ctx-t">推理分级</div>
+              <div class="ctx-item"><span class="dot d-green" style="margin-top:5px"></span><span><b>规则命中</b>· 停役联络 = 短时倒供（唯一解）</span></div>
+              <div class="ctx-item"><span class="dot d-orange" style="margin-top:5px"></span><span><b>LLM 判定</b>· 影响归纳（输出已过 SHACL 校验）</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="popover" style="position:absolute;right:266px;top:96px;width:320px;z-index:5">
+        <div class="p-title"><span class="badge b-orange">L2 记忆 · 用户</span><span style="margin-left:auto" class="dim mono">fact_0287</span></div>
+        <div class="p-body" style="color:var(--label)">用户负责城区配网抢修调度，偏好按「设备 → 馈线 → 用户」三级顺序组织停电影响答案。</div>
+        <div style="margin-top:10px">
+          <div class="kv"><span class="k">命中得分</span><span class="v mono">0.87</span></div>
+          <div class="kv"><span class="k">层级</span><span class="v">L2 · 用户画像（已审核）</span></div>
+          <div class="kv"><span class="k">最近更新</span><span class="v">3 天前 · 由会话「馈线 F12 故障研判」沉淀</span></div>
+          <div class="kv"><span class="k">复用次数</span><span class="v mono">6 次</span></div>
+        </div>
+        <div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:10px;padding-top:10px;border-top:1px solid var(--separator)">
+          <span class="badge b-gray">L1 工作记忆</span>
+          <span class="badge b-orange">L2 用户</span>
+          <span class="badge b-purple">L3 组织</span>
+          <span class="badge" style="background:var(--teal-soft);color:var(--teal)">GraphRAG 路径</span>
+          <span class="badge b-green">规则命中</span>
+        </div>
+        <div class="p-acts">
+          <button class="btn btn-g btn-sm">查看全部</button>
+          <button class="btn btn-s btn-sm">转记忆管理<svg><use href="#i-arrow-r"/></svg></button>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ CHT-05 工具调用详情 ============ -->
+<section class="frame" id="ix-cht-05">
+  <div class="frame-head">
+    <div class="fnum">CHT-05</div>
+    <div>
+      <h2>工具调用详情 · /chat/:sessionId（Popover）</h2>
+      <p>ToolCallTimeline 行点击展开详情：参数快照（mono JSON 折叠/展开）、结果摘要、耗时与 trace_id（点击复制）；高风险回写动作在此标注，执行前强制走 IX-G-04 回写确认。</p>
+      <div class="jumps">
+        <span class="jump-chip">触发：ToolCallTimeline 行点击</span>
+        <span class="jump-chip">trace_id <svg><use href="#i-arrow-r"/></svg> /admin?tab=audit&trace=</span>
+        <span class="jump-chip">高风险回写 <svg><use href="#i-arrow-r"/></svg> IX-G-04（confirm_token）</span>
+        <span class="jump-chip">端点：api/01 §5.8 writeback 台账查询</span>
+      </div>
+    </div>
+  </div>
+  <div class="browser"><div class="bbar"><span class="bdot" style="background:#ff5f57"></span><span class="bdot" style="background:#febc2e"></span><span class="bdot" style="background:#28c840"></span><span class="burl">ontology.local/chat/s-9107</span></div>
+    <div class="app" style="position:relative;overflow:hidden">
+      <aside class="sb" style="opacity:.5">
+        <div class="sb-brand"><span class="sb-logo"><svg><use href="#i-cube"/></svg></span><b>ontology-agent</b></div>
+        <a class="sb-item active"><svg><use href="#i-chat"/></svg>对话</a>
+        <a class="sb-item"><svg><use href="#i-list"/></svg>任务中心</a>
+      </aside>
+      <div class="main" style="opacity:.6">
+        <div class="topbar"><span class="tb-title">梳理 3 号机组停电影响范围</span></div>
+        <div class="chat-body">
+          <div class="chat-main">
+            <div class="msgs">
+              <div class="msg m-u"><span class="avatar" style="background:var(--accent-soft);color:var(--accent)">刘</span>
+                <div class="bubble bubble-u">给 F12 挂牌操作生成停电工单，走 PMS。</div></div>
+              <div class="msg"><span class="avatar"><svg style="width:13px;height:13px"><use href="#i-spark"/></svg></span>
+                <div>
+                  <div class="toolcard" style="border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)"><span class="dot d-blue"></span><span class="tn">knowledge.search</span>(local)&nbsp;·&nbsp;842ms</div>
+                  <div class="toolcard run" style="margin-top:8px"><span class="dot d-blue pulse-ring"></span><span class="tn">action.invoke</span>pms.work_order_create&nbsp;·&nbsp;待确认</div>
+                  <div class="bubble bubble-a" style="margin-top:10px"><p>已准备工单草稿，等待你在回写确认中批准后提交 PMS。</p></div>
+                </div></div>
+            </div>
+            <div class="input-bar"><span class="fakeinput">继续提问…</span><span class="sendbtn"><svg><use href="#i-send"/></svg></span></div>
+          </div>
+        </div>
+      </div>
+      <div class="popover" style="position:absolute;left:520px;top:132px;width:360px;z-index:5">
+        <div class="p-title"><span class="badge" style="background:var(--teal-soft);color:var(--teal)">工具调用</span><span class="mono" style="font-size:12px">action.invoke</span><span class="badge b-red" style="margin-left:auto">高风险</span></div>
+        <div class="think" style="margin:8px 0 0">
+          <div class="think-h"><svg><use href="#i-code"/></svg>参数快照<span class="tmr">已展开 · 点击折叠</span></div>
+          <div class="think-b" style="font-family:var(--mono);font-size:11px;line-height:1.8;color:var(--label)">{<br>&nbsp;&nbsp;"connector": "cn_pms",<br>&nbsp;&nbsp"action": "work_order.create",<br>&nbsp;&nbsp"params": { "feeder": "F12",<br>&nbsp;&nbsp;&nbsp;&nbsp"reason": "3号机组停役检修",<br>&nbsp;&nbsp;&nbsp;&nbsp"window": "09-27 08:00-18:00" }<br>}</div>
+        </div>
+        <div style="margin-top:10px">
+          <div class="kv"><span class="k">结果摘要</span><span class="v">草稿已生成 · 回执待确认（status=pending）</span></div>
+          <div class="kv"><span class="k">耗时</span><span class="v mono">312ms</span></div>
+          <div class="kv" style="align-items:center"><span class="k">trace_id</span><span class="v mono" style="flex:1;word-break:break-all">tr_88d1f0c4</span><span class="icobtn" style="width:24px;height:24px" title="点击复制"><svg><use href="#i-copy"/></svg></span></div>
+        </div>
+        <div class="alert al-warn" style="margin-top:10px"><svg><use href="#i-warn"/></svg><div><b>高风险回写动作</b>执行前弹出 IX-G-04 回写确认（勾选知晓 + confirm_token 60s 有效），取消则调用终止并留审计。</div></div>
+        <div class="p-acts">
+          <button class="btn btn-g btn-sm"><svg><use href="#i-copy"/></svg>复制 trace_id</button>
+          <button class="btn btn-s btn-sm">查看审计<svg><use href="#i-arrow-r"/></svg></button>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ CHT-06 停止生成 ============ -->
+<section class="frame" id="ix-cht-06">
+  <div class="frame-head">
+    <div class="fnum">CHT-06</div>
+    <div>
+      <h2>停止生成 · /chat/:sessionId（流内轻交互）</h2>
+      <p>流式中「停止」单击即停（Apple 式低摩擦，无确认弹窗）：SSE 流终止、保留已生成部分，消息尾追加「已手动停止」标记；STOP 事件入会话轨迹，可回放。</p>
+      <div class="jumps">
+        <span class="jump-chip">触发：流式中「停止」按钮</span>
+        <span class="jump-chip">无弹窗 · 单击即停</span>
+        <span class="jump-chip">端点：api/01 §5.2 POST /sessions/{id}/cancel</span>
+      </div>
+    </div>
+  </div>
+  <div class="browser"><div class="bbar"><span class="bdot" style="background:#ff5f57"></span><span class="bdot" style="background:#febc2e"></span><span class="bdot" style="background:#28c840"></span><span class="burl">ontology.local/chat/s-9107</span></div>
+    <div class="app" style="position:relative;overflow:hidden">
+      <aside class="sb">
+        <div class="sb-brand"><span class="sb-logo"><svg><use href="#i-cube"/></svg></span><b>ontology-agent</b></div>
+        <a class="sb-item"><svg><use href="#i-grid"/></svg>工作台</a>
+        <a class="sb-item active"><svg><use href="#i-chat"/></svg>对话</a>
+        <a class="sb-item"><svg><use href="#i-list"/></svg>任务中心</a>
+        <div class="sb-foot"><span class="sb-ava">刘</span><small><b>刘以在</b>调度班长 · 默认租户</small></div>
+      </aside>
+      <div class="main">
+        <div class="topbar">
+          <span class="tb-title">梳理 3 号机组停电影响范围</span>
+          <span class="badge b-orange"><span class="dot d-orange pulse-ring" style="width:5px;height:5px"></span>生成中</span>
+          <div class="tb-actions"><span class="chipmodel">Claude Sonnet</span></div>
+        </div>
+        <div class="chat-body">
+          <div class="session-col" style="opacity:.7">
+            <div class="sc-head"><b>会话</b></div>
+            <div class="sc-item on"><div class="sc-t">梳理 3 号机组停电影响范围</div><div class="sc-s"><span class="dot d-orange" style="width:5px;height:5px"></span>生成中 · 13 条消息</div></div>
+            <div class="sc-item"><div class="sc-t">馈线 F12 故障研判</div><div class="sc-s">1 小时前</div></div>
+          </div>
+          <div class="chat-main">
+            <div class="msgs">
+              <div class="msg m-u"><span class="avatar" style="background:var(--accent-soft);color:var(--accent)">刘</span>
+                <div class="bubble bubble-u">受影响的重要用户里有哪些是双电源？</div></div>
+              <div class="msg"><span class="avatar"><svg style="width:13px;height:13px"><use href="#i-spark"/></svg></span>
+                <div>
+                  <div class="bubble bubble-a"><p>17 户重要用户中 5 户为双电源供电，其中人民医院配电房…<span class="stream-caret"></span></p></div>
+                  <div style="display:flex;align-items:center;gap:6px;margin-top:6px;font-size:11px;color:var(--label-2)">
+                    <svg style="width:11px;height:11px;color:var(--orange)"><use href="#i-stop"/></svg>已手动停止 · 保留以上内容 · 昨天 16:40
+                  </div>
+                </div></div>
+              <div class="msg"><span class="avatar"><svg style="width:13px;height:13px"><use href="#i-spark"/></svg></span>
+                <div class="bubble bubble-a"><p>正在核对 F12 沿线专变台账：城区医院、水务集团泵站…<span class="stream-caret"></span></p></div></div>
+            </div>
+            <div class="input-bar">
+              <span class="fakeinput">生成中 · 单击右侧按钮停止本次流</span>
+              <span class="chipmodel"><svg><use href="#i-spark"/></svg>已生成 218 tokens</span>
+              <span class="sendbtn" style="background:var(--red)"><svg><use href="#i-stop"/></svg></span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <p class="bp-note" style="max-width:780px;margin-top:12px;font-size:12px">说明：停止不弹确认——单击即调 POST /sessions/{id}/cancel（202），SSE 流以 RUN_CANCELED 事件收尾；已生成增量保留成普通消息并追加「已手动停止」元标记；该 cancel 事件写入会话事件流，可在轨迹回放页（TRAJ-01）定位回放。</p>
+</section>
+
+<!-- ============ CHT-07 重新生成 / 消息操作菜单 ============ -->
+<section class="frame" id="ix-cht-07">
+  <div class="frame-head">
+    <div class="fnum">CHT-07</div>
+    <div>
+      <h2>重新生成 / 消息操作菜单 · /chat/:sessionId（Menu）</h2>
+      <p>助手消息悬停操作条「⋯」唤起：重新生成（携带相同上下文，旧回答折叠保留、可展开对比）、复制、引用（插入输入框）、反馈（赞 / 踩 + 原因可选）。</p>
+      <div class="jumps">
+        <span class="jump-chip">触发：助手消息悬停操作条</span>
+        <span class="jump-chip">重新生成 <svg><use href="#i-arrow-r"/></svg> 旧回答折叠对比</span>
+        <span class="jump-chip">端点：api/01 §5.2 sessions 重发</span>
+      </div>
+    </div>
+  </div>
+  <div class="browser"><div class="bbar"><span class="bdot" style="background:#ff5f57"></span><span class="bdot" style="background:#febc2e"></span><span class="bdot" style="background:#28c840"></span><span class="burl">ontology.local/chat/s-9107</span></div>
+    <div class="app" style="position:relative;overflow:hidden">
+      <aside class="sb" style="opacity:.5">
+        <div class="sb-brand"><span class="sb-logo"><svg><use href="#i-cube"/></svg></span><b>ontology-agent</b></div>
+        <a class="sb-item active"><svg><use href="#i-chat"/></svg>对话</a>
+        <a class="sb-item"><svg><use href="#i-list"/></svg>任务中心</a>
+      </aside>
+      <div class="main">
+        <div class="topbar"><span class="tb-title">梳理 3 号机组停电影响范围</span><span class="badge b-green">运行中</span></div>
+        <div class="chat-body">
+          <div class="chat-main">
+            <div class="msgs">
+              <div class="msg m-u"><span class="avatar" style="background:var(--accent-soft);color:var(--accent)">刘</span>
+                <div class="bubble bubble-u">3 号机组停电会影响哪些重要用户？</div></div>
+              <div class="msg"><span class="avatar"><svg style="width:13px;height:13px"><use href="#i-spark"/></svg></span>
+                <div style="flex:1">
+                  <div class="think" style="max-width:100%">
+                    <div class="think-h"><svg><use href="#i-clock"/></svg>上一版回答（v1）· 已折叠 · 点击展开对比<span class="tmr">v1 · 172 tokens</span></div>
+                  </div>
+                  <div class="bubble bubble-a" style="margin-top:8px">
+                    <p><b>v2（当前）</b>按「设备 → 馈线 → 用户」：1. 3 号机组厂用电切备用段；2. 馈线 F12 全线转检修，重要用户 17 户（含人民医院，需双电源确认）；3. F15 短时电压波动，泵站建议错峰。</p>
+                    <div class="ev-row"><span class="ev-chip"><svg><use href="#i-doc"/></svg>配网检修规程 §4.2</span></div>
+                  </div>
+                  <div style="display:flex;gap:2px;margin-top:6px">
+                    <span class="icobtn" style="width:26px;height:26px" title="重新生成"><svg><use href="#i-refresh"/></svg></span>
+                    <span class="icobtn" style="width:26px;height:26px" title="复制"><svg><use href="#i-copy"/></svg></span>
+                    <span class="icobtn" style="width:26px;height:26px" title="引用"><svg><use href="#i-quote"/></svg></span>
+                    <span class="icobtn" style="width:26px;height:26px" title="有帮助"><svg><use href="#i-thumb-up"/></svg></span>
+                    <span class="icobtn" style="width:26px;height:26px" title="无帮助"><svg><use href="#i-thumb-down"/></svg></span>
+                    <span class="icobtn" style="width:26px;height:26px;background:var(--accent-soft);color:var(--accent)"><svg><use href="#i-more"/></svg></span>
+                  </div>
+                </div></div>
+            </div>
+            <div class="input-bar">
+              <span class="fakeinput" style="color:var(--label-2)"><svg style="width:12px;height:12px;vertical-align:-1px;color:var(--accent)"><use href="#i-quote"/></svg> 引用：馈线 F12 全线转检修，重要用户 17 户…</span>
+              <span class="sendbtn"><svg><use href="#i-send"/></svg></span>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="menu" style="position:absolute;left:700px;top:388px;z-index:5">
+        <div class="menu-i"><svg><use href="#i-refresh"/></svg>重新生成<span class="menu-k">同上下文</span></div>
+        <div class="menu-i"><svg><use href="#i-copy"/></svg>复制</div>
+        <div class="menu-i"><svg><use href="#i-quote"/></svg>引用到输入框</div>
+        <div class="menu-sep"></div>
+        <div class="menu-i"><svg><use href="#i-thumb-up"/></svg>反馈：有帮助</div>
+        <div class="menu-i"><svg><use href="#i-thumb-down"/></svg>反馈：无帮助（原因可选）</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ TSK-01 任务详情抽屉 ============ -->
+<section class="frame" id="ix-tsk-01">
+  <div class="frame-head">
+    <div class="fnum">TSK-01</div>
+    <div>
+      <h2>任务详情抽屉 · /tasks（Drawer 520）</h2>
+      <p>任务行 / 通知深链 ?taskId= 滑出详情抽屉：PipelineSteps 七步全宽步骤条（当前步脉冲态静态示意）、SSE 事件时间线按 seq 对账实时推进、元数据与按状态 contextual 的底部操作区。</p>
+      <div class="jumps">
+        <span class="jump-chip">触发：任务行点击 / 通知深链 ?taskId=</span>
+        <span class="jump-chip">抽取完成 <svg><use href="#i-arrow-r"/></svg> /kb/review?job=</span>
+        <span class="jump-chip">端点：api/01 §5.2 tasks 详情 + tasks/{id}/events SSE</span>
+      </div>
+    </div>
+  </div>
+  <div class="browser"><div class="bbar"><span class="bdot" style="background:#ff5f57"></span><span class="bdot" style="background:#febc2e"></span><span class="bdot" style="background:#28c840"></span><span class="burl">ontology.local/tasks?taskId=job-217</span></div>
+    <div class="app" style="position:relative;overflow:hidden">
+      <aside class="sb" style="opacity:.5">
+        <div class="sb-brand"><span class="sb-logo"><svg><use href="#i-cube"/></svg></span><b>ontology-agent</b></div>
+        <a class="sb-item"><svg><use href="#i-chat"/></svg>对话</a>
+        <a class="sb-item active"><svg><use href="#i-list"/></svg>任务中心</a>
+        <div class="sb-foot"><span class="sb-ava">刘</span><small><b>刘以在</b>调度班长 · 默认租户</small></div>
+      </aside>
+      <div class="main" style="opacity:.55">
+        <div class="topbar"><span class="tb-title">任务中心</span>
+          <div class="seg" style="margin-left:8px"><button class="seg-btn on">全部 12</button><button class="seg-btn">运行中 2</button><button class="seg-btn">失败 1</button></div></div>
+        <div class="content">
+          <div class="card" style="padding:6px 14px">
+            <table class="tbl">
+              <tr><th>任务</th><th>类型</th><th>状态</th><th>进度</th><th></th></tr>
+              <tr style="background:var(--accent-soft)"><td style="font-weight:600">设备手册.docx 抽取</td><td><span class="badge b-gray">抽取</span></td><td><span class="badge b-orange">运行中</span></td><td class="mono">58%</td><td><button class="btn btn-s btn-sm">详情</button></td></tr>
+              <tr><td style="font-weight:600">停电预案库索引重建</td><td><span class="badge b-gray">索引</span></td><td><span class="badge b-green">已完成</span></td><td class="mono">100%</td><td><button class="btn btn-g btn-sm">查看</button></td></tr>
+              <tr><td style="font-weight:600;color:var(--red)">停电工单回写对账 · 09-25</td><td><span class="badge b-gray">对账</span></td><td><span class="badge b-red">失败</span></td><td class="mono">72%</td><td><button class="btn btn-d btn-sm">重试</button></td></tr>
+            </table>
+          </div>
+        </div>
+      </div>
+      <div class="ov-dim" style="opacity:.2"></div>
+      <div class="drawer" style="width:520px;display:flex;flex-direction:column;z-index:6">
+        <div style="display:flex;align-items:center;gap:8px">
+          <h4 style="margin:0">设备手册.docx 抽取</h4>
+          <span class="badge b-gray">kb 抽取</span>
+          <span class="badge b-orange"><span class="dot d-orange pulse-ring" style="width:5px;height:5px"></span>运行中</span>
+          <span class="icobtn" style="margin-left:auto"><svg><use href="#i-x"/></svg></span>
+        </div>
+        <div class="mono dim" style="font-size:11px;margin:4px 0 10px">JOB #217 · SSE 实时推进</div>
+        <div style="font-size:10px;font-weight:700;color:var(--label-3);letter-spacing:.5px;margin-bottom:6px">PIPELINE STEPS · 七步流水线</div>
+        <div class="steps" style="margin:0 0 14px">
+          <div class="step done"><span class="s-dot"><svg><use href="#i-check"/></svg></span><span class="s-name">排队</span></div>
+          <div class="step done"><span class="s-dot"><svg><use href="#i-check"/></svg></span><span class="s-name">预处理</span></div>
+          <div class="step done"><span class="s-dot"><svg><use href="#i-check"/></svg></span><span class="s-name">解析分片</span></div>
+          <div class="step cur"><span class="s-dot pulse-ring"></span><span class="s-name">批量抽取</span></div>
+          <div class="step"><span class="s-dot"></span><span class="s-name">术语对齐</span></div>
+          <div class="step"><span class="s-dot"></span><span class="s-name">SHACL</span></div>
+          <div class="step"><span class="s-dot"></span><span class="s-name">写候选池</span></div>
+        </div>
+        <div style="font-size:10px;font-weight:700;color:var(--label-3);letter-spacing:.5px;margin-bottom:6px">SSE 事件时间线 · tasks/217/events · seq 对账无缺口</div>
+        <div style="flex:1;overflow:auto;min-height:0">
+          <div class="tl">
+            <div class="tl-item"><span class="tl-dot" style="background:var(--green)"></span>
+              <div class="tl-c" style="padding:8px 12px"><div class="tlt" style="font-size:12px"><span class="traj-badge" style="background:var(--green-soft);color:var(--green)">seq 042</span> CHUNK_012 抽取完成 · 候选 4 条</div><div class="tl-meta">1 分钟前 · 842ms</div></div></div>
+            <div class="tl-item"><span class="tl-dot" style="background:var(--orange)"></span>
+              <div class="tl-c" style="padding:8px 12px"><div class="tlt" style="font-size:12px"><span class="traj-badge" style="background:var(--orange-soft);color:var(--orange)">seq 041</span> CHUNK_013 限流退避 · 30s 后自动重试</div><div class="tl-meta">2 分钟前 · warn</div></div></div>
+            <div class="tl-item" style="padding-bottom:0"><span class="tl-dot" style="background:var(--accent)"></span>
+              <div class="tl-c" style="padding:8px 12px"><div class="tlt" style="font-size:12px"><span class="traj-badge" style="background:var(--accent-soft);color:var(--accent)">seq 036</span> TASK_STARTED · 触发人 王工</div><div class="tl-meta">今天 10:21</div></div></div>
+          </div>
+          <div style="margin-top:14px">
+            <div class="kv"><span class="k">发起人</span><span class="v">王工（curator）</span></div>
+            <div class="kv"><span class="k">目标</span><span class="v">设备手册库 · 22 分片</span></div>
+            <div class="kv"><span class="k">创建时间</span><span class="v mono">2026-09-26 10:21</span></div>
+            <div class="kv"><span class="k">成本</span><span class="v mono">¥1.84 · tokens 126k</span></div>
+            <div class="kv"><span class="k">trace_id</span><span class="v mono">tr_5c2a91</span></div>
+          </div>
+        </div>
+        <div style="border-top:1px solid var(--separator);padding-top:12px;margin-top:10px">
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <button class="btn btn-dis" title="失败态才可重试"><svg><use href="#i-refresh"/></svg>重试</button>
+            <button class="btn btn-d"><svg><use href="#i-x"/></svg>取消任务</button>
+            <button class="btn btn-g"><svg><use href="#i-terminal"/></svg>查看日志</button>
+            <button class="btn btn-dis" title="抽取完成并终审后可用"><svg><use href="#i-shield"/></svg>去审核</button>
+          </div>
+          <div class="fhint" style="margin-top:8px">操作区按状态 contextual：失败 → 重试 / 运行中 → 取消 · 查看日志 / 完成 → 去审核（/kb/review?job=217）。</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ TSK-02 任务日志抽屉（二级） ============ -->
+<section class="frame" id="ix-tsk-02">
+  <div class="frame-head">
+    <div class="fnum">TSK-02</div>
+    <div>
+      <h2>任务日志抽屉 · /tasks（二级 Drawer，覆盖 TSK-01 之上）</h2>
+      <p>详情抽屉「查看日志」推入二级日志抽屉：mono 日志流、级别过滤（err / warn / info）、「跟随」开关自动滚底、搜索与复制全部；Esc 逐层关闭回到详情。</p>
+      <div class="jumps">
+        <span class="jump-chip">触发：详情抽屉「查看日志」</span>
+        <span class="jump-chip">二级覆盖 · Esc 逐层关闭</span>
+        <span class="jump-chip">端点：api/01 §5.2 tasks logs</span>
+      </div>
+    </div>
+  </div>
+  <div class="browser"><div class="bbar"><span class="bdot" style="background:#ff5f57"></span><span class="bdot" style="background:#febc2e"></span><span class="bdot" style="background:#28c840"></span><span class="burl">ontology.local/tasks?taskId=job-217&panel=logs</span></div>
+    <div class="app" style="position:relative;overflow:hidden">
+      <aside class="sb" style="opacity:.4">
+        <div class="sb-brand"><span class="sb-logo"><svg><use href="#i-cube"/></svg></span><b>ontology-agent</b></div>
+        <a class="sb-item active"><svg><use href="#i-list"/></svg>任务中心</a>
+      </aside>
+      <div class="main" style="opacity:.4">
+        <div class="topbar"><span class="tb-title">任务中心</span></div>
+        <div class="content"><div class="skel" style="height:220px"></div></div>
+      </div>
+      <div class="drawer" style="width:520px;right:150px;display:flex;flex-direction:column;z-index:6">
+        <div style="display:flex;align-items:center;gap:8px">
+          <h4 style="margin:0">设备手册.docx 抽取</h4>
+          <span class="badge b-orange">运行中 · 58%</span>
+          <span class="icobtn" style="margin-left:auto"><svg><use href="#i-x"/></svg></span>
+        </div>
+        <div class="steps" style="margin:12px 0 14px">
+          <div class="step done"><span class="s-dot"><svg><use href="#i-check"/></svg></span><span class="s-name">排队</span></div>
+          <div class="step done"><span class="s-dot"><svg><use href="#i-check"/></svg></span><span class="s-name">预处理</span></div>
+          <div class="step done"><span class="s-dot"><svg><use href="#i-check"/></svg></span><span class="s-name">解析分片</span></div>
+          <div class="step cur"><span class="s-dot"></span><span class="s-name">批量抽取</span></div>
+          <div class="step"><span class="s-dot"></span><span class="s-name">术语对齐</span></div>
+          <div class="step"><span class="s-dot"></span><span class="s-name">SHACL</span></div>
+          <div class="step"><span class="s-dot"></span><span class="s-name">写候选池</span></div>
+        </div>
+        <div class="tl">
+          <div class="tl-item" style="padding-bottom:0"><span class="tl-dot" style="background:var(--green)"></span>
+            <div class="tl-c" style="padding:8px 12px"><div class="tlt" style="font-size:12px">seq 042 · CHUNK_012 抽取完成 · 候选 4 条</div><div class="tl-meta">1 分钟前</div></div></div>
+        </div>
+        <div class="fhint" style="margin-top:auto">底层为 TSK-01 详情抽屉，被日志抽屉覆盖。</div>
+      </div>
+      <div class="drawer" style="width:460px;display:flex;flex-direction:column;z-index:7;box-shadow:var(--sh-float)">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+          <h4 style="margin:0;display:flex;align-items:center;gap:7px"><svg style="width:15px;height:15px;color:var(--accent)"><use href="#i-terminal"/></svg>任务日志</h4>
+          <span class="badge b-gray mono">JOB #217</span>
+          <span class="icobtn" style="margin-left:auto"><svg><use href="#i-x"/></svg></span>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+          <input class="input" style="height:30px;font-size:12px;flex:1" placeholder="搜索日志关键字…">
+          <div class="seg"><button class="seg-btn on">全部</button><button class="seg-btn" style="color:var(--red)">ERR 1</button><button class="seg-btn" style="color:var(--orange)">WARN 2</button><button class="seg-btn">INFO</button></div>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;font-size:12px;color:var(--label-2)">
+          <span class="fswitch on"></span>跟随最新（自动滚底）
+          <button class="btn btn-g btn-sm" style="margin-left:auto"><svg><use href="#i-copy"/></svg>复制全部</button>
+        </div>
+        <div style="flex:1;overflow:auto;background:var(--surface-2);border:1px solid var(--separator);border-radius:12px;padding:12px 14px;font-family:var(--mono);font-size:11px;line-height:2">
+          <div><span class="dim">10:21:03</span>&nbsp;&nbsp;<span style="color:var(--accent);font-weight:700">INFO</span>&nbsp;&nbsp;TASK_STARTED job=#217 trigger=王工 chunks=22</div>
+          <div><span class="dim">10:21:05</span>&nbsp;&nbsp;<span style="color:var(--accent);font-weight:700">INFO</span>&nbsp;&nbsp;PARSE_DONE chunks=008/22 · 语义切片 overlap=64</div>
+          <div><span class="dim">10:24:12</span>&nbsp;&nbsp;<span style="color:var(--orange);font-weight:700">WARN</span>&nbsp;&nbsp;CHUNK_013 抽取限流 429 · 30s 退避重试</div>
+          <div><span class="dim">10:24:44</span>&nbsp;&nbsp;<span style="color:var(--accent);font-weight:700">INFO</span>&nbsp;&nbsp;CHUNK_013 重试成功 · 候选 3 条</div>
+          <div><span class="dim">10:25:02</span>&nbsp;&nbsp;<span style="color:var(--accent);font-weight:700">INFO</span>&nbsp;&nbsp;CANDIDATE_ENQUEUED total=12（待人工终审）</div>
+          <div><span class="dim">10:25:09</span>&nbsp;&nbsp;<span style="color:var(--red);font-weight:700">ERR&nbsp;</span>&nbsp;&nbsp;CHUNK_017 表格解析降级 · 走纯文本管线（err_code=4021）</div>
+        </div>
+        <div class="fhint" style="margin-top:8px">日志只追加；级别过滤与搜索为本地态，「复制全部」走 tasks logs 端点分页拉全量。</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ TSK-03 失败重试确认 ============ -->
+<section class="frame" id="ix-tsk-03">
+  <div class="frame-head">
+    <div class="fnum">TSK-03</div>
+    <div>
+      <h2>失败重试确认 · /tasks（Modal 440）</h2>
+      <p>失败任务点「重试」先读原因再选范围：错误摘要对齐 api/01 §4 统一错误体四字段（code / message / details / trace_id），重试范围默认仅失败步骤（幂等补偿重放）。</p>
+      <div class="jumps">
+        <span class="jump-chip">触发：失败任务「重试」按钮</span>
+        <span class="jump-chip">确认 <svg><use href="#i-arrow-r"/></svg> 详情抽屉时间线刷新</span>
+        <span class="jump-chip">端点：api/01 §5.2 tasks retry</span>
+      </div>
+    </div>
+  </div>
+  <div class="browser"><div class="bbar"><span class="bdot" style="background:#ff5f57"></span><span class="bdot" style="background:#febc2e"></span><span class="bdot" style="background:#28c840"></span><span class="burl">ontology.local/tasks?taskId=job-204</span></div>
+    <div class="app" style="position:relative;overflow:hidden">
+      <aside class="sb" style="opacity:.4">
+        <div class="sb-brand"><span class="sb-logo"><svg><use href="#i-cube"/></svg></span><b>ontology-agent</b></div>
+        <a class="sb-item active"><svg><use href="#i-list"/></svg>任务中心</a>
+      </aside>
+      <div class="main" style="opacity:.5">
+        <div class="topbar"><span class="tb-title">任务中心</span><div class="seg" style="margin-left:8px"><button class="seg-btn">全部 12</button><button class="seg-btn on">失败 1</button></div></div>
+        <div class="content">
+          <div class="card" style="padding:6px 14px">
+            <table class="tbl">
+              <tr><th>任务</th><th>类型</th><th>状态</th><th></th></tr>
+              <tr><td style="font-weight:600;color:var(--red)">停电工单回写对账 · 09-25</td><td><span class="badge b-gray">对账</span></td><td><span class="badge b-red">失败 · 已重试 1 次</span></td><td><button class="btn btn-d btn-sm">重试</button></td></tr>
+            </table>
+          </div>
+        </div>
+      </div>
+      <div class="modal-mask"><div class="modal" style="width:440px">
+        <div class="m-head">
+          <span class="m-ic" style="background:var(--orange-soft);color:var(--orange)"><svg><use href="#i-refresh"/></svg></span>
+          <div><div class="m-title">重试任务</div>
+            <div class="m-desc">停电工单回写对账 · 09-25（JOB #204 · 对账 · 已重试 1 次）</div></div>
+        </div>
+        <div style="background:var(--surface-2);border:1px solid var(--separator);border-radius:10px;padding:10px 12px;font-family:var(--mono);font-size:11px;line-height:1.9;margin-bottom:12px">
+          <div><span class="dim">code</span>&nbsp;&nbsp;&nbsp;&nbsp;<span style="color:var(--red);font-weight:700">WB_EXEC_TIMEOUT</span></div>
+          <div><span class="dim">message</span>&nbsp;<span style="color:var(--label)">连接器 cn_power 执行超时（30s），回执 unknown</span></div>
+          <div><span class="dim">details</span>&nbsp;{ "step": "writeback_exec", "attempt": 2 }</div>
+          <div><span class="dim">trace</span>&nbsp;&nbsp;&nbsp;tr_88d1f0c4</div>
+        </div>
+        <div class="fhint" style="margin:-6px 0 12px">错误摘要对齐 api/01 §4 统一错误体四字段；台账状态 unknown 待对账确认。</div>
+        <div class="field">
+          <label class="field-label">重试范围</label>
+          <div style="display:flex;flex-direction:column;gap:8px">
+            <label class="fcheck radio"><input type="radio" name="retry-scope" checked><span class="box"></span>仅失败步骤（默认 · 幂等补偿重放 writeback_exec）</label>
+            <label class="fcheck radio"><input type="radio" name="retry-scope"><span class="box"></span>从头执行（全部步骤重新运行，成本重新计费）</label>
+          </div>
+        </div>
+        <div class="fhint">重试动作与结果均写入审计；连续 2 次失败将转人工（needs_human=true）进回写台账。</div>
+        <div class="m-acts">
+          <button class="btn btn-g">取消</button>
+          <button class="btn btn-p"><svg><use href="#i-refresh"/></svg>确认重试</button>
+        </div>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ TSK-04 取消任务确认 ============ -->
+<section class="frame" id="ix-tsk-04">
+  <div class="frame-head">
+    <div class="fnum">TSK-04</div>
+    <div>
+      <h2>取消任务确认 · /tasks（Modal 420 · danger）</h2>
+      <p>运行中任务「取消」需说明后果并填写理由（审计必填）：已投入进度作废、已产生 Token 成本计入台账不退还，任务转入 canceled 终态并通知发起人。</p>
+      <div class="jumps">
+        <span class="jump-chip">触发：运行中任务「取消」按钮</span>
+        <span class="jump-chip">理由必填 · 审计留痕</span>
+        <span class="jump-chip">端点：api/01 §5.2 tasks cancel</span>
+      </div>
+    </div>
+  </div>
+  <div class="browser"><div class="bbar"><span class="bdot" style="background:#ff5f57"></span><span class="bdot" style="background:#febc2e"></span><span class="bdot" style="background:#28c840"></span><span class="burl">ontology.local/tasks?taskId=job-217</span></div>
+    <div class="app" style="position:relative;overflow:hidden">
+      <aside class="sb" style="opacity:.4">
+        <div class="sb-brand"><span class="sb-logo"><svg><use href="#i-cube"/></svg></span><b>ontology-agent</b></div>
+        <a class="sb-item active"><svg><use href="#i-list"/></svg>任务中心</a>
+      </aside>
+      <div class="main" style="opacity:.5">
+        <div class="topbar"><span class="tb-title">任务中心</span><div class="seg" style="margin-left:8px"><button class="seg-btn">全部 12</button><button class="seg-btn on">运行中 2</button></div></div>
+        <div class="content">
+          <div class="card" style="padding:6px 14px">
+            <table class="tbl">
+              <tr><th>任务</th><th>类型</th><th>状态</th><th>进度</th><th></th></tr>
+              <tr><td style="font-weight:600">设备手册.docx 抽取</td><td><span class="badge b-gray">抽取</span></td><td><span class="badge b-orange">运行中</span></td><td class="mono">58%</td><td><button class="btn btn-d btn-sm">取消</button></td></tr>
+            </table>
+          </div>
+        </div>
+      </div>
+      <div class="modal-mask"><div class="modal" style="width:420px">
+        <div class="m-head">
+          <span class="m-ic"><svg><use href="#i-warn"/></svg></span>
+          <div><div class="m-title">取消这个任务？</div>
+            <div class="m-desc">设备手册.docx 抽取（JOB #217）已运行 4 分钟，当前进度 58%。</div></div>
+        </div>
+        <div style="border:1px solid var(--separator);border-radius:10px;padding:2px 12px;margin-bottom:12px">
+          <div class="fold-row"><svg style="color:var(--orange)"><use href="#i-warn"/></svg>已投入进度作废：分片 13/22 已抽取部分不可恢复</div>
+          <div class="fold-row"><svg style="color:var(--orange)"><use href="#i-zap"/></svg>已产生 Token 成本 ¥1.84 计入台账，不退还</div>
+          <div class="fold-row"><svg><use href="#i-bell"/></svg>通知发起人王工 · 任务转入 canceled 终态</div>
+        </div>
+        <div class="field">
+          <label class="field-label">取消理由（必填）<span class="badge b-red" style="margin-left:6px">审计必填</span></label>
+          <input class="input" value="优先级让位：回写对账 JOB #204 需尽快补偿重放">
+          <div class="fhint">理由与操作者、时间一起写入审计日志（audit_log.reason），事后可在 /admin?tab=audit 追溯。</div>
+        </div>
+        <div class="m-acts">
+          <button class="btn btn-g">返回</button>
+          <button class="btn btn-d"><svg><use href="#i-x"/></svg>取消任务</button>
+        </div>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ TRAJ-01 事件详情 Popover ============ -->
+<section class="frame" id="ix-traj-01">
+  <div class="frame-head">
+    <div class="fnum">TRAJ-01</div>
+    <div>
+      <h2>事件详情 Popover · /chat/:sessionId/trajectory（360）</h2>
+      <p>树形事件流节点点击弹出事件详情：事件类型徽标 + seq + 时间戳 + payload JSON（mono 折叠/展开）+ 关联工具调用与成本标注，可一键跳回消息流对应位置。</p>
+      <div class="jumps">
+        <span class="jump-chip">触发：树形事件流节点点击</span>
+        <span class="jump-chip">跳到消息流 <svg><use href="#i-arrow-r"/></svg> /chat/:id（定位该消息）</span>
+        <span class="jump-chip">端点：api/01 §5.2 sessions 轨迹端点</span>
+      </div>
+    </div>
+  </div>
+  <div class="browser"><div class="bbar"><span class="bdot" style="background:#ff5f57"></span><span class="bdot" style="background:#febc2e"></span><span class="bdot" style="background:#28c840"></span><span class="burl">ontology.local/chat/s-9107/trajectory</span></div>
+    <div class="app" style="position:relative;overflow:hidden">
+      <aside class="sb" style="opacity:.5">
+        <div class="sb-brand"><span class="sb-logo"><svg><use href="#i-cube"/></svg></span><b>ontology-agent</b></div>
+        <a class="sb-item active"><svg><use href="#i-chat"/></svg>对话</a>
+        <a class="sb-item"><svg><use href="#i-branch"/></svg>轨迹回放</a>
+      </aside>
+      <div class="main" style="opacity:.55">
+        <div class="topbar"><span class="tb-title">轨迹回放 · 梳理 3 号机组停电影响范围</span>
+          <div class="tb-actions"><span class="chipmodel">42 事件 · 2 分叉点</span></div></div>
+        <div class="content" style="display:grid;grid-template-columns:1fr 240px;gap:16px;align-items:start">
+          <div class="card traj-wrap" style="padding:0">
+            <div class="traj-controls">
+              <span class="traj-play"><svg><use href="#i-play"/></svg></span>
+              <span class="traj-speed">1.0×</span>
+              <span style="font-size:11px;color:var(--label-3)">回放至 18/42</span>
+            </div>
+            <div class="traj-tree" style="padding:14px 18px">
+              <div><span style="color:var(--indigo)">[系统]</span> 任务模板注入（prompt v12 · 配网检修域）</div>
+              <div><span style="color:var(--orange)">[上下文]</span> L2 记忆召回 1 条 · GraphRAG 路径 2 条</div>
+              <div><span style="color:var(--accent)">[用户]</span> 梳理 3 号机组停役检修的影响范围…</div>
+              <div style="background:var(--accent-soft);border-radius:6px;padding:0 8px;margin:0 -8px"><span style="color:var(--teal)">[工具]</span> knowledge.search(local) → 6 实体 / 842ms <span class="badge b-blue" style="font-size:9px;padding:1px 6px">查看中</span></div>
+              <div class="branch">├─ 子Agent · 影响用户清单 ×2 → 完成（各 4 事件）</div>
+              <div class="branch">└─ 规则命中：停役联络 = 短时倒供</div>
+              <div><span style="color:var(--teal)">[工具]</span> ontology.validate → SHACL 0 违规</div>
+              <div><span style="color:var(--accent)">[助手]</span> 流式回复 218 tokens · 引用 3 条</div>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-h"><h3>来源过滤</h3></div>
+            <div style="display:flex;flex-direction:column;gap:8px;font-size:12px">
+              <label class="fcheck"><input type="checkbox" checked><span class="box"><svg><use href="#i-check"/></svg></span>系统（3）</label>
+              <label class="fcheck"><input type="checkbox" checked><span class="box"><svg><use href="#i-check"/></svg></span>用户（4）</label>
+              <label class="fcheck"><input type="checkbox" checked><span class="box"><svg><use href="#i-check"/></svg></span>工具（9）</label>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="popover" style="position:absolute;left:520px;top:186px;width:360px;z-index:5">
+        <div class="p-title"><span class="badge" style="background:var(--teal-soft);color:var(--teal)">工具</span><span class="mono" style="font-size:12px">knowledge.search</span><span class="badge b-gray" style="margin-left:auto">seq #05</span></div>
+        <div style="margin-top:6px">
+          <div class="kv"><span class="k">时间戳</span><span class="v mono">2026-09-26 14:32:05.412</span></div>
+          <div class="kv"><span class="k">耗时 / 成本</span><span class="v mono">842ms · ¥0.0082（1.2k tokens）</span></div>
+          <div class="kv"><span class="k">关联消息</span><span class="v">m-18 · 助手回复引用其结果（3 条证据）</span></div>
+        </div>
+        <div class="think" style="margin-top:10px">
+          <div class="think-h"><svg><use href="#i-code"/></svg>payload JSON<span class="tmr">已展开 · 点击折叠</span></div>
+          <div class="think-b" style="font-family:var(--mono);font-size:11px;line-height:1.8;color:var(--label)">{ "query": "3号机组 停电 影响范围",<br>&nbsp;&nbsp"mode": "local", "top_k": 6,<br>&nbsp;&nbsp"hits": 6,<br>&nbsp;&nbsp"entities": ["馈线F12", "3号机组", "重要用户"] }</div>
+        </div>
+        <div class="p-acts">
+          <button class="btn btn-g btn-sm"><svg><use href="#i-copy"/></svg>复制 payload</button>
+          <button class="btn btn-p btn-sm">跳到消息流<svg><use href="#i-arrow-r"/></svg></button>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ TRAJ-02 分叉恢复确认 ============ -->
+<section class="frame" id="ix-traj-02">
+  <div class="frame-head">
+    <div class="fnum">TRAJ-02</div>
+    <div>
+      <h2>分叉恢复确认 · /chat/:sessionId/trajectory（Modal 480）</h2>
+      <p>树形事件流「从此事件恢复」：说明将创建新分支、原分支树形保留不丢失，后续事件自该事件重放；新分支命名后确认，回到对话页分支态。</p>
+      <div class="jumps">
+        <span class="jump-chip">触发：树形事件流「从此事件恢复」</span>
+        <span class="jump-chip">恢复 <svg><use href="#i-arrow-r"/></svg> /chat/:id（分支态）</span>
+        <span class="jump-chip">端点：api/01 §5.2 sessions 分支端点</span>
+      </div>
+    </div>
+  </div>
+  <div class="browser"><div class="bbar"><span class="bdot" style="background:#ff5f57"></span><span class="bdot" style="background:#febc2e"></span><span class="bdot" style="background:#28c840"></span><span class="burl">ontology.local/chat/s-9107/trajectory?fork=evt-12</span></div>
+    <div class="app" style="position:relative;overflow:hidden">
+      <aside class="sb" style="opacity:.4">
+        <div class="sb-brand"><span class="sb-logo"><svg><use href="#i-cube"/></svg></span><b>ontology-agent</b></div>
+        <a class="sb-item active"><svg><use href="#i-chat"/></svg>对话</a>
+        <a class="sb-item"><svg><use href="#i-branch"/></svg>轨迹回放</a>
+      </aside>
+      <div class="main" style="opacity:.5">
+        <div class="topbar"><span class="tb-title">轨迹回放 · 梳理 3 号机组停电影响范围</span>
+          <div class="tb-actions"><span class="chipmodel">42 事件 · 2 分叉点</span></div></div>
+        <div class="content">
+          <div class="card traj-wrap" style="padding:0">
+            <div class="traj-tree" style="padding:14px 18px">
+              <div><span style="color:var(--accent)">[用户]</span> 梳理 3 号机组停役检修的影响范围…</div>
+              <div style="background:var(--accent-soft);border-radius:6px;padding:0 8px;margin:0 -8px"><span style="color:var(--teal)">[工具]</span> knowledge.search 完成 · seq #12 <span class="badge b-blue" style="font-size:9px;padding:1px 6px">分叉点</span></div>
+              <div class="branch">└─ <button class="btn btn-s btn-sm" style="padding:1px 10px;font-size:11px"><svg><use href="#i-branch"/></svg>从此事件恢复</button></div>
+              <div><span style="color:var(--teal)">[工具]</span> ontology.validate → SHACL 0 违规</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-mask"><div class="modal" style="width:480px">
+        <div class="m-head">
+          <span class="m-ic" style="background:var(--accent-soft);color:var(--accent)"><svg><use href="#i-branch"/></svg></span>
+          <div><div class="m-title">从此事件恢复会话</div>
+            <div class="m-desc">将自事件 seq #12（knowledge.search 完成后）创建新分支并恢复对话。</div></div>
+        </div>
+        <div style="border:1px solid var(--separator);border-radius:10px;padding:2px 12px;margin-bottom:12px">
+          <div class="fold-row"><svg style="color:var(--accent)"><use href="#i-branch"/></svg>原分支（主）完整保留 · 树形可回溯，不删除任何事件</div>
+          <div class="fold-row"><svg style="color:var(--accent)"><use href="#i-refresh"/></svg>新分支自 seq #12 重放，后续事件重新生成</div>
+          <div class="fold-row"><svg><use href="#i-doc"/></svg>分叉动作写入会话事件流与审计（操作者 · 时间）</div>
+        </div>
+        <div class="field">
+          <label class="field-label">新分支命名</label>
+          <input class="input" value="停电影响复盘 · 基于事件 12">
+          <div class="fhint">留空将自动命名「分支 · 2026-09-26 14:47」；命名用于会话列表与轨迹树标识。</div>
+        </div>
+        <div class="m-acts">
+          <button class="btn btn-g">取消</button>
+          <button class="btn btn-p"><svg><use href="#i-branch"/></svg>创建分支并恢复</button>
+        </div>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+  <p style="text-align:center;margin-top:64px;font-size:11px;color:var(--label-3);line-height:1.8">
+    ontology-agent 交互态画板 · 对话 / 任务 / 轨迹回放（IX-CHT-01~07 · IX-TSK-01~04 · IX-TRAJ-01~02，共 13 框）<br>
+    依据 <a href="../../架构设计/26-前端页面交互态详细设计.md" style="color:var(--accent)">docs/架构设计/26 篇 §4 矩阵</a> · <a href="../index.html" style="color:var(--accent)">← 设计稿入口</a> · <a href="../ui-pages.html" style="color:var(--accent)">页面主视图画板</a> · <a href="../components.html" style="color:var(--accent)">组件库</a>
+  </p>
+</div>
+
+<script>
+const io = new IntersectionObserver(es => es.forEach(e => {
+  if (e.isIntersecting) { e.target.classList.add('in-view'); io.unobserve(e.target); }
+}), {threshold: .12});
+document.querySelectorAll('.frame').forEach(f => io.observe(f));
+const _toggle = document.querySelector('.theme-btn');
+_toggle.addEventListener('click', () => {
+  document.documentElement.classList.add('theme-fading');
+  setTimeout(() => document.documentElement.classList.remove('theme-fading'), 300);
+});
+</script>
+</body>
+</html>

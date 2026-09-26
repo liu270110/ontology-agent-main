@@ -1,0 +1,85 @@
+/* =============================================================
+   组合模式层 v1.2 —— 命令面板 / 时间线 / 轨迹 / 终端卡 / 上传区 /
+   批量操作条 / 空态 / 证据链 / 差异行（24 篇 §3 组件的样式基座）
+   ============================================================= */
+/* ---- CommandPalette（⌘K，借鉴 Linear，玻璃面板） ---- */
+.cmdk{border-radius:16px;overflow:hidden}
+.cmdk-input{display:flex;align-items:center;gap:8px;padding:12px 14px;border-bottom:1px solid var(--separator)}
+.cmdk-input svg{width:14px;height:14px;color:var(--label-3)}
+.cmdk-list{max-height:280px;overflow:auto;padding:6px}
+.cmdk-group{font-size:10px;font-weight:700;color:var(--label-3);letter-spacing:.5px;padding:8px 8px 4px}
+.cmdk-item{display:flex;align-items:center;gap:9px;padding:8px 10px;border-radius:9px;
+  font-size:13px;color:var(--label);cursor:pointer}
+.cmdk-item svg{width:14px;height:14px;color:var(--label-2)}
+.cmdk-item.on,.cmdk-item.on svg{background:var(--accent-soft);color:var(--accent)}
+.cmdk-item .sub{margin-left:auto;font-size:11px;color:var(--label-3)}
+
+/* ---- 时间线（借鉴 Geist：左轨 + 状态点 + 相对时间） ---- */
+.tl{position:relative;padding-left:22px}
+.tl::before{content:"";position:absolute;left:5px;top:6px;bottom:6px;width:2px;border-radius:1px;background:var(--separator)}
+.tl-item{position:relative;padding:0 0 18px}
+.tl-dot{position:absolute;left:-22px;top:4px;width:12px;height:12px;border-radius:50%;
+  border:2.5px solid var(--surface);box-shadow:0 0 0 1.5px var(--separator)}
+.tl-c{background:var(--surface);border-radius:13px;padding:11px 14px;box-shadow:var(--sh-card);
+  font-size:12.5px;line-height:1.55;color:var(--label)}
+.tl-c.invalid .tlt{text-decoration:line-through;color:var(--label-2)}
+.tl-meta{display:flex;gap:8px;align-items:center;margin-top:7px;font-size:10.5px;color:var(--label-2)}
+
+/* ---- 轨迹视图（借鉴 DSH Trajectory：来源着色 + mono） ---- */
+.traj-item{display:flex;gap:8px;align-items:flex-start;padding:6px 0;font-family:var(--mono);
+  font-size:11px;line-height:1.5;border-bottom:1px solid var(--separator);color:var(--label)}
+.traj-item:last-child{border-bottom:none}
+.traj-badge{flex:none;font-size:9px;font-weight:700;border-radius:4px;padding:1px 5px;margin-top:1px}
+.traj-badge.system{background:var(--indigo-soft);color:var(--src-system)}
+.traj-badge.user{background:var(--accent-soft);color:var(--src-user)}
+.traj-badge.tool{background:var(--teal-soft);color:var(--src-tool)}
+.traj-badge.subagent{background:var(--purple-soft);color:var(--src-subagent)}
+.traj-badge.context{background:var(--orange-soft);color:var(--src-context)}
+
+/* ---- 终端命令卡（借鉴 DSH 官网） ---- */
+.term{background:var(--surface-2);border:1px solid var(--separator);border-radius:12px;
+  padding:12px 14px;display:flex;align-items:center;gap:10px;
+  font-family:var(--mono);font-size:12px;color:var(--label)}
+.term .ps{color:var(--label-3);user-select:none}
+.term .term-copy{margin-left:auto;color:var(--label-3);opacity:0;transition:opacity .15s var(--ease);cursor:pointer}
+.term:hover .term-copy{opacity:1}
+
+/* ---- 上传区（借鉴 TDesign） ---- */
+.upzone{border:1.5px dashed var(--separator);border-radius:14px;padding:20px 14px;text-align:center;
+  color:var(--label-2);font-size:12px;background:var(--surface-2);transition:.18s var(--ease)}
+.upzone:hover,.upzone.drag{border-color:var(--accent);background:var(--accent-soft)}
+
+/* ---- 批量操作浮条（玻璃 Regular 胶囊，弹簧出现） ---- */
+.batchbar{position:sticky;bottom:16px;display:flex;align-items:center;gap:8px;justify-content:center;
+  border-radius:var(--r-pill);padding:8px 16px;font-size:12px;color:var(--label);
+  background:linear-gradient(135deg,var(--glass-tint),transparent 42%),var(--glass-regular);
+  -webkit-backdrop-filter:blur(24px) saturate(200%);backdrop-filter:blur(24px) saturate(200%);
+  border:1px solid var(--glass-border);
+  box-shadow:inset 0 1px 0 var(--glass-hi),var(--sh-float)}
+@media (prefers-reduced-motion:no-preference){
+  .batchbar{animation:batchbar-in .35s var(--spring)}
+  @keyframes batchbar-in{from{transform:translateY(16px) scale(.96);opacity:0}to{transform:none;opacity:1}}
+}
+
+/* ---- 证据链 / 差异行 / 空态 ---- */
+.ev-chip{display:inline-flex;align-items:center;gap:4px;font-size:10px;font-weight:600;
+  color:var(--accent);background:var(--accent-soft);border-radius:var(--r-pill);padding:3px 9px;
+  font-family:var(--mono);cursor:pointer}
+.ev-chip svg{width:9px;height:9px}
+.diffline{font-family:var(--mono);font-size:11px;padding:2px 8px;border-radius:5px;line-height:1.7}
+.diffline.add{background:var(--green-soft);color:var(--green)}
+.diffline.del{background:var(--red-soft);color:var(--red)}
+.empty{display:flex;flex-direction:column;align-items:center;gap:6px;padding:40px 20px;text-align:center}
+.empty svg{width:28px;height:28px;color:var(--label-3)}
+.empty .t{font-size:14px;font-weight:600;color:var(--label)}
+.empty .d{font-size:12px;color:var(--label-2)}
+.empty .acts{display:flex;gap:8px;margin-top:8px}
+
+/* ---- 计量条 / 键位 / 骨架 ---- */
+.meter{height:6px;border-radius:3px;background:rgba(0,0,0,.06);overflow:hidden}
+.dark .meter{background:rgba(255,255,255,.1)}
+.meter i{display:block;height:100%;border-radius:3px;background:var(--accent)}
+.meter.warn i{background:var(--orange)}
+.meter.bad i{background:var(--red)}
+.kbd{font-family:var(--mono);font-size:10px;border:1px solid var(--separator);border-bottom-width:2px;
+  border-radius:5px;padding:1px 5px;color:var(--label-2);background:var(--surface-2)}

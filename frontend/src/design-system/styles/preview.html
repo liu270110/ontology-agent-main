@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>样式库预览 · frontend/src/design-system/styles</title>
+<!-- 直接加载真实样式库（冒烟验收：改动任一 css 后打开本页核对） -->
+<link rel="stylesheet" href="./index.css">
+<style>
+  body{font-family:var(--font);background:var(--bg);color:var(--label);-webkit-font-smoothing:antialiased;
+    max-width:1080px;margin:0 auto;padding:32px 24px 80px;font-size:14px}
+  h1{font-size:24px;font-weight:700;letter-spacing:-.4px;margin-bottom:4px}
+  .sub{font-size:12px;color:var(--label-2);margin-bottom:24px}
+  h2{font-size:15px;font-weight:700;margin:28px 0 12px}
+  .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px}
+</style>
+</head>
+<body>
+<h1>样式库预览</h1>
+<p class="sub">frontend/src/design-system/styles · 令牌 → 玻璃 → 基元 → 模式 → 工具类 · 亮暗切换：<button class="btn btn-g btn-sm" onclick="document.documentElement.classList.toggle('dark')">切换亮 / 暗</button></p>
+
+<h2>按钮 Buttons</h2>
+<div class="row">
+  <button class="btn btn-p">新建本体</button><button class="btn btn-s">导入文档</button>
+  <button class="btn btn-g">取消</button><button class="btn btn-d">删除项目</button>
+  <button class="btn btn-gl">玻璃操作</button><button class="btn btn-gl-p">玻璃主操作</button>
+  <button class="btn btn-dis">已禁用</button>
+</div>
+
+<h2>输入 / 徽标 / 分段</h2>
+<div class="grid">
+  <div class="card">
+    <div class="field"><label class="field-label">实体类型名称</label><input class="input" placeholder="Standard"></div>
+    <div class="field" style="margin:0"><label class="field-label">校验失败态</label><input class="input err" value="Standrd"><div class="field-err">术语唯一性校验失败：已存在近似术语 Standard（0.96）</div></div>
+  </div>
+  <div class="card">
+    <div class="row" style="margin-bottom:14px">
+      <span class="badge b-green">已发布</span><span class="badge b-orange">审核中</span>
+      <span class="badge b-red">已驳回</span><span class="badge b-blue">官方认证</span>
+      <span class="badge b-purple">重型本体</span><span class="badge b-gray">草稿</span>
+    </div>
+    <div class="row" style="margin-bottom:14px">
+      <div class="seg"><button class="seg-btn on">全部</button><button class="seg-btn">已发布</button><button class="seg-btn">草稿</button></div>
+    </div>
+    <div class="row"><span class="dot d-green"></span><span class="dot d-orange"></span><span class="dot d-red"></span><span class="kbd">⌘</span><span class="kbd">K</span><span class="ev-chip">GB/T 31486-2024 · §6.2.3</span></div>
+  </div>
+</div>
+
+<h2>玻璃材质（控制/导航层专用）</h2>
+<div class="row">
+  <div class="glass" style="border-radius:var(--r-card);padding:14px 18px;width:300px">
+    <b style="font-size:13px">Regular 面板</b><p class="text-dim" style="font-size:12px;margin-top:4px">侧边栏 / 顶栏 / 对话框 / 输入栏</p>
+  </div>
+  <div class="glass-clear" style="border-radius:var(--r-pill);padding:10px 16px;display:flex;gap:8px;align-items:center">
+    <span class="text-dim" style="font-size:12px">Clear 悬浮工具条</span><button class="btn btn-p btn-sm">运行</button>
+  </div>
+  <div class="term"><span class="ps">$</span><span>oa ontology validate battery-std</span><span class="term-copy">复制</span></div>
+</div>
+
+<h2>模式：命令面板 / 数据表 / 轨迹 / 时间线</h2>
+<div class="grid">
+  <div class="glass cmdk">
+    <div class="cmdk-input"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="11" cy="11" r="6.5"/><path d="m20 20-4.4-4.4"/></svg>
+      <span class="text-faint" style="font-size:13px">搜索页面、本体类、工具…</span></div>
+    <div class="cmdk-list">
+      <div class="cmdk-group">页面</div>
+      <div class="cmdk-item on">本体工作台 · 动力电池标准本体<span class="sub">↵</span></div>
+      <div class="cmdk-item">抽取审核台 · 待审 41<span class="sub">G R</span></div>
+      <div class="cmdk-group">操作</div>
+      <div class="cmdk-item">新建对话<span class="sub">⌘ N</span></div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="traj-item"><span class="traj-badge system">系统</span><span class="text-dim">任务模板已注入（prompt v12）</span></div>
+    <div class="traj-item"><span class="traj-badge user">用户</span><span>对比 31486 与 36276…</span></div>
+    <div class="traj-item"><span class="traj-badge tool">工具</span><span class="text-dim">knowledge.search → 6 实体</span></div>
+    <div class="traj-item"><span class="traj-badge subagent">子Agent</span><span class="text-dim">条款抽取并行 ×2</span></div>
+    <div class="traj-item"><span class="traj-badge context">上下文</span><span class="text-dim">L2 记忆召回 1 条</span></div>
+    <div style="margin-top:12px">
+      <div class="text-dim" style="font-size:11px;margin-bottom:5px">Token 预算</div>
+      <div class="meter" style="height:8px"><i style="width:62%"></i></div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="tl">
+      <div class="tl-item"><span class="tl-dot" style="background:var(--green)"></span>
+        <div class="tl-c" style="padding:8px 12px">版本 v1.4.0 发布 · SHACL 0 违规<div class="tl-meta">8 分钟前</div></div></div>
+      <div class="tl-item" style="padding-bottom:0"><span class="tl-dot" style="background:var(--orange)"></span>
+        <div class="tl-c" style="padding:8px 12px">CL-014 变更请求待审<div class="tl-meta">1 小时前</div></div></div>
+    </div>
+    <div class="diffline del" style="margin-top:12px">- gb:CycleLife500 rdfs:label "500次循环寿命"</div>
+    <div class="diffline add">+ gb:CycleLife rdfs:label "循环寿命"</div>
+  </div>
+</div>
+
+<h2>步骤条 / 上传 / 批量条 / 空态</h2>
+<div class="card">
+  <div class="steps" style="margin-bottom:16px">
+    <div class="step done"><span class="s-dot">✓</span><span class="s-name">预处理</span></div>
+    <div class="step done"><span class="s-dot">✓</span><span class="s-name">批量抽取</span></div>
+    <div class="step cur"><span class="s-dot"></span><span class="s-name">人工归档</span></div>
+  </div>
+  <div class="upzone">拖拽文件到此处，或 <span style="color:var(--accent);font-weight:600">浏览</span></div>
+  <div class="empty" style="padding:24px">
+    <span class="t">还没有本体项目</span><span class="d">从一份领域文档开始，七步构建可推理的业务本体</span>
+    <div class="acts"><button class="btn btn-p btn-sm">新建本体项目</button><button class="btn btn-g btn-sm">导入文档</button></div>
+  </div>
+  <!-- 生产用法：置于滚动容器内 position:sticky 吸底；此处静态演示外观 -->
+  <div class="batchbar" style="position:static;margin-top:14px">已选 <b>1</b> 项<button class="btn btn-p btn-sm">批量通过</button><button class="btn btn-g btn-sm">驳回</button></div>
+</div>
+
+<p class="sub" style="margin-top:32px">样式库 v1.2 · 全部类名与设计稿画板同源 · 验收：23 篇 DoD · 详见 docs/架构设计/24 篇</p>
+</body>
+</html>

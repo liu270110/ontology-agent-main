@@ -1,0 +1,95 @@
+/* =============================================================
+   基元样式层 v1.2 —— 按钮 / 输入 / 徽标 / 分段 / 表格 / 状态点 / 步骤条
+   与设计稿画板同名同源；React 基元组件（shadcn 定制）组合这些类
+   ============================================================= */
+/* ---- 按钮 ---- */
+.btn{display:inline-flex;align-items:center;gap:6px;font-family:var(--font);
+  font-size:13px;font-weight:600;border:none;cursor:pointer;
+  border-radius:var(--r-pill);padding:7px 16px;letter-spacing:0;
+  transition:transform .18s var(--ease),box-shadow .18s var(--ease)}
+.btn:hover{transform:translateY(-1px);box-shadow:var(--sh-card)}
+.btn:active{transform:translateY(0);box-shadow:none}
+.btn svg{width:13px;height:13px}
+.btn-p{background:var(--accent);color:#fff}
+.btn-s{background:var(--accent-soft);color:var(--accent)}
+.btn-g{background:rgba(0,0,0,.05);color:var(--label)}
+.dark .btn-g{background:rgba(255,255,255,.1)}
+.btn-d{background:var(--red-soft);color:var(--red)}
+.btn-dis{background:rgba(0,0,0,.04);color:var(--label-3);cursor:not-allowed!important;transform:none!important;box-shadow:none!important}
+.dark .btn-dis{background:rgba(255,255,255,.06)}
+.btn-sm{font-size:12px;padding:4px 12px}
+:focus-visible{outline:none;box-shadow:0 0 0 3px var(--accent-soft);border-color:var(--accent)}
+
+/* ---- 输入 ---- */
+.field{margin-bottom:14px}
+.field-label{display:block;font-size:12px;font-weight:600;color:var(--label-2);margin-bottom:6px}
+.input{width:100%;height:38px;padding:0 12px;font-family:var(--font);font-size:13px;color:var(--label);
+  background:var(--surface);border:1px solid var(--separator);border-radius:var(--r-ctl);
+  outline:none;transition:border-color .18s var(--ease),box-shadow .18s var(--ease)}
+.input::placeholder{color:var(--label-3)}
+.input:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.input.err{border-color:var(--red);box-shadow:0 0 0 3px var(--red-soft)}
+.field-err{font-size:11px;color:var(--red);margin-top:5px}
+
+/* ---- 徽标 / 状态点 ---- */
+.badge{display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:600;
+  border-radius:var(--r-pill);padding:2px 9px}
+.b-green{background:var(--green-soft);color:var(--green)}
+.b-orange{background:var(--orange-soft);color:var(--orange)}
+.b-red{background:var(--red-soft);color:var(--red)}
+.b-blue{background:var(--accent-soft);color:var(--accent)}
+.b-purple{background:var(--purple-soft);color:var(--purple)}
+.b-gray{background:rgba(0,0,0,.05);color:var(--label-2)}
+.dark .b-gray{background:rgba(255,255,255,.09)}
+.dot{width:8px;height:8px;border-radius:50%;flex:none}
+.d-green{background:var(--green)} .d-orange{background:var(--orange)}
+.d-red{background:var(--red)} .d-blue{background:var(--accent)}
+
+/* ---- 分段控件（macOS 样式） ---- */
+.seg{display:inline-flex;background:rgba(0,0,0,.05);border-radius:9px;padding:2px;gap:2px}
+.dark .seg{background:rgba(255,255,255,.08)}
+.seg-btn{border:none;background:transparent;font-family:var(--font);font-size:12px;font-weight:500;
+  color:var(--label-2);padding:5px 14px;border-radius:7px;cursor:pointer;transition:.18s var(--ease)}
+.seg-btn.on{background:var(--surface);color:var(--label);font-weight:600;box-shadow:0 1px 4px rgba(0,0,0,.12)}
+
+/* ---- 卡片 / 面板 ---- */
+.card{background:var(--surface);border-radius:var(--r-card);box-shadow:var(--sh-card);padding:20px 22px}
+.card-h{display:flex;align-items:center;gap:10px;margin-bottom:14px}
+.card-h h3{font-size:15px;font-weight:700;letter-spacing:-.2px}
+.hairline{border:0;border-top:1px solid var(--separator)}
+
+/* ---- 表格（Linear 密度） ---- */
+.tbl{width:100%;border-collapse:collapse;font-size:13px}
+.tbl th{text-align:left;font-size:11px;font-weight:600;color:var(--label-2);
+  padding:8px 10px;border-bottom:1px solid var(--separator)}
+.tbl td{padding:10px;border-bottom:1px solid var(--separator)}
+.tbl tr:last-child td{border-bottom:none}
+.tbl tbody tr{transition:background .12s var(--ease)}
+.tbl tbody tr:hover{background:var(--surface-2)}
+.tbl tr.sel{box-shadow:inset 2px 0 0 var(--accent)}
+
+/* ---- 步骤条（七步流水线） ---- */
+.steps{display:flex;align-items:flex-start}
+.step{display:flex;flex-direction:column;align-items:center;gap:6px;flex:1;position:relative}
+.step::before{content:"";position:absolute;top:9px;left:-50%;width:100%;height:1.5px;background:var(--separator)}
+.step:first-child::before{display:none}
+.step.done::before{background:var(--green)}
+.step.cur::before{background:var(--green)}
+.s-dot{width:18px;height:18px;border-radius:50%;display:flex;align-items:center;justify-content:center;
+  background:var(--surface-2);border:1.5px solid var(--label-3);color:transparent;position:relative;z-index:1}
+.step.done .s-dot{background:var(--green);border-color:var(--green)}
+.step.done .s-dot svg{width:9px;height:9px;color:#fff}
+.step.cur .s-dot{border-color:var(--accent);box-shadow:0 0 0 4px var(--accent-soft)}
+.step.cur .s-dot::after{content:"";width:7px;height:7px;border-radius:50%;background:var(--accent)}
+.s-name{font-size:10px;color:var(--label-2);white-space:nowrap}
+.step.cur .s-name{color:var(--accent);font-weight:700}
+.step.done .s-name{color:var(--label)}
+
+/* ---- Toast ---- */
+.toast{display:flex;align-items:center;gap:10px;max-width:340px;border-radius:var(--r-panel);
+  padding:12px 16px;font-size:13px;font-weight:500;color:var(--label);
+  background:linear-gradient(135deg,var(--glass-tint),transparent 42%),var(--glass-regular);
+  -webkit-backdrop-filter:blur(24px) saturate(200%);backdrop-filter:blur(24px) saturate(200%);
+  border:1px solid var(--glass-border);
+  box-shadow:inset 0 1px 0 var(--glass-hi),var(--sh-float)}
+.toast svg{width:16px;height:16px;color:var(--green);flex:none}

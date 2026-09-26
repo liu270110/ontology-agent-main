@@ -60,7 +60,7 @@
   --mono:"SF Mono","JetBrains Mono",ui-monospace,Consolas,monospace;
 
   /* 布局令牌（03 篇 §2.6：禁止硬编码三栏尺寸） */
-  --sb-w:228px;                              /* 侧边栏 lg 以下 72px / md 抽屉，由实现层切换 */
+  --sb-w:208px;                              /* 侧边栏 lg 以下 72px / md 抽屉，由实现层切换 */
   --topbar-h:52px;
   --edge:rgba(0,0,0,.18);                    /* 图谱连线 */
   color-scheme:light;

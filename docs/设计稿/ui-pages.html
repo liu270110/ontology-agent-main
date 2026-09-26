@@ -59,7 +59,7 @@
       <a href="#p-review">抽取审核</a><a href="#p-kb">知识库</a><a href="#p-explore">图谱</a>
       <a href="#p-memory">记忆</a><a href="#p-agents">Agent</a><a href="#p-market">插件市场</a>
       <a href="#p-tools">工具技能</a><a href="#p-mcp">MCP</a><a href="#p-approve">审批中心</a>
-      <a href="#p-admin">系统</a><a href="#p-responsive">适配</a>
+      <a href="#p-admin">系统</a>
     </nav>
     <button class="theme-btn" onclick="document.documentElement.classList.toggle('dark')">切换亮 / 暗</button>
   </header>
@@ -706,88 +706,6 @@
               <div style="display:flex;flex-direction:column;gap:6px;justify-content:center">
                 <button class="btn btn-p btn-sm">确认执行</button><button class="btn btn-d btn-sm">拒绝</button></div>
             </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  </section>
-<section class="frame" id="p-responsive">
-    <div class="frame-head">
-      <div class="fnum">09</div>
-      <div>
-        <h2>分辨率与窗口适配</h2>
-        <p>Desktop-first 企业工作台：设计基准 <b>1440×900</b>（本画板即此档），最小可用窗口 1024×680；平板（768–1023）全功能布局重组，手机（&lt;768）只保浏览与轻交互（审批/通知/对话/检索）。玻璃固定层 + 内容滚过 = 液态玻璃的最佳展示位。</p>
-        <div class="jumps"><span class="jump-chip">规范全文 <svg><use href="#i-arrow-r"/></svg> 03 篇 §2.6</span><span class="jump-chip">视口矩阵进 CI <svg><use href="#i-arrow-r"/></svg> 22 篇 §4</span></div>
-      </div>
-    </div>
-    <div class="browser"><div class="bbar"><span class="bdot" style="background:#ff5f57"></span><span class="bdot" style="background:#febc2e"></span><span class="bdot" style="background:#28c840"></span><span class="burl">responsive · 1440 / 1280 / 1024 / 768 / 375</span></div>
-      <div style="background:var(--bg);padding:28px;color:var(--label);font-size:13px">
-        <div class="card">
-          <div class="card-h"><h3>断点体系</h3><span class="badge b-gray">Tailwind 4 默认值，集中登记 theme.ts，禁止裸写 @media 数值</span></div>
-          <table class="tbl">
-            <tr><th>档</th><th>视口宽</th><th>布局形态</th><th>侧边栏</th><th>三栏页面行为</th></tr>
-            <tr><td class="mono">2xl</td><td class="mono">≥1536</td><td>内容区 max-w 1440 居中；图谱画布满幅</td><td>展开 228px</td><td>全部展开</td></tr>
-            <tr><td class="mono"><b>xl</b>（基准）</td><td class="mono">1280–1535</td><td>标准三栏 / 双栏</td><td>展开 228px</td><td>全部展开</td></tr>
-            <tr><td class="mono">lg</td><td class="mono">1024–1279</td><td>栏距收紧 32→24</td><td><b>图标条 72px</b>（hover 浮出标签）</td><td>检查器/上下文面板改<b>按钮呼出浮层</b></td></tr>
-            <tr><td class="mono">md</td><td class="mono">768–1023</td><td>双栏→单栏堆叠；表格横滚或卡片化</td><td><b>抽屉化</b>（遮罩 overlay + 汉堡）</td><td>单栏 + 顶部分段切换（会话/消息/上下文）</td></tr>
-            <tr><td class="mono">sm</td><td class="mono">&lt;768</td><td>单列；统计卡 4→2→1；large-title 30→26</td><td>抽屉（默认收起）</td><td>移动浏览形态；专业工作流出引导卡</td></tr>
-          </table>
-        </div>
-        <div class="card" style="margin-top:16px">
-          <div class="card-h"><h3>各档布局形态（工作台示意）</h3><span class="badge b-gray">线框示意 · 实现按 16 篇逐页规格</span></div>
-          <div class="bp-row">
-            <div class="bp-card">
-              <div class="bp-tag"><b>xl</b> · 1280–1535 · 基准</div>
-              <div class="bp-demo">
-                <span class="bp-sb" style="width:24%"></span>
-                <span class="bp-main"><span class="bp-tb"></span>
-                  <span class="bp-body"><span class="bp-blk wide"></span><span class="bp-blk"></span><span class="bp-blk"></span><span class="bp-blk"></span><span class="bp-blk"></span></span></span>
-              </div>
-              <div class="bp-note">三栏全展开；玻璃侧边栏 + 顶栏固定，内容滚过。</div>
-            </div>
-            <div class="bp-card">
-              <div class="bp-tag"><b>lg</b> · 1024–1279</div>
-              <div class="bp-demo">
-                <span class="bp-sb" style="width:9%"></span>
-                <span class="bp-main"><span class="bp-tb"></span>
-                  <span class="bp-body"><span class="bp-blk wide"></span><span class="bp-blk"></span><span class="bp-blk"></span><span class="bp-blk"></span><span class="bp-blk"></span></span></span>
-                <span class="bp-float"></span>
-              </div>
-              <div class="bp-note">侧边栏图标条 72px；右面板改按钮呼出玻璃浮层（右上示意）。</div>
-            </div>
-            <div class="bp-card">
-              <div class="bp-tag"><b>md</b> · 768–1023</div>
-              <div class="bp-demo">
-                <span class="bp-main"><span class="bp-tb" style="position:relative"><span style="position:absolute;left:4px;top:2px;width:10px;height:7px;border-radius:2px;border:1px solid var(--label-3)"></span></span>
-                  <span class="bp-body" style="grid-template-columns:1fr 1fr"><span class="bp-blk wide"></span><span class="bp-blk"></span><span class="bp-blk"></span><span class="bp-blk"></span><span class="bp-blk"></span></span></span>
-                <span class="bp-drawer"></span>
-              </div>
-              <div class="bp-note">侧边栏抽屉化（遮罩 + 汉堡，左示意）；双栏堆叠、面板分段切换。</div>
-            </div>
-            <div class="bp-card">
-              <div class="bp-tag"><b>sm</b> · &lt;768</div>
-              <div class="bp-demo">
-                <span class="bp-main"><span class="bp-tb" style="position:relative"><span style="position:absolute;left:4px;top:2px;width:10px;height:7px;border-radius:2px;border:1px solid var(--label-3)"></span></span>
-                  <span class="bp-body" style="grid-template-columns:1fr"><span class="bp-blk wide"></span><span class="bp-blk"></span><span class="bp-blk"></span></span></span>
-              </div>
-              <div class="bp-note">单列浏览：审批 / 通知 / 对话 / 检索；建模与审核出"请用桌面端"引导卡。</div>
-            </div>
-          </div>
-        </div>
-        <div class="grid2" style="margin-top:16px;grid-template-columns:1.25fr 1fr;align-items:start">
-          <div class="card">
-            <div class="card-h"><h3>三栏折叠优先级（全平台一致）</h3></div>
-            <div class="fold-row"><b>对话页</b><span class="badge b-orange">① 会话列表 → 图标/抽屉</span><svg style="width:11px;height:11px;color:var(--label-3)"><use href="#i-arrow-r"/></svg><span class="badge b-orange">② 上下文面板 → 浮层/Sheet</span><svg style="width:11px;height:11px;color:var(--label-3)"><use href="#i-arrow-r"/></svg><span class="badge b-green">消息流 永在</span></div>
-            <div class="fold-row"><b>本体工作台</b><span class="badge b-orange">① 检查器 → 浮出</span><svg style="width:11px;height:11px;color:var(--label-3)"><use href="#i-arrow-r"/></svg><span class="badge b-orange">② 类树 → 抽屉</span><svg style="width:11px;height:11px;color:var(--label-3)"><use href="#i-arrow-r"/></svg><span class="badge b-green">图谱画布 最后收缩（满幅）</span></div>
-            <div class="fold-row"><b>抽取审核台</b><span class="badge b-orange">① 候选队列 → 下拉选择</span><svg style="width:11px;height:11px;color:var(--label-3)"><use href="#i-arrow-r"/></svg><span class="badge b-green">原文/结构 sm 堆叠</span></div>
-          </div>
-          <div class="card">
-            <div class="card-h"><h3>视口测试矩阵与浏览器</h3></div>
-            <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">
-              <span class="ev-chip">1440</span><span class="ev-chip">1280</span><span class="ev-chip">1024</span><span class="ev-chip">768</span><span class="ev-chip">375</span>
-              <span class="badge b-gray">×</span><span class="badge b-gray">亮</span><span class="badge b-gray">暗</span>
-            </div>
-            <p style="font-size:12px;color:var(--label-2);line-height:1.7">Playwright 视口矩阵截图入 CI（22 篇 §4）。浏览器：Chrome/Edge ≥100、Firefox ≥100、Safari ≥16（backdrop-filter 全支持，液态玻璃无降级）；最小可用窗口 <b>1024×680</b>；支持系统缩放 100%/125%/150%，关键尺寸走令牌（--sb-w）不硬编码。</p>
           </div>
         </div>
       </div>

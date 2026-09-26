@@ -170,11 +170,13 @@ HTTP/1.1 403 Forbidden
 | GET | /sessions/{id}/events | SSE 订阅 / 断线重连（Last-Event-ID，协议见 02 篇） | session:chat | 200（流） | 4301 |
 | POST | /sessions/{id}/cancel | 取消运行中任务 | session:write | 202 | 4102 |
 | POST | /sessions/{id}/close | 关闭会话（触发 L1 归档与 L2 沉淀；2026-09-26 按下方裁决注记补录） | session:write | 202 | 4101 |
-| PATCH | /sessions/{id} | 会话元信息更新（重命名/置顶/标签；**不含归档**——生命周期迁移唯一入口=close；2026-09-26 预登记，25 篇 F-04/X11） | session:write | 200 | 404*、3001 |
+| PATCH | /sessions/{id} | 会话元信息更新（重命名/置顶/标签/群聊 `routing` 切换；**不含归档**——生命周期迁移唯一入口=close；2026-09-26 预登记，25 篇 F-04/X11、27 篇 F-17） | session:write | 200 | 404*、3001 |
 | POST | /sessions/{id}/messages/{mid}/branch | 从指定消息分叉并重生成（**编辑消息=分叉**语义，非原地改写；25 篇 F-03/X3，P0） | session:chat | 202 | 404*、4102 |
 | PUT | /sessions/{id}/knowledge | 会话级知识库挂载（覆盖式更新挂载集合，检索收敛至挂载库；25 篇 F-05/X4） | session:write | 200 | 404*、3001 |
 | POST | /sessions/{id}/share | 创建只读分享快照（body: expires_in / watermark；25 篇 F-07/X5） | session:share | 201 | 404*、409* |
 | DELETE | /sessions/{id}/share | 撤销分享（快照即失效） | session:share | 204 | 404* |
+| POST | /sessions/{id}/members | 群聊成员添加（body: members[]{slot_id,display_name,system_prompt,model,routing_role}；27 篇 F-17/X15） | session:write | 201 | 404*、409* |
+| PATCH/DELETE | /sessions/{id}/members/{mid} | 成员更新/暂停（PATCH）与移除（DELETE） | session:write | 200 / 204 | 404* |
 | GET ★ | /tasks | 任务列表（分页，按 `session_id` / `status` / `type` 过滤） | session:read | 200 | — |
 | GET ★ | /tasks/{task_id} | 任务详情（状态 / 用量 / 成本，Agent §6.2） | session:read | 200 | 404* |
 | GET ★ | /tasks/{task_id}/events | 任务事件时间线（task_events 按 seq 回放：`Accept: text/event-stream` 订阅 SSE，或 JSON 游标分页） | session:read | 200（流）/ 200 | 404*、4301 |
@@ -182,7 +184,7 @@ HTTP/1.1 403 Forbidden
 
 > 已裁决（2026-09-26，参照 OpenAI 惯例 + 设计意图）：二者语义分立共存——`POST /sessions/{id}/close`=状态迁移（会话所有者，触发归档与 L2 沉淀）；`DELETE /sessions/{id}`=管理员软删已归档会话（清理语义，需 `session:admin`）。本表补录 close 行：`| POST | /sessions/{id}/close | 关闭会话（触发 L1 归档与 L2 沉淀） | session:write | 202 | 4101 |`。
 
-> 预登记（2026-09-26，[25 篇](../架构设计/25-前端页面功能缺口对标与任务清单.md)对标缺口，契约先行）：上表 PATCH / branch / knowledge / share 五行为契约预登记，实现随 F-03~F-07 排期；`POST /sessions` 请求体补两个**向后兼容可选字段**：`ephemeral`（临时会话标记：不进历史检索、不产生 L2 候选沉淀，审计照写，F-06）、`effort`（思考档位初值 off|low|medium|high，F-02，档位变化写审计）。新增 scope `session:share` 在 11 篇 §2 Permission 字典登记，并回填本篇 §5 导语与 08 篇 §2.3 动作集枚举（X6/X7 同批）；`PATCH /sessions/{id}` 仅元信息、与 close/DELETE 三者关系=元信息/生命周期迁移/管理员清理，互不重叠。
+> 预登记（2026-09-26，[25 篇](../架构设计/25-前端页面功能缺口对标与任务清单.md)对标缺口，契约先行）：上表 PATCH / branch / knowledge / share 五行为契约预登记，实现随 F-03~F-07 排期；`POST /sessions` 请求体补两个**向后兼容可选字段**：`ephemeral`（临时会话标记：不进历史检索、不产生 L2 候选沉淀，审计照写，F-06）、`effort`（思考档位初值 off|low|medium|high，F-02，档位变化写审计）。新增 scope `session:share` 在 11 篇 §2 Permission 字典登记，并回填本篇 §5 导语与 08 篇 §2.3 动作集枚举（X6/X7 同批）；`PATCH /sessions/{id}` 仅元信息、与 close/DELETE 三者关系=元信息/生命周期迁移/管理员清理，互不重叠。**群聊扩展（2026-09-26 第二批预登记，[27 篇](./27-Agent群聊与工作流编排设计.md)）**：`POST /sessions` body 再补三个可选字段 `type=single\|group`（默认 single）、`members[]`（成员=Agent 插槽实例：slot_id/display_name/system_prompt/model/routing_role）、`routing=mention\|round_robin\|all\|orchestrator`（发言编排四模式，前三种确定性路由、协调者为唯一 LLM 路由且写审计）；MESSAGE_* SSE 事件补 `agent_id`（挂账 02-SSE 协议篇，X15）。
 
 ### 5.3 ontology（routers/ontology.py）
 
@@ -333,6 +335,36 @@ HTTP/1.1 403 Forbidden
 | POST | /permission-requests | 提交权限申请（body: resource/action/reason；生成审批工单=**第六类对象**，权威=11 篇 §6；25 篇 F-11/X7） | 认证后（无额外 scope） | 202 | 3001、409* |
 | GET | /permission-requests | 申请列表（`?role=mine\|approvable`） | review:read | 200 | — |
 
+### 5.11 workflows（routers/workflows.py，2026-09-26 预登记）
+
+> 来源：[27 篇](./27-Agent群聊与工作流编排设计.md) P15（工作流编排）。契约预登记，实现随 X16 工作流引擎排期；scope `workflow:read/run/edit/publish` 挂账 11 篇 §2/§3。工作流版本不可变；发布在 team/enterprise 档走 `workflow_publish` 审批（第七类对象候选，11 篇裁决）。
+
+| 方法 | 路径 | 用途 | 所需 scope | 成功码 | 主要错误码 |
+| ---- | ---- | ---- | ---- | ---- | ---- |
+| GET | /workflow-templates | 工作流模板列表（画框"从模板新建"承载，27 篇 §3） | workflow:read | 200 | — |
+| GET/POST | /workflows | 工作流列表/新建草稿（节点图 JSON：八类节点，27 篇 §3） | workflow:read / workflow:edit | 200 / 201 | 3001 |
+| GET/PUT/DELETE | /workflows/{id} | 详情/更新草稿/删除（仅草稿可改；已发布版本不可变） | workflow:read / workflow:edit | 200 / 200 / 204 | 404*、409* |
+| POST | /workflows/{id}/versions | 提交发布（校验 DAG 无环+节点参数完备 → 生成不可变版本；治理档位分流审批） | workflow:publish | 202 | 3001、409* |
+| GET | /workflows/{id}/versions | 版本历史 | workflow:read | 200 | 404* |
+| POST | /workflows/{id}/rollback | 回滚（以目标版本新建草稿，复用画框 25 交互模式） | workflow:edit | 202 | 404* |
+| POST | /workflows/{id}/test | 试运行（dry-run，202→task；type=workflow_test；支持节点断点） | workflow:run | 202 | 409*、4102 |
+| POST | /workflows/{id}/runs | 正式运行（202→task；type=workflow_run） | workflow:run | 202 | 409*、4102 |
+| GET | /workflows/{id}/runs | 运行历史（对齐任务中心过滤） | workflow:read | 200 | 404* |
+| POST | /workflows/{id}/runs/{run_id}/resume | 断点恢复（命中暂停后修参/从暂停节点继续；202→task；27 篇 §3 time-travel 语义） | workflow:run | 202 | 404*、409* |
+
+### 5.12 sandboxes（routers/sandboxes.py，2026-09-27 预登记——[docs/Sandbox](../Sandbox/沙箱与执行环境设计.md) §12 契约来源，实现随 M5 / S0 提前批次）
+
+管理面端点（供给与执行走 daemon 内部通道不经 REST，Sandbox §11）。信任级映射与容量配置为平台管理员独占（租户只读+可收紧项，Sandbox §3.2）；全部操作落 `sandbox_events` 审计。
+
+| 方法 | 路径 | 用途 | 所需 scope | 成功码 | 主要错误码 |
+| ---- | ---- | ---- | ---- | ---- | ---- |
+| GET | /sandboxes | 沙箱实例列表（按 status/owner_kind 过滤，含资源用量） | sandbox:read | 200 | — |
+| GET | /sandboxes/{id} | 详情（状态机/用量/归属/快照引用） | sandbox:read | 200 | 404* |
+| POST | /sandboxes/{id}/stop | 停止并回收（终态前自动快照可配） | sandbox:write | 202 | 404*、409* |
+| GET | /sandboxes/{id}/audit | 执行与出口审计事件流（sandbox_events 视图） | sandbox:read | 200 | 404* |
+| GET/PUT | /sandbox-config | 池/配额/信任级映射/容量（平台管理员；fail-closed 拒绝不可静默降级，Sandbox §3.2） | sandbox:admin | 200 / 200 | 3001、3003 |
+
+
 ## 6. 关键端点详设
 
 ### 6.1 发消息（同步受理 + 流式）
@@ -475,4 +507,5 @@ HTTP/1.1 202 Accepted
 - [ ] 48xx 号段（writeback）与 404 / 409 通用码在 02 篇 §7 正式登记；
 - [ ] 4301 的 HTTP 映射（建议 410 Gone）在 02 篇登记；
 - [ ] ★ 25 篇对标缺口端点实现排期（2026-09-26 预登记）：§5.2 新增五行（PATCH/branch/knowledge/share）与 §5.10（files/prompts/groups/acl/permission-requests）；实现时同步：新增 scope 与专用错误码登记（11 篇 §2/§3 + §4.2 号段）、**动作集枚举回填**（`share` 动作入 08 篇 §2.3 固定动作集与本篇 §5 导语）、SSE 分支/用量水位事件登记 02-SSE 协议篇（X3/X8）、OpenAPI 快照再生成（16 篇 §2.3 漂移校验）。协调项 X1~X14 见 [docs/代办任务/2026-09-26-前端页面功能缺口补齐.md](../代办任务/2026-09-26-前端页面功能缺口补齐.md)；
+- [ ] ★ 27 篇群聊与工作流端点实现排期（2026-09-26 预登记）：§5.2 群聊扩展（type/members/routing 字段+members 两端点）与 §5.11 workflows 八端点；实现时同步：`workflow:*` scope 登记（11 篇 §2/§3）、`workflow_publish` 审批对象裁决（X16）、MESSAGE_* 事件 agent_id 与路由决策事件（02-SSE 协议篇，X15）、工作流 DAG 校验错误码定号（§4.2）。
 - [ ] 本篇端点表的 OpenAPI 标注核对（八个 routers 全端点标注 scope，02 篇 §8 验收项）进入 CI 契约测试。

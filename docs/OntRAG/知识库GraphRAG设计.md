@@ -5,6 +5,8 @@
 > **2026-09-26 评审修订**：本文按[评审记录](../architecture/评审-2026-09-26-多专家研讨与行业痛点批判.md) §3/§5/§6 落实知识库模块批判——检索默认档改造（§3/§4.0，C-P0 GraphRAG 索引成本）、人工终审吞吐模型（§7.1，C-P0 无工时模型）、治理档位钩子（§7，D-P1）、首个行业场景落地（§2，D-P0）、无依据数字标注（全文「示例值/待实测」，C-P2）。各处修订均以「2026-09-26 评审修订」标注。
 >
 > **2026-09-26 旧稿合入**：新增 §8 知识治理——冲突分诊四型四处置、bi-temporal 时间机器（落地为 knowledge.search 时间参数扩展）、六路召回融合要点（登记待办不强改）、nightly 保鲜例程、易变知识只存指针，摘录自旧稿[架构设计/04-知识库设计与知识治理](../架构设计/04-知识库设计与知识治理.md)的栈无关增量；原 §8~§10 顺延为 §9~§11。
+>
+> **2026-09-27 权威裁决与 v0.2 同步（用户委托"按推荐方案执行"）**：04 篇 v0.2 经知识工程/存储架构/产品最小够用三方独立评审（裁决均"有条件通过"）后，裁决**本文为知识库模块唯一权威**，04 篇转为设计依据存档（其 §11 分期表与验收场景作完整论证保留）。v0.2 修正增量已合入本文：①T2 冲突 v1 全人工裁决、评分仅参考分（§8.1）；②**事实权威落 PG `kb_facts` + 代际激活切换**（§2.7/§6/§8.2）；③封口时间=继任事实业务生效时间、as-of 谓词补全（§8.2）；④chunk 级不设 is_current、as-of 不进向量库（§8.2）；⑤失效分边 SUPERSEDES/OUTRANKED_BY/INVALIDATED_BY（§8.2）；⑥分诊固定顺序 + scope 硬门禁 + 承接判定失败兜底（§8.1）；⑦nightly 例程 v1 收缩与工程纪律（§8.4）；⑧召回口径改四路+出处反查、时间线为显式模式（§8.3）；⑨SimHash 分期 v1.5（§8.0）。
 
 服务规范名**知识库 graphrag-ontology**（锚点 §5 模块 #3）。代码落点：`services/semantic/knowledge/`（extract / graphrag / retrieve）与 `services/business/kb_pipeline/`（流水线编排）。
 
@@ -48,7 +50,8 @@ flowchart LR
     D --> E[5 一致性校验]
     E --> F[6 SHACL 约束校验]
     F --> G[7 人工归档]
-    G --> H[(权威库 Neo4j / Milvus)]
+    G --> H[(PG kb_facts 权威表)]
+    H -->|Outbox 投影| I[(Neo4j / Milvus)]
     D -->|低置信| Q[人工复核队列]
     E -->|冲突| Q
     F -->|违规| Q
@@ -181,7 +184,7 @@ flowchart LR
 | 项 | 内容 |
 | ---- | ---- |
 | 输入 | 全部候选产物 + 证据链（§7 单据） |
-| 输出 | status=authoritative 的实例/关系/术语/规则写入权威库（Neo4j/Milvus），并触发索引增量更新（§3） |
+| 输出 | status=authoritative 的实例/关系/术语/规则写入 **PG `kb_facts` 权威注册表**（同事务写 Outbox 事件——2026-09-27 同步 04 篇 v0.2：事实权威在 PG，Neo4j/Milvus 为投影，§6/§8.2），投影完成后代际激活并触发索引增量更新（§3） |
 | 实现要点 | review_workflow 单据化（§7）；知识工程师可用 Protégé 核校 |
 | 失败处理 | 驳回 → 单据关闭并回流水线；候选产物永不物理删除（审计） |
 | 门禁 | 底线 1 与底线 3 的最终关口 |
@@ -352,9 +355,9 @@ async def knowledge_search(
 
 | collection | 标量字段 | 向量 |
 | ---- | ---- | ---- |
-| kb_chunks_{tenant} | chunk_id、doc_id、tenant_id、text、span | dense（bge-m3 类）+ sparse（BM25） |
+| kb_chunks_{tenant} | chunk_id、doc_id、tenant_id、text、span、doc_generation、doc_lifecycle（2026-09-27 同步：三级时效解耦 §8.2——**不设 is_current / valid 区间**，旧文档切片默认视图降权不过滤） | dense（bge-m3 类）+ sparse（BM25） |
 | kb_community_reports_{tenant} | community_id、level、title、summary | dense |
-| kb_entities_{tenant} | entity_uuid、name、description | dense（local 检索锚点） |
+| kb_entities_{tenant} | entity_uuid、name、description、generation（随事实代际投影） | dense（local 检索锚点） |
 
 **PG 表**：
 
@@ -362,6 +365,7 @@ async def knowledge_search(
 | ---- | ---- |
 | documents | id、tenant_id、name、doc_type、minio_key、content_hash、ontology_version、status（processing/indexed/failed）、uploaded_by |
 | chunks | id、doc_id、tenant_id、idx、text、text_hash、minio_key、span、status |
+| kb_facts | **事实权威注册表**（2026-09-27 同步 04 篇 v0.2，公理「主事实在 PG」）：id、tenant_id、kb_collection_id、fact_iri、subject_iri、predicate_iri、object_ref、generation、state（current/superseded/needs_review/archived）、valid_from、valid_to、effective_date_known、transaction_time（=created_at）、confidence、source_ref（jsonb）、scope（jsonb）、ontology_version、checked_at；索引 `(source_doc_id)`、`(valid_to)`、`(ontology_version)`——承接判定/冲突检测/as-of 均在此表索引执行，Neo4j/Milvus 为投影；**代际激活指针 `kb_collections.active_generation` 列**（切换唯一原子点，§8.2）同步落 database/01（§11 待办） |
 | kb_index_tasks | id、tenant_id、type（full/incremental）、scope、status（§3 状态机）、stats、error |
 
 **MinIO key 规范**：
@@ -416,6 +420,22 @@ ontologies/{tenant_id}/{version}/ontology.ttl     # TBox 权威制品（本服�
 ## 8. 知识治理（2026-09-26 旧稿合入）
 
 > **2026-09-26 旧稿合入**：本章摘录自旧稿[架构设计/04-知识库设计与知识治理](../架构设计/04-知识库设计与知识治理.md)的栈无关增量，并已对齐本文现行口径（§7 review_workflow 状态机、§4.0 检索默认档、四大国标底线、示例值/待实测纪律）；旧稿中前端相关内容（三态徽标、时间线 UI 等消费端设计）未合入。
+>
+> **记忆边界**：本章治理对象是知识库（L4 组织级语义资产）；会话/用户/组织层记忆（L1~L3）的新旧冲突走 memory 篇沉淀判定，不复用本章冲突工单——但 L2/L3 沉淀中发现的领域事实级矛盾可发候选进入本管线分诊。
+
+### 8.0 同源检测与文档版本链（T1 的判定入口，2026-09-26 二轮合入）
+
+§8.1 T1 判定依据"两事实 source_ref 在同一文档版本链上"——版本链的建立发生在**入库预处理步**，三级同源检测（旧稿 §3.1）：
+
+| 级 | 检测 | 命中处置 |
+| ---- | ---- | ---- |
+| ① 精确重复 | 内容 SHA-256 相同 | 拒收并幂等返回既有文档（`uk_documents_checksum` 已承载） |
+| ② 身份命中 | **文档身份键**（规范化编号/标题，如 `GB/T 31486` → `identity_key` + `doc_version`） | 走版本更新路径：新版 `supersedes_id` 指向旧版建链，各版本均为独立 Raw 资产，随后触发 §8.1 事实级承接判定 |
+| ③ 近似同源 | n-gram SimHash 相似度 ≥ 0.9（初值） | 人工确认三选一：版本更新 / 独立文档 / 拒收。**分期 v1.5**（2026-09-27 同步 04 篇 v0.2：v1 仅 ①② 两级，漏检场景由 T2 冲突工单兜底——改写文档中冲突的事实会以工单形式暴露；阈值随真实语料校准） |
+
+- `identity_key` 解析规则随源类型配置（标准编号 / 合同号 / 图号模式），解析不出则视为无身份（仅走 ①③ 两级）；
+- `lifecycle`（draft/current/superseded/archived）与 `status`（流水线八态）**分立两字段**：status 管流水线进度，lifecycle 管版本生命周期，互不混用；
+- 存储增量见 [database/01 §3.3](../database/01-数据库详细设计.md) documents 表（identity_key / doc_version / lifecycle / supersedes_id / simhash 五列 + `(tenant_id, kb_collection_id, identity_key, doc_version)` 唯一索引）。
 
 ### 8.1 冲突分诊：四型四处置
 
@@ -424,48 +444,79 @@ ontologies/{tenant_id}/{version}/ontology.ttl     # TBox 权威制品（本服�
 | 类型 | 特征 | 处置 | 例子 |
 | ---- | ---- | ---- | ---- |
 | **T1 版本演进（过时）** | 两事实的 source_ref 在同一文档版本链上（或源文档间有取代关系） | 不是冲突：自动建立事实级 SUPERSEDES 边，新版遮蔽旧版（§8.2 时间线），无需人工 | GB/T 31486-2024 修改 2015 版的容量限值 |
-| **T2 真矛盾** | 无版本关系，语义互斥 | 置信度评分自动裁决（下）；分不出高下 → 冲突工单 | 文档 A 说审批上限 50 万，文档 B 说 100 万 |
+| **T2 真矛盾** | 无版本关系，语义互斥 | **v1 全部进冲突工单人工裁决**；评分公式仅作工单内参考排序分，不触发自动动作（2026-09-27 同步 04 篇 v0.2：自动裁决=机器替人终审，与底线 1 硬门禁相抵；v1.5 用积累的人工裁决数据经 PoC ② 标定后再开自动档，见下） | 文档 A 说审批上限 50 万，文档 B 说 100 万 |
 | **T3 限定差异** | 表面矛盾，适用 scope（时间/地域/产品线/法规域）不同 | 两事实都保留为有效，各标 scope；检索按查询上下文匹配 | 京沪地标 vs 国标对同一指标的不同要求 |
 | **T4 多源重复** | 主谓宾全同，来源不同 | 合并佐证：一条事实挂多 source_ref，置信度上调，来源列表保留 | 三个文档都确认同一参数 |
 
-T2 自动裁决评分（权重与阈值均为初始建议值/待实测，随 PoC ② 置信度校准一并冻结——§7.1 同款纪律，未校准的 LLM 自报置信度不得直接作裁决依据）：
+T3 触发还要求命中 T4 前置——**分诊按固定顺序执行**（2026-09-27 同步 04 篇 v0.2，先廉价确定性判定、后语义判定）：`T1 版本链命中？→ T4 主谓宾全同？→ T3 双方 scope 均有源文 span 落地且键不相交？→ 否则 T2`。
+
+**scope 结构与硬门禁（2026-09-27 同步）**：scope 为封闭枚举键值 map——`temporal`（区间）/ `region`（行政区划码）/ `product_line`（IRI）/ `regulatory_domain`（IRI）；**作为 T3 判定依据的 scope 值必须回指源文 span（原文中确实出现限定语）**，LLM 推断的 scope 只能作工单参考信息、不得自动生效——防 T2 真矛盾被误判 T3 后以「都有效」长期共存且无人知晓（§8.4 nightly 抽样复核兜底）。
+
+T2 裁决评分（**仅作冲突工单 UI 的参考排序分，v1 不触发任何自动动作**；权重与阈值为初始建议值/待实测，v1.5 自动档开启前须随 PoC ② 置信度校准一并冻结——§7.1 同款纪律，未校准的 LLM 自报置信度不得直接作裁决依据）：
 
 ```
 score = 0.35·来源权威(文档类型/机构分级) + 0.25·时效(新近者得分)
       + 0.20·佐证数(独立 source_ref 数) + 0.20·出处质量(span 指向条款原文 > 转述)
 ```
 
-- `|Δscore| ≥ 0.25`（初值）：高分者胜，败者自动封口并连 SUPERSEDES 边 + 生成裁决说明写入冲突记录（可审计）；
-- `|Δscore| < 0.25`：转人工。
+- v1：全部人工裁决——工单并排两条事实 + 各自原文出处 + 参考评分明细，人工点选胜者 / 判定 T3 限定共存（人工填 scope）/ 判定待定；
+- v1.5（自动档，开启前置两条件：v1 人工裁决数据积累达标 + 阈值经 PoC ② 标定冻结）：`|Δscore| ≥ 阈值（初值 0.25）`高分者胜，败者自动封口并连 **OUTRANKED_BY** 边（非 SUPERSEDES——机器裁决结果不混入版本演变史，§8.2 边语义）+ 裁决说明写入冲突记录（可审计）；低于阈值转人工。
 
 **对齐现行 review_workflow 状态机（2026-09-26 旧稿合入）**：冲突工单复用 §7 单据机制——status 沿用 `pending / approved / rejected / edited` 四态，步骤 5 的 `conflict` 标记即工单入口；工单 payload 并排携带两条事实 + 各自原文出处 + 评分明细，人工点选胜者 / 判定 T3 限定共存 / 判定待定；批量审核交互同 §7。`subject_type` 需增设 `conflict` 枚举值并回填审核域清单（§11 待办）。
 
-事实级承接判定（版本更新路径的配套；核心原则：**文档被替代 ≠ 其派生事实全部作废**——新版通常只改写部分内容，逐条判定，不整链推翻）：
+事实级承接判定（版本更新路径的配套；核心原则：**文档被替代 ≠ 其派生事实全部作废**——新版通常只改写部分内容，逐条判定，不整链推翻。2026-09-27 同步：判定在 PG `kb_facts` 上执行——按 `source_doc_id` 索引反查旧版事实、subject+predicate 分组哈希连接，单文档数千事实为毫秒~秒级）：
 
 ```
 新版文档终审通过
-  → 取旧版派生的全部当前有效事实（按 subject 分组），与新版事实逐条比对（subject + predicate 对齐）：
-      a) 新版有同主谓新事实 → 旧事实标记 superseded：封口（valid_to）+ SUPERSEDES 边（时间戳、出处齐全）
-      b) 新版未重现的旧事实（缺失） → 标记 needs_review：默认降权但可见，进批量人工复核，不直接删除
-      c) 新版明确否定（矛盾）     → 走冲突分诊（本节 T1~T4）
+  → 取旧版派生的全部当前事实（kb_facts 按 source_doc_id 反查，subject + predicate 对齐分组）：
+      a) 新版有同主谓新事实 → 旧事实标 superseded：封口（valid_to = 继任事实业务生效时间，§8.2 封口规则）
+         + SUPERSEDES 边；新版把一条拆为多条时允许组级边（边上记 cardinality=split）
+      b) 新版未重现的旧事实 → 先做【定向复查抽】：用旧事实宾语值 + 术语对新版 chunks 检索式复查（§8.3 词法路）
+         → 命中：判「疑似漏抽」加急工单；未命中：判「确认删除」，转 needs_review
+         （默认可见但带待复核标注，随新代激活可见，不直接删除）
+      c) 新版明确否定（矛盾） → 走冲突分诊（本节 T1~T4）
 ```
 
-### 8.2 bi-temporal 时间机器（双时间线）
+- **顺序依赖**：若本体同期发生 MAJOR 变更，先完成本体核心侧 IRI 迁移，再执行承接判定（对齐键依赖 IRI 稳定）；
+- **谓词白名单前置**：候选谓词必须映射到 TBox 属性，映射失败单独进「候选属性」工单、不得静默跳过——否则承接比对与冲突检测的比对键直接失效（2026-09-27 同步 04 篇 v0.2 §3.2）。
+
+### 8.2 bi-temporal 时间机器（双时间线）+ 代际激活（2026-09-27 同步 04 篇 v0.2）
 
 | 时间维 | 含义 | 例 |
 | ---- | ---- | ---- |
-| `valid_time`（valid_from / valid_to） | 业务有效时间：这条事实描述的世界状态何时成立/失效 | 容量限值 100Ah 在 2024-03-01 被改为 120Ah |
+| `valid_time`（valid_from / valid_to） | 业务有效时间：这条事实描述的世界状态何时成立/失效 | 容量限值 100Ah 自 2024-03-01（新版实施日）失效——即使 2026-09 才入库 |
 | `transaction_time`（入库事务时间） | 我们何时知道并入库；PG 侧由 `created_at` 承担 | 2024-05-10 上传 2024 版标准并终审 |
 
-失效 = `valid_to` 封口 + SUPERSEDES 边，**不物理删除**（§2.7「候选产物永不物理删除」同款纪律在权威态的延伸）。PG `documents` / `document_chunks` 双时间线列已按本节设计补入 [database/01 §3.3](../database/01-数据库详细设计.md)（标「本篇补充」）；Neo4j 事实属性与 Milvus 标量字段（is_current / valid_from / valid_to）落库登记 §11 待办。
+**封口规则（v0.2 修正，勿混双时间线）**：旧事实 `valid_to = 继任事实的 valid_from`（业务生效时间），**不是处理时刻**——处理动作时刻只进 `transaction_time`；源文档无明确生效日期时才回退为处置时刻，并记 `effective_date_known=false` 供审计区分（否则 as-of 查询会同时命中新旧两条矛盾答案）。失效 = 封口 + 取代边，**不物理删除**（§2.7「候选产物永不物理删除」同款纪律在权威态的延伸）。PG `documents` / `document_chunks` 双时间线列已按本节设计补入 [database/01 §3.3](../database/01-数据库详细设计.md)（标「本篇补充」）；**facts 侧权威表 `kb_facts` 见 §6**（2026-09-27 同步），Neo4j/Milvus 投影字段见 §11 待办。
+
+**失效分边承载（三种边不复用，机器裁决结果不混入版本演变史）**：
+
+| 边 | 语义 | 使用场景 |
+| ---- | ---- | ---- |
+| `[:SUPERSEDES]` | 存在替代版本的更替（版本承接语义；时间线/演变史通道只遍历此链） | T1 承接判定、文档版本链 |
+| `[:OUTRANKED_BY {conflict_id, score, decided_by}]` | 裁决淘汰（无版本关系的矛盾，人工裁决出胜负） | T2 工单裁决 |
+| `[:INVALIDATED_BY]` | 无替代的撤回/作废 | 工单裁决废弃、T3 scope 撤销、错误入库撤回 |
+
+`OUTRANKED_BY` / `INVALIDATED_BY` 在「失效说明」面板呈现，不进时间线。
+
+**事实权威与代际激活切换（v0.2 P0 修正。背景：直接对 Neo4j/Milvus/PG 三存储做"状态字段翻转"在 Outbox 异步投影下不成立——先写新后封旧会出现"双 current 窗口"：图谱路已见新事实、向量路仍回旧事实，RRF 去重因 IRI 不同失效，矛盾上下文注入 LLM；先封旧后写新则出现"零 current 窗口"，默认检索该主谓直接空结果）**：
+
+1. **PG 单事务**：写新代事实（`generation = active + 1`：新版事实 + 承接判定保留的 needs_review 事实）+ 旧代事实封口（valid_to、superseded、取代边关系数据）+ 写 Outbox 事件（同事务，锚点既有约定）；
+2. **Outbox 中继投影**：新旧事实（均带 generation 标记）幂等投影 Neo4j / Milvus；按事件序单调推进，失败重试、超限死信（锚点既有纪律）；
+3. **激活**：投影追平后 `UPDATE kb_collections SET active_generation = active + 1`——**全流程唯一原子点（PG 单行）**；
+4. **善后**：受影响对象标脏（`kb.community.dirty`，完整档）+ 旧文档 lifecycle → superseded（Raw 层文件原封不动）。
+
+窗口期语义（明示）：激活前检索见旧代（数据一致、只是未更新），激活后全量切新代，**不存在新旧混杂窗口**；新事实激活延迟 SLO < 5 分钟（示例值，投影滞后告警沿用既有纪律）。幂等键 `(tenant_id, kb_collection_id, old_doc_id, new_doc_id, step)`，各步可安全重放。
 
 检索三态（与现行 §5 knowledge.search 不冲突——现行签名无时间参数，本节作为**时间参数扩展**落地）：
 
 | 模式 | 参数扩展 | 语义 | 过滤实现 |
 | ---- | ---- | ---- | ---- |
-| 当前有效（默认） | 无（维持现状） | 只返回未被取代的当前权威事实 | 图查询 `valid_to IS NULL`；仍只返回 authoritative（底线 1 不破） |
-| 时间点 as-of | `as_of: datetime \| None` | 返回该时刻有效的知识（审计/合规：「当时的规定是什么」） | `valid_from ≤ as_of < valid_to`（尚未入库的按 transaction_time > as_of 排除） |
+| 当前有效（默认） | 无（维持现状） | 只返回当前代（generation = active）权威事实 | 统一 `generation = active_generation`（PG/图/向量同条件）；图侧叠加 `valid_to IS NULL`；仍只返回 authoritative（底线 1 不破） |
+| 时间点 as-of | `as_of: datetime \| None` | 返回该时刻有效的知识（审计/合规：「当时的规定是什么」） | **PG `kb_facts` 索引 + Neo4j 时间线执行，不在向量库做**（as-of 是集合检索，高选择性范围过滤令 ANN 退化近暴力扫描）；完整谓词 `valid_from ≤ as_of AND (valid_to IS NULL OR as_of < valid_to) AND transaction_time ≤ as_of` |
 | 全量含旧 | `include_superseded: bool = False` | 被取代知识一并返回，**必须带显著标注**（「已于 X 时被 Y 取代」+ 取代链入口） | 不过滤，结果分组 current / superseded |
+
+**三级时效解耦（v0.2 修正，勿互相推导）**：事实级三态过滤只作用于 `kb_facts` / 图事实 / `kb_entities`（标量 `generation`，随事实封口事件聚合投影）；**chunk 级不设 is_current / valid 区间**——若 chunk 的 current 随文档 lifecycle 翻转，旧文档中未被取代的仍有效事实将从向量路整体消失，§8.1 needs_review「默认可见」落空；chunk 只挂 `doc_generation` + `doc_lifecycle` 标量，旧文档切片在默认视图**降权不过滤**。社区摘要切换后到重编译前服务旧内容（可接受，标脏事件保证最终刷新——设计决定）。
 
 遮蔽而非消失：superseded 知识在 as-of 查询、supersedes 链遍历（「这条结论的演变史」）、出处反查（从原文切片找它派生过的知识）三条通道中永远可达。
 
@@ -479,10 +530,10 @@ score = 0.35·来源权威(文档类型/机构分级) + 0.25·时效(新近者�
 | 2 | 词法精确路（BM25 + pg_trgm） | 编号、代码、专有名词字面（向量会偏） | 部分已有（Milvus sparse 在向量路内，未独立成路） |
 | 3 | 图结构路（local） | 关系型问题、多跳 | 已有（§4.0 默认档 LazyGraphRAG 式查询时图遍历） |
 | 4 | 社区摘要路（global） | 全局主题/总结类问题 | 完整档才有（§4.0：默认档降级为地图谱聚合） |
-| 5 | 时间线路（supersedes 链 + bi-temporal） | as-of 查询、演变史、「最新版改了什么」 | 依赖 §8.2，未建 |
+| 5 | 时间线路（supersedes 链 + bi-temporal） | as-of 查询、演变史、「最新版改了什么」 | 依赖 §8.2；**2026-09-27 同步 v0.2 裁定：不作为并行召回路**——as-of/演变史是用户意图明确的显式检索模式（入口直接路由 §8.2 时间参数），做成并行路会在用户未问历史时把旧知识混进融合排序、反而需要抑制逻辑；是否并行化随 PoC ③ 再评估 |
 | 6 | 出处反查路（source_ref 反向索引） | 从答案/实体回原文切片；从文档找它派生的知识（审计溯源与 §8.1 承接判定） | 未独立成路 |
 
-融合要点（供扩展评估时参考）：多路候选 → RRF 粗排 → 硬过滤（tenant_id、kb_id、权限，检索前过滤，模型看不见无权数据）→ 时效语义过滤（§8.2 三态）→ 软加权（时效衰减 + 置信度 + 来源权威 + T3 scope 匹配度）→ 去重聚合（同一事实多路命中只留一条，合并命中路数，路数越多越靠前）。是否扩展、扩展哪几路随 PoC ③ 一并裁决（§11 待办）。
+融合要点（供扩展评估时参考；2026-09-27 按 04 篇 v0.2 口径更新）：各路**检索前**下推硬过滤（tenant_id、kb_collection_id、ACL §4.3、generation——必须在 top-k 截断**之前**，否则各路候选被无权/过期结果挤占）→ RRF 粗排 → **generation 校验以 PG `kb_facts` 权威状态为准**（防投影滞后窗口下双端不一致）→ 去重聚合（同一事实多路命中只留一条，合并命中路数，路数越多越靠前）→ v1.5 叠加软加权：置信度 + 陈旧度 `λ·(now − checked_at)`（**只罚「久未核验」不罚「老而有效」**——2015 版标准未被取代仍 current，不因老降权）+ T3 scope 匹配。是否扩展、扩展哪几路随 PoC ③ 一并裁决（§11 待办）。
 
 ### 8.4 nightly 保鲜例程（周期巡检的具体化）
 
@@ -491,6 +542,15 @@ L3 定时任务 `kb_nightly_maintenance`（与 [database/01 §6](../database/01-
 1. **增量重编译**：消费上次运行以来的事件（新终审事实、取代边、标脏社区），只重算受影响对象——默认档为受影响 chunk / 实体描述向量（§4.0），完整档开启的试点子集才含社区摘要；
 2. **知识 lint 巡检**：悬空出处（source_ref 指向不存在的文档/切片）→ 告警；孤儿实体（无任何关系与事实）→ 候选清理工单（人工确认后转 archived）；陈旧声明按 `checked_at` 最老优先重验（对照原文重新校验，LLM 抽查 + 结构校验），过期未验者降权并标记 `stale`；失效未封口（needs_review 超时未复核）→ 催办；
 3. **冲突补扫**：对 T2 抽样复检（本体/规则更新后，旧裁决可能失效）。
+
+**分期收缩（2026-09-27 同步 04 篇 v0.2）**：v1 = 增量重编译（事件驱动为主、夜间兜底）+ needs_review 催办（14 天催办、**30 天未复核自动转 archived**——保留可溯、不再占队列；聚合复核单位 = 按 subject/主题分组，呼应 §7.1 批次纪律）+ 悬空出处告警（纯 SQL 廉价项）；陈旧重验（`checked_at` 按事实类别分 TTL）、孤儿实体清理、冲突补扫（依赖 T2 自动档，随 §8.1 v1.5 开启）为 v1.5。
+
+**例程工程纪律（v1 即生效，防失控——2026-09-27 同步 04 篇 v0.2）**：
+
+1. **预算上限**：每次运行硬上限三项 `max_communities_recompiled / max_facts_reverified / token_budget`，超限顺延次夜并告警；LLM 成本经模型网关按任务类型分账（docs/memory §5.5 空闲闸门/预算分账同款纪律）；
+2. **增量游标**：checkpoint 落 PG `kb_maintenance_runs`（记 watermark / last_event_id），重编译以 `(community_id, input_hash)` 幂等——防 at-least-once 重复消费烧钱；
+3. **调度互斥**：Redis 锁 `lock:kb_nightly`（TTL + 心跳续期）防多 worker 双跑；例程走独立队列 `arq:queue:kb_batch`（worker 并发 1），与在线抽取任务隔离；
+4. **结构漂移**：社区成员变化率超阈值（初值 30%，示例值）时人工确认重跑 Leiden，不自动重分区。
 
 与本体核心周期巡检（[本体核心设计 §6.4](../ontology/本体核心设计.md)）错位互补：TBox 一致性（consistency_check，每日）、实例合规抽检（instance_conflict，每日）、术语唯一性（term_uniqueness，每周）、用量统计（usage_stats，每月）归本体核心例行；本例程承接知识库侧重验与图谱 lint。`instance_conflict` 巡检发现的问题回流 §8.1 冲突分诊，频率口径对齐该巡检表（每日/每周档）。
 
@@ -522,6 +582,44 @@ L3 定时任务 `kb_nightly_maintenance`（与 [database/01 §6](../database/01-
 - **重嵌入成本预算**：单文档重嵌入 chunk 数计入 `kb_index_tasks.stats` 与租户成本报表；变更块占比过高（示例阈值 >50%，随 PoC ③ 标定）时增量比全量贵，直接转全量重跑；
 - 指标：`kb_reembed_chunks_total`（重嵌入 chunk 计数，按租户/kb 维度）——增量重索引成本与效率的总账。
 
+**验收修复（2026-09-26 专家验收）**：迁移窗口写路径=**v1 主写 + v2 追平**（增量同步任务把窗口期新写/更新/删除按 chunk 同步投递到 v2，含 memory_facts 复用场景）；影子对比样本口径=**仅取两库共有 chunk_id 的同 query top-k 命中对比**（新增 chunk 不入判据）；窗口容量与追平延迟进 ops 日检（`reembed_lag_chunks`）。
+
+### 8.7 向量重建双写切换（2026-09-26 P1 设计补全）
+
+换 embedding 模型（如 bge-m3 → 新模型，含维度变更）**不得原地覆写**——07 篇 §2.4 维度契约：改 embedding 配置必须重建 collection（ops/02 §8 容量触发表同款依据）。定稿五步流程「**建新 → 全量重嵌 → 影子双读 → 切流 → 可回滚**」：
+
+```mermaid
+flowchart LR
+    A["1 建 v2 collection<br/>（_v2 后缀，别名解析）"] --> B["2 后台全量重嵌入<br/>（批量队列，进度可查）"]
+    B --> C["3 影子双读期<br/>新旧各检索 top-k 采样对比"]
+    C -->|"命中率差 <2% 达标"| D["4 切流：别名指向 v2<br/>（走 ops 变更单）"]
+    C -->|"差 ≥2%"| E["不切流，暂停排查"]
+    D --> F["5 v1 保留 30 天只读"]
+    F -->|"质量异常"| G["回滚 = 别名切回 v1"]
+    F -->|"期满无回滚"| H["v1 下线（变更单）"]
+```
+
+| 步 | 设计 |
+| ---- | ---- |
+| 1 新 collection | `_v2` 后缀新建：`kb_chunks_{tenant}_v2` / `kb_entities_{tenant}_v2` / `kb_community_reports_{tenant}_v2`（含 dense 的三张整体迁建；sparse/BM25 与 embedding 模型无关，随迁重建以保 collection 内一致）；检索入口经 **Milvus 别名**（lite 档 pgvector 为配置项）解析物理名，业务代码不感知版本 |
+| 2 全量重嵌入 | 复用 `kb_index_tasks` 任务模型（type=full、scope=reembed，§3 状态机与断点续跑）；走 kb 域批量队列 `kb:queue:{tenant_id}`（07 篇 §5.3，租户内并发默认 3）并按空闲闸门让路（docs/memory §9.1 同款纪律——不与对话路径抢嵌入与存储）；**进度可查**：`reembed_progress{tenant}`（gauge，已完成 chunk 占比 0~1）+ `kb_index_tasks.stats`（完成/总数/ETA） |
+| 3 影子双读 | 线上响应仍出自 v1；对**采样流量**（默认在线 10% + golden QA 全量，示例值/待实测）影子读 v2，新旧模型各检索 top-k 比命中率——**08 篇 §7.4 embedding 漂移巡检同款机制与阈值**；**切换判据 = 采样命中率差 <2%**（连续达标窗口默认 3 日，示例值随 PoC ③ 冻结）；差 ≥2% 不切流，排查分块/模型/参数；非采样请求零额外开销 |
+| 4 切流 | 别名原子切至 v2（秒级生效）；切流后 08 篇 §7.4 漂移巡检接力（7 天每日基线对比）；切流动作走 ops/02 §9 变更单 |
+| 5 保留与回滚 | **v1 保留 30 天只读**（不写入；影子对比、审计、回滚可读）；**回滚 = 别名切回 v1**（v1 数据全程未动，秒级生效；切流后 7 天巡检命中率差 >2% 或检索质量大盘异常即触发）；期满未回滚经变更单下线删除 |
+
+**全量重嵌入成本预算表**（各参数均为示例值/待实测，随 PoC ③ 冻结——与 §4.0/§7.1 同款纪律）：
+
+| 项 | 估算口径 | 示例值（1 万页 ≈ 2 万 chunk，§7.1 口径） |
+| ---- | ---- | ---- |
+| 输入 token | chunk 总数 × 平均 chunk token（§2.1 分块目标 512±128，取 512） | 2 万 × 512 ≈ **1.0×10⁷ token**（一次性） |
+| 实体描述向量 | authoritative 实体总数 × 平均描述 token | 随抽取密度实测（PoC ③ 一并标定） |
+| 时长 | chunk 总数 ÷（租户并发 3 × 批大小 64）× 单批耗时 | 单批 10s（示例）≈ 17 min；单批 60s（示例）≈ 104 min |
+| 存储增量 | v2 ≈ v1 同规模 | 双 collection 并存期向量磁盘 ×2（影子期容量预警纳入 ops 日检） |
+| 计量 | 重嵌入 token 计入 `kb_index_tasks.stats` 与租户成本报表（08 篇 §6 同源） | — |
+
+- 记忆嵌入 collection（`memory_facts_{tenant}`，docs/memory §7）换型**复用本节同套流程与判据**（同 embedding profile，07 篇 §2.2）；
+- 指标总账：`reembed_progress`（步骤 2）+ 既有 `kb_reembed_chunks_total`（§8.6）合计覆盖重建与增量两类重嵌入。
+
 ## 9. 与前端检索 Playground 的联调接口
 
 `POST /api/v1/knowledge/playground/search`（debug 形态，权限：知识库管理员/知识工程师）。请求在 §5 签名基础上增加 `debug: true`，响应追加 `trace`：
@@ -550,12 +648,12 @@ Playground 页面（L1）据此渲染检索全过程与证据链；§10 的质�
 
 ## 11. 待办与开放问题
 
-- [ ] **六路召回扩展评估（2026-09-26 旧稿合入登记，不强改 §4.2）**：§8.3 第 2/5/6 路（独立词法精确路、时间线路、出处反查路）是否纳入现行两路 RRF，随 PoC ③ 一并裁决
+- [ ] **多路召回扩展评估（2026-09-26 旧稿合入登记，不强改 §4.2；2026-09-27 口径更新）**：扩展评估对象 = §8.3 第 2/6 路（独立词法精确路、出处反查路）——**时间线路已裁定为显式 as-of 检索模式、不再作为并行召回路**（§8.3）；随 PoC ③ 一并裁决
 - [ ] **冲突工单 `subject_type=conflict` 枚举扩展（2026-09-26 旧稿合入登记）**：回填本文 §7 单据枚举与 [database/01 §3.5](../database/01-数据库详细设计.md) review_tickets.target_type，并同步 06 篇表清单
-- [ ] **bi-temporal 图/向量侧落库（2026-09-26 旧稿合入登记）**：Neo4j 事实属性（valid_from / valid_to / SUPERSEDES 边）与 Milvus 标量字段（is_current / valid_from / valid_to）；PG 列已补 database/01 §3.3
+- [ ] **bi-temporal 图/向量侧落库（2026-09-26 旧稿合入登记；2026-09-27 按 04 篇 v0.2 口径修订）**：**PG 新表 `kb_facts`（事实权威注册表，字段见 §6）+ `kb_collections.active_generation` 列**落 [database/01](../database/01-数据库详细设计.md)（待同步，DB owner 认领）；Neo4j 投影属性（valid_from / valid_to / generation / `SUPERSEDES`·`OUTRANKED_BY`·`INVALIDATED_BY` 三种边 / T3 的 scope 属性）与 Milvus/pgvector 标量（**chunk 级不设 is_current / valid 区间**——只加 `doc_generation` / `doc_lifecycle`，§8.2 三级时效解耦；`kb_entities` 加 `generation`）；as-of 查询在 PG/图侧实现、不进向量库；facts 侧 `checked_at`（§8.4 陈旧重验依赖）一并落库
 - [ ] **knowledge.search 时间参数定稿（2026-09-26 旧稿合入登记）**：`as_of` / `include_superseded` 的 API 形态与 MCP 工具参数设计（联动 §5 与网关层契约）
-- [ ] **T2 自动裁决阈值校准（2026-09-26 旧稿合入登记）**：评分权重与分差阈值 0.25 为设计目标，随 PoC ② 置信度校准冻结
-- [ ] **kb_nightly_maintenance 例程排期（2026-09-26 旧稿合入登记）**：与本体核心 §6.4 巡检的调度协同与事件回流打通
+- [ ] **T2 自动裁决阈值校准（2026-09-26 旧稿合入登记；2026-09-27 口径修订）**：**v1 全人工裁决，评分仅作工单参考分、不触发动作（§8.1）**；v1.5 自动档开启前置两条件 = v1 人工裁决数据积累达标 + 权重/分差阈值（初值 0.25）随 PoC ② 置信度校准冻结
+- [ ] **kb_nightly_maintenance 例程排期（2026-09-26 旧稿合入登记）**：与本体核心 §6.4 巡检的调度协同与事件回流打通——消费的四个事件先定名登记：`kb.document.superseded` / `kb.fact.superseded` / `kb.community.dirty` / `kb.conflict.raised`（§8.4 例程的事件输入，07 篇 msg 信封承载）
 - [ ] GraphRAG 实现路线 PoC：自研管线 vs 定制 microsoft/graphrag vs neo4j-graphrag（上游 §4 待办延续；2026-09-26 评审修订：路线验证须覆盖默认档要求的 LazyGraphRAG 式查询时图遍历）
 - [ ] OWL 推理引擎选型：rdflib+pySHACL vs 外挂 Jena Fuseki/GraphDB（锚点 §7 待办沿用）
 - [ ] **PoC ② 抽取置信度校准（本模块出口条件，M2；2026-09-26 评审修订登记）**：金标集 ≥500 条标定 LLM 自报置信度校准曲线 → 冻结人工终审阈值与抽样率、标定终审吞吐 ρ（条/人时）；完成前 §7 全部阈值仅为设计目标（锚点 §7 PoC 表）
@@ -564,4 +662,5 @@ Playground 页面（L1）据此渲染检索全过程与证据链；§10 的质�
 - [x] ~~LazyGraphRAG 式延迟索引是否引入（成本敏感租户场景）~~（**2026-09-26 评审裁决关闭**：已定为默认检索路径组成部分，转正式设计 §4.0）
 - [x] ~~首个行业本体试点领域选择（上游 §4 待办沿用）~~（**2026-09-26 评审裁决关闭**：钦定电力配电网停电分析，种子本体 + 样例数据集为 M2 出口条件，见 §2）
 - [ ] Milvus collection 按租户预建 vs 动态创建的运维策略
+- [ ] **向量重建双写切换两回填（2026-09-26 P1 设计补全，§8.7）**：全量重嵌入成本（token/时长/实体向量量）实测冻结随 PoC ③；`reembed_progress` 指标回填 07 篇 §6 清单
 - [ ] `services/ → services/`、`docs/OntRAG/ → docs/OntRAG/` 改名后同步更新本文路径（锚点 §7 待办）

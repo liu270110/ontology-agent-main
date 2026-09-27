@@ -42,7 +42,7 @@ export function CommandMenu() {
       onOpenChange={setOpen}
       label="命令面板"
       overlayClassName="fixed inset-0 z-[100] bg-black/40"
-      contentClassName="fixed left-1/2 top-[16%] z-[101] w-[560px] max-w-[92vw] -translate-x-1/2 overflow-hidden rounded-2xl border border-separator bg-surface shadow-[var(--sh-float)]"
+      contentClassName="cmdk fixed left-1/2 top-[16%] z-[101] w-[560px] max-w-[92vw] -translate-x-1/2"
       shouldFilter
       loop
     >

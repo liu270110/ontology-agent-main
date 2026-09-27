@@ -74,7 +74,7 @@ export function LoginPage() {
 
   if (mfaToken) {
     return (
-      <div className="login-stage relative flex min-h-screen items-center justify-center overflow-hidden bg-bg">
+      <div className="login-stage app-stage relative flex min-h-screen items-center justify-center overflow-hidden bg-bg">
         <div className="login-wash lw1 blob-drift" />
         <div className="login-wash lw2 blob-drift" style={{ animationDelay: '-7s' }} />
         <MfaStepCard
@@ -90,7 +90,7 @@ export function LoginPage() {
   }
 
   return (
-    <div className="login-stage relative flex min-h-screen items-center justify-center overflow-hidden bg-bg">
+    <div className="login-stage app-stage relative flex min-h-screen items-center justify-center overflow-hidden bg-bg">
       <div className="login-wash lw1 blob-drift" />
       <div className="login-wash lw2 blob-drift" style={{ animationDelay: '-7s' }} />
       {/* 链接邀请提示条（页顶）：preview 成功显绿条（租户/角色），410/未命中显红条 */}

@@ -4,3 +4,5 @@ coverage/
 src/api/generated/
 *.tsbuildinfo
 *.local
+dist-live
+dist-s2deep

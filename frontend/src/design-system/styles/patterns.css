@@ -2,8 +2,19 @@
    组合模式层 v1.2 —— 命令面板 / 时间线 / 轨迹 / 终端卡 / 上传区 /
    批量操作条 / 空态 / 证据链 / 差异行（24 篇 §3 组件的样式基座）
    ============================================================= */
-/* ---- CommandPalette（⌘K，借鉴 Linear，玻璃面板） ---- */
-.cmdk{border-radius:16px;overflow:hidden}
+/* ---- CommandPalette（⌘K，借鉴 Linear；三档纪律：命令面板悬浮件=Clear 档，
+   文字加光晕承托。注：现网 command-menu 组件暂用 bg-surface 实底（白名单外待改），
+   本类为样式基座的纪律对齐，组件切换 .cmdk 类即得玻璃浮层） ---- */
+.cmdk{border-radius:16px;overflow:hidden;
+  text-shadow:0 1px 2px var(--glass-halo);
+  background:linear-gradient(135deg,var(--glass-tint),transparent 42%),var(--glass-clear);
+  -webkit-backdrop-filter:blur(24px) saturate(200%);backdrop-filter:blur(24px) saturate(200%);
+  border:1px solid var(--glass-border);
+  box-shadow:inset 0 1px 0 var(--glass-hi),var(--sh-float)}
+@supports not ((backdrop-filter:blur(1px)) or (-webkit-backdrop-filter:blur(1px))){
+  .cmdk{background:var(--surface);border-color:var(--separator)}
+}
+@media (prefers-reduced-transparency:reduce){.cmdk{background:var(--surface);border-color:var(--separator)}}
 .cmdk-input{display:flex;align-items:center;gap:8px;padding:12px 14px;border-bottom:1px solid var(--separator)}
 .cmdk-input svg{width:14px;height:14px;color:var(--label-3)}
 .cmdk-list{max-height:280px;overflow:auto;padding:6px}
@@ -49,13 +60,18 @@
   color:var(--label-2);font-size:12px;background:var(--surface-2);transition:border-color var(--dur-1) var(--ease),background var(--dur-1) var(--ease)}
 .upzone:hover,.upzone.drag{border-color:var(--accent);background:var(--accent-soft)}
 
-/* ---- 批量操作浮条（玻璃 Regular 胶囊，弹簧出现） ---- */
+/* ---- 批量操作浮条（三档纪律：悬浮控件=Clear 档，文字加光晕承托；弹簧出现） ---- */
 .batchbar{position:sticky;bottom:16px;display:flex;align-items:center;gap:8px;justify-content:center;
   border-radius:var(--r-pill);padding:8px 16px;font-size:12px;color:var(--label);
-  background:linear-gradient(135deg,var(--glass-tint),transparent 42%),var(--glass-regular);
+  text-shadow:0 1px 2px var(--glass-halo);
+  background:linear-gradient(135deg,var(--glass-tint),transparent 42%),var(--glass-clear);
   -webkit-backdrop-filter:blur(24px) saturate(200%);backdrop-filter:blur(24px) saturate(200%);
   border:1px solid var(--glass-border);
   box-shadow:inset 0 1px 0 var(--glass-hi),var(--sh-float)}
+@supports not ((backdrop-filter:blur(1px)) or (-webkit-backdrop-filter:blur(1px))){
+  .batchbar{background:var(--surface);border-color:var(--separator)}
+}
+@media (prefers-reduced-transparency:reduce){.batchbar{background:var(--surface);border-color:var(--separator)}}
 @media (prefers-reduced-motion:no-preference){
   .batchbar{animation:batchbar-in var(--dur-3) var(--spring)}
   @keyframes batchbar-in{from{transform:translateY(16px) scale(.96);opacity:0}to{transform:none;opacity:1}}

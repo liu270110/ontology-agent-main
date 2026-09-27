@@ -1,6 +1,24 @@
 /* =============================================================
-   工具类层 v1.2 —— 与 Tailwind 共存的少量语义工具类
+   工具类层 v1.3 —— 与 Tailwind 共存的少量语义工具类
    ============================================================= */
+/* 应用舞台底（board.css .app 权威配方）：静态双光斑，为玻璃提供可折射的彩色背景。
+   只声明 background-image，基色由消费方的 bg-bg（var(--bg)）承担；光斑层零 blur、
+   零动画（性能纪律：同屏 backdrop-filter 层数克制，动态氛围交给 .glass-aurora 且降级） */
+.app-stage{background-image:
+  radial-gradient(50% 40% at 88% 0%,var(--accent-soft),transparent 60%),
+  radial-gradient(40% 35% at 0% 100%,var(--teal-soft),transparent 58%)}
+/* 顶栏材质条（board.css .bbar 权威配方）：material 半透明 + blur20 saturate180 */
+.material-bar{
+  background:var(--material);
+  -webkit-backdrop-filter:blur(20px) saturate(180%);
+  backdrop-filter:blur(20px) saturate(180%)}
+/* 降级：不支持 backdrop-filter / 用户偏好低透明时退实底（材质出处不变，可读性优先） */
+@supports not ((backdrop-filter:blur(1px)) or (-webkit-backdrop-filter:blur(1px))){
+  .material-bar{background:var(--surface)}
+}
+@media (prefers-reduced-transparency:reduce){
+  .material-bar{background:var(--surface)}
+}
 .mono{font-family:var(--mono);font-size:12px;color:var(--label)}
 .mono.dim{color:var(--label-2)}
 .text-dim{color:var(--label-2)}

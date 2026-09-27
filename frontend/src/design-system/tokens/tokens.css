@@ -41,6 +41,7 @@
   --spotlight:rgba(255,255,255,.35);
   --glass-tinted:rgba(0,113,227,.78);       /* Tinted：强调色着色玻璃（主操作/选中，iOS 26） */
   --glass-tinted-border:rgba(255,255,255,.4);
+  --glass-halo:rgba(255,255,255,.55);        /* Clear 档文字光晕（三档纪律：Clear 上文字加 text-shadow 承托） */
 
   /* 几何 / 阴影 / 动效 / 字体 */
   --r-card:18px; --r-panel:14px; --r-ctl:10px; --r-pill:999px;
@@ -91,6 +92,7 @@
   --glass-border:rgba(255,255,255,.14);
   --glass-tinted:rgba(10,132,255,.6);
   --glass-tinted-border:rgba(255,255,255,.25);
+  --glass-halo:rgba(0,0,0,.6);
   --sh-card:0 2px 8px rgba(0,0,0,.3),0 8px 24px rgba(0,0,0,.35);
   --sh-float:0 4px 12px rgba(0,0,0,.4),0 16px 48px rgba(0,0,0,.55);
   --edge:rgba(255,255,255,.22);

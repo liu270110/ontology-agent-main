@@ -10,7 +10,14 @@
 .btn:hover{transform:translateY(-1px);box-shadow:var(--sh-card)}
 .btn:active{transform:translateY(0);box-shadow:none}
 .btn svg{width:13px;height:13px}
-.btn-p{background:var(--accent);color:var(--on-accent)}
+/* Tinted 玻璃主按钮（board.css .btn-gl-p/.glass-tinted 配方：白色折射渐变 + tinted 玻璃边
+   + 内高光/内阴影 + 强调光晕）。对比硬门禁：基底取实 accent——.glass-tinted 的 .78 半透明
+   基底上 13px 白字实测约 3.4:1 不达 AA，按纪律提高着色不透明度；且小件按钮不挂
+   backdrop-filter（性能纪律：控制同屏模糊层数，board 主玻璃按钮同此取舍）。
+   玻璃边用 inset ring 画，避免 border 撑高按钮（.btn 为 border:none，零布局位移）。 */
+.btn-p{color:var(--on-accent);
+  background:linear-gradient(135deg,rgba(255,255,255,.22),transparent 45%),var(--accent);
+  box-shadow:inset 0 0 0 1px var(--glass-tinted-border),inset 0 1px 0 rgba(255,255,255,.4),inset 0 -1px 1px rgba(0,0,0,.15),var(--glow-accent)}
 .btn-s{background:var(--accent-soft);color:var(--accent)}
 .btn-g{background:rgba(0,0,0,.05);color:var(--label)}
 .dark .btn-g{background:rgba(255,255,255,.1)}
@@ -99,12 +106,18 @@
 .step.done .s-name{color:var(--label)}
 
 /* ---- Toast ---- */
+/* ---- Toast（三档纪律：悬浮控件=Clear 档；Clear 上文字加光晕承托保证可读） ---- */
 .toast{display:flex;align-items:center;gap:10px;max-width:340px;border-radius:var(--r-panel);
   padding:12px 16px;font-size:13px;font-weight:500;color:var(--label);
-  background:linear-gradient(135deg,var(--glass-tint),transparent 42%),var(--glass-regular);
+  text-shadow:0 1px 2px var(--glass-halo);
+  background:linear-gradient(135deg,var(--glass-tint),transparent 42%),var(--glass-clear);
   -webkit-backdrop-filter:blur(24px) saturate(200%);backdrop-filter:blur(24px) saturate(200%);
   border:1px solid var(--glass-border);
   box-shadow:inset 0 1px 0 var(--glass-hi),var(--sh-float)}
+@supports not ((backdrop-filter:blur(1px)) or (-webkit-backdrop-filter:blur(1px))){
+  .toast{background:var(--surface);border-color:var(--separator)}
+}
+@media (prefers-reduced-transparency:reduce){.toast{background:var(--surface);border-color:var(--separator)}}
 .toast svg{width:16px;height:16px;color:var(--green);flex:none}
 
 /* =============================================================

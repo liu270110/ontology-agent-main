@@ -442,6 +442,16 @@ def _build_abox(cand: _CandidateRef, catalog: SeedCatalog) -> Graph:
     return graph
 
 
+def _gate_candidate(cand: _CandidateRef, catalog: SeedCatalog) -> ValidationReport:
+    """单候选 SHACL 门禁（纯函数，同步；调用方 to_thread）。
+
+    tbox_graph=种子图：subClassOf 闭包并入数据图——防御父类形状对子类实例静默漏检
+    （sh:targetClass 子类展开只看数据图内公理；core/shacl.validate 文档同源，2026-09-27 实测复现）。
+    """
+    data_graph = _build_abox(cand, catalog)
+    return ontology_shacl.validate(data_graph, catalog.shapes_graph, tbox_graph=catalog.shapes_graph)
+
+
 async def run_validate(ctx: StepContext) -> None:
     """步骤 6 SHACL 约束校验：候选逐条组最小 ABox × 种子 shapes；violations/gate_result 回写。
 
@@ -476,8 +486,7 @@ async def run_validate(ctx: StepContext) -> None:
         for row in rows
     ]
     for cand in candidates:  # 逐条隔离：违规归因精确到候选（不做批量图混检）
-        data_graph = await asyncio.to_thread(_build_abox, cand, catalog)
-        report = await asyncio.to_thread(ontology_shacl.validate, data_graph, catalog.shapes_graph)
+        report = await asyncio.to_thread(_gate_candidate, cand, catalog)
         await _persist_gate_result(ctx, cand.id, report)
     if candidates:
         logger.info("kb_validate done: document_id=%s candidates=%d", ctx.document_id, len(candidates))

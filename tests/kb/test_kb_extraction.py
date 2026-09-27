@@ -304,3 +304,43 @@ async def test_validate_shacl_gate_rejects_violations_and_writes_gate_result(
     assert gate["conforms"] is False and gate["violation_count"] == len(order.violations)
     assert gate["shapes"] == "seeds/power_seed.ttl@v1" and gate["checked_at"]
     assert ticket.status == "pending_review"  # 仍留人工终审队列
+
+
+# ---------------------------------------------------------------- 纯函数：门禁子类闭包（回归 2026-09-27）
+
+
+def test_门禁_子类实例命中父类形状_闭包并入不漏检(tmp_path):
+    """回归：sh:targetClass 子类展开只看数据图内 subClassOf 公理——门禁必须把种子图作为
+    tbox 闭包传入，否则子类候选（断路器）违反父类形状（设备编号必填）时静默放水
+    （core/shacl.validate 文档同源；2026-09-27 实测复现）。"""
+    from services.kb.business.kb_extraction import _CandidateRef, _gate_candidate
+
+    seed_ttl = """@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix pw: <http://ontology-agent.local/o/t1/power#> .
+
+pw:PowerDevice a owl:Class ; rdfs:label "电力设备"@zh .
+pw:Breaker a owl:Class ; rdfs:subClassOf pw:PowerDevice ; rdfs:label "断路器"@zh .
+pw:deviceCode a owl:DatatypeProperty ; rdfs:domain pw:PowerDevice ; rdfs:range xsd:string .
+pw:PowerDeviceShape a sh:NodeShape ;
+    sh:targetClass pw:PowerDevice ;
+    sh:property [ sh:path pw:deviceCode ; sh:minCount 1 ; sh:name "设备编号必填"@zh ; ] .
+"""
+    seed_file = tmp_path / "mini_seed.ttl"
+    seed_file.write_text(seed_ttl, encoding="utf-8")
+    catalog = load_seed_catalog(seed_file)
+    dev_iri = f"{PW}Breaker"
+
+    missing = _CandidateRef(
+        id=uuid.uuid4(), subject="断路器B12", predicate=None, object=None,
+        subject_type=dev_iri, canonical_name=None, meta={},
+    )
+    assert not _gate_candidate(missing, catalog).conforms  # 闭包并入：子类实例命中父类必填
+
+    ok = _CandidateRef(
+        id=uuid.uuid4(), subject="断路器B12", predicate=None, object=None,
+        subject_type=dev_iri, canonical_name=None, meta={"properties": {"deviceCode": "B12"}},
+    )
+    assert _gate_candidate(ok, catalog).conforms  # 合规候选照常放行

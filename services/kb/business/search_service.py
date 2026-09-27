@@ -16,6 +16,8 @@ ChatPolicy.retrieval_retry_max 并在调用侧裁决重试与「无检索上下�
 
 from __future__ import annotations
 
+import asyncio
+import logging
 import time
 import uuid
 from collections.abc import Mapping, Sequence
@@ -26,10 +28,13 @@ from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from services.kb.business.usage_service import UsageStore
 from services.kb.retrieval.embed import AclPushdown, OllamaEmbedder, bm25_search, vector_search
 from services.kb.retrieval.graph import ClassHierarchy, build_class_hierarchy, expand_graph
 from services.kb.retrieval.retrieve import GraphPath, SearchHit, hybrid_search
 from services.ontology.business.hierarchy_service import get_class_hierarchy
+
+logger = logging.getLogger(__name__)
 
 # 跨模块显式服务调用（standards/01 §2.1 规则 3：business 为许可面，模块文档=database/01 §3.4）：
 # 类层次读模型经 ontology 公开服务获取（kb 禁入 ontology.data；与 kb/api/kb.py 同一消费面），
@@ -83,6 +88,7 @@ class KnowledgeSearchService:
         ollama_base_url: str,
         hierarchy_ttl_s: float = _HIERARCHY_TTL_SECONDS,
         acl_filter_enabled: bool | None = None,
+        usage_store: UsageStore | None = None,
     ) -> None:
         self._session_factory = session_factory
         self._embedder = OllamaEmbedder(ollama_base_url)
@@ -95,6 +101,9 @@ class KnowledgeSearchService:
 
             acl_filter_enabled = get_settings().kb_acl_filter_enabled
         self._acl_filter_enabled = acl_filter_enabled
+        # 知识活性埋点（多源接入 §6.1 v1；None=缺省不埋点，组合根零改动零行为变化）
+        self._usage_store = usage_store
+        self._usage_tasks: set[asyncio.Task[None]] = set()  # 持引用防 fire-and-forget 任务被 GC
 
     async def search(
         self,
@@ -161,15 +170,62 @@ class KnowledgeSearchService:
             # source_context 软路由（多源接入 §5.2 v1）：None=原序零开销零 SQL；非空=score 微调重排
             hits = await rerank_hits_by_source_context(db, result.hits, source_context=source_context)
         latency_ms = int((time.perf_counter() - started) * 1000)
+        citations = [_hit_to_citation(hit) for hit in hits]
+        self._schedule_usage_record(
+            tenant_id=tenant_id, kb_collection_id=kb_id, chunk_ids=[c.chunk_id for c in citations]
+        )
         return KnowledgeSearchResult(
             query=result.query,
             degraded=result.degraded,
             degraded_reasons=list(result.degraded_reasons),
             channels=list(result.channels),
-            citations=[_hit_to_citation(hit) for hit in hits],
+            citations=citations,
             graph_paths=[_path_to_dict(path) for path in result.graph_paths],
             latency_ms=latency_ms,
         )
+
+    def _schedule_usage_record(
+        self, *, tenant_id: uuid.UUID, kb_collection_id: uuid.UUID | None, chunk_ids: Sequence[uuid.UUID]
+    ) -> None:
+        """知识活性埋点调度（多源接入 §6.1 v1）：citations 生成后 fire-and-forget 计数。
+
+        - usage_store 未注入（缺省 None）或 kb_id 缺省（跨库检索无法零成本归因）→ 零动作；
+        - 统计失败绝不影响检索主链路：异常在守卫协程内吞掉，DEBUG 留痕（不升级不打扰）。
+        """
+        store = self._usage_store
+        if store is None or kb_collection_id is None or not chunk_ids:
+            return
+        # 批内去重（保序）：同一 chunk 多次命中只计一次，防止多路召回重复放大计数
+        unique_ids = list(dict.fromkeys(chunk_ids))
+        task = asyncio.get_running_loop().create_task(
+            self._record_usage_guarded(
+                store, tenant_id=tenant_id, kb_collection_id=kb_collection_id, chunk_ids=unique_ids
+            )
+        )
+        self._usage_tasks.add(task)
+        task.add_done_callback(self._usage_tasks.discard)
+
+    async def _record_usage_guarded(
+        self,
+        store: UsageStore,
+        *,
+        tenant_id: uuid.UUID,
+        kb_collection_id: uuid.UUID,
+        chunk_ids: Sequence[uuid.UUID],
+    ) -> None:
+        """埋点守卫：store 任何异常吞掉 + DEBUG 留痕（§6.1 零成本埋点纪律：统计不伤主链路）。"""
+        try:
+            await store.record_search_hits(
+                tenant_id=tenant_id, kb_collection_id=kb_collection_id, chunk_ids=chunk_ids
+            )
+        except Exception:  # noqa: BLE001 —— 吞掉是设计意图（埋点旁路，绝不外溢到检索调用方）
+            logger.debug(
+                "usage 埋点失败（不影响检索主链路）: tenant=%s kb=%s chunks=%d",
+                tenant_id,
+                kb_collection_id,
+                len(chunk_ids),
+                exc_info=True,
+            )
 
     async def _class_hierarchy(self, db: AsyncSession, tenant_id: uuid.UUID) -> ClassHierarchy:
         """租户类层次（当前发布版）+ 进程内 TTL 缓存；无已发布本体 → 空层次（闭包退化非失败）。"""

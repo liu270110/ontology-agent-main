@@ -94,6 +94,50 @@ export function ProfileTab() {
           保存{dirty ? '' : '（无修改）'}
         </button>
       </div>
+
+      <AboutCard />
+    </div>
+  )
+}
+
+/** 关于（版本单源=package.json，经 vite define 注入；桌面端经 preload appInfo 桥取壳版本对照）。 */
+function AboutCard() {
+  const [desktop, setDesktop] = useState<{ version: string; platform: string } | null>(null)
+  useEffect(() => {
+    // 非 Electron 环境 window.oaDesktop 不存在（types.d.ts ambient 可选桥）
+    void (window as { oaDesktop?: { appInfo(): Promise<{ version: string; platform: string }> } }).oaDesktop
+      ?.appInfo()
+      .then(setDesktop)
+      .catch(() => {})
+  }, [])
+
+  const buildTime = (() => {
+    try {
+      return new Date(__BUILD_TIME__).toLocaleString('zh-CN', { hour12: false })
+    } catch {
+      return __BUILD_TIME__
+    }
+  })()
+
+  return (
+    <div className="card mt-4 p-4" data-testid="about-card">
+      <b className="text-sm">关于</b>
+      <dl className="mt-2 text-[12px]">
+        <div className="flex justify-between border-b border-separator py-1.5">
+          <dt className="text-label-3">应用版本</dt>
+          <dd className="mono" data-testid="about-version">{__APP_VERSION__}</dd>
+        </div>
+        <div className="flex justify-between border-b border-separator py-1.5">
+          <dt className="text-label-3">构建时间</dt>
+          <dd className="mono" data-testid="about-build-time">{buildTime}</dd>
+        </div>
+        <div className="flex justify-between py-1.5">
+          <dt className="text-label-3">运行环境</dt>
+          <dd className="mono" data-testid="about-runtime">
+            {desktop ? `桌面端 · Electron ${desktop.version} · ${desktop.platform}` : 'Web'}
+          </dd>
+        </div>
+      </dl>
     </div>
   )
 }

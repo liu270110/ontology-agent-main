@@ -1,6 +1,6 @@
 version: '1.0'
 name: develop-pipeline
-displayName: 'CI-门禁（S1 静态/S2 单测为硬门禁，失败即阻断；S3 为 M1 占位，S4~S6 随里程碑接入。2026-09-26 OCR 评审修复：移除吞错回退）'
+displayName: 'CI-门禁（S1 静态/S2 单测硬门禁；S3 集成占位；S4 前端 build+vitest 硬门禁+视口矩阵软门禁。2026-09-28 接入 30 篇 §7.3）'
 triggers:
   push:
     branches:
@@ -44,3 +44,26 @@ stages:
         pythonVersion: 3.11
         commands:
           - echo "M1 接入：pytest -m integration（testcontainers PG/Redis/MinIO），届时替换本占位"
+  - name: stage-frontend
+    displayName: 'S4 前端门禁（build+vitest+视口矩阵，30 篇 §7.3）'
+    steps:
+      - step: build@nodejs
+        name: frontend_build_test
+        displayName: 'frontend：tsc+vite build+vitest（Node 20）'
+        nodeVersion: 20
+        commands:
+          - cd frontend
+          - npm ci
+          - npm run build
+          - npx vitest run
+      - step: build@nodejs
+        name: frontend_viewport_matrix
+        displayName: '视口矩阵（5 视口×亮暗×3 页，22 篇 §4）'
+        nodeVersion: 20
+        commands:
+          - cd frontend
+          - VITE_ENABLE_MOCK=1 npm run build
+          - npm i -D playwright 2>/dev/null || true
+          - npx playwright install chromium --with-deps || npx playwright install chromium
+          - VITE_ENABLE_MOCK=1 npx vite preview --port 4199 & sleep 5
+          - python tests/viewport-matrix.py || echo "WARN 视口矩阵非硬门禁（截图产物见构建 Artifacts）"

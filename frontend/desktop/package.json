@@ -2,7 +2,7 @@
   "name": "ontology-agent-desktop",
   "productName": "ontology-agent",
   "private": true,
-  "version": "0.1.0-m1",
+  "version": "0.2.0",
   "description": "ontology-agent 桌面端 Electron 壳（FE-ADR-FE9）：宿主 Web 同一 dist 构建物，壳只负责窗口/协议/托盘宿主能力",
   "author": "ontology-agent platform team",
   "main": "dist-electron/main.js",

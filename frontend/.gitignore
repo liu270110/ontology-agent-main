@@ -6,3 +6,5 @@ src/api/generated/
 *.local
 dist-live
 dist-s2deep
+dist-dash/
+dist-upload/

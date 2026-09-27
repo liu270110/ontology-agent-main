@@ -1,7 +1,11 @@
-import { api } from '@/api/client'
+import { ApiError, api, trySilentRefresh } from '@/api/client'
+import { useAuthStore } from '@/stores/auth-store'
 
 /** kb 域 API（契约=api/01 §5.4 + §6.2；DTO 手写过渡，TODO: 后端 /meta/openapi 可用后 gen:api 生成）。
- *  与 mocks/kb-handlers.ts 的 mock 形状一一对应；切 live 只换 VITE_ENABLE_MOCK=0。 */
+ *  与 mocks/kb-handlers.ts 的 mock 形状一一对应；切 live 只换 VITE_ENABLE_MOCK=0。
+ *  S8 上传链路 live 对账（2026-09-28 网关 8021 实测）：POST /kb/documents、/kb/collections、
+ *  pipeline/start 返回**裸 DTO**（无 {code,message,data} 信封），与 mock 信封形态并存——
+ *  上传链路改走 postKbRaw 双形态兼容（client.apiFetchEnvelope 强信封解包会对裸 DTO 误抛）。 */
 
 export type KbDocStatus = 'pending' | 'extracting' | 'indexed' | 'failed'
 export type CandidateType = 'entity' | 'relation' | 'attribute' | 'axiom'
@@ -101,20 +105,158 @@ export function listDocuments() {
   return api.get<{ items: KbDocument[]; next_cursor: string | null }>('/kb/documents')
 }
 
-/** POST /kb/documents —— 登记文档（live：返回 MinIO 预签名地址直传后再 pipeline/start；
- *  mock：登记即收编，直传步骤省略） */
-export function registerDocument(body: { name: string; size_bytes: number; content_type: string }) {
-  return api.post<KbDocument>('/kb/documents', body)
+// ---------------------------------------------------------------- 上传链路（S8 live 对账 2026-09-28）
+
+/** 上传链路专用 POST：live 网关对 /kb/collections、/kb/documents、pipeline/start 返回裸 DTO
+ *  （无信封；client.apiFetchEnvelope 的 `code !== 0` 强校验会误抛），而 mock（MSW）与
+ *  GET /kb/documents 为信封形态——此处双形态兼容，并保留 401 单飞静默刷新后重放一次。 */
+async function postKbRaw<T>(path: string, body?: unknown): Promise<T> {
+  const base = import.meta.env.VITE_API_BASE ?? '/api/v1'
+  const doFetch = () => {
+    const token = useAuthStore.getState().accessToken
+    return fetch(`${base}${path}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+      body: body === undefined ? undefined : JSON.stringify(body),
+    })
+  }
+  let res = await doFetch()
+  if (res.status === 401 && (await trySilentRefresh())) res = await doFetch()
+  const raw = await res.text()
+  let parsed: unknown = null
+  try {
+    parsed = raw ? JSON.parse(raw) : null
+  } catch {
+    /* 非 JSON（网关裸错误页等）→ 走 HTTP status 兜底 */
+  }
+  if (!res.ok) {
+    // 错误三形态：网关信封 {code,message} / FastAPI 原生 {detail} / 纯 status
+    const err = (parsed ?? {}) as { code?: number; message?: string; detail?: unknown }
+    const detail = typeof err.detail === 'string' ? err.detail : undefined
+    throw new ApiError(err.code ?? -1, err.message ?? detail ?? `HTTP ${res.status}`, res.status)
+  }
+  if (parsed && typeof parsed === 'object' && 'code' in parsed) {
+    const env = parsed as { code: number; message?: string; data: T }
+    if (env.code !== 0) throw new ApiError(env.code, env.message ?? `HTTP ${res.status}`, res.status)
+    return env.data
+  }
+  return parsed as T
+}
+
+export interface KbCollectionOut {
+  id: string
+  name: string
+  description: string | null
+  embedding_model: string
+  status: string
+  created_at: string
+}
+
+/** POST /kb/collections —— 创建知识库集合（live 实测 201 裸 DTO；同名 409「同名知识库已存在」）。
+ *  后端无 GET 列表端点（R53）：collection_id 只能经创建获得 → 前端按目标库名缓存复用
+ *  （ensureCollectionId），缓存失效（库重置 404）时清缓存重建一次。 */
+export function createCollection(body: { name: string; description?: string; embedding_model?: string }) {
+  return postKbRaw<KbCollectionOut>('/kb/collections', body)
+}
+
+const COLLECTION_CACHE_KEY = 'oa-kb-collections'
+
+function cachedCollectionId(name: string): string | null {
+  try {
+    return (JSON.parse(localStorage.getItem(COLLECTION_CACHE_KEY) ?? '{}') as Record<string, string>)[name] ?? null
+  } catch {
+    return null
+  }
+}
+
+function cacheCollectionId(name: string, id: string) {
+  try {
+    const map = JSON.parse(localStorage.getItem(COLLECTION_CACHE_KEY) ?? '{}') as Record<string, string>
+    map[name] = id
+    localStorage.setItem(COLLECTION_CACHE_KEY, JSON.stringify(map))
+  } catch {
+    /* 隐私模式等：仅失去跨会话缓存，每次上传重建集合的 409 交给行内错误提示 */
+  }
+}
+
+function clearCollectionId(name: string) {
+  try {
+    const map = JSON.parse(localStorage.getItem(COLLECTION_CACHE_KEY) ?? '{}') as Record<string, string>
+    delete map[name]
+    localStorage.setItem(COLLECTION_CACHE_KEY, JSON.stringify(map))
+  } catch {
+    /* 同上，忽略 */
+  }
+}
+
+/** 目标知识库名 → collection_id：缓存命中直接用；未命中 POST /kb/collections 创建并缓存。 */
+export async function ensureCollectionId(name: string): Promise<string> {
+  const hit = cachedCollectionId(name)
+  if (hit) return hit
+  const col = await createCollection({ name })
+  cacheCollectionId(name, col.id)
+  return col.id
+}
+
+export interface KbDocumentRegistered {
+  id: string
+  collection_id: string
+  title: string
+  status: string
+  size_bytes: number | null
+  checksum_sha256: string
+  created_at: string
+  /** 幂等命中既有文档时为 false（同集合同内容 checksum 去重，仍按成功处理） */
+  created: boolean
+}
+
+/** POST /kb/documents —— 登记文档。S8 live 实测（2026-09-28 网关 8021）：M2 **JSON 内容直传**，
+ *  请求 {collection_id(UUID), title, content(非空文本), mime_type?}（extra=forbid，非 multipart）；
+ *  200 裸 DocumentOut；checksum 幂等（created=false）。无 MinIO 预签名上传地址
+ *  （R18 预登记未实现，对象存储直传随 M3）——二进制类文件（PDF/Office/图片）内容以文本语义
+ *  降级直传，密文/扫描件抽取质量受限，待 M3 预签名链路替换。 */
+export function registerDocument(body: { collection_id: string; title: string; content: string; mime_type?: string }) {
+  return postKbRaw<KbDocumentRegistered>('/kb/documents', body)
+}
+
+/** 上传单文件全链路：collection 解析（404=集合失效→清缓存重建一次）→ 登记文档。
+ *  多文件由 UploadDialog 循环单文件调用（每文件一行进度）。 */
+export async function uploadDocumentText(opts: {
+  collectionName: string
+  title: string
+  content: string
+  mime_type?: string
+}): Promise<KbDocumentRegistered> {
+  const cid = await ensureCollectionId(opts.collectionName)
+  try {
+    return await registerDocument({ collection_id: cid, title: opts.title, content: opts.content, mime_type: opts.mime_type })
+  } catch (e) {
+    if (e instanceof ApiError && e.httpStatus === 404) {
+      clearCollectionId(opts.collectionName)
+      const cid2 = await ensureCollectionId(opts.collectionName)
+      return registerDocument({ collection_id: cid2, title: opts.title, content: opts.content, mime_type: opts.mime_type })
+    }
+    throw e
+  }
+}
+
+export interface PipelineStartOut {
+  /** mock 语义（MSW 返回 {job_id}）；live 无任务号（lite 流水线进程内执行，job_id=null） */
+  job_id?: string | null
+  /** live 202 实测形态：{document_id, accepted} */
+  document_id?: string
+  accepted?: boolean
+}
+
+/** POST /kb/documents/{id}/pipeline/start —— 启动七步抽取流水线
+ *  （live 实测 202 {document_id, accepted:true}；mock 202 {job_id}——双形态宽类型）。 */
+export function startPipeline(id: string) {
+  return postKbRaw<PipelineStartOut>(`/kb/documents/${id}/pipeline/start`)
 }
 
 /** DELETE /kb/documents/{id}（IX-KB-03；契约缺口见交付报告 R17：§5.4 未列 DELETE 行） */
 export function deleteDocument(id: string) {
   return api.delete<{ deleted: boolean }>(`/kb/documents/${id}`)
-}
-
-/** POST /kb/documents/{id}/pipeline/start —— 启动七步抽取流水线 */
-export function startPipeline(id: string) {
-  return api.post<{ job_id: string }>(`/kb/documents/${id}/pipeline/start`)
 }
 
 /** POST /kb/documents/{id}/pipeline/retry —— 断点重跑（IX-KB-04 全文/仅失败分片；IX-REV-05 单分片） */

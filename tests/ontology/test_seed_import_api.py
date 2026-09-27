@@ -3,6 +3,7 @@
 
 覆盖：
 - 导入成功：201 + 项目摘要（published/head=v1）+ 版本指针与制品 checksum 一致 + 制品内容含种子类；
+- 导入成功读模型投影：publish 后四表（classes/properties/axioms/rules）行存在且与种子类目一致；
 - 重复 slug 导入被拒：409（uk_ontologies_tenant_id_iri_base）且零孤儿制品、零冗余行；
 - inspect 失败拒绝导入：lint 违例 / 解析失败均 4204，项目行不落库。
 
@@ -37,9 +38,13 @@ from services.iam.data.orm import Tenant as TenantORM
 from services.iam.data.orm import User as UserORM
 from services.ontology.api import ontology as ontology_api
 from services.ontology.business import seed_service
+from services.ontology.data.orm import Axiom as AxiomORM
+from services.ontology.data.orm import OntoClass as OntoClassORM
 from services.ontology.data.orm import Ontology as OntologyORM
 from services.ontology.data.orm import OntologyChangeset as OntologyChangesetORM
 from services.ontology.data.orm import OntologyVersion as OntologyVersionORM
+from services.ontology.data.orm import OntoProperty as OntoPropertyORM
+from services.ontology.data.orm import Rule as RuleORM
 from services.platform.config import Settings
 from services.platform.deps import Principal, get_current_principal, get_session
 from services.platform.errors import GatewayError, error_response
@@ -48,6 +53,19 @@ if sys.platform == "win32":
     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
 SLUG = "power-seed-it"
+
+# 种子资产域命名空间（power_outage_seed.ttl 内容定死，与项目 iri_base 无关——投影 IRI 即此空间）
+PWR = "https://ontology-agent.dev/ns/power#"
+_SEED_RULE_NAMES = {
+    "WorkTicketShape",
+    "DispatchedTicketShape",
+    "OutageEventShape",
+    "FeederShape",
+    "TransformerShape",
+    "RepairCrewShape",
+    "RestorationPlanShape",
+    "MaintenanceWindowShape",
+}
 
 # 损坏资产样本：行动闭环断裂（缺 triggeredByEvent/guardedByRule → LINT_ACTION_NOT_CLOSED）
 _LINT_VIOLATION_TTL = """
@@ -149,8 +167,16 @@ async def seed_api(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> AsyncIter
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://testserver") as client:
         yield SeedApiEnv(client=client, tenant_id=tenant.id, user_id=user.id, factory=factory, artifacts=artifacts_root)
 
-    async with factory() as db, db.begin():  # FK 逆序清理（版本→变更单→本体→用户→租户）
-        for orm in (OntologyVersionORM, OntologyChangesetORM, OntologyORM):
+    async with factory() as db, db.begin():  # FK 逆序清理（读模型四表→版本→变更单→本体→用户→租户）
+        for orm in (
+            RuleORM,
+            AxiomORM,
+            OntoPropertyORM,
+            OntoClassORM,
+            OntologyVersionORM,
+            OntologyChangesetORM,
+            OntologyORM,
+        ):
             await db.execute(delete(orm).where(orm.tenant_id == tenant.id))
         await db.execute(delete(UserORM).where(UserORM.id == user.id))
         await db.execute(delete(TenantORM).where(TenantORM.id == tenant.id))
@@ -205,6 +231,85 @@ async def test_种子导入成功_项目版本制品三落位(seed_api: SeedApiE
     assert changesets[0].applicant_id == seed_api.user_id  # solo 档：导入人即审批人（留痕可追溯）
     assert len(versions) == 1 and versions[0].version == "v1"
     assert versions[0].checksum == version["checksum"]
+
+
+async def test_种子导入成功_读模型四表投影落位(seed_api: SeedApiEnv) -> None:
+    """导入成功即读模型就绪（2026-09-28 补投影链）：publish 后四表行存在且内容与种子类目一致。
+
+    链路同 L2 publish 路由同款：import_seed_as_project 在聚合 publish 后显式调
+    project_published_version（routes 缺省=制品图重跑 lint 取权威路由，rollback 同款），
+    投影与版本行同会话事务落库——无需任何后续调用，检索/工作台即可消费。
+    """
+    # Act
+    resp = await seed_api.client.post("/ontologies/import-seed", json={"slug": SLUG})
+    assert resp.status_code == 201, resp.text
+    body = resp.json()
+    seed_report = body["seed_report"]
+    # Assert —— 四表行存在：类数与种子自检口径一致（同一 lint/投影产出），其余三表非空
+    async with seed_api.factory() as db:
+        classes = (
+            (await db.execute(select(OntoClassORM).where(OntoClassORM.tenant_id == seed_api.tenant_id)))
+            .scalars()
+            .all()
+        )
+        properties = (
+            (await db.execute(select(OntoPropertyORM).where(OntoPropertyORM.tenant_id == seed_api.tenant_id)))
+            .scalars()
+            .all()
+        )
+        axioms = (
+            (await db.execute(select(AxiomORM).where(AxiomORM.tenant_id == seed_api.tenant_id))).scalars().all()
+        )
+        rules = ((await db.execute(select(RuleORM).where(RuleORM.tenant_id == seed_api.tenant_id))).scalars().all())
+        changeset_row = (
+            (
+                await db.execute(
+                    select(OntologyChangesetORM).where(OntologyChangesetORM.tenant_id == seed_api.tenant_id)
+                )
+            )
+            .scalars()
+            .one()
+        )
+        version_row = (
+            (
+                await db.execute(
+                    select(OntologyVersionORM).where(OntologyVersionORM.tenant_id == seed_api.tenant_id)
+                )
+            )
+            .scalars()
+            .one()
+        )
+    assert len(classes) == seed_report["class_count"] >= 20  # 种子规模口径 20~50 类（锚点 §7）
+    assert len(properties) >= 1 and len(axioms) >= 1 and len(rules) >= 1
+
+    # Assert —— classes 与种子对象/行动层一致：标签、层级、OB2 行动类判定
+    by_iri = {c.iri: c for c in classes}
+    feeder = by_iri[f"{PWR}Feeder"]
+    assert feeder.name == "Feeder" and feeder.label == "10kV 馈线" and feeder.is_behavior is False
+    assert by_iri[f"{PWR}ScheduledOutage"].subclass_of == [f"{PWR}OutageEvent"]  # 种子 subClassOf 层级入列
+    assert by_iri[f"{PWR}DispatchRepair"].is_behavior is True  # 行动类（subClassOf ob2:Action 闭包）
+    assert all(c.version_id == version_row.id for c in classes)  # 挂靠 v1 版本行
+    assert all(c.changeset_id == changeset_row.id for c in classes)  # 来源变更单留痕
+
+    # Assert —— properties 与种子属性层一致：域/值域 + shape 约束随属性投影
+    prop_by_iri = {p.iri: p for p in properties}
+    supplies = prop_by_iri[f"{PWR}supplies"]
+    assert supplies.kind == "object"
+    assert supplies.domain_iri == f"{PWR}Feeder" and supplies.range_iri == f"{PWR}Transformer"
+    assert prop_by_iri[f"{PWR}feederId"].kind == "datatype"
+    assert prop_by_iri[f"{PWR}feederId"].constraints["pattern"] == "^F-[0-9]{3}$"  # FeederShape 约束投影
+
+    # Assert —— axioms 含种子 subClassOf 直接公理（行动闭环与事件层级可追溯）
+    axiom_triples = {(a.kind, a.subject_iri, a.object_iri) for a in axioms}
+    assert ("subClassOf", f"{PWR}FaultOutage", f"{PWR}OutageEvent") in axiom_triples
+    assert ("subClassOf", f"{PWR}DispatchRepair", "https://ontology-agent.dev/ns/ob2#Action") in axiom_triples
+
+    # Assert —— rules 与种子 8 条 ob2:Rule 一致：三路由判定落列（权威=lint §2.3）
+    rule_by_name = {r.name: r for r in rules}
+    assert set(rule_by_name) == _SEED_RULE_NAMES
+    assert rule_by_name["RepairCrewShape"].route == "shacl"  # 纯 R2 算子封闭集通道
+    assert rule_by_name["DispatchedTicketShape"].route == "engine"  # 含 sh:sparql 超 R2 算子集 → R3
+    assert all(r.version_id == version_row.id and r.changeset_id == changeset_row.id for r in rules)
 
 
 async def test_重复slug导入被拒_409且零孤儿制品(seed_api: SeedApiEnv) -> None:

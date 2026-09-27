@@ -456,6 +456,7 @@ export const groupHandlers = [
   // ---- 路由切换持久化（GRP-02：PATCH /sessions/{id} routing；§5.2 预登记） ----
   http.patch('*/api/v1/sessions/:id', async ({ params, request }) => {
     const id = String(params.id)
+    if (!id.startsWith('g-')) return undefined // 非群聊会话（s-*）放行 handlers.ts sessions 块（置顶/重命名 PATCH）
     const body = (await request.json()) as { routing?: RoutingMode }
     if (!SESSIONS[id]) return err(2001, '会话不存在', 404)
     if (body.routing) SESSIONS[id].routing = body.routing

@@ -46,7 +46,7 @@ interface GroupStreamState {
   appendLocal: (content: string) => void
   /** 确认高风险动作后回写该消息 pending_action → confirmed */
   resolveAction: (messageId: string, token: string) => void
-  /** 归约一帧：'applied' | 'dup' | 'gap'（gap 由调用方触发 ?last_seq= 重连，§3.2） */
+  /** 归约一帧：'applied' | 'dup' | 'gap'（gap 由调用方触发 ?last_event_id= 重连，api/02 §4） */
   apply: (evt: SseEvent) => 'applied' | 'dup' | 'gap'
 }
 

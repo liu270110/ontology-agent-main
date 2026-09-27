@@ -1,0 +1,27 @@
+# ontology-agent 桌面壳打包配置（electron-builder；v1 以 --dir 未打包验证为准，nsis 目标预置）
+appId: com.ontology.agent
+productName: ontology-agent
+directories:
+  buildResources: build
+  output: release
+# 主进程产物（无生产依赖，全部 devDeps；electron 本体由 builder 注入）
+files:
+  - dist-electron/**/*
+  - package.json
+# Web 同源 dist 构建物随壳分发，运行时主进程从 resources/webapp 加载（main.ts WEB_DIST 解析）
+extraResources:
+  - from: ../dist
+    to: webapp
+win:
+  icon: build/icon.ico
+  target:
+    - target: nsis
+      arch:
+        - x64
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  shortcutName: ontology-agent
+# 本壳无原生模块，跳过 rebuild 加速打包
+npmRebuild: false

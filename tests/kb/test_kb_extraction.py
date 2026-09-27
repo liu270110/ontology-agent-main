@@ -436,8 +436,15 @@ async def test_validate_marks_evidence_not_in_chunk_without_blocking_review(
     await run_extract(ctx)
     await run_validate(ctx)
     async with kb_pg() as db:
-        facts = (await db.execute(select(KbFactORM))).scalars().all()
-        tickets = {t.target_id: t for t in (await db.execute(select(ReviewTicketORM))).scalars().all()}
+        facts = (
+            await db.execute(select(KbFactORM).where(KbFactORM.tenant_id == extract_env["tenant_id"]))
+        ).scalars().all()
+        tickets = {
+            t.target_id: t
+            for t in (
+                await db.execute(select(ReviewTicketORM).where(ReviewTicketORM.tenant_id == extract_env["tenant_id"]))
+            ).scalars().all()
+        }
     haunted = [f for f in facts if f.subject == "馈线F001"]
     clean = [f for f in facts if f.subject == "变压器T-09"]
     assert haunted and clean
@@ -464,7 +471,14 @@ async def test_align_tier2_embedding_cosine_aligns_pending_names(
     await run_extract(_ctx(kb_pg, extract_env))  # FakeModelPort：馈线F001 / 工单OO-123456 两候选
     await run_align(_ctx(kb_pg, extract_env, model=None, embedder=_ScriptedEmbedder(table)))
     async with kb_pg() as db:
-        facts = {f.subject: f for f in (await db.execute(select(KbFactORM))).scalars().all()}
+        facts = {
+            f.subject: f
+            for f in (
+                await db.execute(
+                    select(KbFactORM).where(KbFactORM.tenant_id == extract_env["tenant_id"])
+                )
+            ).scalars().all()
+        }
     feeder, order = facts["馈线F001"], facts["工单OO-123456"]
     assert feeder.meta["align"]["tier"] == 1  # 对照：二级只接手一级未命中
     assert order.subject_type == f"{PW}OutageOrder" and order.aliases == [f"{PW}OutageOrder"]
@@ -499,7 +513,14 @@ async def test_align_tier3_llm_whitelist_boundary_rejection(
     await run_extract(ctx)
     await run_align(ctx)
     async with kb_pg() as db:
-        facts = {f.subject: f for f in (await db.execute(select(KbFactORM))).scalars().all()}
+        facts = {
+            f.subject: f
+            for f in (
+                await db.execute(
+                    select(KbFactORM).where(KbFactORM.tenant_id == extract_env["tenant_id"])
+                )
+            ).scalars().all()
+        }
     aligned, rejected = facts["配网环网柜"], facts["神秘设备"]
     assert aligned.subject_type == f"{PW}PowerDevice" and aligned.aliases == [f"{PW}PowerDevice"]
     assert aligned.meta["align"]["tier"] == 3 and aligned.meta["align"]["rule"] == "llm"
@@ -517,7 +538,14 @@ async def test_align_embed_unavailable_skips_tier2_degrades_not_fails(
     await run_extract(_ctx(kb_pg, extract_env))
     await run_align(_ctx(kb_pg, extract_env, model=None, embedder=_FailingEmbedder()))
     async with kb_pg() as db:
-        facts = {f.subject: f for f in (await db.execute(select(KbFactORM))).scalars().all()}
+        facts = {
+            f.subject: f
+            for f in (
+                await db.execute(
+                    select(KbFactORM).where(KbFactORM.tenant_id == extract_env["tenant_id"])
+                )
+            ).scalars().all()
+        }
     order = facts["工单OO-123456"]  # 一级未命中 + 二级不可用 + 三级未装配 → 保留待审
     assert order.status == "candidate" and order.aliases == []
     assert order.meta["align"]["status"] == "needs_review" and order.meta["align"]["tier"] is None

@@ -1,0 +1,162 @@
+# services/ontology/turtle/mem.ttl
+# mem 记忆本体 TBox v1（06 篇 §3；内建本体制品，随平台版本发布；自己吃狗粮：与租户本体同用 core/{tbox,shacl}.py 管理）。
+# 七类记录 + 关键属性 + SHACL 写入门禁（shape v1 最低线：FactClaim content 必填；出处/值域/基数门禁随 M4 后续任务补齐）。
+
+@prefix mem: <https://ontology-agent.dev/ontology/mem#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+<https://ontology-agent.dev/ontology/mem#> a owl:Ontology ;
+    rdfs:label "mem 记忆本体 v1" ;
+    rdfs:comment "记忆系统类型系统（06 篇 §3）：七类记录类型 + 关键属性 + SHACL 写入门禁。" .
+
+# ---------------------------------------------------------------------------
+# §3.1 记录类型（owl:Class 层级）：六类可抽取 + Observation 仅后台固化
+# ---------------------------------------------------------------------------
+
+mem:MemoryRecord a owl:Class ;
+    rdfs:label "记忆记录" ;
+    rdfs:comment "mem 七类记录的公共父类（类型系统根）。" .
+
+mem:Preference a owl:Class ;
+    rdfs:subClassOf mem:MemoryRecord ;
+    rdfs:label "偏好" ;
+    rdfs:comment "用户/组织的偏好约束，抽取要点：稳定的行为/格式要求，如「回答须附出处」。" .
+
+mem:FactClaim a owl:Class ;
+    rdfs:subClassOf mem:MemoryRecord ;
+    rdfs:label "事实声明" ;
+    rdfs:comment "可证伪的一句话事实，抽取要点：有明确主体与断言内容；子类分属性型/关系型。" .
+
+mem:AttributeFact a owl:Class ;
+    rdfs:subClassOf mem:FactClaim ;
+    rdfs:label "属性型事实" ;
+    rdfs:comment "属性型事实（实体—属性—值），如「A 系统负责人是张三」。" .
+
+mem:RelationalFact a owl:Class ;
+    rdfs:subClassOf mem:FactClaim ;
+    rdfs:label "关系型事实" ;
+    rdfs:comment "关系型事实（主体—谓词—客体），如「A 系统依赖 B 系统」。" .
+
+mem:Episode a owl:Class ;
+    rdfs:subClassOf mem:MemoryRecord ;
+    rdfs:label "事件片段" ;
+    rdfs:comment "带时间语境的事件片段，抽取要点：何时何地发生了什么，如「9-20 评审会决定推迟 M3」。" .
+
+mem:Decision a owl:Class ;
+    rdfs:subClassOf mem:MemoryRecord ;
+    rdfs:label "决策" ;
+    rdfs:comment "决策/结论，抽取要点：在备选项中拍板的结果及其理由，如「记忆方案选 B」。" .
+
+mem:Goal a owl:Class ;
+    rdfs:subClassOf mem:MemoryRecord ;
+    rdfs:label "目标" ;
+    rdfs:comment "目标/意图，抽取要点：尚未完成的追求状态，如「正在准备等保测评」。" .
+
+mem:ProcedureRef a owl:Class ;
+    rdfs:subClassOf mem:MemoryRecord ;
+    rdfs:label "程序引用" ;
+    rdfs:comment "指向 Skills/工具配方的指针（不复制内容），抽取要点：什么任务用什么技能/工具。" .
+
+mem:Observation a owl:Class ;
+    rdfs:subClassOf mem:MemoryRecord ;
+    rdfs:label "观察信念" ;
+    rdfs:comment "观察信念：多条同主体事实经 sleep-time 反思固化而成（去重+证据链+proof 计数）；仅后台固化产生，不进抽取 schema。" .
+
+# ---------------------------------------------------------------------------
+# §3.2 关键属性
+# ---------------------------------------------------------------------------
+
+mem:content a owl:DatatypeProperty ;
+    rdfs:label "正文" ;
+    rdfs:comment "一句话自然语言正文（注入上下文用）。" ;
+    rdfs:domain mem:MemoryRecord ;
+    rdfs:range xsd:string .
+
+mem:about a owl:ObjectProperty ;
+    rdfs:label "关于实体" ;
+    rdfs:comment "链接到业务实体 IRI（术语对齐后的唯一 IRI）；同实体记忆归位是冲突判定的前提。" ;
+    rdfs:domain mem:MemoryRecord ;
+    rdfs:range xsd:anyURI .
+
+mem:structured a owl:DatatypeProperty ;
+    rdfs:label "类型化槽位" ;
+    rdfs:comment "jsonb 槽位约定（如 attribute/value），SHACL 约束的属性值，机器判定用。" ;
+    rdfs:domain mem:MemoryRecord .
+
+mem:assertedBy a owl:ObjectProperty ;
+    rdfs:label "出处指针" ;
+    rdfs:comment "出处（session/message、doc+chunk+span、tool_call）——宪法第 5 条全程可追溯。" ;
+    rdfs:domain mem:MemoryRecord .
+
+mem:confidence a owl:DatatypeProperty ;
+    rdfs:label "置信度" ;
+    rdfs:comment "0~1 置信度。" ;
+    rdfs:domain mem:MemoryRecord ;
+    rdfs:range xsd:decimal .
+
+mem:scope a owl:DatatypeProperty ;
+    rdfs:label "作用域" ;
+    rdfs:comment "personal / org。" ;
+    rdfs:domain mem:MemoryRecord .
+
+mem:layer a owl:DatatypeProperty ;
+    rdfs:label "层级" ;
+    rdfs:comment "记忆层级 1~4。" ;
+    rdfs:domain mem:MemoryRecord .
+
+mem:supersedes a owl:ObjectProperty ;
+    rdfs:label "取代" ;
+    rdfs:comment "失效链：新事实取代旧事实（软删，不物理删除）。" .
+
+mem:contradicts a owl:ObjectProperty ;
+    rdfs:label "矛盾" ;
+    rdfs:comment "失效链：与旧事实的矛盾关系。" .
+
+mem:validFrom a owl:DatatypeProperty ;
+    rdfs:label "生效时间" ;
+    rdfs:comment "事实有效期起点（双时间线：事实何时成立）。" .
+
+mem:validTo a owl:DatatypeProperty ;
+    rdfs:label "失效时间" ;
+    rdfs:comment "事实有效期终点。" .
+
+mem:supportedBy a owl:ObjectProperty ;
+    rdfs:label "证据链" ;
+    rdfs:comment "观察记录指向被固化的多条事实。" .
+
+mem:proofCount a owl:DatatypeProperty ;
+    rdfs:label "证据计数" ;
+    rdfs:comment "独立证据计数——置信度之外的第二信号（Hindsight 机制）；mem:Observation 专用。" ;
+    rdfs:range xsd:integer .
+
+# ---------------------------------------------------------------------------
+# SHACL 写入门禁（shape v1 最低线，作用于 FactClaim 及其子类）
+# ---------------------------------------------------------------------------
+
+mem:FactClaimShape a sh:NodeShape ;
+    rdfs:label "事实声明写入门禁" ;
+    sh:targetClass mem:FactClaim ;
+    sh:property [
+        sh:path mem:content ;
+        sh:name "正文" ;
+        sh:description "一句话事实正文（必填）" ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:datatype xsd:string ;
+        sh:minLength 1 ;
+    ] ;
+    sh:property [
+        sh:path mem:about ;
+        sh:name "关于实体" ;
+        sh:description "对齐后的实体 IRI；对不齐时允许缺省（§5.1 置空）" ;
+        sh:nodeKind sh:IRI ;
+    ] ;
+    sh:property [
+        sh:path mem:confidence ;
+        sh:name "置信度" ;
+        sh:datatype xsd:decimal ;
+    ] .

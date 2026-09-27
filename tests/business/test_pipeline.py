@@ -162,3 +162,12 @@ async def test_idempotent_settle_skips():
         tenant_id=TENANT, session_id=uuid.uuid4(), transcript="t", now=NOW, idempotency_key="sess-1"
     )
     assert result.added == 0 and llm.calls == 0  # 命中即短路，不调 LLM
+
+
+def test_pipeline_prompt_driven_by_tbox():
+    """抽取 schema 来自 mem TBox 生成而非静态串（本体驱动最低验收线，plan3 任务 1）。"""
+    from services.memory.business.consolidation_pipeline import SETTLE_SYSTEM_PROMPT
+
+    for name in ("mem:Preference", "mem:FactClaim", "mem:Episode", "mem:Decision", "mem:Goal", "mem:ProcedureRef"):
+        assert name in SETTLE_SYSTEM_PROMPT, name  # 枚举来自 TBox
+    assert "仅后台固化" not in SETTLE_SYSTEM_PROMPT  # Observation 不进抽取枚举

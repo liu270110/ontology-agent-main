@@ -210,6 +210,10 @@ class KbSearchIn(BaseModel):
     max_hops: int = Field(default=2, ge=0, le=3)  # local/drift 图扩展跳数（§4.3 护栏 lite 上限 3）
     as_of: datetime | None = None  # bi-temporal 时点检索（参数权威=OntRAG §8.2）
     include_superseded: bool = False  # 被取代知识一并返回（带取代标注；lite=chunk/document 代际）
+    # 源系统标识软路由（多源接入设计 §5.2：同词异义按源系统加权排序；None=维持相关度序。
+    # 匹配文档 meta.source_system 的命中加分排前、不匹配者降序不剔除——软路由不硬过滤，
+    # 硬过滤与分组返回 schema 随 v1.5 语境术语表落地）
+    source_context: str | None = Field(default=None, max_length=64)
 
 
 class KbHitOut(BaseModel):

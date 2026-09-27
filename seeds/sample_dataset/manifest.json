@@ -1,0 +1,62 @@
+{
+  "dataset": "power-outage-sample",
+  "version": "0.2",
+  "provenance": "synthetic —— 合成样例，供抽取流水线与检索评估使用，不对应任何真实单位数据",
+  "seed_ontology": "../power_seed.ttl",
+  "seed_ontology_classes": 36,
+  "namespace_prefix": "pw:",
+  "docs": [
+    {
+      "id": "outage-ticket-OO-260928",
+      "path": "docs/outage-ticket-OO-260928.md",
+      "title": "停电工单 OO-260928",
+      "extract_type": "时序流程型",
+      "seed_class_anchors": [
+        "pw:OutageOrder",
+        "pw:OutageEvent",
+        "pw:OutageConfirmed",
+        "pw:IsolateFault",
+        "pw:DispatchRepair",
+        "pw:PowerRestored",
+        "pw:RepairCompleted",
+        "pw:Feeder",
+        "pw:Switch",
+        "pw:RepairCrew"
+      ],
+      "rule_anchors": ["pw:R003", "pw:R005"],
+      "sha256": "235989f5684f141c6c24d3e56848b742ce5fbe9960ee1004e8e34ed916ebe6ff"
+    },
+    {
+      "id": "feeder-ledger-F102",
+      "path": "docs/feeder-ledger-F102.md",
+      "title": "F102 馈线台账（10kV 城东线）",
+      "extract_type": "数据型",
+      "seed_class_anchors": [
+        "pw:Feeder",
+        "pw:Transformer",
+        "pw:Switch",
+        "pw:ProtectionDevice",
+        "pw:Customer",
+        "pw:LineSection"
+      ],
+      "rule_anchors": [],
+      "sha256": "2bb2a179d767a8aea1d2e06e48d72c3b060fd3a1e0685f1abcb5bd6feb682298"
+    },
+    {
+      "id": "outage-handling-manual-extract",
+      "path": "docs/outage-handling-manual-extract.md",
+      "title": "配电网停电处置规程（节选）",
+      "extract_type": "文本知识型",
+      "seed_class_anchors": [
+        "ob2:Rule",
+        "pw:OutageEvent",
+        "pw:PowerRestored",
+        "pw:OutageReport"
+      ],
+      "rule_anchors": ["pw:R003（条款 2 的规则素材）", "pw:R005（条款 3 的规则素材）"],
+      "sha256": "9ad29515a3e26e312bbb09b2bc04462f55c7c41ef02106104a46c8b3a72292c9"
+    }
+  ],
+  "golden_qa": "qa/golden-qa.jsonl",
+  "golden_qa_note": "30 条（每模式 10 条，对齐 OntRAG §10 下限），检索实测标定待 M3"
+}

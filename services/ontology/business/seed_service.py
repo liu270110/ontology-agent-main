@@ -7,6 +7,7 @@ triggeredByEvent/guardedByRule + 术语唯一性）+ 类/行动/形状计数入�
 
 from __future__ import annotations
 
+import uuid
 from pathlib import Path
 
 from pydantic import BaseModel
@@ -15,7 +16,10 @@ from rdflib.namespace import OWL, SH
 
 from services.ontology.core.lint import lint
 from services.ontology.core.shacl import ValidationReport, validate
-from services.ontology.core.tbox import TASK, load_turtle
+from services.ontology.core.tbox import TASK, default_namespace, load_turtle
+from services.ontology.domain.model.ontology import Ontology, OntologyVersionRef
+from services.ontology.domain.repo.ontology_repo import OntologyRepository
+from services.platform.kernel import DomainError
 
 SEED_PATH = Path(__file__).resolve().parent.parent / "seeds" / "power_outage_seed.ttl"
 
@@ -57,3 +61,60 @@ def load_seed_report(path: Path = SEED_PATH) -> tuple[Graph, SeedReport]:
     """装载 + 自检一步到位（调用方主路径；图可继续用于实例校验/投影）。"""
     graph = load_seed_graph(path)
     return graph, inspect_seed(graph)
+
+
+# ---------------------------------------------------------------- 种子导入（正式入口：禁空工作台冷启动）
+
+SEED_PROJECT_NAME = "电力停电分析本体"  # display_name 缺省定名（种子资产即电力停电分析精简 OB2）
+
+
+class SeedImportResult(BaseModel):
+    """导入结果：聚合（head 已推进 v1）+ 制品指针 + 种子自检报告（L2 响应摘要来源）。"""
+
+    ontology: Ontology
+    version: OntologyVersionRef
+    report: SeedReport
+
+
+async def import_seed_as_project(
+    repo: OntologyRepository,
+    *,
+    tenant_id: uuid.UUID,
+    slug: str,
+    display_name: str | None = None,
+    actor_id: uuid.UUID,
+) -> SeedImportResult:
+    """种子本体资产 → 正式本体项目（锚点 §7「禁空工作台冷启动」的正式入口）。
+
+    链路（复用既有落库路径，本体核心设计 §9 事务序；调用方会话=单事务边界）：
+    种子自检门禁（装载+lint，不过即抛错拒绝——宪法 3 资产化落点）→ 项目行先行落库
+    （slug 冲突在制品写入前暴露，零孤儿制品，uk_ontologies_tenant_id_iri_base 以
+    IntegrityError 上抛）→ 单变更单五动词链（solo 档：导入人即审批人，种子为专家定稿
+    资产非 LLM 候选）→ append_version（种子 Turtle 为 v1 制品，制品写成功→PG 版本行）
+    → 聚合 publish 推进 head（状态 published，列表/详情即刻可见）。
+    """
+    turtle = SEED_PATH.read_text(encoding="utf-8")  # 调用期读模块全局（测试可 monkeypatch 注入损坏资产）
+    try:
+        graph = load_seed_graph(SEED_PATH)
+    except ValueError as exc:
+        raise DomainError(f"4204 SEED_UNPARSEABLE: 种子资产解析失败，拒绝导入: {exc}") from exc
+    report = inspect_seed(graph)
+    if not report.lint_ok:
+        raise DomainError(f"4204 SEED_GATE_FAILED: 种子自检未过 lint 门禁，拒绝导入: {report.lint_violations}")
+
+    ontology = Ontology(
+        tenant_id=tenant_id,
+        iri_base=default_namespace(str(tenant_id), slug),
+        name=display_name or SEED_PROJECT_NAME,
+    )
+    await repo.save(ontology)  # 先建项目行：slug 冲突早暴露（此时制品未写、版本未落，零孤儿）
+    changeset = ontology.open_changeset("种子本体导入", applicant_id=actor_id)
+    changeset.record_gate(True, {"seed_report": report.model_dump(), "source": "seed_asset"})
+    changeset.submit()
+    changeset.approve(actor_id, note="种子导入：solo 档导入人即审批人（专家定稿资产，门禁报告随单留痕）")
+    version_ref = await repo.append_version(
+        ontology.id, content=turtle, changelog="种子本体导入（power_outage_seed）", published_by=actor_id
+    )
+    ontology.publish(True, {}, version_ref=version_ref, actor_id=actor_id)  # approvals 复用 approve 留痕
+    await repo.save(ontology)
+    return SeedImportResult(ontology=ontology, version=version_ref, report=report)

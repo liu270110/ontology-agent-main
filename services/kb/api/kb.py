@@ -19,6 +19,10 @@
     GET  /kb/documents/{id}/review/candidates     终审候选列表（api/01 §5.4 ★，quote/violations 透出）
     POST /kb/review/candidates/{cid}/decision     单条终审决策 accept|reject|edit_accept（202）
     POST /kb/documents/{id}/review/batch-decision 批量终审决策（≤200 条/批，逐条独立执行，202）
+    GET  /kb/review-queue                     needs_review 聚合复核队列（§7.1 批次纪律：
+                                              按 subject 分组聚合——计数/最旧 created_at/样本 ≤3）
+    POST /kb/review-queue/batch-decide        按 subject 全组批量裁决（authoritative/rejected，
+                                              逐行留痕；主文档 §11 待办聚合复核交互面）
 
 scope：kb:write（写路径）/ kb:read（检索与进度），deny-by-default（08 §2.5）；
 终审工作台三端点持 review:read / review:approve（契约 §5.4 行；候选非成品门禁的裁决面）。
@@ -88,11 +92,17 @@ from services.kb.api.schemas.kb import (
     ReviewCandidateOut,
     ReviewCandidatePageMetaOut,
     ReviewCandidatePageOut,
+    ReviewQueueBatchDecideIn,
+    ReviewQueueBatchDecideOut,
+    ReviewQueueGroupOut,
+    ReviewQueueSampleOut,
+    ReviewQueueSummaryOut,
     ReviewStatusFilter,
     doc_type_of,
     ui_status_of,
 )
 from services.kb.business.kb_pipeline import M2_FULL_STEPS, PipelineError, run_pipeline
+from services.kb.business.review_queue import ReviewQueueService
 from services.kb.business.search_service import rerank_hits_by_source_context
 from services.kb.data.orm import Document, DocumentChunk, KbCollection, KbFact, KbPipelineStep
 from services.kb.retrieval.embed import AclPushdown, OllamaEmbedder, bm25_search, vector_search
@@ -965,3 +975,77 @@ async def batch_decide_candidates(
             results.append(BatchCandidateDecisionItemOut(candidate_id=item.candidate_id, ok=False, error=f"500 {exc}"))
             counts["failed"] += 1
     return BatchCandidateDecisionOut(results=results, meta=BatchCandidateDecisionMetaOut(**counts))
+
+
+# ---------------------------------------------------------------- needs_review 聚合复核（§7.1 批次纪律）
+#
+# 主文档 §11 待办「needs_review 聚合复核的交互设计（按 subject/主题分组复核）」：单部标准
+# 换版可产生数千条 needs_review 候选（§8.1 b 类承接判定），逐条复核不可运行——本组端点按
+# subject 分组聚合展示、复核人按组全量裁决（review:approve 权限面，与单条终审同源）。
+# 状态词汇：服务缺省过滤 needs_review（§8.1 b 类目标态；现行 v1 candidate 队列经服务参数
+# 显式传入复用，落库侧词汇扩展随 §11 待办另切片）。
+# 装配缝：app.state.kb_review_queue 优先（组合根显式装配/测试替换缝），缺省即席构造并挂
+# app.state 复用（服务无状态：会话工厂 + 可选单据服务端口，留痕复用结论见服务模块头）。
+
+
+def _review_queue_service(request: Request) -> ReviewQueueService:
+    svc = getattr(request.app.state, "kb_review_queue", None)
+    if svc is None:
+        svc = ReviewQueueService(
+            get_session_factory(request.app.state.settings),  # type: ignore[arg-type]
+            tickets=getattr(request.app.state, "candidate_review", None),
+        )
+        request.app.state.kb_review_queue = svc  # 即席装配进程内复用（无状态对象，幂等）
+    return svc
+
+
+@router.get("/review-queue", summary="needs_review 聚合复核队列（按 subject 分组：计数/最旧/样本 ≤3）")
+async def review_queue_summary(principal: ReviewReadDep, request: Request) -> ReviewQueueSummaryOut:
+    """§7.1 批次纪律聚合面：每组 subject/subject_type/计数/最旧 created_at/样本引用 ≤3 条。
+
+    空队列返回 groups=[]（合法态）；样本取组内最旧 3 条（复核人先看最早堆积的候选）。
+    """
+    groups = await _review_queue_service(request).queue_summary(principal.tenant_id)
+    return ReviewQueueSummaryOut(
+        groups=[
+            ReviewQueueGroupOut(
+                subject=group.subject,
+                subject_type=group.subject_type,
+                count=group.count,
+                oldest_created_at=group.oldest_created_at,
+                samples=[
+                    ReviewQueueSampleOut(fact_id=s.fact_id, document_id=s.document_id, chunk_id=s.chunk_id)
+                    for s in group.samples
+                ],
+            )
+            for group in groups
+        ],
+        total=sum(group.count for group in groups),
+    )
+
+
+@router.post("/review-queue/batch-decide", summary="按 subject 全组批量裁决（authoritative/rejected，逐行留痕）")
+async def review_queue_batch_decide(
+    body: ReviewQueueBatchDecideIn,
+    principal: ReviewApproveDep,
+    request: Request,
+) -> ReviewQueueBatchDecideOut:
+    """同 subject 全组裁决（跨文档聚拢，组级原子：要么全裁要么全不裁）；返回裁决行数。
+
+    留痕逐行：open 单 payload["decisions"] 复用 ReviewTicketService（best-effort）+ 行内
+    meta["review_queue"] 审计恒写（无单也有痕）；非法 decision 由 DTO Literal 先行 422；
+    空组幂等返回 decided=0（行数即真值，不 404）。
+    """
+    outcome = await _review_queue_service(request).batch_decide(
+        principal.tenant_id,
+        subject=body.subject,
+        decision=body.decision,
+        reviewer_id=principal.user_id,
+        comment=body.comment,
+    )
+    return ReviewQueueBatchDecideOut(
+        subject=outcome.subject,
+        decision=outcome.decision,
+        decided=outcome.decided,
+        trail_recorded=outcome.trail_recorded,
+    )

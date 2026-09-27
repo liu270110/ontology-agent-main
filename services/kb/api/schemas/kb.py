@@ -511,3 +511,62 @@ class BatchCandidateDecisionOut(BaseModel):
     model_config = ConfigDict(extra="forbid")
     results: list[BatchCandidateDecisionItemOut]
     meta: BatchCandidateDecisionMetaOut
+
+
+# ---------------------------------------------------------------- needs_review 聚合复核（§7.1 / §8.1 承接判定）
+#
+# 主文档 §11 待办「needs_review 聚合复核的交互设计（按 subject/主题分组复核）」：单部标准
+# 换版可产生数千条 needs_review 候选，逐条复核不可运行——按 subject 分组聚合展示，复核人
+# 按组全量裁决；逐行留痕（open 单 payload["decisions"] + 行内审计，见 business/review_queue）。
+
+class ReviewQueueSampleOut(BaseModel):
+    """组内样本引用（≤3 条，最旧优先）：回指候选事实与 chunk/document 出处。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    fact_id: uuid.UUID
+    document_id: uuid.UUID
+    chunk_id: uuid.UUID | None = None
+
+
+class ReviewQueueGroupOut(BaseModel):
+    """一个 subject/主题聚合组（subject_type 为组属性；最旧组优先由服务层排序保证）。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    subject: str
+    subject_type: str | None = None
+    count: int
+    oldest_created_at: datetime
+    samples: list[ReviewQueueSampleOut] = Field(default_factory=list)
+
+
+class ReviewQueueSummaryOut(BaseModel):
+    """聚合复核队列响应（groups 空列表=空队列合法态；total=队列候选总条数）。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    groups: list[ReviewQueueGroupOut] = Field(default_factory=list)
+    total: int = 0
+
+
+class ReviewQueueBatchDecideIn(BaseModel):
+    """全组批量裁决请求（OntRAG §7 批量审核交互）：decision 映射 kb_facts.status。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    subject: str = Field(min_length=1, max_length=1024)
+    decision: Literal["authoritative", "rejected"]  # 越枚举 → FastAPI 422（3001 统一错误体）
+    comment: str | None = Field(default=None, max_length=512)  # 裁决意见（逐行留痕携带）
+
+
+class ReviewQueueBatchDecideOut(BaseModel):
+    """全组裁决结果：decided=裁决行数；trail_recorded=其中落到 open 单留痕的行数
+    （行内审计恒写不计入——无单行也有痕，见 business/review_queue 复用结论）。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    subject: str
+    decision: str
+    decided: int
+    trail_recorded: int

@@ -299,7 +299,7 @@ export function WorkspacePanel({ sessionId }: { sessionId: string }) {
             </div>
             <div ref={termEndRef} />
           </div>
-          <div className="pt-1 text-[10px] text-label-3">白名单命令：ls · pwd · cat · head · tail（未放行的命令将被拒绝）</div>
+          <div className="pt-1 text-[10px] text-label-2">白名单：ls · pwd · cat · head · tail，其余拒绝</div>
         </div>
       )}
 

@@ -85,7 +85,7 @@ async function rawJsonRequest<T>(path: string, init: RequestInit): Promise<T> {
   return body.data
 }
 
-async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
+async function apiFetchEnvelope<T>(path: string, init?: RequestInit): Promise<T> {
   const isAuthPath = AUTH_PATHS.some(p => path.startsWith(p))
 
   async function doFetch(): Promise<Response> {
@@ -115,12 +115,18 @@ async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
   if (res.status === 429) {
     throw new ApiError(1005, '请求过于频繁', 429, Number(res.headers.get('Retry-After') ?? 0))
   }
-  const body = (await res.json().catch(() => null)) as Envelope<T> | null
+  const body = (await res.json().catch(() => null)) as (Envelope<unknown> & { meta?: unknown }) | null
   if (!res.ok || !body) {
     throw new ApiError(body?.code ?? -1, body?.message ?? `HTTP ${res.status}`, res.status)
   }
   if (body.code !== 0) throw new ApiError(body.code, body.message, res.status)
-  return body.data
+  // 信封整体返回（data + 同级 meta，§6.2 检索等端点）；apiFetch 再剥 data
+  return body as T
+}
+
+async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
+  const envelope = await apiFetchEnvelope<Envelope<T>>(path, init)
+  return envelope.data
 }
 
 /** 204/空体安全解析（logout 等）。 */
@@ -148,6 +154,9 @@ export const api = {
   get: <T>(path: string) => apiFetch<T>(path),
   post: <T>(path: string, body?: unknown) =>
     apiFetch<T>(path, { method: 'POST', body: body === undefined ? undefined : JSON.stringify(body) }),
+  /** 同 post，但返回完整信封（含与 data 同级的 meta——§6.2 kb/search 样例）。 */
+  postEnvelope: <T>(path: string, body?: unknown) =>
+    apiFetchEnvelope<T>(path, { method: 'POST', body: body === undefined ? undefined : JSON.stringify(body) }),
   put: <T>(path: string, body?: unknown) =>
     apiFetch<T>(path, { method: 'PUT', body: body === undefined ? undefined : JSON.stringify(body) }),
   patch: <T>(path: string, body?: unknown) =>

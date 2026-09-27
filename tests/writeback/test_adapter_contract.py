@@ -37,7 +37,7 @@ from services.writeback.adapters.mock_power_ticket import (
     mock_power_ticket_meta,
 )
 from services.writeback.business.policy import WritebackPolicy
-from tests.writeback.conftest import TENANT_ID
+from tests.writeback.conftest import TENANT_ID, make_dispatcher
 
 KEY = f"{TENANT_ID}:contract-1"
 OCCURRED_AT = "2026-09-28T08:00:00+00:00"  # fake 业务系统固定受理时间戳（可解析性断言用）
@@ -415,3 +415,24 @@ def test_注册表_connector_id冲突_fail_fast() -> None:
 
     with pytest.raises(ValueError, match="连接器已注册"):
         registry.register(adapter, meta)  # 同 connector_id 二次注册即拒
+
+
+async def test_dispatcher_连接器直抛TimeoutError_裁决unknown不重试() -> None:
+    """B5 遗留口径差实证（ocr high 项闭环）：连接器自身超时先于 dispatcher 预算抛
+    TimeoutError——asyncio.wait_for 透传 → except TimeoutError → unknown（§2.5），
+    非 mark_failed 终态；attempts=1 不盲目重试（防重复创建工单），业务侧零副作用。"""
+    adapter, meta, server = _http_stack()
+    server.timeout_next = 1  # 连接器侧 httpx 超时（→ TimeoutError 直抛）
+    dispatcher, _ledger = make_dispatcher(
+        adapter,
+        action_iris=meta.action_iris,
+        policy=WritebackPolicy(max_attempts=3, backoff_base_seconds=0.0, execute_timeout_seconds=30),
+    )
+
+    result = await dispatcher.invoke_action(
+        tenant_id=TENANT_ID, action_iri=ACTION_IRI_CREATE_ORDER, params={"feeder": "F-101", "reason": "接地"}
+    )
+
+    assert result["status"] == "unknown"  # 非 failed 终态（§2.5 超时=受理未知态）
+    assert result["attempts"] == 1  # unknown 不重试
+    assert server.orders_by_key == {}  # 业务侧零副作用（超时发生在受理前）

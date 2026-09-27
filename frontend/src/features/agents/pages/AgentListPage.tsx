@@ -2,7 +2,9 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { ArrowRight, Bot, CircleStop, Play, Plus } from 'lucide-react'
+import { ApiError } from '@/api/client'
 import { useAuthStore } from '@/stores/auth-store'
+import { ErrorState, SkeletonCards } from '@/components/states'
 import { listAgents, AGENT_STATUS_LABEL, type AgentStatus, type PlatformAgent } from '../api'
 import { RegisterWizard } from '../components/RegisterWizard'
 import { StartStopModal } from '../components/StartStopModal'
@@ -28,7 +30,7 @@ export function AgentListPage() {
   const [wizardOpen, setWizardOpen] = useState(false)
   const [toggle, setToggle] = useState<{ agent: PlatformAgent; action: 'start' | 'stop' } | null>(null)
 
-  const { data, isLoading } = useQuery({ queryKey: ['agents', 'list'], queryFn: listAgents })
+  const { data, isLoading, isError, error, refetch } = useQuery({ queryKey: ['agents', 'list'], queryFn: listAgents })
   const agents = data?.items ?? []
 
   return (
@@ -48,14 +50,14 @@ export function AgentListPage() {
           <div key={a.id} className="card flex flex-col !p-4" data-testid={`agent-card-${a.id}`}>
             <div className="flex items-center gap-2">
               <Bot size={15} aria-hidden />
-              <b className="truncate text-[14px]">{a.name}</b>
-              <span className="mono ml-auto text-[10.5px] text-label-3">{a.adapter} {a.adapter_version}</span>
+              <b className="truncate text-sm">{a.name}</b>
+              <span className="mono ml-auto text-[11px] text-label-3">{a.adapter} {a.adapter_version}</span>
             </div>
             <div className="mt-1.5 flex items-center gap-2">
               <AgentStatusBadge status={a.status} />
               <span className="badge b-gray">{a.version}</span>
             </div>
-            <p className="mt-2 line-clamp-2 min-h-8 text-[11.5px] leading-4 text-label-2">{a.description}</p>
+            <p className="mt-2 line-clamp-2 min-h-8 text-[11px] leading-4 text-label-2">{a.description}</p>
             <div className="mt-2 text-[11px] text-label-3">
               活跃会话 {a.active_sessions} · 排队任务 {a.queued_tasks} · 工具 {a.tools.length} 个
             </div>
@@ -78,8 +80,22 @@ export function AgentListPage() {
         ))}
       </div>
 
-      {isLoading && <div className="empty mt-6"><div className="t">加载中…</div></div>}
-      {!isLoading && agents.length === 0 && (
+      {/* S8 状态切片：加载骨架卡（数量≈mock 实例 3）/ 错误态（重试=refetch） */}
+      {isLoading && (
+        <div className="mt-4">
+          <SkeletonCards count={3} />
+        </div>
+      )}
+      {isError && (
+        <div className="mt-4">
+          <ErrorState
+            message={error instanceof Error ? error.message : undefined}
+            code={error instanceof ApiError ? error.code : undefined}
+            onRetry={() => void refetch()}
+          />
+        </div>
+      )}
+      {!isLoading && !isError && agents.length === 0 && (
         <div className="empty mt-6">
           <div className="t">还没有注册的 Agent</div>
           <div className="d">从「注册 Agent」开始：选适配器 → 填接入参数 → 注入工具。</div>

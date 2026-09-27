@@ -9,7 +9,9 @@ import {
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Eye, Filter, RotateCcw, Search, Settings, Trash2, Upload } from 'lucide-react'
 import { toast } from 'sonner'
+import { ApiError } from '@/api/client'
 import { useAuthStore } from '@/stores/auth-store'
+import { ErrorState, SkeletonRows } from '@/components/states'
 import { listDocuments, type KbDocument } from '../api'
 import { FileTypeBadge, StatusBadge, formatSize, relativeTime } from '../components/shared'
 import { UploadDialog } from '../components/UploadDialog'
@@ -80,7 +82,7 @@ export function DocumentsPage() {
       header: '流水线',
       cell: ({ row }) => <StatusBadge doc={row.original} />,
     }),
-    col.accessor('updated_at', { header: '更新', cell: info => <span className="text-dim text-[12px]">{relativeTime(info.getValue())}</span> }),
+    col.accessor('updated_at', { header: '更新', cell: info => <span className="text-dim text-xs">{relativeTime(info.getValue())}</span> }),
     col.display({
       id: 'actions',
       header: '',
@@ -170,7 +172,7 @@ export function DocumentsPage() {
         <div className="relative">
           <Search size={13} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-label-3" aria-hidden />
           <input
-            className="input h-8 w-56 pl-8 text-[12.5px]"
+            className="input h-8 w-56 pl-8 text-xs"
             placeholder="搜索文档名…"
             aria-label="搜索文档"
             value={search}
@@ -233,11 +235,30 @@ export function DocumentsPage() {
                 ))}
               </tr>
             ))}
-            {table.getRowModel().rows.length === 0 && (
+            {/* S8 状态切片：首次加载骨架行（行数≈mock 文档量 5）；错误态内嵌 ErrorState，重试=refetch */}
+            {docsQuery.isPending && (
+              <tr>
+                <td colSpan={7}>
+                  <SkeletonRows rows={5} rowHeight={30} />
+                </td>
+              </tr>
+            )}
+            {docsQuery.isError && (
+              <tr>
+                <td colSpan={7}>
+                  <ErrorState
+                    message={docsQuery.error instanceof Error ? docsQuery.error.message : undefined}
+                    code={docsQuery.error instanceof ApiError ? docsQuery.error.code : undefined}
+                    onRetry={() => void docsQuery.refetch()}
+                  />
+                </td>
+              </tr>
+            )}
+            {!docsQuery.isPending && !docsQuery.isError && table.getRowModel().rows.length === 0 && (
               <tr>
                 <td colSpan={7}>
                   <div className="empty">
-                    <div className="t">{docsQuery.isLoading ? '加载中…' : '没有匹配的文档'}</div>
+                    <div className="t">没有匹配的文档</div>
                     <div className="d">调整筛选条件，或上传新文档开始抽取。</div>
                   </div>
                 </td>
@@ -248,7 +269,7 @@ export function DocumentsPage() {
       </div>
 
       {/* 跳转 chips（26 篇矩阵联动） */}
-      <div className="mt-3 flex gap-2 text-[11.5px]">
+      <div className="mt-3 flex gap-2 text-[11px]">
         <Link to="/kb/review" className="rounded-full border border-separator px-3 py-1 text-label-2 hover:border-accent hover:text-accent">
           流水线进行中 → 抽取审核台
         </Link>

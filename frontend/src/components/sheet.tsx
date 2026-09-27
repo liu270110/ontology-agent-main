@@ -32,8 +32,8 @@ export function Sheet({
       <Drawer.Portal>
         <Drawer.Overlay className="fixed inset-0 bg-black/40" style={{ zIndex: 'var(--z-modal)' } as React.CSSProperties} />
         <Drawer.Content
-          className="fixed bottom-0 right-0 top-0 flex flex-col bg-surface outline-none"
-          style={{ width, zIndex: 'var(--z-modal)', boxShadow: 'var(--sh-float)' }}
+          className="glass fixed bottom-0 right-0 top-0 flex flex-col outline-none"
+          style={{ width, zIndex: 'var(--z-modal)' }}
         >
           <div className="hairline-b flex flex-none items-center gap-2 px-5 py-4">
             <Drawer.Title className="text-[15px] font-bold">{title}</Drawer.Title>

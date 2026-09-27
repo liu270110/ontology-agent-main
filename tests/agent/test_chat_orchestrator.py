@@ -186,14 +186,9 @@ async def test_一次对话产出主干波_11_事件族完整序列() -> None:
     ]
     assert names[5] is ChatEventName.TEXT_MESSAGE_START
     assert names[-1] is ChatEventName.RUN_FINISHED
-<<<<<<< HEAD
     # 主干波事件族（RUN_ERROR 为互斥终态，由失败路径用例覆盖；ROUTING_DECISION 为
     # 群聊路由系统事件，仅 group 会话路径产出——单 agent 对话不含，27 篇 X15）
     assert set(names) == set(ChatEventName) - {ChatEventName.RUN_ERROR, ChatEventName.ROUTING_DECISION}
-=======
-    # 主干波 11 事件族（RUN_ERROR 为互斥终态，由失败路径用例覆盖）
-    assert set(names) == set(ChatEventName) - {ChatEventName.RUN_ERROR, ChatEventName.ROUTING_DECISION}  # ROUTING_DECISION 仅群聊路径（27 篇 X15）
->>>>>>> feature/test-align-groupchat-event
     assert (
         "".join(e.data["delta"] for e in events if e.name is ChatEventName.TEXT_MESSAGE_CONTENT) == answer
     )  # 流式增量拼接=全文（流式透传）

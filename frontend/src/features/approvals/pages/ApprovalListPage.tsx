@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { CheckCheck } from 'lucide-react'
+import { ApiError } from '@/api/client'
+import { ErrorState, SkeletonRows } from '@/components/states'
 import { listReviews, type Approval } from '../api'
 import { ApprovalDetailModal, ApprovalTypeBadge } from '../components/ApprovalDetailModal'
 import { BatchApprovalModal } from '../components/BatchApprovalModal'
@@ -24,7 +26,7 @@ export function ApprovalListPage() {
   const [detail, setDetail] = useState<Approval | null>(null)
   const [batchOpen, setBatchOpen] = useState(false)
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['approvals', 'list', tab],
     queryFn: () => listReviews(TABS.find(t => t.key === tab)!.status),
   })
@@ -111,8 +113,20 @@ export function ApprovalListPage() {
             </div>
           </div>
         ))}
-        {isLoading && <div className="empty"><div className="t">加载中…</div></div>}
-        {!isLoading && items.length === 0 && (
+        {/* S8 状态切片：加载骨架行（行数≈mock 待办 6）/ 错误态（重试=refetch）；空态仅在成功后出现 */}
+        {isLoading && (
+          <div className="card !p-4">
+            <SkeletonRows rows={6} rowHeight={40} />
+          </div>
+        )}
+        {isError && (
+          <ErrorState
+            message={error instanceof Error ? error.message : undefined}
+            code={error instanceof ApiError ? error.code : undefined}
+            onRetry={() => void refetch()}
+          />
+        )}
+        {!isLoading && !isError && items.length === 0 && (
           <div className="empty">
             <div className="t">没有待办审批</div>
             <div className="d">新的变更发布、抽取终审、插件安装、MCP 接入、记忆升级与权限申请会出现在这里。</div>

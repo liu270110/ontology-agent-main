@@ -1,0 +1,115 @@
+{
+  "meta": {
+    "generated_at": "2026-09-27T01:33:48.368055+00:00",
+    "seed": 42,
+    "token_rule": "est 口径 = len(text)//2（中文，随前批 PoC③ 冻结）；LLM 样本以端点 usage 为准",
+    "community_algo": "networkx louvain（层次化，近似 Leiden——networkx 无 Leiden 实现）"
+  },
+  "corpus": {
+    "n_docs": 150,
+    "n_chunks": 150,
+    "corpus_est_tokens": 30703,
+    "chunk_target_chars": 500,
+    "chunk_median_chars": 402,
+    "chunking_seconds": 0.009,
+    "bm25_index_seconds": 0.0256,
+    "bm25_storage_bytes": 383493,
+    "n_entities": 164
+  },
+  "embed": {
+    "measured": false,
+    "seconds": 32.739,
+    "tokens": 30703,
+    "tok_per_s": 937.8,
+    "vector_storage_bytes": 614400,
+    "dim": 1024
+  },
+  "communities": {
+    "n_entities": 164,
+    "seconds": 0.9031,
+    "n_top_cells": 4,
+    "n_l0": 0,
+    "n_l1": 22,
+    "n_total": 22
+  },
+  "llm": {
+    "available": true,
+    "base_url": "http://127.0.0.1:18001/v1",
+    "model": "local-main",
+    "config_source": "services.platform.config",
+    "calls": 9,
+    "prompt_tokens": 3187,
+    "completion_tokens": 2294,
+    "median_latency_s": 19.688
+  },
+  "llm_unit_cost": {
+    "extract": {
+      "measured": true,
+      "n_samples": 3,
+      "median_prompt_est_tokens": 297,
+      "median_completion_est_tokens": 816,
+      "median_latency_s": 118.252
+    },
+    "report": {
+      "measured": true,
+      "n_samples": 5,
+      "median_prompt_est_tokens": 227,
+      "median_completion_est_tokens": 81,
+      "median_latency_s": 19.615
+    }
+  },
+  "full_index_estimate": {
+    "extract_calls": 150,
+    "extract_est_seconds": 6690.8,
+    "report_calls": 22,
+    "report_est_seconds": 557.6,
+    "community_seconds": 0.9031,
+    "total_est_seconds": 7249.3,
+    "total_est_tokens": 65547,
+    "extra_storage_bytes": 374784,
+    "total_storage_bytes": 1372677,
+    "extract_measured": true,
+    "report_measured": true
+  },
+  "query": {
+    "n_queries": 6,
+    "lazy_median_ms": 3.81,
+    "lazy_with_vector": false,
+    "lazy_latencies_ms": [
+      3.82,
+      3.97,
+      3.8,
+      4.02,
+      3.01,
+      3.68
+    ],
+    "full_local_search_est_ms": 48758.7,
+    "full_global_search_est_ms": 116858.7,
+    "full_local_search_est_tokens": 1050,
+    "full_global_search_est_tokens": 3400
+  },
+  "matrix": {
+    "index_seconds": {
+      "lazy": 32.77,
+      "full_est": 7249.3
+    },
+    "index_tokens": {
+      "lazy_embed_tokens": 30703,
+      "full_llm_est_tokens": 65547
+    },
+    "index_llm_calls": {
+      "lazy": 0,
+      "full_est": 172
+    },
+    "index_storage_bytes": {
+      "lazy": 997893,
+      "full_est": 1372677
+    },
+    "query_median_ms": {
+      "lazy": 3.81,
+      "full_local_est": 48758.7,
+      "full_global_est": 116858.7
+    },
+    "cost_ratio_time": 221.2
+  }
+}

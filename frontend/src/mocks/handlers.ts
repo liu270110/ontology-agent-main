@@ -10,7 +10,7 @@ import { adminHandlers } from './admin-handlers'
  *  S1 认证契约化：**任意合法 email + 密码≥6 位成功**（演示写死用户已移除），假 JWT claims
  *  按 08 篇 §2.1 build_claims（sub/tenant_id/roles/scopes/typ/jti/iat/exp）。预登记契约
  *  （后端 M1 未实现，前端代码就绪，live 不触发）：mfa@example.com → 200 {mfa_required, mfa_token}
- *  （X17 两段式，一次性）；locked@example.com 恒 1002（防枚举）；失败 5 次/10min → 429 1005 + Retry-After。 */
+ *  （X17 两段式，一次性）；locked@example.com 恒 1002（防枚举）；失败 5 次/10min → 429 2005 RATE_LIMITED + Retry-After（api/01 §4.3，2026-09-27 对账 §8 裁决：1005 号段不存在）。 */
 
 /** 角色码权威 = 08 篇 §2.2；scope 词汇 = 11 篇 资源:动作（与 routes.tsx meta.permission 对齐） */
 const DIRECTORY: Record<string, { roles: string[]; scopes: string[] }> = {
@@ -258,7 +258,7 @@ export const handlers = [
         return HttpResponse.json(tokenPairFor(MFA_EMAIL))
       }
       recordFailure()
-      if (rateLimited()) return jsonErr(1005, '操作过于频繁', 429, { 'Retry-After': '120' })
+      if (rateLimited()) return jsonErr(2005, '操作过于频繁', 429, { 'Retry-After': '120' })
       return jsonErr(1002, '验证码错误', 401)
     }
 
@@ -272,7 +272,7 @@ export const handlers = [
     if (email === LOCKED_EMAIL || password.length < 6 || !email.includes('@')) {
       // 防枚举：locked 恒 1002；其余凭据形不足也统一 1002，不暴露区分（28 篇 §2 红线）
       recordFailure()
-      if (rateLimited()) return jsonErr(1005, '操作过于频繁', 429, { 'Retry-After': '120' })
+      if (rateLimited()) return jsonErr(2005, '操作过于频繁', 429, { 'Retry-After': '120' })
       return jsonErr(1002, '邮箱或密码错误', 401)
     }
     return HttpResponse.json(tokenPairFor(email))
@@ -397,4 +397,79 @@ export const handlers = [
       headers: { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', 'X-Accel-Buffering': 'no' },
     })
   }),
+
+  // ---- Agent 工作区面板（31 篇：文件树 + 终端 + 资源，画框23）----
+  // GET /sessions/:id/workspace/tree —— 沙箱 /workspace 层级树（20 篇 SBX-3 daemon 代理；M1 静态 mock）
+  http.get('*/api/v1/sessions/:id/workspace/tree', () =>
+    HttpResponse.json({
+      code: 0, message: 'ok',
+      data: {
+        recycle_in_minutes: 26,
+        root: {
+          name: '/workspace/', path: '/', type: 'dir',
+          children: [
+            {
+              name: 'artifacts', path: '/workspace/artifacts', type: 'dir',
+              children: [
+                { name: '排查报告草稿 v0.1.md', path: '/workspace/artifacts/排查报告草稿 v0.1.md', type: 'file', size: 1229, updated_at: '刚刚创建', dirty: true },
+                { name: '台账数据.json', path: '/workspace/artifacts/台账数据.json', type: 'file', size: 4860, updated_at: '2 分钟前' },
+              ],
+            },
+            { name: 'uploads', path: '/workspace/uploads', type: 'dir', children: [] },
+            { name: '台账导出.xlsx', path: '/workspace/台账导出.xlsx', type: 'file', size: 860288, updated_at: '10 分钟前' },
+          ],
+        },
+      },
+    }),
+  ),
+
+  // GET /sessions/:id/workspace/file?path=... —— 只读文件内容（≤1MB 内联）
+  http.get('*/api/v1/sessions/:id/workspace/file', ({ request }) => {
+    const path = new URL(request.url).searchParams.get('path') ?? ''
+    const FILES: Record<string, { content: string; language: string }> = {
+      '/workspace/artifacts/排查报告草稿 v0.1.md': {
+        language: 'markdown',
+        content: '# 动力电池故障排查报告（草稿 v0.1）\n\n## 一、结论摘要\n台账 3 条缺陷记录中，2 条涉及电芯循环衰减，1 条为 BMS 采样线束接触不良。\n\n## 二、证据清单\n1. 台账导出.xlsx · Sheet1 · 行 42 —— 循环寿命 812 次（低于 GB/T 36276 的 1000 次阈值）\n2. 台账导出.xlsx · Sheet1 · 行 57 —— 容量保持率 76%\n3. 台账导出.xlsx · Sheet1 · 行 63 —— 采样线束阻抗异常\n\n## 三、建议\n对 F12 馈线供电的储能站安排循环寿命复测；BMS 采样线束列入季度检修。',
+      },
+      '/workspace/artifacts/台账数据.json': {
+        language: 'json',
+        content: '{\n  "defects": [\n    { "row": 42, "type": "循环衰减", "cell": "A32", "cycles": 812 },\n    { "row": 57, "type": "容量保持率", "cell": "A32", "sov": 0.76 },\n    { "row": 63, "type": "采样线束", "cell": "BMS-07", "impedance_mohm": 42.6 }\n  ]\n}',
+      },
+    }
+    const hit = FILES[path]
+    if (hit) return HttpResponse.json({ code: 0, message: 'ok', data: { path, ...hit } })
+    if (path.endsWith('.xlsx'))
+      return HttpResponse.json({ code: 0, message: 'ok', data: { path, language: 'binary', content: '（二进制文件 · xlsx 工作簿 840KB，请下载后用本地应用打开）' } })
+    return jsonErr(3404, '文件不存在或已回收', 404)
+  }),
+
+  // POST /sessions/:id/terminal/exec —— 受限 shell（20 篇 exec.run；M1 回放 canned 输出）
+  http.post('*/api/v1/sessions/:id/terminal/exec', async ({ request }) => {
+    const body = (await request.json()) as { command?: string }
+    const cmd = (body.command ?? '').trim()
+    if (!cmd) return jsonErr(3401, '命令不能为空', 422)
+    let out: string[]
+    if (/^ls\b/.test(cmd)) {
+      out = cmd.includes('artifacts') ? ['排查报告草稿 v0.1.md', '台账数据.json'] : ['artifacts/', 'uploads/', '台账导出.xlsx']
+    } else if (/^(pwd)\b/.test(cmd)) out = ['/workspace']
+    else if (/^(cat|head|tail)\b/.test(cmd)) out = [`cat: 只读代理放行 · ${cmd.split(/\s+/)[1] ?? '(缺参数)'}`]
+    else out = [`bash: ${cmd.split(/\s+/)[0]}: 受限 shell 未放行（信任级 L2 · 白名单 ls/pwd/cat/head/tail）`]
+    return HttpResponse.json({ code: 0, message: 'ok', data: { command: cmd, exit_code: 0, lines: out } })
+  }),
+
+  // GET /sessions/:id/resources —— 会话资源四分组（30 篇对象模型）
+  http.get('*/api/v1/sessions/:id/resources', () =>
+    HttpResponse.json({
+      code: 0, message: 'ok',
+      data: {
+        items: [
+          { id: 'res-2481-a1', type: 'attachment', name: '台账导出.xlsx', size: 860288, status: 'ready', uploaded_by: 'user', created_at: '2026-09-27T14:02:11Z', ocr_status: 'done', extract_status: 'archived' },
+          { id: 'res-2481-b2', type: 'artifact', name: '排查报告草稿 v0.1.md', size: 1229, status: 'ready', uploaded_by: 'sandbox', created_at: '2026-09-27T14:20:40Z' },
+          { id: 'res-2481-b3', type: 'artifact', name: '台账数据.json', size: 4860, status: 'ready', uploaded_by: 'sandbox', created_at: '2026-09-27T14:20:44Z' },
+          { id: 'res-2481-c4', type: 'ontology_snapshot', name: 'power-ont v1.4.ttl', size: 214018, status: 'ready', uploaded_by: 'agent:claude', created_at: '2026-09-27T11:08:02Z' },
+          { id: 'res-2481-d5', type: 'export', name: '故障研判简报.pdf', size: 431216, status: 'processing', uploaded_by: 'agent:claude', created_at: '2026-09-27T14:21:37Z' },
+        ],
+      },
+    }),
+  ),
 ]

@@ -4,6 +4,7 @@ import { ChatStream } from '../components/ChatStream'
 import { MessageInput } from '../components/MessageInput'
 import { ContextMeter } from '../components/ContextMeter'
 import { ContextCollapseButton, ContextPanel, ContextPanelRail } from '../components/ContextPanel'
+import { WorkspacePanel } from '../components/WorkspacePanel'
 import { EvidenceSheet, type EvidenceFocus } from '../components/EvidenceSheet'
 import { useSessionStore } from '@/stores/session-store'
 import { useSessionStream } from '@/sse/useSessionStream'
@@ -22,11 +23,14 @@ const CONNECTION_TEXT: Record<string, string> = {
  *  数据流（16 篇 §3.2）：选会话 → GET messages 拉历史基线 → 开 SSE → 事件经 session-store.apply 归约；
  *  seq 跳号 → 重拉历史校正（MESSAGES_SNAPSHOT 兜底随 M4 批）。
  *  S2 深化：上下文面板四分组+溯源 Popover（IX-CHT-04）、证据抽屉（IX-CHT-03）、
- *  停止生成（IX-CHT-06：POST /sessions/{id}/cancel + 保留已生成部分）。 */
+ *  停止生成（IX-CHT-06：POST /sessions/{id}/cancel + 保留已生成部分）。
+ *  S3 增量（画框23 / 31 篇）：右栏双页签——上下文 ↔ Agent 工作区（文件树/终端/资源）。 */
 export function ChatPage() {
   const [picked, setPicked] = useState<string | null>(null)
   const sessionId = picked
   const [ctxCollapsed, setCtxCollapsed] = useState(false)
+  /** 右栏双页签（画框03+23）：本次回答上下文 ↔ Agent 工作区（文件树/终端/资源） */
+  const [rightTab, setRightTab] = useState<'context' | 'workspace'>('context')
   const [evFocus, setEvFocus] = useState<EvidenceFocus | null>(null)
   const apply = useSessionStore(s => s.apply)
   const seed = useSessionStore(s => s.seed)
@@ -79,6 +83,30 @@ export function ChatPage() {
             <span className="text-xs text-label-3">← 从左侧选择一个会话开始</span>
           )}
           <span className="ml-auto" />
+          {sessionId && (
+            <div className="seg" role="tablist" aria-label="右侧面板">
+              <button
+                type="button"
+                role="tab"
+                data-testid="right-tab-context"
+                aria-selected={rightTab === 'context'}
+                className={`seg-btn ${rightTab === 'context' ? 'on' : ''}`}
+                onClick={() => setRightTab('context')}
+              >
+                上下文
+              </button>
+              <button
+                type="button"
+                role="tab"
+                data-testid="right-tab-workspace"
+                aria-selected={rightTab === 'workspace'}
+                className={`seg-btn ${rightTab === 'workspace' ? 'on' : ''}`}
+                onClick={() => setRightTab('workspace')}
+              >
+                工作区
+              </button>
+            </div>
+          )}
           <ContextCollapseButton collapsed={ctxCollapsed} onToggle={() => setCtxCollapsed(v => !v)} />
         </header>
         {sessionId ? (
@@ -91,11 +119,13 @@ export function ChatPage() {
           <div className="flex flex-1 items-center justify-center text-sm text-label-3">选择会话后开始对话</div>
         )}
       </div>
-      {/* 上下文面板（IX-CHT-04）：右 240px，可折叠为窄轨 */}
+      {/* 右栏（IX-CHT-04 + 画框23）：上下文面板 / Agent 工作区面板 页签切换，可折叠为窄轨 */}
       {!sessionId ? null : ctxCollapsed ? (
         <ContextPanelRail onExpand={() => setCtxCollapsed(false)} />
-      ) : (
+      ) : rightTab === 'context' ? (
         <ContextPanel onOpenEvidence={setEvFocus} />
+      ) : (
+        <WorkspacePanel sessionId={sessionId} />
       )}
       {/* 证据原文抽屉（IX-CHT-03）：消息流 chip / 上下文面板引用文档 共用宿主 */}
       <EvidenceSheet focus={evFocus} onClose={() => setEvFocus(null)} />

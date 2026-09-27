@@ -29,7 +29,7 @@ mem:Preference a owl:Class ;
 mem:FactClaim a owl:Class ;
     rdfs:subClassOf mem:MemoryRecord ;
     rdfs:label "事实声明" ;
-    rdfs:comment "可证伪的一句话事实，抽取要点：有明确主体与断言内容；子类分属性型/关系型。" .
+    rdfs:comment "可证伪的一句话事实；抽取要点：属性型/关系型事实统一按 mem:FactClaim 输出，勿输出 AttributeFact/RelationalFact 子类名（抽取枚举与门禁只收 FactClaim）。" .
 
 mem:AttributeFact a owl:Class ;
     rdfs:subClassOf mem:FactClaim ;
@@ -131,6 +131,7 @@ mem:supportedBy a owl:ObjectProperty ;
 mem:proofCount a owl:DatatypeProperty ;
     rdfs:label "证据计数" ;
     rdfs:comment "独立证据计数——置信度之外的第二信号（Hindsight 机制）；mem:Observation 专用。" ;
+    rdfs:domain mem:Observation ;
     rdfs:range xsd:integer .
 
 # ---------------------------------------------------------------------------

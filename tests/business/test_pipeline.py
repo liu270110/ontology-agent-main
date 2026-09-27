@@ -1,14 +1,17 @@
 # tests/business/test_pipeline.py
 """ConsolidationPipeline 单测：fake 仓储 + fake LLM（规格 06 篇 §5.1）。"""
 
+import json
 import uuid
 from datetime import UTC, datetime
 
 from services.memory.business.consolidation_pipeline import (
+    SETTLE_SYSTEM_PROMPT,
     ConsolidationPipeline,
     SettleResult,
 )
 from services.memory.domain.model.memory import MemoryLayer, MemoryRecord, MemoryType
+from services.ontology.core.mem_tbox import generate_extraction_schema
 
 NOW = datetime(2026, 9, 26, 12, 0, tzinfo=UTC)
 TENANT = uuid.uuid4()
@@ -165,9 +168,7 @@ async def test_idempotent_settle_skips():
 
 
 def test_pipeline_prompt_driven_by_tbox():
-    """抽取 schema 来自 mem TBox 生成而非静态串（本体驱动最低验收线，plan3 任务 1）。"""
-    from services.memory.business.consolidation_pipeline import SETTLE_SYSTEM_PROMPT
-
-    for name in ("mem:Preference", "mem:FactClaim", "mem:Episode", "mem:Decision", "mem:Goal", "mem:ProcedureRef"):
-        assert name in SETTLE_SYSTEM_PROMPT, name  # 枚举来自 TBox
+    """抽取 schema 整体来自 mem TBox 生成（本体驱动最低验收线，plan3 任务 1）。"""
+    # 整体一致性断言：prompt 内嵌 schema 与 TBox 生成结果逐字相等——静态串"恰好含名"无法蒙混
+    assert json.dumps(generate_extraction_schema(), ensure_ascii=False) in SETTLE_SYSTEM_PROMPT
     assert "仅后台固化" not in SETTLE_SYSTEM_PROMPT  # Observation 不进抽取枚举

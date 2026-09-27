@@ -3,6 +3,8 @@
 
 import json
 
+import rdflib
+
 from services.ontology.core.mem_tbox import (
     generate_extraction_schema,
     load_mem_graph,
@@ -12,10 +14,10 @@ from services.ontology.core.mem_tbox import (
 
 def test_turtle_loads_with_six_extractable_classes():
     g = load_mem_graph()
-    classes = {str(c).split("#")[-1] for c in g.subjects()}
+    classes = {str(c).rsplit("#", 1)[-1] for c in g.subjects(rdflib.RDF.type, rdflib.OWL.Class)}
     # 六类可抽取（Observation 仅后台固化，不在抽取 schema）
     for name in ("Preference", "FactClaim", "Episode", "Decision", "Goal", "ProcedureRef"):
-        assert any(name in cls for cls in classes), name
+        assert name in classes, name
 
 
 def test_extraction_schema_has_six_enum_values():
@@ -25,6 +27,8 @@ def test_extraction_schema_has_six_enum_values():
     text = json.dumps(props)
     for name in ("mem:Preference", "mem:FactClaim", "mem:Episode", "mem:Decision", "mem:Goal", "mem:ProcedureRef"):
         assert name in text, name
+    enum = schema["properties"]["records"]["items"]["properties"]["record_type"]["enum"]
+    assert len(enum) == 6  # 枚举恰六类：多或漏都是 TBox 装载/schema 生成缺陷
     assert "mem:Observation" not in text.replace("不进抽取", "")  # Observation 不进抽取枚举
 
 
@@ -49,3 +53,20 @@ def test_shacl_missing_content_fails():
         }
     )
     assert violations  # 缺 content 必有违规
+
+
+def test_shacl_garbage_iri_rejected():
+    violations = validate_mem_record(
+        {
+            "record_type": "mem:FactClaim",
+            "subject_iri": "not a uri 张三",  # 空白 + 非 ASCII：良构性门禁必拒（core/tbox.iri_problems）
+            "content": "A 负责人是张三",
+        }
+    )
+    assert violations
+
+
+def test_shacl_non_mem_prefixed_record_type_rejected():
+    for bad in ("FactClaim", "pwr:FaultOutage", ""):
+        violations = validate_mem_record({"record_type": bad, "content": "x"})
+        assert violations, bad  # 非 mem: 前缀（含缺省）直接判违规，不进 SHACL

@@ -11,6 +11,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from services.ontology.business.seed_service import SeedImportResult
 from services.ontology.core import ValidationReport
 from services.ontology.domain.model.ontology import Ontology, OntologyChangeset, OntologyStatus
 
@@ -115,6 +116,32 @@ class OntologyValidateIn(BaseModel):
     data_graph: str = Field(min_length=1, max_length=4_000_000)
 
 
+class OntologyImportSeedIn(BaseModel):
+    """种子本体导入请求（禁空工作台冷启动正式入口）：slug 定命名空间；display_name 缺省用种子定名。"""
+
+    model_config = ConfigDict(extra="forbid")
+    slug: str = Field(pattern="^[a-z0-9][a-z0-9-]{0,62}$")
+    display_name: str | None = Field(default=None, min_length=1, max_length=128)
+
+
+class SeedReportOut(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    class_count: int
+    action_count: int
+    shape_count: int
+    lint_ok: bool
+    lint_violations: list[str] = []
+
+
+class SeedImportOut(BaseModel):
+    """种子导入响应：项目摘要（published/head=v1）+ 版本指针 + 种子自检报告（可追溯，宪法 5）。"""
+
+    model_config = ConfigDict(extra="forbid")
+    ontology: OntologyOut
+    version: HeadVersionOut
+    seed_report: SeedReportOut
+
+
 class ValidationViolationOut(BaseModel):
     model_config = ConfigDict(extra="forbid")
     focus_node: str | None = None
@@ -184,4 +211,16 @@ def report_from_domain(report: ValidationReport) -> ValidationReportOut:
             )
             for v in report.results
         ],
+    )
+
+
+def seed_import_from_domain(result: SeedImportResult) -> SeedImportOut:
+    return SeedImportOut(
+        ontology=from_domain(result.ontology),
+        version=HeadVersionOut(
+            version=result.version.version,
+            artifact_key=result.version.artifact_key,
+            checksum=result.version.checksum,
+        ),
+        seed_report=SeedReportOut(**result.report.model_dump()),
     )

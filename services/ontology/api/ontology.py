@@ -33,18 +33,22 @@ from services.ontology.api.schemas.ontology import (
     ChangesetRejectIn,
     ChangesetSubmitIn,
     OntologyCreateIn,
+    OntologyImportSeedIn,
     OntologyListOut,
     OntologyOut,
     OntologyValidateIn,
+    SeedImportOut,
     changeset_from_domain,
     from_domain,
     report_from_domain,
+    seed_import_from_domain,
 )
 from services.ontology.business.changeset_service import (
     project_published_version,
     submit_changeset_for_review,
 )
 from services.ontology.business.ontology_gate import GateReport, run_changeset_gate
+from services.ontology.business.seed_service import import_seed_as_project
 from services.ontology.core import default_namespace, load_turtle, validate
 from services.ontology.data.repo_impl.ontology_repo import PgOntologyRepository, VersionSummary
 from services.ontology.domain.model.ontology import DomainError, Ontology, OntologyStatus
@@ -321,6 +325,36 @@ async def validate_ontology(
         raise GatewayError(3001, str(exc), status_code=422) from exc
     report = validate(data_graph, shapes_graph)
     return report_from_domain(report).model_dump()
+
+
+@router.post(
+    "/import-seed",
+    status_code=status.HTTP_201_CREATED,
+    summary="种子本体导入（禁空工作台冷启动）：新建项目+v1 制品，inspect 自检不过即拒",
+)
+async def import_seed(
+    body: OntologyImportSeedIn,
+    principal: OntologyWriteDep,
+    db: SessionDep,
+) -> SeedImportOut:
+    """种子资产 → 正式项目（L3 import_seed_as_project 编排，事务语义同 SessionDep）。
+
+    门禁在服务端实跑（种子装载+lint 自检，不过即 4204 拒绝，宪法 3）；slug 冲突以
+    uk_ontologies_tenant_id_iri_base 唯一约束兜底转 409（与 create_ontology 同口径）。
+    """
+    try:
+        result = await import_seed_as_project(
+            _repo(db, principal.tenant_id),
+            tenant_id=principal.tenant_id,
+            slug=body.slug,
+            display_name=body.display_name,
+            actor_id=principal.user_id,
+        )
+    except DomainError as exc:
+        raise domain_error(exc, fallback_code=4204) from exc
+    except IntegrityError as exc:  # uk_ontologies_tenant_id_iri_base（slug 冲突，零孤儿制品）
+        raise GatewayError(409, "同名 slug 的本体命名空间已存在", status_code=409) from exc
+    return seed_import_from_domain(result)
 
 
 # ---- 内部装配 ----

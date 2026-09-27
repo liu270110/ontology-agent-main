@@ -1,7 +1,9 @@
 """L2 ontology 路由（api/01 §5.3 契约 M2 子集；本体核心设计 §6.1/§7.1）。
 
 纪律：写路径全走聚合方法（open_changeset / changeset.submit/approve/reject / publish / rollback），
-禁绕过聚合直改 status（03 §6.1 / 04 §2）；solo 档提交人即审批人（ontology §6.3 档位钩子，M1）；
+禁绕过聚合直改 status（03 §6.1 / 04 §2）；发布审批按租户治理档位走 approval_chain 收敛点
+（08 §2.4，2026-09-27 M5 条件二接线：approve/publish 读取 tenants.settings.governance_tier 注入聚合，
+读取器=组合根 app.state.review_approvals duck-typing 消费，零 review import 边）；
 发布事务=制品写成功→PG 版本行→读模型投影（repo_impl/ontology_repo，M2 本地目录，MinIO 随 M4）；
 POST /validate 经 pySHACL 门禁封装（ontology §5.2：校验是门禁非提示）。
 
@@ -21,7 +23,7 @@ import re
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, Query, Request, status
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -88,6 +90,26 @@ def _require_changeset(ontology: Ontology, changeset_id: uuid.UUID):
     if changeset is None or changeset.id != changeset_id:
         raise GatewayError(4202, "变更单不存在或不为本体当前变更单", status_code=404)
     return changeset
+
+
+def _tier_reader(request: Request):
+    """治理档位读取器（组合根注入面，08 §2.4）：gateway lifespan 装配
+    ``app.state.review_approvals``（ReviewApprovalService，M5-1 build_review_approval），本模块
+    duck-typing 消费其 ``tier()`` 透出面——零 review import 边（契约六 review.data 模块私有，
+    gateway→review.business 豁免边已收口在组合根；先例=plugin/api/plugins._market）。"""
+    reader = getattr(request.app.state, "review_approvals", None)
+    if reader is None:  # fail-closed：装配缺失不放行（solo 回落仅适用于 settings 缺失，不适用于装配缺失）
+        raise GatewayError(5004, "治理档位读取器未装配", status_code=503)
+    return reader
+
+
+async def _tenant_tier(request: Request, tenant_id: uuid.UUID) -> str:
+    """租户治理档位字符串（权威存储位=tenants.settings.governance_tier，08 §2.4）。
+
+    以参数注入聚合（L4 纯度：Ontology 聚合不直读租户 settings）；字符串解析收敛在
+    review.domain.parse_governance_tier（缺失/空回落 solo 种子默认，非法 4702）。
+    """
+    return str((await _tier_reader(request).tier(tenant_id)).value)
 
 
 @router.post("", status_code=status.HTTP_201_CREATED, summary="创建本体（draft；默认命名空间自动生成）")
@@ -176,7 +198,7 @@ async def submit_changeset(
 @router.post(
     "/{ontology_id}/changesets/{changeset_id}/approve",
     status_code=status.HTTP_202_ACCEPTED,
-    summary="终审通过（solo 档：提交人即审批人，审批留痕）",
+    summary="终审通过（档位审批链：solo 自审/team 禁自批/enterprise 四眼，08 §2.4）",
 )
 async def approve_changeset(
     ontology_id: uuid.UUID,
@@ -184,11 +206,15 @@ async def approve_changeset(
     body: ChangesetApproveIn,
     principal: OntologyApproveDep,
     db: SessionDep,
+    request: Request,
 ) -> ChangesetOut:
     try:
         ontology = await _require_ontology(db, principal.tenant_id, ontology_id)
         changeset = _require_changeset(ontology, changeset_id)
-        changeset.approve(principal.user_id, body.note)
+        # 档位注入（08 §2.4 收敛点接线）：租户 settings 读取留在 L2，聚合只收参数（L4 纯度）
+        changeset.approve(
+            principal.user_id, body.note, governance_tier=await _tenant_tier(request, principal.tenant_id)
+        )
         await _repo(db, principal.tenant_id).save(ontology)
     except DomainError as exc:
         raise domain_error(exc, fallback_code=4203) from exc
@@ -228,6 +254,7 @@ async def publish_changeset(
     body: ChangesetPublishIn,
     principal: OntologyPublishDep,
     db: SessionDep,
+    request: Request,
 ) -> OntologyOut:
     repo = _repo(db, principal.tenant_id)
     try:
@@ -248,8 +275,12 @@ async def publish_changeset(
             ontology_id, content=content, changelog=body.changelog, published_by=principal.user_id
         )
         try:
-            ontology.publish(  # 聚合断言：门禁任何档位不可跳过 + solo 档审批留痕（ontology §6.3）
-                report.conforms, body.approvals, version_ref=version_ref, actor_id=principal.user_id
+            ontology.publish(  # 聚合断言：门禁任何档位不可跳过 + 审批链按档位（08 §2.4 收敛点接线）
+                report.conforms,
+                body.approvals,
+                version_ref=version_ref,
+                actor_id=principal.user_id,
+                governance_tier=await _tenant_tier(request, principal.tenant_id),
             )
         except DomainError:
             repo.artifacts.discard(version_ref.artifact_key)  # 审批缺失等拒绝：回收孤儿制品（PG 行随事务回滚）

@@ -13,12 +13,14 @@ from __future__ import annotations
 import asyncio
 import io
 import tarfile
+import time
+from collections.abc import Callable
 from pathlib import Path
 
-from docker.errors import NotFound
+import docker
+from docker.errors import APIError, NotFound
 from docker.types import LogConfig
 
-import docker
 from services.platform.config import get_settings
 from services.sandbox.runtime.types import Scenario, TrustLevel
 
@@ -32,6 +34,21 @@ from .backend import (
 )
 
 _OUTPUT_LIMIT = 64 * 1024  # 单命令输出截断（Sandbox §7.1）
+
+
+def _remove_with_retry(fn: Callable[[], None], *, attempts: int = 4, delay: float = 1.5) -> None:
+    """Docker 资源删除重试兜底：409（in use / already in progress）退避重试，
+    末次仍失败则放弃（资源交由 Docker 生命周期回收）。"""
+    for i in range(attempts):
+        try:
+            fn()
+            return
+        except NotFound:  # 已不存在 = 删除成功
+            return
+        except APIError:  # 409 竞态等：退避后重试
+            if i == attempts - 1:
+                return
+            time.sleep(delay * (i + 1))
 
 
 class DockerBackend:
@@ -172,13 +189,7 @@ class DockerBackend:
 
     def _remove_stale_container(self, name: str) -> None:
         """池语义：同 id 重供给 = 销毁重建（v=True 连卷），不做原地复用——防残留泄漏（Sandbox §5.2）。"""
-        try:
-            self._client.containers.get(name).remove(force=True, v=True)
-        except NotFound:
-            pass
+        _remove_with_retry(lambda: self._client.containers.get(name).remove(force=True, v=True))
 
     def _remove_stale_volume(self, volume: str) -> None:
-        try:
-            self._client.volumes.get(volume).remove(force=True)
-        except NotFound:
-            pass
+        _remove_with_retry(lambda: self._client.volumes.get(volume).remove(force=True))

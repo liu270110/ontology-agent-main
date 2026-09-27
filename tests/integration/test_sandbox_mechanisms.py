@@ -6,9 +6,11 @@
 
 from __future__ import annotations
 
+import time
 import uuid
 
 import pytest
+from docker.errors import APIError, NotFound
 
 from services.sandbox.domain.model.sandbox import Scenario, TrustLevel
 from services.sandbox.runtime import (
@@ -24,16 +26,32 @@ pytestmark = pytest.mark.integration
 _IMAGE = "docker.m.daocloud.io/library/python:3.12-slim"  # 已预拉
 
 
+def _remove_with_retry(fn, *, attempts: int = 4, delay: float = 1.5) -> None:
+    """与 services/sandbox/runtime/docker_backend.py 同款重试语义（不 import 其私有工具）：
+    409（in use / already in progress）退避重试，末次仍失败则放弃（资源交由 Docker 生命周期回收）。"""
+    for i in range(attempts):
+        try:
+            fn()
+            return
+        except NotFound:  # 已不存在 = 删除成功
+            return
+        except APIError:  # 409 竞态等：退避后重试
+            if i == attempts - 1:
+                return
+            time.sleep(delay * (i + 1))
+
+
 @pytest.fixture()
 async def backend(tmp_path):
     b = DockerBackend(network_name="oa-tst-sbx-net", snapshot_dir=tmp_path)
     yield b
-    # 清理：本测试创建的容器/卷以标签兜底（destroy 已在用例内调用，此处双保险）。
+    # 清理：本测试创建的容器/卷以标签兜底（destroy 已在用例内调用，此处双保险）；
+    # 删除套重试兜底：teardown 与用例内 destroy 并发删同一容器/卷时 Docker 报 409 竞态。
     # 网络不删：每用例删/建 internal 网存在竞态（全量回归实测偶发 error），留待 Docker 生命周期自然回收。
     for c in b._client.containers.list(all=True, filters={"label": "oa.sandbox"}):
-        c.remove(force=True, v=True)
+        _remove_with_retry(lambda c=c: c.remove(force=True, v=True))
     for v in b._client.volumes.list(filters={"label": "oa.sandbox"}):
-        v.remove(force=True)
+        _remove_with_retry(lambda v=v: v.remove(force=True))
 
 
 def _spec(**kw):
@@ -131,8 +149,6 @@ async def test_snapshot_destroy_restore_consistent(backend):
     snap = await backend.snapshot(handle, source="hibernate")
     await backend.destroy(handle)
     # 销毁后容器确已不存在
-    from docker.errors import NotFound
-
     with pytest.raises(NotFound):
         backend._client.containers.get(handle.container_name)
     handle2 = await backend.restore(snap, spec)

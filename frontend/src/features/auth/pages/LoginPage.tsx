@@ -13,8 +13,8 @@ import { MfaStepCard } from '../components/MfaStepCard'
  *  链接邀请（2026-09-28 ★ invite-links 切片）：?join=<token> 页顶提示条——GET preview（retry:false）
  *  成功显绿条（租户/角色），410/未命中显红条；登录成功后 fire-and-forget 调 join 端点自动加入。 */
 
-/** 版本脚注（画板 p-login 基线同款；随 release 出版手动同步 package.json version） */
-const VERSION_FOOTER = 'v0.1.0-m1 · build 20260926'
+/** 版本脚注（画板 p-login 基线同款；版本单源=package.json 经 vite define 注入；日期取本地时区，ISO 直接截串会有 UTC 偏差） */
+const VERSION_FOOTER = `v${__APP_VERSION__} · build ${new Date(__BUILD_TIME__).toLocaleDateString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit' }).replaceAll('/', '')}`
 
 export function LoginPage() {
   const status = useAuthStore(s => s.status)

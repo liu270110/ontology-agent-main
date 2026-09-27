@@ -64,11 +64,16 @@ class Document(Base, PkMixin, TenantMixin, TimestampMixin):
             "'pending_review','indexed','failed')",
             name="status",
         ),
-        UniqueConstraint(
+        # checksum 唯一性 = 部分唯一索引（WHERE valid_to IS NULL，迁移 c4f6a8b0d2e4 同名改建；
+        # database/01 documents 段契约 2026-09-28 B6 批）：墓碑行（valid_to 封口）不占唯一性——
+        # 软删后同内容可重传为全新文档（墓碑行保留审计）
+        Index(
+            "uk_documents_tenant_id_kb_collection_id_checksum_sha256",
             "tenant_id",
             "kb_collection_id",
             "checksum_sha256",
-            name="uk_documents_tenant_id_kb_collection_id_checksum_sha256",
+            unique=True,
+            postgresql_where=text("valid_to IS NULL"),
         ),
         Index("ix_documents_status", "status"),
         Index(

@@ -197,7 +197,8 @@ class DocumentDetailEnvelope(BaseModel):
 
 
 class DocumentDeleteCascade(BaseModel):
-    """级联删除计数（R17-b；DB FK 无 ON DELETE CASCADE → 应用层手动级联后按表计数）。"""
+    """下线分片计数（墓碑口径：chunks/kb_facts/checkpoint 物理保留，仅随文档 valid_to 封口
+    下线检索——计数为被下线入检索的当前有效分片数）。"""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -205,7 +206,7 @@ class DocumentDeleteCascade(BaseModel):
 
 
 class DocumentDeleteData(BaseModel):
-    """删除结果 data 面（R17-b：幂等——文档不存在亦 200 deleted=false，cascade 归零）。"""
+    """删除结果 data 面（墓碑式软删幂等：文档不存在/已墓碑亦 200 deleted=false，不 404）。"""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -301,7 +302,7 @@ class KbGraphNodeOut(BaseModel):
 
 class KbGraphRelOut(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    type: str  # subclass_of | same_class
+    type: str  # subclass_of | same_class | 关系谓词名（图三查权威关系边）
     weight: float  # 信息值（层次 1.0 / 同类逐跳衰减），非排序分
 
 
@@ -336,6 +337,57 @@ class KbUsageOut(BaseModel):
     model_config = ConfigDict(extra="forbid")
     latency_ms: int
     llm_calls: int = 0  # lite 抽取式摘要不引 LLM（§5 usage 形态）
+
+
+# ---------------------------------------------------------------- 分片列表（api/01 §5.4 ★ chunks 行，FR-KB-03）
+
+
+class KbChunkOut(BaseModel):
+    """分片预览项（FR-KB-03）：content=原文预览截断（api 层 ≤500 字符）；span=命中高亮偏移
+    （chunk.meta.span，指向原文 [start, end)）；has_embedding=布尔（向量本体不回传）。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    id: uuid.UUID
+    document_id: uuid.UUID
+    seq: int
+    content: str
+    token_count: int | None = None
+    page_no: int | None = None
+    span: list[int] | None = None
+    has_embedding: bool = False  # pgvector 列缺失 / 未向量化恒 False（降级契约 BM25-only）
+    created_at: datetime
+
+
+class KbChunkPageMetaOut(BaseModel):
+    """分片分页 meta（api/01 §3.1 meta 惯例；offset 分页）。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    offset: int
+    limit: int
+    total: int
+
+
+class KbChunkPageOut(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    items: list[KbChunkOut] = Field(default_factory=list)
+    meta: KbChunkPageMetaOut
+
+
+# ---------------------------------------------------------------- 图三查（api/01 §5.4 ★ GET /kb/graph/*）
+
+
+class KbGraphQueryOut(BaseModel):
+    """图三查统一响应（lite=类级图，retrieval/graph.py 纯函数）：节点/边列表。
+
+    空结果非失败（OntRAG §4）：未知类 IRI / 无路径 → 200 空 nodes/rels，404 仅用于资源不存在。
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    nodes: list[KbGraphNodeOut] = Field(default_factory=list)
+    rels: list[KbGraphRelOut] = Field(default_factory=list)
 
 
 class KbSearchOut(BaseModel):

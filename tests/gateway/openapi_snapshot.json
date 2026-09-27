@@ -1366,7 +1366,7 @@
       },
       "DocumentDeleteCascade": {
         "additionalProperties": false,
-        "description": "级联删除计数（R17-b；DB FK 无 ON DELETE CASCADE → 应用层手动级联后按表计数）。",
+        "description": "下线分片计数（墓碑口径：chunks/kb_facts/checkpoint 物理保留，仅随文档 valid_to 封口\n下线检索——计数为被下线入检索的当前有效分片数）。",
         "properties": {
           "chunks": {
             "default": 0,
@@ -1379,7 +1379,7 @@
       },
       "DocumentDeleteData": {
         "additionalProperties": false,
-        "description": "删除结果 data 面（R17-b：幂等——文档不存在亦 200 deleted=false，cascade 归零）。",
+        "description": "删除结果 data 面（墓碑式软删幂等：文档不存在/已墓碑亦 200 deleted=false，不 404）。",
         "properties": {
           "cascade": {
             "$ref": "#/components/schemas/DocumentDeleteCascade"
@@ -2322,6 +2322,130 @@
         "title": "KbAnswerSentenceOut",
         "type": "object"
       },
+      "KbChunkOut": {
+        "additionalProperties": false,
+        "description": "分片预览项（FR-KB-03）：content=原文预览截断（api 层 ≤500 字符）；span=命中高亮偏移\n（chunk.meta.span，指向原文 [start, end)）；has_embedding=布尔（向量本体不回传）。",
+        "properties": {
+          "content": {
+            "title": "Content",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "document_id": {
+            "format": "uuid",
+            "title": "Document Id",
+            "type": "string"
+          },
+          "has_embedding": {
+            "default": false,
+            "title": "Has Embedding",
+            "type": "boolean"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "page_no": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Page No"
+          },
+          "seq": {
+            "title": "Seq",
+            "type": "integer"
+          },
+          "span": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "integer"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Span"
+          },
+          "token_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Token Count"
+          }
+        },
+        "required": [
+          "id",
+          "document_id",
+          "seq",
+          "content",
+          "created_at"
+        ],
+        "title": "KbChunkOut",
+        "type": "object"
+      },
+      "KbChunkPageMetaOut": {
+        "additionalProperties": false,
+        "description": "分片分页 meta（api/01 §3.1 meta 惯例；offset 分页）。",
+        "properties": {
+          "limit": {
+            "title": "Limit",
+            "type": "integer"
+          },
+          "offset": {
+            "title": "Offset",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "offset",
+          "limit",
+          "total"
+        ],
+        "title": "KbChunkPageMetaOut",
+        "type": "object"
+      },
+      "KbChunkPageOut": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/KbChunkOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/KbChunkPageMetaOut"
+          }
+        },
+        "required": [
+          "meta"
+        ],
+        "title": "KbChunkPageOut",
+        "type": "object"
+      },
       "KbCitationOut": {
         "additionalProperties": false,
         "description": "OntRAG §5 citations 全字段（quote=chunk 原文截片；span 指向原文 [start, end)）。",
@@ -2480,6 +2604,28 @@
           "chunk_ids"
         ],
         "title": "KbGraphPathOut",
+        "type": "object"
+      },
+      "KbGraphQueryOut": {
+        "additionalProperties": false,
+        "description": "图三查统一响应（lite=类级图，retrieval/graph.py 纯函数）：节点/边列表。\n\n空结果非失败（OntRAG §4）：未知类 IRI / 无路径 → 200 空 nodes/rels，404 仅用于资源不存在。",
+        "properties": {
+          "nodes": {
+            "items": {
+              "$ref": "#/components/schemas/KbGraphNodeOut"
+            },
+            "title": "Nodes",
+            "type": "array"
+          },
+          "rels": {
+            "items": {
+              "$ref": "#/components/schemas/KbGraphRelOut"
+            },
+            "title": "Rels",
+            "type": "array"
+          }
+        },
+        "title": "KbGraphQueryOut",
         "type": "object"
       },
       "KbGraphRelOut": {
@@ -6442,7 +6588,7 @@
     },
     "/api/v1/kb/documents/{document_id}": {
       "delete": {
-        "description": "级联删除文档（api/01 §5.15 对账行 DELETE /kb/documents/{id}）。\n\nDB FK（document_chunks/kb_pipeline_step/kb_facts → documents.id）均无 ON DELETE CASCADE\n且 kb_facts.chunk_id 还指向 document_chunks.id → 应用层按依赖逆序手动级联后删文档行。\n幂等：文档不存在（含他人租户，deny-by-default 同口径）亦 200 deleted=false，不 404。",
+        "description": "墓碑式软删（api/01 §5.15 DELETE 行「不物理删除」=平台底线；database/01 §3.3 documents\n双时间线「失效=封口不删除」）。\n\n口径（B6 实装裁决）：\n- 墓碑 = documents.valid_to = now()（status 八态 CHECK 无 deleted 态可置；bm25/vector/graph\n  三路检索 SQL 均内建 d.valid_to IS NULL 谓词——封口即全线下线检索，契约「已索引内容下线」）；\n- chunks/kb_facts/kb_pipeline_step 物理保留（kb_facts 与审计不删——复核与追溯依据）；\n  删除后详情/分片/候选/流水线/重试经 _load_document（valid_to 过滤）一律 404 不可见；\n- 同内容可重传：checksum 唯一性=部分唯一索引（uk_documents_tenant_id_kb_collection_id_\n  checksum_sha256，WHERE valid_to IS NULL，迁移 partial-unique 改建）——墓碑行不占唯一性，\n  重传=全新插入（database/01 documents 段契约同批登记）；\n- 幂等：重复删除与不存在对调用方等价 → 200 deleted=false（不 404；他人租户同口径 deny-by-default）；\n- 契约行成功码 204 与 live 对账（R17-b）200 强信封解包并存：按 live 口径保留 200+envelope，\n  deleted 标志区分命中/幂等未命中（偏离已在报告登记）。",
         "operationId": "delete_document_api_v1_kb_documents__document_id__delete",
         "parameters": [
           {
@@ -6478,13 +6624,13 @@
             "description": "Validation Error"
           }
         },
-        "summary": "删除文档（R17-b：硬删 + 应用层级联；幂等）",
+        "summary": "删除文档（墓碑式软删：valid_to 封口下线检索；幂等恒 200）",
         "tags": [
           "knowledge-base"
         ]
       },
       "get": {
-        "description": "单文档详情（api/01 §5 kb 行 GET /kb/documents/{id}）：复用列表投影 + 定位字段。\n\n404 = 文档域既有口径（_load_document：code 404「文档不存在」，api/01 §5 登记的 404*）。",
+        "description": "单文档详情（api/01 §5 kb 行 GET /kb/documents/{id}）：复用列表投影 + 定位字段。\n\n404 = 文档域既有口径（_load_document：code 404「文档不存在」，api/01 §5 登记的 404*）；\n已墓碑（DELETE 后 valid_to 封口）文档同样 404 不可见（墓碑口径：删除后详情不可见）。",
         "operationId": "get_document_api_v1_kb_documents__document_id__get",
         "parameters": [
           {
@@ -6521,6 +6667,73 @@
           }
         },
         "summary": "文档详情（R17-a live 对账补齐：列表 DTO 全字段 + chunk 计数/error）",
+        "tags": [
+          "knowledge-base"
+        ]
+      }
+    },
+    "/api/v1/kb/documents/{document_id}/chunks": {
+      "get": {
+        "description": "分片预览（api/01 §5.4 ★ 行，FR-KB-03）：仅当前有效分片（chunk.valid_to IS NULL），seq 升序。\n\ncontent=原文预览截断（≤500 字符；全文走文档原文）；span=命中高亮偏移（meta.span，指向原文\n[start, end)）；has_embedding=布尔（向量本体不回传；pgvector 列缺失恒 False=BM25-only 降级）。\n文档不存在/已墓碑 → 404（_load_document 统一口径）。",
+        "operationId": "list_document_chunks_api_v1_kb_documents__document_id__chunks_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "document_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Document Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/KbChunkPageOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "分片列表（seq 升序；offset/limit 分页 + meta.total）",
         "tags": [
           "knowledge-base"
         ]
@@ -6564,6 +6777,50 @@
           }
         },
         "summary": "流水线进度（八态 + 步级 checkpoint）",
+        "tags": [
+          "knowledge-base"
+        ]
+      }
+    },
+    "/api/v1/kb/documents/{document_id}/pipeline/retry": {
+      "post": {
+        "description": "api/01 §5.4 retry 行（202 受理 / 409*）：对 failed 文档受理一次 run_pipeline。\n\n断点续跑语义（kb_pipeline.run_pipeline）：受理即返回，从失败步骤续跑（done 步跳过、\nattempt 跨运行累计 ≤3、checkpoint 幂等）。\n并发防呆（ocr 评审 medium）：document 行 with_for_update 锁内复核 status 并**预复位\nfailed→preprocessed（状态机唯一入口）先行提交**——并发第二调用在锁上排队、进锁后见\n非 failed 态 → 409，重试不双跑（复位后 run_pipeline 内的复位断言为幂等 no-op）。\n防呆：非 failed 态（进行中/已入库/uploaded 等）→ 409；文档不存在或已墓碑 → 404。",
+        "operationId": "retry_pipeline_api_v1_kb_documents__document_id__pipeline_retry_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "document_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Document Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PipelineStartOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "失败文档流水线重试（202 受理 + 后台断点续跑；非 failed 态 409）",
         "tags": [
           "knowledge-base"
         ]
@@ -6790,6 +7047,321 @@
           }
         },
         "summary": "终审候选实例列表（分页；quote/violations/align 全量透出）",
+        "tags": [
+          "knowledge-base"
+        ]
+      }
+    },
+    "/api/v1/kb/graph/neighborhood": {
+      "get": {
+        "description": "邻域查询（api/01 §5.4 ★ 行）：从类 IRI 出发层次近邻 depth 跳（lite 语义一跳直达，上限 2）\n+ 触及该类的权威关系边（relation_type 可过滤，对端类入节点集）。\n\nclass_iri（或契约别名 entity_id）必填（缺失 → 3001/422）；未知类 IRI → 200 空结果\n（OntRAG §4 空结果非失败，404 仅用于资源不存在口径）。",
+        "operationId": "expand_neighborhood_api_v1_kb_graph_neighborhood_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "class_iri",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 512,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Class Iri"
+            }
+          },
+          {
+            "in": "query",
+            "name": "entity_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 512,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Entity Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "depth",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "maximum": 2,
+              "minimum": 0,
+              "title": "Depth",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "relation_type",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 128,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Relation Type"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/KbGraphQueryOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "实体邻域展开（类 IRI depth≤2 层次近邻 + 权威关系边，谓词可过滤）",
+        "tags": [
+          "knowledge-base"
+        ]
+      }
+    },
+    "/api/v1/kb/graph/path": {
+      "get": {
+        "description": "路径查询（api/01 §5.4 ★ 行）：类层次图内 BFS 最短路（父子边双向可行走，subclass_of 链\n上下行语义均有效），节点按路径序返回、边=逐跳 subclass_of。\n\nfrom_class_iri/to_class_iri（或契约别名 source/target）均必填（缺失 → 3001/422）；\n端点未知 / max_hops 内无路 → 200 空结果（OntRAG §4 空结果非失败）。",
+        "operationId": "find_graph_path_api_v1_kb_graph_path_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "from_class_iri",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 512,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "From Class Iri"
+            }
+          },
+          {
+            "in": "query",
+            "name": "to_class_iri",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 512,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "To Class Iri"
+            }
+          },
+          {
+            "in": "query",
+            "name": "source",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 512,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Source"
+            }
+          },
+          {
+            "in": "query",
+            "name": "target",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 512,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Target"
+            }
+          },
+          {
+            "in": "query",
+            "name": "max_hops",
+            "required": false,
+            "schema": {
+              "default": 3,
+              "maximum": 8,
+              "minimum": 1,
+              "title": "Max Hops",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/KbGraphQueryOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "两实体间路径查询（类层次图内 BFS 最短路；max_hops 限深）",
+        "tags": [
+          "knowledge-base"
+        ]
+      }
+    },
+    "/api/v1/kb/graph/search": {
+      "get": {
+        "description": "图检索（api/01 §5.4 ★ 行，`q=` 关键词/IRI 片段）：类名/IRI/本地名片段匹配 → 类层次双向\nBFS depth 跳扩展 + 权威关系边扩展（对端类并入节点集，类层次+关系扩展语义）。\n\nq 与 class_name 至少一个（缺失 → 3001/422）；无匹配类 → 200 空结果（OntRAG §4 非失败）。",
+        "operationId": "search_graph_entities_api_v1_kb_graph_search_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 256,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Q"
+            }
+          },
+          {
+            "in": "query",
+            "name": "class_name",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 256,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Class Name"
+            }
+          },
+          {
+            "in": "query",
+            "name": "depth",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "maximum": 3,
+              "minimum": 0,
+              "title": "Depth",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "top_k",
+            "required": false,
+            "schema": {
+              "default": 10,
+              "maximum": 50,
+              "minimum": 1,
+              "title": "Top K",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/KbGraphQueryOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "图谱实体搜索（q/class_name 匹配类 + 层次 depth 跳 + 权威关系扩展）",
         "tags": [
           "knowledge-base"
         ]

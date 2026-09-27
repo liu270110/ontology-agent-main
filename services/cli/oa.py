@@ -45,6 +45,7 @@ CREDENTIALS_PATH = Path.home() / ".oa" / "credentials.json"
 
 # --------------------------------------------------------------- 退出与凭据小工具
 
+
 def _fail(message: str, exit_code: int) -> NoReturn:
     """统一错误出口：stderr 输出 + 指定退出码（语义见模块 docstring）。"""
     click.echo(f"错误: {message}", err=True)
@@ -83,6 +84,7 @@ def _save_credentials(creds: dict[str, Any]) -> Path:
 
 
 # --------------------------------------------------------------- HTTP 薄封装
+
 
 def _make_client(base_url: str) -> httpx.Client:
     """构建网关 HTTP 客户端（测试经 monkeypatch 本函数注入 MockTransport，零外网）。"""
@@ -135,6 +137,7 @@ def _authed_json_or_fail(resp: httpx.Response, what: str, creds: dict[str, Any])
 
 # --------------------------------------------------------------- 渲染小工具
 
+
 def _truncate(text: str, width: int) -> str:
     flat = " ".join(str(text).split())
     return flat if len(flat) <= width else flat[: max(width - 3, 1)] + "..."
@@ -153,6 +156,7 @@ def _render_table(headers: list[str], rows: list[list[str]]) -> str:
 
 
 # --------------------------------------------------------------- 命令树（13 §4）
+
 
 @click.group(name="oa")
 def cli() -> None:
@@ -311,9 +315,7 @@ def ontology_list(status_filter: str | None, limit: int, base_url: str) -> None:
         params["status"] = status_filter
     try:
         with _make_client(base_url) as client:
-            resp = _request(
-                client, "GET", f"{_API_PREFIX}/ontologies", token=str(creds["access_token"]), params=params
-            )
+            resp = _request(client, "GET", f"{_API_PREFIX}/ontologies", token=str(creds["access_token"]), params=params)
     except httpx.HTTPError as exc:
         _fail(f"网络错误：无法连接 {base_url}（{exc}）", EXIT_AUTH_NETWORK)
     data = _authed_json_or_fail(resp, "ontology list", creds)

@@ -4,8 +4,9 @@
 
 1. **AgentSlot 注册面**（02 §4.2，`agent.slots`）：ChatAdapter 经
    ``ExtensionDispatcher.register_agent_slot`` 进内核分发器同一注册表（meta 语义标注 +
-   spawn_sub 契约签名，版本握手走注册面缺省值）；v1 仅冻结注册面——chat 路径不经
-   spawn_sub，返回占位句柄仅满足契约签名（消费随 M4 子代理批次接通）。
+   spawn_sub 契约签名，版本握手走注册面缺省值）；**M4 消费接线已通**——spawn_sub 经
+   内核 BuiltinAgentSlot 同步派生子代理（单轮独立生成，窗口隔离），Artifact 过回传
+   契约校验后方可取用（sub_receipt）。
 2. **每轮扩展装配**（02 §4 ②①④ 通道，策略下放、形态归内核）：一次对话 = 模板规划
    （planning.strategies，零 token 模板档）+ 组装上下文供给（context.providers）+
    单步生成工具（tools.bindings，B1 基线在计划步上照常生效）——三件经
@@ -24,7 +25,6 @@ from __future__ import annotations
 import asyncio
 import json
 import time
-import uuid
 from collections.abc import AsyncIterator, Callable
 from typing import Any
 from uuid import UUID
@@ -32,6 +32,8 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field
 
 from services.agent.business.chat_events import ChatEvent, ChatEventName
+from services.agent.business.kernel.budget import Budget
+from services.agent.business.kernel.subagent import BuiltinAgentSlot, SubRunReceipt, SubRunResult
 from services.agent.domain.model.kernel_actions import ApprovalTicket, ExecutionMode, ToolCall, ToolResult
 from services.agent.domain.model.kernel_context import (
     ContextBlock,
@@ -40,6 +42,7 @@ from services.agent.domain.model.kernel_context import (
     TaskRef,
     TenantContext,
 )
+from services.agent.domain.model.kernel_gates import RunOutcome
 from services.agent.domain.model.kernel_planning import PlanCandidate, PlanMode, PlanStep
 from services.platform.errors import ErrorCode
 
@@ -63,6 +66,7 @@ class ChatTurn(BaseModel):
     message: str  # 本条用户消息
     history: tuple[tuple[str, str], ...] = ()  # 近窗 (role, content)，新→旧
     context_text: str = ""  # 已标界的记忆+证据上下文（B3 标界在组装器落）
+    system_prompt: str | None = None  # 成员人格（27 篇群聊成员 system_prompt；None=平台缺省）
     num_ctx: int | None = None  # 上下文窗口注入（ModelPort 可选参，端点不支持时忽略）
 
     @property
@@ -294,6 +298,55 @@ class ChatAnswerTool:
         return ToolResult(ok=True, output={"answer": self._box.answer}, usage={"total_tokens": total_tokens})
 
 
+class _ChatSubRunRunner:
+    """chat 子 Run 执行器（SubRunRunner 适配）：子代理=单轮独立生成，窗口隔离由构造保证。
+
+    - 不共享父对话历史（history=()）与父检索证据（context_text=""）——02 §4.2 窗口隔离；
+    - 子目标=task.objective（派生方传聚焦后的子目标）；context_budget → num_ctx（子窗口
+      绝对上限，ModelPort 不支持时忽略）；
+    - 产物映射：Artifact={"answer": 回答}（过 artifact_schema 才可回传，校验在 BuiltinAgentSlot）；
+      tokens_used=子轮用量合计（父侧分账依据）。
+    """
+
+    def __init__(self, adapter: ChatAdapter, *, timeout_ms: int = 30_000) -> None:
+        self._adapter = adapter
+        self._timeout_ms = timeout_ms
+
+    async def __call__(self, task: TaskRef, ctx: TenantContext, *, budget: Budget) -> SubRunResult:
+        turn = ChatTurn(
+            tenant_id=ctx.tenant_id,
+            session_id=task.task_id,  # 子 Run 无父会话语义：仅占位标识（不触发 L1 回写）
+            run_id=task.run_id,
+            message=task.objective,
+            history=(),
+            context_text="",
+            num_ctx=budget.max_tokens,
+        )
+        parts: list[str] = []
+        usage: dict[str, Any] = {}
+        try:
+            async for generated in self._adapter.stream_chat(turn, ctx, timeout_ms=self._timeout_ms):
+                if generated.kind == "text_delta":
+                    parts.append(generated.delta)
+                elif generated.kind == "finish":
+                    usage = dict(generated.usage)
+        except asyncio.CancelledError:
+            raise  # 取消传播：级联取消语义由 BuiltinAgentSlot/清单统一裁决（§2.4）
+        except BaseException as exc:  # 子生成失败一律结构化终态（禁裸异常逃逸）
+            code = int(getattr(exc, "code", 5999))
+            return SubRunResult(
+                outcome=RunOutcome(run_id=task.run_id, status="failed", reason_code=code, reason=str(exc)),
+                artifact={},
+                tokens_used=0,
+            )
+        tokens = sum(v for v in usage.values() if isinstance(v, int))
+        return SubRunResult(
+            outcome=RunOutcome(run_id=task.run_id, status="completed", reason="子代理单轮生成完成"),
+            artifact={"answer": "".join(parts)},
+            tokens_used=tokens,
+        )
+
+
 class ChatAdapter:
     """chat 适配器基类：子类实现 stream_chat（生成通道），扩展装配面共用。"""
 
@@ -307,7 +360,16 @@ class ChatAdapter:
         raise NotImplementedError("适配器必须实现 stream_chat")  # pragma: no cover
         yield GenerationEvent(kind="finish")  # pragma: no cover（async generator 形态要求）
 
-    # ── AgentSlot 契约面（02 §4.2；v1 仅冻结注册面）──────────────────────
+    # ── AgentSlot 契约面（02 §4.2，M4 消费接线）───────────────────────────
+    @property
+    def sub_slot(self) -> BuiltinAgentSlot:
+        """子代理插槽（懒装配）：复用内核 BuiltinAgentSlot 全部契约（分账/Artifact 校验/级联）。"""
+        slot = getattr(self, "_sub_slot", None)
+        if slot is None:
+            slot = BuiltinAgentSlot(_ChatSubRunRunner(self))
+            self._sub_slot = slot  # noqa: SLF001  # 惰性单例（实例级缓存）
+        return slot
+
     async def spawn_sub(
         self,
         task: TaskRef,
@@ -317,8 +379,14 @@ class ChatAdapter:
         artifact_schema: dict[str, Any],
         timeout_ms: int = 600_000,
     ) -> str:
-        """v1 占位：chat 适配器不派生子代理，返回占位句柄仅满足 AgentSlot 契约签名。"""
-        return f"{self.adapter_name}-sub-{uuid.uuid4()}"
+        """派生子代理：经 BuiltinAgentSlot 同步执行（子 Run 终态先于父步后验，§4.2）。"""
+        return await self.sub_slot.spawn_sub(
+            task, ctx, context_budget=context_budget, artifact_schema=artifact_schema, timeout_ms=timeout_ms
+        )
+
+    def sub_receipt(self, handle_id: str) -> SubRunReceipt | None:
+        """派生结果取用面（Artifact 已过回传契约校验）。"""
+        return self.sub_slot.receipt(handle_id)
 
     # ── 每轮扩展装配（策略下放、形态归内核；轮间零共享状态）────────────────
     def turn_planner(self, turn: ChatTurn) -> ChatTemplatePlanner:

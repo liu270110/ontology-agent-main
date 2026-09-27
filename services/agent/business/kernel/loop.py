@@ -28,8 +28,10 @@ from services.agent.business.kernel.errors import BudgetExhaustedError, KernelCo
 from services.agent.business.kernel.execution import ExecutionStage
 from services.agent.business.kernel.gate_baseline import BaselineGate, canonical_param_hash
 from services.agent.business.kernel.grounding import ContextAssemblyStage
-from services.agent.business.kernel.ledger import KernelLedger
+from services.agent.business.kernel.ledger import KernelLedger, LedgerSink
 from services.agent.business.kernel.run_context import RunContext
+from services.agent.business.kernel.spill import SpillStore
+from services.agent.business.kernel.subagent import ParentBindable
 from services.agent.domain.model.kernel_actions import ActionDecision, ApprovalTicket, ExecutionMode
 from services.agent.domain.model.kernel_context import ContextBlock, KernelEvent, TaskRef, TenantContext
 from services.agent.domain.model.kernel_gates import GateFinding, GateReport, GateVerdict, RunOutcome
@@ -80,6 +82,7 @@ class AgentKernel:
         *,
         clock: Callable[[], float] = time.monotonic,
         tool_timeout_s: float = _TOOL_TIMEOUT_S,
+        spill_store: SpillStore | None = None,
     ) -> None:
         self._dispatcher = dispatcher
         self._baseline = BaselineGate()
@@ -89,7 +92,9 @@ class AgentKernel:
         self._last_ledger: KernelLedger | None = None
         # 阶段执行器（内核私有；依赖注入同一分发器，禁直连能力实现）
         self._context_stage = ContextAssemblyStage(dispatcher, self._emit)
-        self._execution_stage = ExecutionStage(dispatcher, self._emit, tool_timeout_s=tool_timeout_s)
+        self._execution_stage = ExecutionStage(
+            dispatcher, self._emit, tool_timeout_s=tool_timeout_s, spill_store=spill_store
+        )
 
     @property
     def last_ledger(self) -> KernelLedger | None:
@@ -104,12 +109,22 @@ class AgentKernel:
         *,
         budget: Budget,
         approvals: tuple[ApprovalTicket, ...] = (),
+        ledger_sink: LedgerSink | None = None,
+        spill_store: SpillStore | None = None,
     ) -> RunOutcome:
-        """执行一次 Run（七阶段）。取消传播下状态一致：终态经账本可追溯后重抛取消。"""
+        """执行一次 Run（七阶段）。取消传播下状态一致：终态经账本可追溯后重抛取消。
+
+        ``ledger_sink``（C1 PG 台账投影，组合根注入）：内核锚点事件在入账同时异步投影
+        到持久层，终态前排水（先落库后终态的可追溯口径）；投影失败不阻断运行。
+        """
         if not ctx.trace_id:
             raise KernelContractError("TenantContext.trace_id 为空，拒绝运行（C2 可追溯底线）")
-        rc = RunContext(task, ctx, budget, clock=self._clock, approvals=approvals)
+        rc = RunContext(task, ctx, budget, clock=self._clock, approvals=approvals, ledger_sink=ledger_sink)
         self._last_ledger = rc.ledger
+        self._execution_stage.spill_store = spill_store  # per-run spill 注入（02 §11.2-11）
+        slot = self._dispatcher.agent_slot()  # agent.slots（02 §4.2）：可绑定实现挂父作用域（分账+级联）
+        if isinstance(slot, ParentBindable):
+            slot.bind_parent(task.run_id, rc.tracker, rc.coordinator)
         try:
             # 时长维硬兜底（A4）；未设时长预算按 24h 封顶。超限中断统一走取消清单收敛。
             hard_cap = budget.duration_s if budget.duration_s is not None else 86_400.0
@@ -177,6 +192,7 @@ class AgentKernel:
                     "residuals": list(rc.ledger.residuals),
                 },
             )
+            await rc.ledger.drain_sink()  # C1 投影排水（取消亦不丢锚点）
             raise  # 取消语义向上传播；终态与零残留已经账本可追溯
 
     # ── ③ 规划（策略优先、模型回退；三层校验）────────────────────────────
@@ -235,22 +251,44 @@ class AgentKernel:
         return PlanCandidate(strategy_name="kernel.model_fallback", steps=tuple(steps))
 
     def _validate_candidate(self, candidate: PlanCandidate) -> None:
-        """计划三层校验 v1：① 结构层（pydantic 形状）；② 绑定层（行动类有执行载体、seq 严格递增）；
-        ③ 分级层（executionMode 合法枚举，pydantic StrEnum 保证）。
+        """计划三层校验 v1：① 结构层（pydantic 形状 + parameter_schema 域校验）；
+        ② 绑定层（行动类有执行载体、seq 严格递增）；③ 分级层（executionMode 合法枚举，
+        pydantic StrEnum 保证）。
 
         绑定层载体：read/write 行动类须有 tools.bindings 绑定；code 行动类须有
-        execution.backends 注册（02 §3：沙箱代码行动类执行器走执行后端）。"""
+        execution.backends 注册（02 §3：沙箱代码行动类执行器走执行后端）。
+        parameter_schema 在**计划验收期**校验（hermes 勘察细节 1，02 §11.2-1：坏 schema
+        验收期报错，不拖到运行期门禁才炸）。"""
         seqs = [s.seq for s in candidate.steps]
         if len(seqs) != len(set(seqs)):
             raise KernelContractError("计划步 seq 重复（绑定层校验失败）")
         if seqs != sorted(seqs):
             raise KernelContractError("计划步 seq 非严格递增（绑定层校验失败）")
         for step in candidate.steps:
+            self._validate_parameter_schema(step)
             if step.execution_mode is ExecutionMode.CODE:
                 if self._dispatcher.execution_backend() is None:
                     raise KernelContractError("code 行动类需注册 ExecutionBackend（L3 执行后端）")
             elif self._dispatcher.tool_for(step.action_iri) is None:
                 raise KernelContractError(f"计划引用未绑定行动类: {step.action_iri}（绑定层校验失败）")
+
+    @staticmethod
+    def _validate_parameter_schema(step: PlanStep) -> None:
+        """参数域 Schema 最小形状校验（结构层）：对象 Schema + required ⊆ properties。"""
+        schema = step.parameter_schema
+        if not schema:
+            return  # 空 Schema=无参数域约束（合法，chat 模板档形态）
+        if not isinstance(schema, dict) or ("type" in schema and schema["type"] != "object"):
+            raise KernelContractError(f"计划步 {step.seq} parameter_schema 须为 object Schema（结构层校验失败）")
+        properties = schema.get("properties", {})
+        required = schema.get("required", [])
+        if not isinstance(properties, dict) or not isinstance(required, list):
+            raise KernelContractError(f"计划步 {step.seq} parameter_schema properties/required 形状非法（结构层）")
+        unknown = [key for key in required if key not in properties]
+        if unknown:
+            raise KernelContractError(
+                f"计划步 {step.seq} parameter_schema required 引用未声明属性: {unknown}（结构层校验失败）"
+            )
 
     # ── ④ 门禁（基线先、包后，只增不替；B1）──────────────────────────────
     async def _stage_gate(self, rc: RunContext, candidate: PlanCandidate, step: PlanStep) -> None:
@@ -390,6 +428,7 @@ class AgentKernel:
                 await asyncio.wait_for(sink.handle(list(ledger.events), ctx), timeout=_SINK_TIMEOUT_S)
             except Exception as exc:  # 通知失败不阻断落账（结构化转义留痕）
                 logger.warning("事件汇失败（不阻断落账）: %s", exc)
+        await ledger.drain_sink()  # C1 投影排水：先落库后终态（可追溯口径）
         self._emit(
             ledger,
             ctx,
@@ -402,6 +441,7 @@ class AgentKernel:
                 "stage": str(LoopStage.SETTLEMENT),
             },
         )
+        await ledger.drain_sink()  # C1 投影排水：settled 锚点亦投影，先落库后终态（可追溯口径）
         return RunOutcome(
             run_id=task.run_id,
             status=str(status),
@@ -423,6 +463,7 @@ class AgentKernel:
     ) -> RunOutcome:
         if run_checklist:  # §2.4：资源释放先行（在途调用中止/租约强制释放/工作区标记）
             await rc.coordinator.execute(reason=reason)
+        await rc.ledger.drain_sink()  # C1 投影排水：终态可追溯（超时残留已在账本留痕）
         for state in rc.states.values():
             if not state.is_terminal:
                 state.cancel(reason=reason)

@@ -33,10 +33,29 @@ class SessionRepository(Protocol):
         """只追加消息，返回递增 seq（04 §4）；seq 已由聚合方法分配，仓储只负责落库。"""
         ...
 
-    async def list_for_user(self, user_id: UUID, *, offset: int = 0, limit: int = 20) -> list[Session]: ...
+    async def list_for_user(
+        self,
+        user_id: UUID,
+        *,
+        offset: int = 0,
+        limit: int = 20,
+        session_type: str | None = None,  # single|group（27 篇 X15：GET /sessions?type=group）
+    ) -> list[Session]: ...
 
     async def list_messages(self, session_id: UUID, *, before_id: UUID | None = None, limit: int = 20) -> list[Message]:
         """历史消息回放（api/01 §5.2：before_id 游标分页；seq 倒序）。"""
+        ...
+
+    async def get_message_by_seq(self, session_id: UUID, seq: int) -> Message | None:
+        """按 seq 取单条消息（worker 重放：task.payload.message_seq → 触发消息内容）。"""
+        ...
+
+    async def count_by_agent(self, agent_id: UUID) -> int:
+        """引用计数（api/01 §5.1 DELETE /agents：存在会话引用时拒绝删除）。"""
+        ...
+
+    async def count_messages_by_role(self, session_id: UUID, role: str) -> int:
+        """按角色计数（群聊 round_robin 游标：assistant 数 % speakers，零新增状态）。"""
         ...
 
 
@@ -56,6 +75,14 @@ class TaskRepository(Protocol):
 
     async def find_running_by_session(self, session_id: UUID) -> Task | None:
         """会话级运行中任务预检（03 §3 步骤 1）；并发硬保证=uk_tasks_one_active_run（04 §2.1）。"""
+        ...
+
+    async def find_running_by_agent(self, agent_id: UUID) -> Task | None:
+        """agent 级运行中任务查询（api/01 §5.1 DELETE /agents 存在 running task 时 409）。"""
+        ...
+
+    async def list_events(self, task_id: UUID, *, after_seq: int | None = None, limit: int = 100) -> list[TaskEvent]:
+        """任务事件按 seq 回放（先落库后推送；after_seq=Last-Event-ID 断点续传口径）。"""
         ...
 
     async def list(

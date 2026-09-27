@@ -67,6 +67,13 @@ class BudgetTracker:
         return self._tokens_used
 
     @property
+    def remaining_tokens(self) -> int | None:
+        """剩余 token 预算（None=不限）：子 Run 分账断言口（02 §4.2，A4 不新增总额）。"""
+        if self._budget.max_tokens is None:
+            return None
+        return self._budget.max_tokens - self._tokens_used
+
+    @property
     def steps_done(self) -> int:
         return self._steps_done
 

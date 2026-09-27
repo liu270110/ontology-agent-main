@@ -338,6 +338,7 @@ class ChatOrchestrator:
                 usage=dict(box.usage),
                 degraded=context.degraded,
                 cost_ms=cost_ms,
+                agent_id=command.agent_id,
                 **extra,  # type: ignore[arg-type]
             )
 

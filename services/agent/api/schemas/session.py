@@ -7,10 +7,22 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from services.agent.domain.model.session import Message, Session, SessionStatus
+
+
+class GroupMemberIn(BaseModel):
+    """群成员入参（27 篇 X15：成员=Agent 插槽实例）。"""
+
+    model_config = ConfigDict(extra="forbid")
+    agent_id: uuid.UUID
+    display_name: str = Field(min_length=1, max_length=128)
+    system_prompt: str | None = None
+    model: str | None = Field(default=None, max_length=64)
+    routing_role: str = Field(default="speaker", pattern="^(coordinator|speaker|observer)$")
 
 
 class SessionCreateIn(BaseModel):
@@ -18,6 +30,10 @@ class SessionCreateIn(BaseModel):
     agent_id: uuid.UUID
     title: str | None = Field(default=None, max_length=256)
     channel: str = Field(default="web", pattern="^(web|api|cli)$")
+    # 群聊扩展（27 篇 X15，向后兼容可选；type=single 时 members/routing 被聚合拒绝）
+    type: str = Field(default="single", pattern="^(single|group)$")
+    routing: str = Field(default="round_robin", pattern="^(mention|round_robin|all|orchestrator)$")
+    members: list[GroupMemberIn] = Field(default_factory=list, max_length=5)
 
 
 class SendMessageIn(BaseModel):
@@ -40,7 +56,40 @@ class SessionOut(BaseModel):
     agent_id: uuid.UUID
     status: SessionStatus
     title: str | None
+    type: str = "single"
+    routing: str = "round_robin"
     created_at: datetime | None = None
+
+
+class GroupMemberOut(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    id: uuid.UUID
+    agent_id: uuid.UUID
+    display_name: str
+    system_prompt: str | None = None
+    model: str | None = None
+    routing_role: str
+
+
+class MemberListOut(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    items: list[GroupMemberOut]
+
+
+class MemberUpdateIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    display_name: str | None = Field(default=None, min_length=1, max_length=128)
+    system_prompt: str | None = None
+    model: str | None = Field(default=None, max_length=64)
+    routing_role: str | None = Field(default=None, pattern="^(coordinator|speaker|observer)$")
+
+
+class SessionPatchIn(BaseModel):
+    """会话元信息更新（api/01 §5.2：routing 切换仅 group 会话，不含归档）。"""
+
+    model_config = ConfigDict(extra="forbid")
+    title: str | None = Field(default=None, max_length=256)
+    routing: str | None = Field(default=None, pattern="^(mention|round_robin|all|orchestrator)$")
 
 
 class SessionListOut(BaseModel):
@@ -68,11 +117,49 @@ class MessagePageOut(BaseModel):
 
 
 def to_domain(dto: SessionCreateIn, *, tenant_id: uuid.UUID, user_id: uuid.UUID) -> Session:
-    return Session(id=uuid.uuid4(), tenant_id=tenant_id, agent_id=dto.agent_id, user_id=user_id, title=dto.title)
+    from services.agent.domain.model.session import MemberRole, RoutingMode, SessionType
+
+    session = Session(
+        id=uuid.uuid4(),
+        tenant_id=tenant_id,
+        agent_id=dto.agent_id,
+        user_id=user_id,
+        title=dto.title,
+        type=SessionType(dto.type),
+    )
+    if session.type.value == "group":  # 聚合方法逐成员入群：上限/唯一/协调者不变式在此断言
+        for m in dto.members:
+            session.add_member(
+                agent_id=m.agent_id,
+                display_name=m.display_name,
+                system_prompt=m.system_prompt,
+                model=m.model,
+                routing_role=MemberRole(m.routing_role),
+            )
+        session.set_routing(RoutingMode(dto.routing))
+    return session
 
 
 def from_domain(ag: Session) -> SessionOut:
-    return SessionOut(id=ag.id, agent_id=ag.agent_id, status=ag.status, title=ag.title)
+    return SessionOut(
+        id=ag.id,
+        agent_id=ag.agent_id,
+        status=ag.status,
+        title=ag.title,
+        type=ag.type.value,
+        routing=ag.routing.value,
+    )
+
+
+def member_from_domain(m: Any) -> GroupMemberOut:
+    return GroupMemberOut(
+        id=m.id,
+        agent_id=m.agent_id,
+        display_name=m.display_name,
+        system_prompt=m.system_prompt,
+        model=m.model,
+        routing_role=m.routing_role.value,
+    )
 
 
 def message_from_domain(m: Message) -> MessageOut:

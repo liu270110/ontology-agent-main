@@ -24,22 +24,30 @@ from services.agent.api.deps import (
     domain_error,
 )
 from services.agent.api.schemas.session import (
+    GroupMemberIn,
+    MemberListOut,
+    MemberUpdateIn,
     MessagePageOut,
     SendMessageIn,
     SessionCreateIn,
     SessionListOut,
     SessionOut,
+    SessionPatchIn,
     from_domain,
+    member_from_domain,
     message_from_domain,
     to_domain,
 )
 from services.agent.business.chat_events import ChatCommand, ChatOutcome
+from services.agent.business.chat_group import stream_group_turn
 from services.agent.business.chat_orchestrator import build_chat_orchestrator
-from services.agent.domain.model.session import Message, SessionError
+from services.agent.domain.model.agent import AgentError
+from services.agent.domain.model.kernel_context import KernelEvent
+from services.agent.domain.model.session import MemberRole, Message, RoutingMode, SessionError
 from services.agent.domain.model.task import Task, TaskError, TaskEvent
 from services.memory.business.runtime import build_l1_store  # memory 公开装配面（memory.data 模块私有，P2-2 收口）
 from services.platform.db.uow import AsyncUnitOfWork
-from services.platform.deps import get_redis, get_session_factory, get_uow
+from services.platform.deps import get_redis, get_session_factory
 from services.platform.errors import GatewayError
 
 router = APIRouter(prefix="/sessions", tags=["sessions"])
@@ -77,36 +85,92 @@ def _get_hub(request: Request) -> SseHubProtocol:
     return hub  # type: ignore[no-any-return]
 
 
-def _get_chat_orchestrator(request: Request) -> Any:
+def _build_spill_store(settings: Any) -> Any:
+    """spill 存储装配（02 §11.2-11）：task_spill_dir 未配置=关闭（None）；M4 切 MinIO 实现。"""
+    spill_dir = getattr(settings, "task_spill_dir", None)
+    if not spill_dir:
+        return None
+    from services.agent.data.spill_store import LocalDirSpillStore
+
+    return LocalDirSpillStore(spill_dir)
+
+
+def build_kernel_ledger_sink_factory(
+    uow: AsyncUnitOfWork,
+) -> Callable[[uuid.UUID, uuid.UUID], Callable[[KernelEvent], Awaitable[None]]]:
+    """C1 内核账本投影工厂（组合根，2026-09-27 批）：kernel.* 锚点事件 → PG task_events 行。
+
+    每轮对话经 factory(task_id, run_id) 取得闭包 sink；内核账本在终态前排水
+    （先落库后终态，C1 可追溯口径）。落库失败由内核账本结构化转义（审计不阻断主流程）。
+    本函数是编排器（业务层）与 UoW 之间的注入边界——编排器自身不 import ORM/UoW。
+    """
+
+    def factory(task_id: uuid.UUID, run_id: uuid.UUID) -> Callable[[KernelEvent], Awaitable[None]]:
+        async def sink(event: KernelEvent) -> None:
+            data = dict(event.data)
+            data.setdefault("run_id", str(run_id))
+            async with uow.for_tenant(event.tenant_id) as tx:
+                await tx.tasks.append_event(
+                    task_id,
+                    TaskEvent(task_id=task_id, event_type=event.event_type, data=data),
+                )
+
+        return sink
+
+    return factory
+
+
+def get_or_build_chat_orchestrator(state: Any) -> Any:
     """取/建对话编排器（模块级组合模式，同 kb.py get_model_port 先例；app.state 单例缓存）。
 
     组合内容：双适配器（builtin=ModelPort，claude=直连无 key 5002）+ 上下文组装器
     （kb 检索服务在 chat_context 工厂内装配）+ 结果汇（PG 短事务 UoW#2）。
+    供端点请求（request.app.state）与 gateway lifespan（TaskRunWorker）共用同一装配面。
     """
-    cached = getattr(request.app.state, "chat_orchestrator", None)
+    cached = getattr(state, "chat_orchestrator", None)
     if cached is not None:
         return cached
-    settings = request.app.state.settings
-    l1_store = getattr(request.app.state, "l1_store", None)
+    settings = state.settings
+    l1_store = getattr(state, "l1_store", None)
     if l1_store is None:
         l1_store = build_l1_store(get_redis(settings), ttl_seconds=settings.memory_l1_ttl_seconds)
-        request.app.state.l1_store = l1_store
+        state.l1_store = l1_store
     orchestrator = build_chat_orchestrator(
-        model_port=getattr(request.app.state, "model_port", None),
+        model_port=getattr(state, "model_port", None),
         l1_store=l1_store,
         session_factory=get_session_factory(settings),
         ollama_base_url=settings.ollama_base_url,
-        result_sink=build_chat_result_sink(get_uow(request)),
+        result_sink=build_chat_result_sink(state.uow),  # lifespan 装配于 app.state（06 §1）
+        kernel_ledger_sink_factory=build_kernel_ledger_sink_factory(state.uow),  # C1 锚点投影（2026-09-27 批）
+        spill_store=_build_spill_store(settings),  # spill（02 §11.2-11）：未配置目录=关闭
     )
-    request.app.state.chat_orchestrator = orchestrator
+    state.chat_orchestrator = orchestrator
     return orchestrator
+
+
+def _get_chat_orchestrator(request: Request) -> Any:
+    """端点侧入口：转发到 state 级构建函数（worker 与请求共享同一编排器实例）。"""
+    return get_or_build_chat_orchestrator(request.app.state)
 
 
 @router.post("", status_code=status.HTTP_201_CREATED, summary="创建会话（绑定 agent）")
 async def create_session(body: SessionCreateIn, principal: SessionWriteDep, uow: UowDep) -> SessionOut:
-    async with uow.for_tenant(principal.tenant_id) as tx:
-        session = to_domain(body, tenant_id=principal.tenant_id, user_id=principal.user_id)
-        await tx.sessions.add(session, channel=body.channel)
+    """会话不变式前置校验（Agent 服务设计 §2）：agent 必须存在（404）且未禁用（disabled 不得被新会话引用，409）。"""
+    try:
+        async with uow.for_tenant(principal.tenant_id) as tx:
+            agent = await tx.agents.get(body.agent_id)
+            if agent is None:
+                raise GatewayError(404, "agent 不存在", status_code=404)
+            agent.ensure_usable_for_new_session()
+            session = to_domain(body, tenant_id=principal.tenant_id, user_id=principal.user_id)
+            for m in session.members:  # 成员 agent 存在性校验（FK 之外的业务 404 口径）
+                member_agent = await tx.agents.get(m.agent_id)
+                if member_agent is None:
+                    raise GatewayError(404, f"群成员 agent 不存在: {m.agent_id}", status_code=404)
+                member_agent.ensure_usable_for_new_session()
+            await tx.sessions.add(session, channel=body.channel)
+    except AgentError as exc:
+        raise GatewayError(409, str(exc), status_code=409) from exc
     return from_domain(session)
 
 
@@ -116,9 +180,12 @@ async def list_sessions(
     uow: UowDep,
     offset: Annotated[int, Query(ge=0)] = 0,
     limit: Annotated[int, Query(ge=1, le=100)] = 20,
+    session_type: Annotated[str | None, Query(alias="type", pattern="^(single|group)$")] = None,
 ) -> SessionListOut:
     async with uow.for_tenant(principal.tenant_id) as tx:
-        items = await tx.sessions.list_for_user(principal.user_id, offset=offset, limit=limit)
+        items = await tx.sessions.list_for_user(
+            principal.user_id, offset=offset, limit=limit, session_type=session_type
+        )
     return SessionListOut(items=[from_domain(s) for s in items], offset=offset, limit=limit)
 
 
@@ -148,6 +215,100 @@ async def close_session(session_id: uuid.UUID, principal: SessionWriteDep, uow: 
         raise domain_error(exc, fallback_code=4101) from exc
 
 
+@router.get("/{session_id}/members", summary="群成员列表（27 篇 X15）")
+async def list_members(session_id: uuid.UUID, principal: SessionReadDep, uow: UowDep) -> MemberListOut:
+    async with uow.for_tenant(principal.tenant_id) as tx:
+        session = await tx.sessions.get(session_id)
+        if session is None:
+            raise GatewayError(404, "会话不存在", status_code=404)
+    return MemberListOut(items=[member_from_domain(m) for m in session.members])
+
+
+@router.post("/{session_id}/members", status_code=status.HTTP_201_CREATED, summary="群成员添加（27 篇 X15）")
+async def add_member(
+    session_id: uuid.UUID, body: GroupMemberIn, principal: SessionWriteDep, uow: UowDep
+) -> MemberListOut:
+    try:
+        async with uow.for_tenant(principal.tenant_id) as tx:
+            session = await tx.sessions.get(session_id)
+            if session is None:
+                raise GatewayError(404, "会话不存在", status_code=404)
+            member_agent = await tx.agents.get(body.agent_id)
+            if member_agent is None:
+                raise GatewayError(404, "群成员 agent 不存在", status_code=404)
+            member_agent.ensure_usable_for_new_session()
+            session.add_member(
+                agent_id=body.agent_id,
+                display_name=body.display_name,
+                system_prompt=body.system_prompt,
+                model=body.model,
+                routing_role=MemberRole(body.routing_role),
+            )
+            await tx.sessions.save_meta(session)  # 成员随 save_meta 同步（删全量插）
+    except SessionError as exc:
+        raise domain_error(exc, fallback_code=4103) from exc
+    return MemberListOut(items=[member_from_domain(m) for m in session.members])
+
+
+@router.patch("/{session_id}/members/{member_id}", summary="群成员更新（角色/模型/提示词）")
+async def update_member(
+    session_id: uuid.UUID,
+    member_id: uuid.UUID,
+    body: MemberUpdateIn,
+    principal: SessionWriteDep,
+    uow: UowDep,
+) -> MemberListOut:
+    try:
+        async with uow.for_tenant(principal.tenant_id) as tx:
+            session = await tx.sessions.get(session_id)
+            if session is None:
+                raise GatewayError(404, "会话不存在", status_code=404)
+            role = MemberRole(body.routing_role) if body.routing_role else None
+            session.update_member(
+                member_id,
+                routing_role=role,
+                model=body.model,
+                system_prompt=body.system_prompt,
+                display_name=body.display_name,
+            )
+            await tx.sessions.save_meta(session)
+    except SessionError as exc:
+        raise domain_error(exc, fallback_code=4103) from exc
+    return MemberListOut(items=[member_from_domain(m) for m in session.members])
+
+
+@router.delete("/{session_id}/members/{member_id}", status_code=status.HTTP_204_NO_CONTENT, summary="群成员移除")
+async def remove_member(session_id: uuid.UUID, member_id: uuid.UUID, principal: SessionWriteDep, uow: UowDep) -> None:
+    try:
+        async with uow.for_tenant(principal.tenant_id) as tx:
+            session = await tx.sessions.get(session_id)
+            if session is None:
+                raise GatewayError(404, "会话不存在", status_code=404)
+            session.remove_member(member_id)
+            await tx.sessions.save_meta(session)
+    except SessionError as exc:
+        raise domain_error(exc, fallback_code=4103) from exc
+
+
+@router.patch("/{session_id}", summary="会话元信息更新（routing 切换仅 group；不含归档）")
+async def patch_session(
+    session_id: uuid.UUID, body: SessionPatchIn, principal: SessionWriteDep, uow: UowDep
+) -> SessionOut:
+    try:
+        async with uow.for_tenant(principal.tenant_id) as tx:
+            session = await tx.sessions.get(session_id)
+            if session is None:
+                raise GatewayError(404, "会话不存在", status_code=404)
+            if body.routing is not None:
+                session.set_routing(RoutingMode(body.routing))
+            if body.title is not None:
+                session.title = body.title
+            await tx.sessions.save_meta(session)
+    except SessionError as exc:
+        raise domain_error(exc, fallback_code=4103) from exc
+    return from_domain(session)
+
+
 @router.post(
     "/{session_id}/messages",
     status_code=status.HTTP_202_ACCEPTED,
@@ -165,7 +326,10 @@ async def send_message(
 
     预检次序=03 §3：先聚合状态（closed→4101，不变式只在 Session.append_message 断言一次），
     再会话级活跃任务预检（4102；并发硬保证=uk_tasks_one_active_run，04 §2.1）。
+    SSE 分流在受理事务**前**判定：SSE 路径受理即认领（run queued→running，04 §3），
+    防 TaskRunWorker 对同一 queued Run 重复认领；非 SSE 路径保持 queued 交 worker。
     """
+    wants_sse = request is not None and _SSE_MEDIA_TYPE in request.headers.get("accept", "")
     try:
         async with uow.for_tenant(principal.tenant_id) as tx:
             session = await tx.sessions.get(session_id)
@@ -179,8 +343,16 @@ async def send_message(
             )
             await tx.sessions.append_message(session_id, message)
             await tx.sessions.save_meta(session)  # created→active（首条用户消息，04 §3）随标量保存
-            task = Task(tenant_id=principal.tenant_id, type="chat", session_id=session_id, payload={"message_seq": seq})
+            task = Task(
+                tenant_id=principal.tenant_id,
+                type="chat",
+                session_id=session_id,
+                agent_id=session.agent_id,  # 任务归属 agent（api/01 §5.1 DELETE /agents 占用检查依据）
+                payload={"message_seq": seq},
+            )
             run = task.start_run()  # 聚合方法：pending→running + 活跃 Run（queued）
+            if wants_sse:
+                run.start()  # 受理即认领（内联执行，04 §3「适配器 spawn 成功」）
             await tx.tasks.save(task)
             event = TaskEvent(
                 task_id=task.id,
@@ -193,7 +365,7 @@ async def send_message(
     except TaskError as exc:
         raise domain_error(exc, fallback_code=4102) from exc
 
-    if request is None or _SSE_MEDIA_TYPE not in request.headers.get("accept", ""):
+    if not wants_sse:
         return {"data": {"run_id": str(run.id), "task_id": str(task.id), "status": run.status.value}, "meta": {}}
     command = ChatCommand(
         tenant_id=principal.tenant_id,
@@ -206,7 +378,13 @@ async def send_message(
         trace_id=getattr(request.state, "trace_id", "") or f"req-{run.id}",
         adapter=body.adapter,
     )
-    return _chat_stream_response(request, session_id, command)
+    return _chat_stream_response(
+        request,
+        session_id,
+        command,
+        group_members=tuple(session.members),  # 受理事务内快照（27 篇 X15）
+        group_routing=session.routing.value,
+    )
 
 
 @router.get("/{session_id}/events", summary="SSE 订阅 / 断线重连（Last-Event-ID，02 §5）")
@@ -232,16 +410,45 @@ async def stream_events(
     return StreamingResponse(stream, media_type=_SSE_MEDIA_TYPE, headers=dict(_SSE_HEADERS))
 
 
-def _chat_stream_response(request: Request, session_id: uuid.UUID, command: ChatCommand) -> StreamingResponse:
-    """编排器事件流 → hub 发布 + 本连接直发（生产连接不消费自身队列，02 §5）。"""
+def _chat_stream_response(
+    request: Request,
+    session_id: uuid.UUID,
+    command: ChatCommand,
+    *,
+    group_members: tuple[Any, ...] = (),
+    group_routing: str = "round_robin",
+) -> StreamingResponse:
+    """编排器事件流 → hub 发布 + 本连接直发（生产连接不消费自身队列，02 §5）。
+
+    群聊会话（27 篇 X15）：先路由解算（mention/round_robin/all/orchestrator）→
+    ROUTING_DECISION 审计事件 → 逐成员顺序执行（1 Task/1 Run，成员人格经 command 注入）。
+    """
     hub = _get_hub(request)
     orchestrator = _get_chat_orchestrator(request)
+    uow = request.app.state.uow
+    settings = request.app.state.settings
+
+    async def count_assistant() -> int:
+        async with uow.for_tenant(command.tenant_id) as tx:
+            return await tx.sessions.count_messages_by_role(session_id, "assistant")
 
     async def event_stream() -> AsyncIterator[bytes]:
-        async for event in orchestrator.stream_chat(command):
+        if group_members:
+            source = stream_group_turn(
+                orchestrator,
+                command=command,
+                members=group_members,
+                routing=group_routing,
+                count_assistant=count_assistant,
+                resolve_model=getattr(request.app.state, "model_port", None),
+            )
+        else:
+            source = orchestrator.stream_chat(command)
+        async for event in source:
             _, frame = hub.publish(session_id, event.name.value, event.data)
             yield frame
 
+    _ = settings
     return StreamingResponse(event_stream(), media_type=_SSE_MEDIA_TYPE, headers=dict(_SSE_HEADERS))
 
 
@@ -249,11 +456,15 @@ def build_chat_result_sink(uow: AsyncUnitOfWork) -> Callable[[ChatOutcome], Awai
     """对话结果汇工厂（组合根 lifespan 注入 chat_orchestrator；03 §3 步骤 8 UoW#2 短事务）。
 
     职责：assistant 消息落库（聚合方法分配 seq）+ run 终态审计事件（含 citations/usage，
-    「有引用」的可回放留痕；citations 列=messages.citations jsonb 待 DDL 随 M4）。
+    「有引用」的可回放留痕）+ **run/task 行终态回写**（04 §3 状态机收口：run completed/
+    failed/timeout + usage；task succeeded；失败侧 retryable 且 attempt<3 保持 running——
+    重试期间不落 failed，监督者=TaskRunWorker 继续，04 §3「Run failed 且重试耗尽」）。
     本函数是编排器（业务层）与 UoW 之间的注入边界——编排器自身不 import ORM/UoW。
     """
 
     async def sink(outcome: ChatOutcome) -> None:
+        from services.agent.business.task_worker import finalize_outcome_on_task
+
         async with uow.for_tenant(outcome.tenant_id) as tx:
             session = await tx.sessions.get(outcome.session_id)
             if session is None:
@@ -261,7 +472,13 @@ def build_chat_result_sink(uow: AsyncUnitOfWork) -> Callable[[ChatOutcome], Awai
             seq = session.append_message("assistant", outcome.answer)  # assistant 不触发状态迁移
             await tx.sessions.append_message(
                 outcome.session_id,
-                Message(session_id=outcome.session_id, seq=seq, role="assistant", content=outcome.answer),
+                Message(
+                    session_id=outcome.session_id,
+                    seq=seq,
+                    role="assistant",
+                    agent_id=outcome.agent_id,  # 群聊发言归属（27 篇 X15）
+                    content=outcome.answer,
+                ),
             )
             finished = outcome.error_code is None
             await tx.tasks.append_event(
@@ -282,6 +499,10 @@ def build_chat_result_sink(uow: AsyncUnitOfWork) -> Callable[[ChatOutcome], Awai
                     },
                 ),
             )
+            task = await tx.tasks.get(outcome.task_id)  # 终态回写（run/task 行，04 §3 收口）
+            if task is not None:
+                finalize_outcome_on_task(task, outcome)
+                await tx.tasks.save(task)
 
     return sink
 

@@ -12,6 +12,8 @@
 from __future__ import annotations
 
 import logging
+import uuid
+from collections.abc import Callable
 from typing import Any
 
 from fastapi import FastAPI, Request
@@ -20,7 +22,7 @@ from fastapi.responses import JSONResponse
 from services.mcp.a2a.auth import A2aAuthError, ApiKeyAuthorizer
 from services.mcp.a2a.card import AgentCard
 from services.mcp.a2a.jsonrpc import DEFAULT_TIMEOUT_S, dispatch_jsonrpc, new_trace_id
-from services.mcp.a2a.service import A2aService
+from services.mcp.a2a.service import A2aExecutor, A2aResultStore, A2aService
 
 logger = logging.getLogger("services.mcp.a2a")
 
@@ -39,8 +41,17 @@ def build_a2a_app(
     service: A2aService,
     authorizer: ApiKeyAuthorizer,
     timeout_s: float = DEFAULT_TIMEOUT_S,
+    executor: A2aExecutor | None = None,
+    result_store: A2aResultStore | None = None,
+    cancel_hook: Callable[[uuid.UUID], bool] | None = None,
 ) -> FastAPI:
-    """A2A 应用工厂：发现 + 任务端点（fastapi 独立监听，uvicorn 承载）。"""
+    """A2A 应用工厂：发现 + 任务端点（fastapi 独立监听，uvicorn 承载）。
+
+    executor 接线（M5 登记缓议项）：组合根经本工厂参数注入委托执行缝（A2aTaskExecutor）
+    ——工厂 build 时经 ``service.attach_executor`` 一次接线（执行器 + 结果存储 + 取消传播
+    钩子）；未注入=裸受理形态（M5-2 行为，任务保持 working）。"""
+    if executor is not None:
+        service.attach_executor(executor=executor, result_store=result_store, cancel_hook=cancel_hook)
     app = FastAPI(title="ontology-agent-a2a", version=card.protocol_version, docs_url=None, redoc_url=None)
 
     @app.get("/.well-known/agent-card.json", summary="Agent Card 发现（无需鉴权，api/04 §2）")

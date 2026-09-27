@@ -163,7 +163,8 @@ export function WorkspacePanel({ sessionId }: { sessionId: string }) {
     void workspaceApi.tree(sessionId).then(t => {
       if (!alive) return
       setTree(t)
-      setExpanded(new Set(collectDirs(t.root)))
+      // 根行不再渲染（根=静态 /workspace/ 标签），expanded 只种子可折叠的子目录
+      setExpanded(new Set((t.root.children ?? []).flatMap(c => collectDirs(c))))
     })
     void workspaceApi.resources(sessionId).then(r => {
       if (alive) setResources(r.items)
@@ -298,7 +299,7 @@ export function WorkspacePanel({ sessionId }: { sessionId: string }) {
             </div>
             <div ref={termEndRef} />
           </div>
-          <div className="pt-1 text-[10px] text-label-3">白名单命令：ls · pwd · cat · head · tail（其余走审批链）</div>
+          <div className="pt-1 text-[10px] text-label-3">白名单命令：ls · pwd · cat · head · tail（未放行的命令将被拒绝）</div>
         </div>
       )}
 

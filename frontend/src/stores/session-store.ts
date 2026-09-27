@@ -11,6 +11,8 @@ export interface ChatMessage {
   finishReason?: string
   /** 历史消息的 seq（实时消息无）；用于订阅建立时对齐 lastSeq（§3.2） */
   seq?: number
+  /** 历史消息附着的证据（S2 深化：历史不对称修复——历史回复同样渲染证据 chip，IX-CHT-03） */
+  evidence?: Evidence
 }
 
 export interface ToolCall {
@@ -27,8 +29,19 @@ export interface RunInfo {
   error?: { code: number; message: string }
 }
 
+export interface EvidenceChunk {
+  doc_id: string
+  chunk_id: string
+  quote: string
+  score: number
+  /** S2 深化 garnish：命中句（IX-CHT-03 原文片段高亮用，缺省=整段 quote） */
+  highlight?: string
+  page?: number
+  entity?: string
+}
+
 export interface Evidence {
-  chunks: { doc_id: string; chunk_id: string; quote: string; score: number }[]
+  chunks: EvidenceChunk[]
   graph_paths: { nodes: string[]; edges: string[] }[]
   degraded: boolean
 }
@@ -43,11 +56,15 @@ interface SessionState {
   evidence: Evidence | null
   /** 供 UI 的当前运行态 */
   running: boolean
+  /** 当前运行 id（停止生成 IX-CHT-06：POST /sessions/{id}/cancel 需携带） */
+  activeRunId: string | null
 
   setActiveSession: (id: string | null) => void
   /** 历史基线（订阅前 GET /sessions/{id}/messages，§3.2），对齐 lastSeq */
   seed: (messages: ChatMessage[], lastSeq?: number) => void
   setConnection: (c: SessionState['connection']) => void
+  /** 停止生成（IX-CHT-06）：流终止、保留已生成部分，末条助手消息追加「已手动停止」标记 */
+  stopRun: () => void
   /** 归约一帧：返回 'applied' | 'dup' | 'gap'（gap 由调用方触发补发/快照，§3.2） */
   apply: (evt: SseEvent) => 'applied' | 'dup' | 'gap'
 }
@@ -61,13 +78,25 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   connection: 'connecting',
   evidence: null,
   running: false,
+  activeRunId: null,
 
   setActiveSession: id =>
-    set({ activeSessionId: id, messages: [], toolCalls: {}, runs: {}, lastSeq: 0, evidence: null, running: false }),
+    set({ activeSessionId: id, messages: [], toolCalls: {}, runs: {}, lastSeq: 0, evidence: null, running: false, activeRunId: null }),
 
   seed: (messages, lastSeq = 0) => set({ messages, lastSeq }),
 
   setConnection: connection => set({ connection }),
+
+  stopRun() {
+    // 轻确认（26 篇 IX-CHT-06 无弹窗单击即停）：取消请求由调用方发 POST /cancel，此处只做本地终态
+    set(s => ({
+      running: false,
+      activeRunId: null,
+      messages: s.messages.map((m, i) =>
+        m.role === 'assistant' && i === s.messages.length - 1 ? { ...m, finishReason: 'stopped' } : m,
+      ),
+    }))
+  },
 
   apply(evt) {
     const { lastSeq } = get()
@@ -98,7 +127,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     switch (evt.name) {
       case 'RUN_STARTED': {
         const rid = String(d.run_id ?? '')
-        set(s => ({ running: true, runs: { ...s.runs, [rid]: { status: 'running' } }, evidence: null }))
+        set(s => ({ running: true, activeRunId: rid, runs: { ...s.runs, [rid]: { status: 'running' } }, evidence: null }))
         break
       }
       case 'TEXT_MESSAGE_START':
@@ -154,7 +183,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
         set(s => {
           const runs = { ...s.runs, [rid]: { ...s.runs[rid], status: 'succeeded' as const, usage: d.usage } }
           const stillRunning = Object.values(runs).some(r => r.status === 'running')
-          return { runs, running: stillRunning }
+          return { runs, running: stillRunning, activeRunId: stillRunning ? s.activeRunId : null }
         })
         break
       }
@@ -163,7 +192,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
         set(s => {
           const runs = { ...s.runs, [rid]: { ...s.runs[rid], status: 'failed' as const, error: { code: Number(d.code), message: String(d.message ?? '') } } }
           const stillRunning = Object.values(runs).some(r => r.status === 'running')
-          return { runs, running: stillRunning }
+          return { runs, running: stillRunning, activeRunId: stillRunning ? s.activeRunId : null }
         })
         break
       }

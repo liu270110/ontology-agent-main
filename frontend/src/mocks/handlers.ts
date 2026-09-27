@@ -104,20 +104,93 @@ function jsonErr(code: number, message: string, status: number, headers?: Record
   return HttpResponse.json({ code, message, data: null }, { status, headers })
 }
 
-const SESSIONS = [
+interface MockSession {
+  id: string
+  title: string
+  agent_id: string
+  updated_at: string
+  pinned?: boolean
+}
+const SESSIONS: MockSession[] = [
   { id: 's-2481', title: '动力电池标准对比', agent_id: 'nanobot', updated_at: '2026-09-27T10:00:00Z' },
   { id: 's-2479', title: 'CL-014 约束逻辑评审准备', agent_id: 'nanobot', updated_at: '2026-09-27T09:00:00Z' },
 ]
 
-const HISTORY: Record<string, { id: string; role: 'user' | 'assistant'; content: string; seq: number }[]> = {
-  's-2481': [{ id: 'm-h1', role: 'user', content: '对比 GB/T 31486 与 36276 在循环寿命测试上的要求差异。', seq: 199 }],
+/** S2 对话域深化（26 篇 §4.1）：历史消息支持 evidence 附着（历史不对称修复——IX-CHT-03 证据 chip 可从历史直接打开） */
+interface MockHistoryMessage {
+  id: string
+  role: 'user' | 'assistant'
+  content: string
+  seq: number
+  finish_reason?: string
+  evidence?: {
+    chunks: { doc_id: string; chunk_id: string; quote: string; score: number; highlight?: string; page?: number; entity?: string }[]
+    graph_paths: { nodes: string[]; edges: string[] }[]
+    degraded: boolean
+  }
 }
+
+const HISTORY: Record<string, MockHistoryMessage[]> = {
+  's-2481': [
+    { id: 'm-h1', role: 'user', content: '对比 GB/T 31486 与 36276 在循环寿命测试上的要求差异。', seq: 199 },
+    {
+      id: 'm-h2', role: 'assistant', finish_reason: 'stop', seq: 200,
+      content:
+        '两条标准的核心差异在测试对象与判定口径：GB/T 31486 以单体/模块为对象考核容量恢复能力，GB/T 36276 面向电池单体与电池簇，循环 1000 次后容量保持率须 ≥80%，并增加安全性测试项。',
+      evidence: {
+        degraded: false,
+        chunks: [
+          {
+            doc_id: 'GB/T 36276', chunk_id: 'chunk_017', page: 3, score: 0.83, entity: 'power-ont#电池簇',
+            quote: '电池簇经 1000 次循环后容量保持率应不低于 80%，且不应出现漏液、外壳破裂等异常。',
+            highlight: '1000 次循环后容量保持率应不低于 80%',
+          },
+          {
+            doc_id: 'GB/T 31486', chunk_id: 'chunk_042', page: 5, score: 0.78, entity: 'power-ont#电池模块',
+            quote: '模块循环寿命试验中，容量恢复能力不低于初始容量的 90% 判定为合格。',
+            highlight: '容量恢复能力不低于初始容量的 90%',
+          },
+        ],
+        graph_paths: [
+          { nodes: ['power-ont#GB/T 36276', 'power-ont#电池簇'], edges: ['考核'] },
+          { nodes: ['power-ont#GB/T 31486', 'power-ont#电池模块'], edges: ['考核'] },
+        ],
+      },
+    },
+  ],
+  // 项 9 历史种子补全：s-2479 补一对完整问答（用户+助手回复+证据 chip），修历史不对称
+  's-2479': [
+    { id: 'm-h3', role: 'user', content: 'CL-014 约束在停役联络方式上校验哪些规则？给出依据。', seq: 197 },
+    {
+      id: 'm-h4', role: 'assistant', finish_reason: 'stop', seq: 198,
+      content:
+        'CL-014 校验停役联络的唯一解约束：停役联络 = 短时倒供（唯一解）。即馈线停役时只允许经联络开关短时倒供，禁止长期合环；该规则命中 SHACL 约束 3 条，全部通过。',
+      evidence: {
+        degraded: false,
+        chunks: [
+          {
+            doc_id: '配网检修规程（2024 修订）', chunk_id: 'chunk_042', page: 3, score: 0.92, entity: 'power-ont#馈线F12',
+            quote: '其 10kV 馈线 F12 应转入检修状态，并在操作把手上悬挂「禁止合闸，线路有人工作」标示牌；恢复送电前应核对接地线已全部拆除。',
+            highlight: '10kV 馈线 F12 应转入检修状态',
+          },
+        ],
+        graph_paths: [
+          { nodes: ['power-ont#馈线F12', 'power-ont#3号机组'], edges: ['属于'] },
+          { nodes: ['power-ont#馈线F12', '检修中（挂牌）'], edges: ['转入状态'] },
+        ],
+      },
+    },
+  ],
+}
+
+/** 运行取消（IX-CHT-06 停止生成）：被取消的 run 剩余帧不再广播（保留已生成部分） */
+const cancelledRuns = new Set<string>()
 
 // ---- SSE 仿真（api/02 §2 帧格式：id/event/data；支持多连接广播；POST 触发一轮脚本） ----
 type Ctrl = ReadableStreamDefaultController<Uint8Array>
 const conns = new Set<Ctrl>()
 const enc = new TextEncoder()
-let seq = 199 // 首帧 = 历史基线 seq+1（订阅对齐，§3.2）
+let seq = 200 // 首帧 = 历史基线 max seq+1（订阅对齐，§3.2）
 let pingTimer: ReturnType<typeof setInterval> | null = null
 /** 按会话缓冲已发帧（seq → 帧文本），供跳号重连时 last_seq 补发（api/02 §3.2） */
 const framesBySession: Record<string, { seq: number; text: string }[]> = {}
@@ -232,8 +305,42 @@ export const handlers = [
   }),
 
   http.get('*/api/v1/sessions', () =>
-    HttpResponse.json({ code: 0, message: 'ok', data: { items: SESSIONS, next_cursor: null } }),
+    HttpResponse.json({
+      code: 0, message: 'ok',
+      // 置顶优先（IX-CHT-01：F-04 过滤与着色同源排序），组内按更新时间倒序
+      data: {
+        items: [...SESSIONS].sort((a, b) => Number(b.pinned ?? false) - Number(a.pinned ?? false)),
+        next_cursor: null,
+      },
+    }),
   ),
+
+  // PATCH /sessions/:id（api/01 §5.2 预登记行：元信息更新=重命名/置顶，不含归档）
+  http.patch('*/api/v1/sessions/:id', async ({ request, params }) => {
+    const body = (await request.json()) as { title?: string; pinned?: boolean }
+    const s = SESSIONS.find(x => x.id === params.id)
+    if (!s) return jsonErr(3001, '会话不存在', 404)
+    if (typeof body.title === 'string' && body.title.trim()) s.title = body.title.trim()
+    if (typeof body.pinned === 'boolean') s.pinned = body.pinned
+    s.updated_at = new Date().toISOString()
+    return HttpResponse.json({ code: 0, message: 'ok', data: s })
+  }),
+
+  // DELETE /sessions/:id（api/01 §5.2：删除会话及其消息与证据引用，审计留痕由网关层记）
+  http.delete('*/api/v1/sessions/:id', ({ params }) => {
+    const i = SESSIONS.findIndex(x => x.id === params.id)
+    if (i < 0) return jsonErr(3001, '会话不存在', 404)
+    SESSIONS.splice(i, 1)
+    delete HISTORY[params.id as string]
+    return new HttpResponse(null, { status: 204 })
+  }),
+
+  // POST /sessions/:id/cancel（api/01 §5.2：取消运行中任务——IX-CHT-06 停止生成）
+  http.post('*/api/v1/sessions/:id/cancel', async ({ request }) => {
+    const body = (await request.json().catch(() => ({}))) as { run_id?: string }
+    if (body.run_id) cancelledRuns.add(body.run_id)
+    return HttpResponse.json({ code: 0, message: 'ok', data: { run_id: body.run_id ?? null } }, { status: 202 })
+  }),
 
   http.get('*/api/v1/sessions/:id/messages', ({ params }) =>
     HttpResponse.json({
@@ -249,6 +356,8 @@ export const handlers = [
     const { frames, ids } = scriptFor(sessionId, body.content ?? '')
     frames.forEach((f, i) =>
       setTimeout(() => {
+        // IX-CHT-06 停止生成：run 被取消后剩余帧不再广播（客户端保留已生成部分）
+        if (cancelledRuns.has(ids.run_id)) return
         // 缓冲与广播同刻执行：重连补发与直播不重复（重复帧由 store seq 对账兜底）
         ;(framesBySession[sessionId] ??= []).push({ seq: Number(/id: (\d+)/.exec(f)?.[1] ?? 0), text: f })
         broadcast(f)
@@ -261,7 +370,9 @@ export const handlers = [
   http.get('*/api/v1/sessions/:id/events', ({ request }) => {
     ensurePing()
     const sid = new URL(request.url).pathname.split('/')[4]
-    const lastSeq = Number(new URL(request.url).searchParams.get('last_seq') ?? 0)
+    // 续传参数兼容双读：last_event_id（api/02 §4 登记名，2026-09-27 对账 §8 裁决）+ 旧 last_seq 过渡
+    const sp = new URL(request.url).searchParams
+    const lastSeq = Number(sp.get('last_event_id') ?? sp.get('last_seq') ?? 0)
     let ctrl: Ctrl | null = null
     const stream = new ReadableStream<Uint8Array>({
       start(controller) {

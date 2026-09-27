@@ -15,10 +15,10 @@ import io
 import tarfile
 from pathlib import Path
 
+import docker
 from docker.errors import NotFound
 from docker.types import LogConfig
 
-import docker
 from services.platform.config import get_settings
 from services.sandbox.runtime.types import Scenario, TrustLevel
 

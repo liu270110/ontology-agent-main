@@ -346,6 +346,7 @@ class FakeModelPort:
                 "name": keyword,
                 "ontology_class": ontology_class,
                 "confidence": 0.9,
+                "evidence": keyword,  # 关键词本身必在正文段（命中条件）→ 引语逐字命中，门禁清洁路径
                 "detail": f"原文提及{keyword}",
                 "properties": dict(self._keyword_properties.get(keyword, {})),
             }

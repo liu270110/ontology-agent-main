@@ -10,8 +10,12 @@
     GET  /kb/documents/{id}/pipeline          进度（八态 + 步级 checkpoint）
     POST /kb/search                           knowledge.search lite：bm25+向量+图三路 RRF
                                               （图=LazyGraphRAG lite 查询时扩展，retrieval/graph.py）
+    GET  /kb/documents/{id}/review/candidates     终审候选列表（api/01 §5.4 ★，quote/violations 透出）
+    POST /kb/review/candidates/{cid}/decision     单条终审决策 accept|reject|edit_accept（202）
+    POST /kb/documents/{id}/review/batch-decision 批量终审决策（≤200 条/批，逐条独立执行，202）
 
-scope：kb:write（写路径）/ kb:read（检索与进度），deny-by-default（08 §2.5）。
+scope：kb:write（写路径）/ kb:read（检索与进度），deny-by-default（08 §2.5）；
+终审工作台三端点持 review:read / review:approve（契约 §5.4 行；候选非成品门禁的裁决面）。
 降级契约：嵌入模型不可用 / pgvector 列缺失 → BM25-only 且 degraded=true；
 mode=global/drift 无社区摘要索引 → 降级 local 且 degraded=true（drift/完整档二期）；
 流水线 embed 步软降级（document.meta["degraded"]=["embed"]，可重跑补向量）。
@@ -29,7 +33,7 @@ import time
 import uuid
 from collections.abc import Sequence
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Annotated
+from typing import TYPE_CHECKING, Annotated, Any
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Query, Request, status
 from sqlalchemy import func, or_, select
@@ -38,6 +42,12 @@ from sqlalchemy.exc import IntegrityError
 from services.kb.api.schemas.kb import (
     DOCUMENT_TYPE_FILTER,
     DOCUMENT_UI_STATUS_FILTER,
+    BatchCandidateDecisionItemOut,
+    BatchCandidateDecisionMetaOut,
+    BatchCandidateDecisionOut,
+    BatchDecisionIn,
+    CandidateDecisionIn,
+    CandidateDecisionOut,
     CollectionCreateIn,
     CollectionOut,
     DocumentCreateIn,
@@ -47,6 +57,7 @@ from services.kb.api.schemas.kb import (
     DocumentOut,
     DocumentPipelineProgress,
     DocumentStatusQuery,
+    FactTypeFilter,
     KbAnswerOut,
     KbAnswerSentenceOut,
     KbCitationOut,
@@ -62,11 +73,16 @@ from services.kb.api.schemas.kb import (
     PipelineProgressOut,
     PipelineStartOut,
     PipelineStepOut,
+    ReviewCandidateEvidenceOut,
+    ReviewCandidateOut,
+    ReviewCandidatePageMetaOut,
+    ReviewCandidatePageOut,
+    ReviewStatusFilter,
     doc_type_of,
     ui_status_of,
 )
 from services.kb.business.kb_pipeline import M2_FULL_STEPS, PipelineError, run_pipeline
-from services.kb.data.orm import Document, DocumentChunk, KbCollection, KbPipelineStep
+from services.kb.data.orm import Document, DocumentChunk, KbCollection, KbFact, KbPipelineStep
 from services.kb.retrieval.embed import AclPushdown, OllamaEmbedder, bm25_search, vector_search
 from services.kb.retrieval.graph import ClassHierarchy, build_class_hierarchy, expand_graph
 from services.kb.retrieval.retrieve import ExtractiveAnswer, GraphExpansion, GraphPath, SearchHit, hybrid_search
@@ -77,7 +93,7 @@ from services.ontology.business.hierarchy_service import get_class_hierarchy
 # 消费场景 = LazyGraphRAG lite 类闭包扩展（docs/OntRAG §4.0）。禁放 ontology.api——api 链触达
 # ontology.data 会击穿「ontology.data 模块私有」契约（import-linter 强制）。
 from services.platform.deps import Principal, SessionDep, get_session_factory, require_scope
-from services.platform.errors import GatewayError
+from services.platform.errors import ErrorCode, GatewayError
 from services.platform.ports.model_port import ModelPort
 
 if TYPE_CHECKING:  # 仅类型注解（运行时零 import——app.py 同款纪律）
@@ -88,6 +104,9 @@ router = APIRouter(prefix="/kb", tags=["knowledge-base"])
 
 KbReadDep = Annotated[Principal, Depends(require_scope("kb:read"))]
 KbWriteDep = Annotated[Principal, Depends(require_scope("kb:write"))]
+# 终审工作台三端点（api/01 §5.4 ★ 行）：裁决面 scope 走 review 段，与 admin 审批面同权
+ReviewReadDep = Annotated[Principal, Depends(require_scope("review:read"))]
+ReviewApproveDep = Annotated[Principal, Depends(require_scope("review:approve"))]
 
 logger = logging.getLogger("services.gateway.kb")
 
@@ -587,4 +606,273 @@ def _answer_to_out(answer: ExtractiveAnswer) -> KbAnswerOut:
             KbAnswerSentenceOut(text=sentence.text, citations=sentence.citations) for sentence in answer.sentences
         ],
         citations=answer.citations,
+    )
+
+
+# ---------------------------------------------------------------- 终审工作台（api/01 §5.4 ★ 三端点）
+#
+# B4 逐候选消费面：B2 抽取深化已把 evidence.quote/span 与 violations 写进 kb_facts，列表端点是
+# 它们到达前端终审工作台的正式通道；决策端点是全仓唯一 authoritative 写路径（OntRAG §2.7：
+# 人工终审=候选生效唯一关口，宪法第 3 条「候选非成品」，review:approve scope 背书）。
+#
+# 跨模块边界：审核单写路径经 app.state.candidate_review（lifespan 装配的
+# ReviewTicketService，即 review.business.candidates——review.data 模块私有契约六的公开面）
+# 鸭子类型调用，本文件零 review 静态 import（admin.py _approvals 同款，契约六收口前不新增边）。
+
+_TICKET_TARGET_TYPE = "knowledge_instance"  # extract 双写同款 target（kb_extraction._persist_candidates）
+_TICKET_OPEN_STATUSES = ("draft", "pending_review")  # uk_review_one_open 同口径
+_TICKET_SETTLED_STATUSES = ("approved", "published")  # 终态单：迟到决策 4701
+_BATCH_DECISION_LIMIT = 200  # api/01 §5.4：批量上限 200 条/批，超出 3001
+_DECISION_BUCKET = {"accept": "accepted", "reject": "rejected", "edit_accept": "edited"}
+
+
+def _tickets(request: Request) -> Any:
+    """候选审核单服务（app.state.candidate_review=ReviewTicketService；未装配=503 端口检查先例）。"""
+    tickets = getattr(request.app.state, "candidate_review", None)
+    if tickets is None:
+        raise GatewayError(5004, "候选审核服务未装配", status_code=503)
+    return tickets
+
+
+def _candidate_out(row: KbFact) -> ReviewCandidateOut:
+    """kb_facts 行 → 工作台列表项（evidence 信封/violations/align 全量透出，裁决依据不裁剪）。"""
+    evidence = row.evidence if isinstance(row.evidence, dict) else {}
+    meta = row.meta if isinstance(row.meta, dict) else {}
+    align = meta.get("align")
+    span = evidence.get("span")
+    return ReviewCandidateOut(
+        id=row.id,
+        fact_type=row.fact_type,
+        subject=row.subject,
+        subject_type=row.subject_type,
+        predicate=row.predicate,
+        object=row.object,
+        object_type=row.object_type,
+        canonical_name=row.canonical_name,
+        aliases=[str(a) for a in (row.aliases or [])],
+        confidence=float(row.confidence),
+        status=row.status,
+        evidence=ReviewCandidateEvidenceOut(
+            source_ref=dict(evidence.get("source_ref") or {}),
+            quote=evidence.get("quote"),
+            span=[int(v) for v in span] if isinstance(span, list) else None,
+        ),
+        violations=[dict(v) for v in (row.violations or []) if isinstance(v, dict)],
+        align=dict(align) if isinstance(align, dict) else None,
+        created_at=row.created_at,
+    )
+
+
+@router.get(
+    "/documents/{document_id}/review/candidates",
+    summary="终审候选实例列表（分页；quote/violations/align 全量透出）",
+)
+async def list_review_candidates(
+    document_id: uuid.UUID,
+    principal: ReviewReadDep,
+    session: SessionDep,
+    fact_type: Annotated[FactTypeFilter | None, Query()] = None,
+    status_filter: Annotated[ReviewStatusFilter | None, Query(alias="status")] = None,  # 缺省=全部三态
+    min_confidence: Annotated[float | None, Query(ge=0, le=1)] = None,  # confidence 下界（含）
+    offset: Annotated[int, Query(ge=0)] = 0,
+    limit: Annotated[int, Query(ge=1, le=200)] = 50,
+) -> ReviewCandidatePageOut:
+    """P4 终审队列（api/01 §5.4 ★）：按 document_id（租户过滤）列出 kb_facts 候选。"""
+    await _load_document(session, principal.tenant_id, document_id)  # 404 前置校验
+    conds = [KbFact.tenant_id == principal.tenant_id, KbFact.document_id == document_id]
+    if fact_type is not None:
+        conds.append(KbFact.fact_type == fact_type)
+    if status_filter is not None:
+        conds.append(KbFact.status == status_filter)
+    if min_confidence is not None:
+        conds.append(KbFact.confidence >= min_confidence)
+    total = (await session.execute(select(func.count()).select_from(KbFact).where(*conds))).scalar_one()
+    rows = (
+        (
+            await session.execute(
+                select(KbFact)
+                .where(*conds)
+                # 同事务插入共享 now() 时间戳，id 作稳定游标（分页不重不漏）
+                .order_by(KbFact.created_at.desc(), KbFact.id)
+                .offset(offset)
+                .limit(limit)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    return ReviewCandidatePageOut(
+        items=[_candidate_out(row) for row in rows],
+        meta=ReviewCandidatePageMetaOut(offset=offset, limit=limit, total=int(total)),
+    )
+
+
+def _apply_decision(fact: KbFact, action: str, edit: Any) -> str:
+    """决策语义落 fact（内存态，随请求会话提交）；返回决策后状态。
+
+    - accept → authoritative（OntRAG §2.7 人工终审关口；全仓唯一 authoritative 写路径）；
+    - reject → rejected；
+    - edit_accept → 按编辑载荷修订（None 字段不覆盖）后保持/复位 candidate（契约「修订后入审」；
+      rejected 候选修订后复活重进审）。
+    防呆：accept/reject 仅对 candidate 态（对 rejected/authoritative 重复决策 → 409）；
+    edit_accept 不接受 authoritative（终审生效态不被工作台静默降级）。
+    """
+    if action in ("accept", "reject"):
+        if fact.status != "candidate":
+            raise GatewayError(409, f"候选非 candidate 态（当前 {fact.status}），重复决策拒绝", status_code=409)
+        fact.status = "authoritative" if action == "accept" else "rejected"
+        return fact.status
+    # edit_accept：candidate 保持入审；rejected 修订复活；authoritative 拒绝降级
+    if fact.status == "authoritative":
+        raise GatewayError(409, "候选已 authoritative（终审生效态），不接受修订", status_code=409)
+    for name, value in edit.provided().items():  # 单一字段源（ocr 评审 low：与 DTO 双源必漂移）
+        setattr(fact, name, value)
+    fact.status = "candidate"  # 修订后入审（保持或复位）
+    return fact.status
+
+
+async def _precheck_ticket(tickets: Any, *, tenant_id: uuid.UUID, candidate_id: uuid.UUID) -> Any | None:
+    """决策前置防呆（在任何 fact 变更前执行，保证失败项零副作用）：
+
+    候选 open 单 → 返回该单（后续落留痕）；无单 / 单已 rejected-cancelled → None（容忍票据缺失，
+    主断言在 fact 状态翻转，事实表是终审裁决的权威记录）；单已 approved/published 后的迟到决策
+    → 4701（review 段，admin.py _domain_error 同映射：HTTP 409）——终态单不可再动（08 §4）。
+    """
+    ticket = await tickets.get_latest_ticket(
+        tenant_id=tenant_id, target_type=_TICKET_TARGET_TYPE, target_id=candidate_id
+    )
+    if ticket is not None and ticket["status"] in _TICKET_SETTLED_STATUSES:
+        raise GatewayError(
+            ErrorCode.OBJECT_ALREADY_IN_REVIEW,
+            f"审核单已终态（{ticket['status']}），迟到决策拒绝",
+            status_code=409,
+        )
+    if ticket is None or ticket["status"] not in _TICKET_OPEN_STATUSES:
+        return None
+    return ticket
+
+
+async def _append_decision_trail(
+    tickets: Any, ticket: Any, *, tenant_id: uuid.UUID, candidate_id: uuid.UUID, action: str, approver_id: uuid.UUID
+) -> None:
+    """留痕落单：决策记录（决策人/时间/action/candidate_id）追加进 open 单 payload["decisions"]。
+
+    经 ReviewTicketService.merge_payload 整体重赋值（JSONB 不可原地变更纪律同 attach_gate_result）；
+    独立短事务——成功即持久，失败上抛（整请求回滚，不产生半程留痕）。
+    """
+    payload = dict(ticket["payload"] or {})
+    decisions = list(payload.get("decisions") or [])
+    decisions.append(
+        {
+            "action": action,
+            "candidate_id": str(candidate_id),
+            "decided_by": str(approver_id),
+            "decided_at": datetime.now(UTC).isoformat(),
+        }
+    )
+    payload["decisions"] = decisions
+    await tickets.merge_payload(tenant_id=tenant_id, ticket_id=ticket["id"], payload=payload)
+
+
+@router.post(
+    "/review/candidates/{candidate_id}/decision",
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="单条终审决策 accept|reject|edit_accept（唯一 authoritative 写路径，review:approve 背书）",
+)
+async def decide_candidate(
+    candidate_id: uuid.UUID,
+    body: CandidateDecisionIn,
+    principal: ReviewApproveDep,
+    request: Request,
+    session: SessionDep,
+) -> CandidateDecisionOut:
+    """宪法第 3 条（候选非成品）：LLM 产物一律人工终审才生效——本端点即该关口的工作台动作面。
+
+    accept 翻转 authoritative（OntRAG §2.7）；决策留痕经 ReviewTicketService 落候选 open 单
+    （无单容忍）；fact 不存在 404（kb 段）、非 candidate 态 409、单已终态迟到决策 4701。
+    """
+    fact = await session.get(KbFact, candidate_id, with_for_update=True)  # 行锁防并发 accept/reject 双写穿透
+    if fact is None or fact.tenant_id != principal.tenant_id:
+        raise GatewayError(404, "候选事实不存在", status_code=404)
+    tickets = _tickets(request)
+    ticket = await _precheck_ticket(tickets, tenant_id=principal.tenant_id, candidate_id=candidate_id)
+    new_status = _apply_decision(fact, body.action, body.edit)
+    await session.commit()  # 事实翻转先持久（ocr 评审 high：留痕先于翻转=中途失败产生幽灵审计）
+    trail_recorded = False
+    if ticket is not None:  # 留痕后置 best-effort：失败不回滚已生效裁决（宁可缺痕不产生幽灵痕）
+        try:
+            await _append_decision_trail(
+                tickets,
+                ticket,
+                tenant_id=principal.tenant_id,
+                candidate_id=candidate_id,
+                action=body.action,
+                approver_id=principal.user_id,
+            )
+            trail_recorded = True
+        except Exception:  # noqa: BLE001 留痕失败不阻断裁决返回（审计缺口走日志告警）
+            logger.warning("decision trail persist failed: candidate_id=%s", candidate_id, exc_info=True)
+    return CandidateDecisionOut(
+        candidate_id=candidate_id, action=body.action, status=new_status, trail_recorded=trail_recorded
+    )
+
+
+@router.post(
+    "/documents/{document_id}/review/batch-decision",
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="批量终审决策（≤200 条/批，超出 3001；逐条独立执行，不整批回滚）",
+)
+async def batch_decide_candidates(
+    document_id: uuid.UUID,
+    body: BatchDecisionIn,
+    principal: ReviewApproveDep,
+    request: Request,
+    session: SessionDep,
+) -> BatchCandidateDecisionOut:
+    """逐条独立执行（单条失败仅记 error 不中断批次），响应 meta 汇总 accepted/rejected/edited/failed。"""
+    await _load_document(session, principal.tenant_id, document_id)  # 404 前置校验
+    if len(body.decisions) > _BATCH_DECISION_LIMIT:
+        raise GatewayError(ErrorCode.PARAM_INVALID, f"批量决策上限 {_BATCH_DECISION_LIMIT} 条/批", status_code=422)
+    tickets = _tickets(request)
+    results: list[BatchCandidateDecisionItemOut] = []
+    counts = {"accepted": 0, "rejected": 0, "edited": 0, "failed": 0}
+    for item in body.decisions:
+        try:
+            fact = await session.get(KbFact, item.candidate_id, with_for_update=True)
+            if fact is None or fact.tenant_id != principal.tenant_id:
+                raise GatewayError(404, "候选事实不存在", status_code=404)
+            if fact.document_id != document_id:  # 路径文档绑定（ocr 评审 medium：防跨文档代决策）
+                raise GatewayError(404, "候选不属于该文档", status_code=404)
+            # 前置防呆（4701）先于任何变更 → 失败项零副作用（部分成功语义不失真）
+            ticket = await _precheck_ticket(tickets, tenant_id=principal.tenant_id, candidate_id=item.candidate_id)
+            new_status = _apply_decision(fact, item.action, item.edit)
+            await session.commit()  # 逐条独立持久（ocr 评审 medium：一条 DB 异常不回滚整批已 ok 项）
+            if ticket is not None:  # 留痕后置 best-effort（同单条口径：不产生幽灵审计）
+                try:
+                    await _append_decision_trail(
+                        tickets,
+                        ticket,
+                        tenant_id=principal.tenant_id,
+                        candidate_id=item.candidate_id,
+                        action=item.action,
+                        approver_id=principal.user_id,
+                    )
+                except Exception:  # noqa: BLE001
+                    logger.warning("decision trail persist failed: candidate_id=%s", item.candidate_id, exc_info=True)
+            results.append(BatchCandidateDecisionItemOut(candidate_id=item.candidate_id, ok=True, status=new_status))
+            counts[_DECISION_BUCKET[item.action]] += 1
+        except GatewayError as exc:  # 逐条隔离：业务失败（404/409/4701/…）只记该条结果
+            results.append(
+                BatchCandidateDecisionItemOut(
+                    candidate_id=item.candidate_id, ok=False, error=f"{exc.code} {exc.message}"
+                )
+            )
+            counts["failed"] += 1
+        except Exception as exc:  # noqa: BLE001 逐条隔离兜底（LookupError/DB 异常同款记失败，不 500 整批）
+            results.append(
+                BatchCandidateDecisionItemOut(candidate_id=item.candidate_id, ok=False, error=f"500 {exc}")
+            )
+            counts["failed"] += 1
+    return BatchCandidateDecisionOut(
+        results=results, meta=BatchCandidateDecisionMetaOut(**counts)
     )

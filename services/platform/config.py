@@ -77,6 +77,10 @@ class Settings(BaseSettings):
     # 列缺失自动 no-op 并 DEBUG 留痕。DDL（documents.acl_tags jsonb）为本批报告欠账（迁移唯一归属=并行 agent）。
     kb_acl_filter_enabled: bool = False
 
+    # kb 术语对齐二级（嵌入余弦）阈值（OntRAG §2.4 步骤 4 起步值；层轴 M2.5 验收结论移植）。
+    # 一级精确/包含未命中的候选名 × 种子类表层全量嵌入，余弦 ≥ 阈值即对齐；嵌入不可用整级跳过（降级不失败）。
+    align_embed_threshold: float = Field(default=0.92, ge=0.0, le=1.0)
+
     # 在线忠实度抽检（docs/architecture/10 §2 缺口②，落点 08 §7.4）：对话完成路径按采样率
     # 抽中后记录 faithfulness 检查任务占位（LLM-as-judge 判定本体随评估批次接入）。
     # 默认开、采样率 1%（10 篇口径）；确定性采样（run_id 哈希桶，可复现可追溯）。

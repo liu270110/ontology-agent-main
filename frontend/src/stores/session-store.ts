@@ -6,13 +6,18 @@ import type { SseEvent } from '@/sse/events'
 
 export interface ChatMessage {
   id: string
-  role: 'user' | 'assistant'
+  /** system = workspace.file.* 系统行（仅实时事件派生，服务端历史不下发） */
+  role: 'user' | 'assistant' | 'system'
   content: string
   finishReason?: string
   /** 历史消息的 seq（实时消息无）；用于订阅建立时对齐 lastSeq（§3.2） */
   seq?: number
   /** 历史消息附着的证据（S2 深化：历史不对称修复——历史回复同样渲染证据 chip，IX-CHT-03） */
   evidence?: Evidence
+  /** 系统行专用（31 篇）：workspace.file.* 动作与目标 */
+  wsAction?: 'created' | 'modified' | 'deleted'
+  wsPath?: string
+  wsName?: string
 }
 
 export interface ToolCall {
@@ -46,6 +51,29 @@ export interface Evidence {
   degraded: boolean
 }
 
+/** workspace.file.* 事件 Feed 条目（31 篇）：会话级环形缓冲最近 20 条 */
+export interface WorkspaceEventItem {
+  seq: number
+  action: 'created' | 'modified' | 'deleted'
+  path: string
+  name: string
+  created_at?: string
+}
+
+/** terminal.output 行（31 篇）：供工作区终端页签追加回放 */
+export interface TerminalLine {
+  text: string
+  stream: 'stdout' | 'stderr'
+}
+
+/** @引用插入草稿信号（资源行 → 消息输入框解耦队列，消费方按 seq 记游标） */
+export interface DraftInsert {
+  text: string
+  seq: number
+}
+
+let draftSeq = 0
+
 interface SessionState {
   activeSessionId: string | null
   messages: ChatMessage[]
@@ -58,6 +86,17 @@ interface SessionState {
   running: boolean
   /** 当前运行 id（停止生成 IX-CHT-06：POST /sessions/{id}/cancel 需携带） */
   activeRunId: string | null
+
+  /** 会话级 workspace 事件环形缓冲（最近 20 条，31 篇 workspace.file.*） */
+  workspaceEvents: WorkspaceEventItem[]
+  /** 工作区变更信号：file.* 事件自增，面板廉价订阅（防抖后重拉文件树） */
+  workspaceVersion: number
+  /** terminal.output 追加缓冲（最近 200 行），面板按游标消费进本地终端 */
+  terminalLines: TerminalLine[]
+  /** @引用 → 输入框草稿插入信号队列（MessageInput 按游标消费） */
+  draftInserts: DraftInsert[]
+  /** 资源行「@引用」动作入口：入队 @文件名（不直接触碰输入框） */
+  pushDraftInsert: (text: string) => void
 
   setActiveSession: (id: string | null) => void
   /** 历史基线（订阅前 GET /sessions/{id}/messages，§3.2），对齐 lastSeq */
@@ -79,9 +118,19 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   evidence: null,
   running: false,
   activeRunId: null,
+  workspaceEvents: [],
+  workspaceVersion: 0,
+  terminalLines: [],
+  draftInserts: [],
 
   setActiveSession: id =>
-    set({ activeSessionId: id, messages: [], toolCalls: {}, runs: {}, lastSeq: 0, evidence: null, running: false, activeRunId: null }),
+    set({
+      activeSessionId: id, messages: [], toolCalls: {}, runs: {}, lastSeq: 0, evidence: null, running: false, activeRunId: null,
+      workspaceEvents: [], workspaceVersion: 0, terminalLines: [], draftInserts: [],
+    }),
+
+  pushDraftInsert: text =>
+    set(s => ({ draftInserts: [...s.draftInserts, { text, seq: ++draftSeq }].slice(-20) })),
 
   seed: (messages, lastSeq = 0) => set({ messages, lastSeq }),
 
@@ -122,6 +171,12 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       graph_paths?: Evidence['graph_paths']
       degraded?: boolean
       messages?: ChatMessage[]
+      path?: string
+      name?: string
+      created_at?: string
+      lines?: unknown[]
+      stream?: string
+      text?: string
     }
 
     switch (evt.name) {
@@ -199,6 +254,32 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       case 'MESSAGES_SNAPSHOT':
         set({ messages: d.messages ?? [] })
         break
+      case 'workspace.file.created':
+      case 'workspace.file.modified':
+      case 'workspace.file.deleted': {
+        // 31 篇：消息流插系统行 + 树刷新信号 + Feed 环形缓冲（最近 20 条）
+        const action = evt.name === 'workspace.file.created' ? 'created' : evt.name === 'workspace.file.modified' ? 'modified' : 'deleted'
+        const path = String(d.path ?? '')
+        const item: WorkspaceEventItem = {
+          seq: evt.seq, action, path,
+          name: String(d.name ?? (path.split('/').pop() || path)),
+          created_at: typeof d.created_at === 'string' ? d.created_at : undefined,
+        }
+        set(s => ({
+          messages: [...s.messages, { id: `ws-${evt.seq}`, role: 'system', content: '', wsAction: action, wsPath: path, wsName: item.name }],
+          workspaceEvents: [...s.workspaceEvents, item].slice(-20),
+          workspaceVersion: s.workspaceVersion + 1,
+        }))
+        break
+      }
+      case 'terminal.output': {
+        // 31 篇：终端面板追加行（只进终端缓冲，不动 workspaceVersion——树无需刷新）
+        const raw = Array.isArray(d.lines) ? d.lines : d.text != null && d.text !== '' ? [d.text] : []
+        const lines = raw.map(l => ({ text: String(l), stream: d.stream === 'stderr' ? ('stderr' as const) : ('stdout' as const) }))
+        if (lines.length === 0) break
+        set(s => ({ terminalLines: [...s.terminalLines, ...lines].slice(-200) }))
+        break
+      }
       default:
         break // 未知事件忽略（api/02 向前兼容裁决）
     }

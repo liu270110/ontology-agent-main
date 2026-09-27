@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Send, Square } from 'lucide-react'
 import { useSessionStore } from '@/stores/session-store'
 import { api } from '@/api/client'
@@ -12,6 +12,21 @@ export function MessageInput({ sessionId, onStop }: { sessionId: string; onStop:
   const [busy, setBusy] = useState(false)
   const running = useSessionStore(s => s.running)
   const activeRunId = useSessionStore(s => s.activeRunId)
+
+  // @引用（资源行 hover 动作）→ store 信号队列 → 追加进草稿；按游标消费，基线对齐挂载/换会话
+  const draftInserts = useSessionStore(s => s.draftInserts)
+  const consumedRef = useRef(-1)
+  useEffect(() => {
+    if (consumedRef.current < 0) {
+      consumedRef.current = draftInserts.length
+      return
+    }
+    if (draftInserts.length > consumedRef.current) {
+      const fresh = draftInserts.slice(consumedRef.current)
+      consumedRef.current = draftInserts.length
+      setText(v => (v.trim() ? `${v} ${fresh.map(f => f.text).join(' ')}` : fresh.map(f => f.text).join(' ')))
+    }
+  }, [draftInserts, sessionId])
 
   async function send() {
     const content = text.trim()

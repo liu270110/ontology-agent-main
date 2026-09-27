@@ -147,20 +147,38 @@ async def wb_env(kb_pg: async_sessionmaker[AsyncSession]) -> AsyncIterator[dict]
     seed_rows = {
         # candidate 带 quote + align（工作台裁决依据全量透出的断言锚点）
         "feed": _fact_row(
-            tenant.id, doc.id, fact_type="entity", subject="馈线F001", status="candidate", confidence=0.9,
-            quote="馈线 F001 由 城东变电站 供电", align={"tier": 1, "status": "aligned", "rule": "exact"},
+            tenant.id,
+            doc.id,
+            fact_type="entity",
+            subject="馈线F001",
+            status="candidate",
+            confidence=0.9,
+            quote="馈线 F001 由 城东变电站 供电",
+            align={"tier": 1, "status": "aligned", "rule": "exact"},
         ),
         # relation 候选（fact_type 过滤断言锚点），无审核单（无单容忍路径）
         "rel": _fact_row(
-            tenant.id, doc.id, fact_type="relation", subject="馈线F001", status="candidate", confidence=0.5,
-            predicate="suppliedBy", obj="城东变电站",
+            tenant.id,
+            doc.id,
+            fact_type="relation",
+            subject="馈线F001",
+            status="candidate",
+            confidence=0.5,
+            predicate="suppliedBy",
+            obj="城东变电站",
         ),
         # 低置信候选（confidence 下界过滤锚点）
         "low": _fact_row(tenant.id, doc.id, fact_type="entity", subject="台区T09", status="candidate", confidence=0.2),
         # rejected 带违例（violations 透出断言锚点 + edit_accept 复活锚点）
         "rej": _fact_row(
-            tenant.id, doc.id, fact_type="entity", subject="凭空馈线", status="rejected", confidence=0.8,
-            quote="原文中不存在的引语", violations=[{"rule": "evidence_not_in_chunk", "detail": "幻觉证据嫌疑"}],
+            tenant.id,
+            doc.id,
+            fact_type="entity",
+            subject="凭空馈线",
+            status="rejected",
+            confidence=0.8,
+            quote="原文中不存在的引语",
+            violations=[{"rule": "evidence_not_in_chunk", "detail": "幻觉证据嫌疑"}],
         ),
         # authoritative（非 candidate 态 409 防呆锚点）
         "auth": _fact_row(
@@ -547,7 +565,8 @@ async def test_batch_越限_3001(wb_env, kb_pg):
     env = wb_env
     body = BatchDecisionIn(
         decisions=[
-            BatchCandidateDecisionIn(candidate_id=uuid.uuid4(), action="accept") for _ in range(201)  # >200
+            BatchCandidateDecisionIn(candidate_id=uuid.uuid4(), action="accept")
+            for _ in range(201)  # >200
         ]
     )
     async with kb_pg() as db:

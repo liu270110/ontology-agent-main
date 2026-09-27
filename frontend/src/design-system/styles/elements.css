@@ -17,6 +17,9 @@
 .btn-d{background:var(--red-soft);color:var(--red)}
 /* 豁免登记：!important 用于压制 .btn:hover 的抬升，属状态强制而非降级路径 */
 .btn-dis{background:rgba(0,0,0,.04);color:var(--label-3);cursor:not-allowed!important;transform:none!important;box-shadow:none!important}
+/* 原生 disabled 属性统一灰化（S6 验收修复：批量审批高危禁批等场景按钮语义与视觉一致） */
+.btn:disabled{background:rgba(0,0,0,.04)!important;color:var(--label-3)!important;cursor:not-allowed!important;transform:none!important;box-shadow:none!important;border-color:var(--separator)}
+.dark .btn:disabled{background:rgba(255,255,255,.06)!important}
 .dark .btn-dis{background:rgba(255,255,255,.06)}
 .btn-sm{font-size:12px;padding:4px 12px}
 :focus-visible{outline:none;box-shadow:0 0 0 3px var(--accent-soft);border-color:var(--accent)}

@@ -21,6 +21,10 @@ from services.iam.data.orm import (  # noqa: F401
     User,
     UserRole,
 )
+from services.kb.data.connector_orm import (  # noqa: F401  连接器游标/登记表（多源接入 §3 v1）
+    KbConnectorCursor,
+    KbConnectorEvent,
+)
 from services.kb.data.orm import (  # noqa: F401
     Document,
     DocumentChunk,

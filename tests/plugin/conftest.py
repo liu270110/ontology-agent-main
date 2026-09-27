@@ -7,6 +7,7 @@ Windows psycopg 需 Selector 事件循环；每用例自建租户（settings.gov
 from __future__ import annotations
 
 import asyncio
+import os
 import sys
 import uuid
 from collections.abc import AsyncIterator
@@ -24,6 +25,10 @@ from services.plugin.runtime.registry import PluginRuntime
 
 if sys.platform == "win32":
     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+
+# 平台签名 dev key（两级签名 fail-closed 的开发期供给口径：OA_PLATFORM_PLUGIN_SIGNING_KEY；
+# 生成方式=services.platform.security.generate_signing_key，生产经部署密钥管理下发，禁入库）
+os.environ.setdefault("OA_PLATFORM_PLUGIN_SIGNING_KEY", "3f" * 32)
 
 
 @dataclass

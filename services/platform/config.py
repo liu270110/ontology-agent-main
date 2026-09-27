@@ -38,6 +38,13 @@ class Settings(BaseSettings):
     jwt_access_ttl_minutes: int = 120
     jwt_refresh_ttl_days: int = 14
 
+    # 插件市场两级签名平台私钥（Skills §5.1，Ed25519 raw seed hex 64 字符；M5-1 增项，报告已报）。
+    # 缺失/非法 → 发布与安装验签 fail-closed（发布 4510 拒绝，安装 4510/4509 拒绝，禁静默降级）。
+    # 开发期生成 dev key：
+    #   python -c "from services.platform.security import generate_signing_key; print(generate_signing_key())"
+    # 产出后写入 .env 的 OA_PLATFORM_PLUGIN_SIGNING_KEY；生产经部署密钥管理下发，禁入库。
+    platform_plugin_signing_key: str | None = None
+
     # 模型网关（14 篇 §9：本地 vLLM 主力 + 云渠道溢出，均为 OpenAI 兼容端点。
     # M0 单渠道直连；多渠道 fallback 待 foundation/llm 落地收编进 model_channels）
     llm_base_url: str | None = None  # 云渠道 https://api.deepseek.com；本地 vLLM http://127.0.0.1:8001/v1
@@ -46,9 +53,18 @@ class Settings(BaseSettings):
     # M0 历史字段（ops/03 单轨 Ollama 时期）：14 篇 §9 vLLM 定稿后随网关改造移除，勿新增依赖
     ollama_base_url: str = "http://localhost:11434"
 
+    # 能力层 P0（docs/Agent/06）：fs 工作区根（None=禁用 fs 工具）与 web 出口白名单（空=全拒 fail-closed）
+    workspace_root: str | None = None
+    web_egress_allowlist: str = ""  # 逗号分隔域名；空=web 工具全拒
+
     # 网关运行
     api_prefix: str = "/api/v1"
     sse_heartbeat_seconds: int = 15  # 建议值，压测后冻结（02 §5）
+
+    # 任务执行 worker（非 SSE 受理路径 + 重试监督；Agent 服务设计 §2 补全表，2026-09-27 批）
+    task_worker_enabled: bool = True  # False=回到「queued 挂起等人工/外部消费」旧行为
+    task_worker_poll_interval_s: float = 1.0  # 空转轮询间隔（OutboxRelay 同款 1s）
+    task_spill_dir: str | None = None  # 工具结果 spill 存储目录（None=spill 关闭；M4 切 MinIO）
 
     # 记忆域（06 篇 §4/§5.2/§5.5；计划 1 仅 L1 与检索参数）
     memory_l1_ttl_seconds: int = 24 * 3600  # L1 会话记忆块 TTL（会话活跃期）

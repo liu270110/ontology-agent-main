@@ -2,17 +2,38 @@
 
 from __future__ import annotations
 
+import copy
 import uuid
 from dataclasses import dataclass, field
 from typing import Any
 
+from services.platform import security
 from services.plugin.domain.model.manifest import validate_manifest
 from services.plugin.domain.model.plugin import Plugin, PluginKind, PluginVersion, ToolBinding
 from services.review.domain.approval_chain import GovernanceTier
 
 CHECKSUM = "b" * 64
 
-VALID_SERVER_JSON: dict[str, Any] = {
+# 开发者密钥对（两级签名第一级 Skills §5.1；进程内一次生成全程复用——发布链 Arrange 件）
+PUBLISHER_PRIVATE_KEY_HEX = security.generate_signing_key()
+PUBLISHER_PUBLIC_KEY_HEX = security.public_key_hex_of(PUBLISHER_PRIVATE_KEY_HEX)
+
+
+def publisher_signed_fields(server_json: dict[str, Any], checksum: str) -> dict[str, str]:
+    """开发者签名字段（x-platform.publisher_signature / publisher_public_key；发布前必须完成）。
+
+    签名域含 publisher_public_key 本身（公钥被签名绑定）；平台签回填的 signature 字段由
+    security.signable_manifest 剔除，不进任何一级签名域。
+    """
+    with_key = copy.deepcopy(server_json)
+    x_platform = dict(with_key.get("x-platform") or {})
+    x_platform["publisher_public_key"] = PUBLISHER_PUBLIC_KEY_HEX
+    with_key["x-platform"] = x_platform
+    signature = security.sign_publisher_plugin(PUBLISHER_PRIVATE_KEY_HEX, server_json=with_key, checksum=checksum)
+    return {"publisher_public_key": PUBLISHER_PUBLIC_KEY_HEX, "publisher_signature": signature}
+
+
+_BASE_SERVER_JSON: dict[str, Any] = {
     "name": "io.ontology-agent/weather",
     "display_name": "天气查询",
     "version": "1.0.0",
@@ -22,6 +43,7 @@ VALID_SERVER_JSON: dict[str, Any] = {
         "schema_version": "1",
         "category": "data-tools",
         "required_scopes": ["weather:read"],
+        "compatible_protocol_versions": ["2025-06-18"],
         "tools": [
             {
                 "name": "weather.query",
@@ -31,6 +53,13 @@ VALID_SERVER_JSON: dict[str, Any] = {
             }
         ],
     },
+}
+
+# 清单即开发者签域：先挂开发者公钥/签名（签名域含公钥），发布时平台签回填由
+# security.signable_manifest 剔除，不影响两级签名域。
+VALID_SERVER_JSON: dict[str, Any] = {
+    **_BASE_SERVER_JSON,
+    "x-platform": {**_BASE_SERVER_JSON["x-platform"], **publisher_signed_fields(_BASE_SERVER_JSON, CHECKSUM)},
 }
 
 

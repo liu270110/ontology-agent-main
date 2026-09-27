@@ -116,6 +116,7 @@ class PgPluginRepository:
             update(PluginORM)
             .where(PluginORM.id == plugin.id)
             .values(
+                name=plugin.name,  # PUT 元数据用例（api/01 §5.6）；slug/kind 登记后不可变故不在此列
                 latest_version=plugin.latest_version,
                 signature=plugin.signature,
                 status=to_storage_status(plugin.status),
@@ -183,6 +184,7 @@ class PgPluginRepository:
             update(PluginVersionORM)
             .where(PluginVersionORM.id == version.id)
             .values(
+                server_json=dict(version.server_json),  # 发布联动回填 x-platform.signature（上架态必填）
                 scan_report=version.scan_report,
                 status=version.status.value,
             )

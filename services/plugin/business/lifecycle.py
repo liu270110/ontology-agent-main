@@ -1,15 +1,19 @@
-"""L3 用例服务：插件市场全生命周期（M5-1 最小版；权威=docs/Skills §4 流水线 + api/01 §5.6）。
+"""L3 用例服务：插件市场全生命周期（M5-1 遗留收口版；权威=docs/Skills §4 流水线 + api/01 §5.6）。
 
 用例簇（一文件一用例函数簇）：
 - :meth:`PluginMarketService.create_listing` —— 登记 draft 插件 + 首版本（submitted）；
-- :meth:`PluginMarketService.submit_for_review` —— 服务端实跑门禁 1（schema 校验，宪法 3
-  任何档位不可跳过）→ 版本 scan_passed → 插件 in_review → 候选进审（target_type=
-  plugin_listing，复用 ReviewTicketService）；失败退回 draft（Skills §4 退回边）；
+- :meth:`PluginMarketService.submit_for_review` —— 服务端实跑门禁链 1~6（门禁 1 schema
+  校验在 domain/model/manifest.py；2~6 见 business/gates.py；宪法 3 任何档位不可跳过，
+  逐关真实结论随 scan_report 留痕）→ 版本 scan_passed → 插件 in_review → 候选进审
+  （target_type=plugin_listing，复用 ReviewTicketService）；失败退回 draft（Skills §4 退回边）；
 - :meth:`PluginMarketService.review_decision` —— 治理三档审批链（收敛于
   review.domain.approval_chain）+ 通过后发布联动（工单 published → 版本 published →
-  插件 published → runtime 工具注册，08 §4 插件上架场景行）；
+  插件 published → 平台真签（Skills §5.1 两级签名：先验开发者签再平台签，占位签退役）→
+  runtime 工具注册，08 §4 插件上架场景行）；密钥缺失 fail-closed 拒绝发布（4510）；
 - :meth:`PluginMarketService.install/enable/disable` —— 租户安装与启停（tools.enabled
-  持久真相；published↔suspended 域状态机在聚合侧联动）。
+  持久真相；安装前两级验签——先平台签后开发者签，任一失败 4509 拒装，Skills §5.1）；
+- :meth:`PluginMarketService.update_metadata/deprecate/list_versions` —— api/01 §5.6
+  剩余端点（PUT 更新元数据 / DELETE deprecated 软删 / GET 版本树）。
 
 事务纪律：仓储方法只 flush 不 commit（SessionDep 提交）；审批侧 ReviewApprovalService 自持
 短事务——发布联动为幂等补齐设计（ticket approved 但发布未完成时重入本用例续走）。
@@ -17,12 +21,15 @@
 
 from __future__ import annotations
 
+import json
 import uuid
 from dataclasses import dataclass
 from typing import Any
 
 from services.platform.kernel import DomainError
-from services.plugin.domain.model.manifest import ToolTemplate, manifest_tools, validate_manifest
+from services.platform.security import PluginSigner, verify_publisher_plugin
+from services.plugin.business.gates import run_gates
+from services.plugin.domain.model.manifest import ToolTemplate, manifest_tools
 from services.plugin.domain.model.plugin import (
     Plugin,
     PluginKind,
@@ -41,6 +48,37 @@ _TARGET_TYPE = "plugin_listing"
 def _tier_label(value: Any) -> str:
     """档位枚举/字符串 → 标签（GovernanceTier 为 StrEnum；插件侧不依赖 review.domain）。"""
     return str(getattr(value, "value", value))
+
+
+def _publisher_fields(server_json: dict[str, Any]) -> tuple[str | None, str | None]:
+    """开发者签名/公钥读取位（x-platform.publisher_signature / publisher_public_key）。"""
+    x_platform = server_json.get("x-platform")
+    if not isinstance(x_platform, dict):
+        return None, None
+    signature = x_platform.get("publisher_signature")
+    public_key = x_platform.get("publisher_public_key")
+    return (
+        signature if isinstance(signature, str) and signature else None,
+        public_key if isinstance(public_key, str) and public_key else None,
+    )
+
+
+def _stored_platform_signature(server_json: dict[str, Any], plugin_signature: str | None) -> str | None:
+    """平台签读取位：清单 x-platform.signature 优先，回落 plugins.signature 列。"""
+    x_platform = server_json.get("x-platform")
+    candidate = x_platform.get("signature") if isinstance(x_platform, dict) else None
+    if not isinstance(candidate, str) or not candidate:
+        candidate = plugin_signature
+    return candidate if isinstance(candidate, str) and candidate else None
+
+
+def _with_platform_signature(server_json: dict[str, Any], signature: str) -> dict[str, Any]:
+    """上架态回填 x-platform.signature（Skills §3.4.2：提交态省略，上架态必填）。"""
+    manifest: dict[str, Any] = json.loads(json.dumps(server_json))
+    x_platform = dict(manifest.get("x-platform") or {})
+    x_platform["signature"] = signature
+    manifest["x-platform"] = x_platform
+    return manifest
 
 
 @dataclass(frozen=True, slots=True)
@@ -69,12 +107,24 @@ class PluginMarketService:
         review: PluginReviewPort,
         approvals: ReviewDecisionPort,
         runtime: PluginRuntime | None = None,
+        signer: PluginSigner | None = None,
     ) -> None:
         self._repo = repo
         self._bindings = bindings
         self._review = review
         self._approvals = approvals
         self._runtime = runtime
+        self._signer = signer
+
+    def _require_signer(self) -> PluginSigner:
+        """平台签名器取用（fail-closed：密钥缺失/非法 → 4510，发布与验签一律拒绝）。"""
+        signer = self._signer
+        if signer is None or not signer.ready:
+            raise DomainError(
+                "4510 PLATFORM_SIGNING_KEY_MISSING: 平台签名密钥未配置，发布/验签拒绝"
+                "（fail-closed；开发期经 OA_PLATFORM_PLUGIN_SIGNING_KEY 提供 dev key）"
+            )
+        return signer
 
     # ---- 登记（draft）----
 
@@ -150,7 +200,7 @@ class PluginMarketService:
         submitter_id: uuid.UUID,
         trace_id: str = "",
     ) -> uuid.UUID:
-        """提交上架审核：门禁 1 通过 → in_review + 工单 pending_review；失败退回 draft。
+        """提交上架审核：门禁链 1~6 通过 → in_review + 工单 pending_review；失败退回 draft。
 
         幂等口径：同版本已有 open 工单 → 4701（uk_review_one_open 的用例侧前置检查）。
         """
@@ -164,18 +214,24 @@ class PluginMarketService:
         ):
             raise DomainError("4701 OBJECT_ALREADY_IN_REVIEW: 该版本已有在审工单")
 
-        # 门禁 1（服务端实跑，不采信客户端自报——宪法 3）；2~6 关 M5 未建（scan_report 如实标注）
-        try:
-            report = validate_manifest(ver.server_json)
-        except DomainError:
-            # 失败留痕（Skills §4 submitted→draft 退回边）：报告随版本落库，插件保持/退回 draft
-            ver.scan_report = {"gate": "schema_v1", "passed": False, "trace_id": trace_id}
+        # 门禁链 1~6（服务端实跑全链，不采信客户端自报——宪法 3；逐关真实结论随报告留痕）
+        report = run_gates(
+            ver.server_json,
+            artifact_key=ver.artifact_key,
+            checksum=ver.checksum,
+            compat_mcp=ver.compat_mcp,
+            trace_id=trace_id,
+        )
+        if not report["passed"]:
+            # 失败留痕（Skills §4 submitted→draft 退回边）：逐关结论随版本落库，插件保持/退回 draft
+            failed = [name for name, result in report["gates"].items() if not result["passed"]]
+            first_finding = next((finding for result in report["gates"].values() for finding in result["findings"]), "")
+            ver.scan_report = report
             if plugin.status is not PluginStatus.DRAFT:
                 plugin.reject_back_to_draft()
             await self._repo.save_version(ver)
             await self._repo.save(plugin)
-            raise
-        report = {**report, "trace_id": trace_id}
+            raise DomainError(f"4503 PLUGIN_GATE_FAILED: 门禁未通过 {failed}: {first_finding}")
 
         if plugin.status is PluginStatus.DRAFT:
             plugin.submit()
@@ -253,11 +309,29 @@ class PluginMarketService:
                 await self._repo.save(plugin)
                 return outcome
 
-        # 发布联动：版本 published → 插件 published → 工单 published → runtime 注册
+        # 发布联动：版本 published → 插件 published → 平台真签 → 工单 published → runtime 注册
+        signer = self._require_signer()  # fail-closed：平台密钥缺失拒绝发布（4510）
+        publisher_signature, publisher_public_key = _publisher_fields(ver.server_json)
+        if publisher_signature is None or publisher_public_key is None:
+            raise DomainError(
+                "4509 PLUGIN_SIGNATURE_INVALID: 缺少开发者签名/公钥（两级签名第一级，Skills §5.1——"
+                "平台签对象=发布者签名+清单，开发者签必须在提交前完成）"
+            )
+        if not verify_publisher_plugin(
+            publisher_public_key,
+            server_json=ver.server_json,
+            checksum=ver.checksum,
+            publisher_signature=publisher_signature,
+        ):
+            raise DomainError("4509 PLUGIN_SIGNATURE_INVALID: 开发者签名与清单不符（拒发——包内容被篡改或密钥不符）")
+        platform_signature = signer.sign_platform(
+            server_json=ver.server_json, checksum=ver.checksum, publisher_signature=publisher_signature
+        )
         ver.publish()  # scan_passed → published（非法迁移 4501）
         plugin.publish()  # in_review → published
         plugin.latest_version = ver.version
-        plugin.signature = f"platform-ed25519:{ver.checksum[:32]}"  # 平台签占位（两级签名随市场全量批次）
+        plugin.signature = platform_signature  # 平台真签（占位签 platform-ed25519:{checksum} 退役）
+        ver.server_json = _with_platform_signature(ver.server_json, platform_signature)  # 上架态必填回填
         await self._repo.save_version(ver)
         await self._repo.save(plugin)
         await self._review.mark_published(tenant_id=tenant_id, ticket_id=ticket_id, note=note)
@@ -289,6 +363,30 @@ class PluginMarketService:
             raise LookupError(f"插件版本不存在: {version if version is not None else 'latest'}")
         if ver.status.value != "published":
             raise DomainError(f"4502 PLUGIN_NOT_PUBLISHED: 仅已发布版本可安装（当前 {ver.status.value}）")
+        # 两级验签（Skills §5.1 验证顺序：先平台签 → 后开发者签；任一失败拒装——外部默认不可信）
+        signer = self._require_signer()
+        stored_signature = _stored_platform_signature(ver.server_json, plugin.signature)
+        publisher_signature, publisher_public_key = _publisher_fields(ver.server_json)
+        signature_ok = (
+            stored_signature is not None
+            and signer.verify_platform(
+                server_json=ver.server_json,
+                checksum=ver.checksum,
+                publisher_signature=publisher_signature,
+                platform_signature=stored_signature,
+            )
+            and verify_publisher_plugin(
+                publisher_public_key,
+                server_json=ver.server_json,
+                checksum=ver.checksum,
+                publisher_signature=publisher_signature,
+            )
+        )
+        if not signature_ok:
+            raise DomainError(
+                f"4509 PLUGIN_SIGNATURE_INVALID: 两级验签失败，拒绝安装"
+                f"（Skills §5.1；可疑篡改——复核后走重新发布链）: {plugin.slug}@{ver.version}"
+            )
         existing = await self._bindings.list_by_plugin(plugin_id)
         if existing:
             raise DomainError(f"4504 PLUGIN_ALREADY_INSTALLED: 插件已安装: {plugin.slug}")
@@ -344,6 +442,35 @@ class PluginMarketService:
             binding.enable() if enabled else binding.disable()
             await self._bindings.save_enabled(binding)
         return bindings
+
+    # ---- api/01 §5.6 剩余端点用例（PUT 元数据 / DELETE 弃用软删 / GET 版本树）----
+
+    async def update_metadata(self, *, plugin_id: uuid.UUID, name: str) -> Plugin:
+        """更新插件元数据（PUT /plugins/{id}；slug/kind 登记后不可变，本用例只开放展示名）。"""
+        plugin = await self._require_plugin(plugin_id)
+        if plugin.status is PluginStatus.DEPRECATED:
+            raise DomainError("4501 PLUGIN_ILLEGAL_TRANSITION: 已弃用插件为终态，元数据不可变更")
+        plugin.name = name  # validate_assignment 兜底长度/类型
+        await self._repo.save(plugin)
+        return plugin
+
+    async def deprecate(self, *, plugin_id: uuid.UUID) -> Plugin:
+        """弃用下架（DELETE /plugins/{id}）：deprecated 软删终态，不物理删除（全程可追溯底线）。
+
+        迁移合法性由聚合保证（published|suspended → deprecated；draft/in_review 4501）；
+        弃用联动 runtime 卸载（下架件不再可见）。
+        """
+        plugin = await self._require_plugin(plugin_id)
+        plugin.deprecate()
+        await self._repo.save(plugin)
+        if self._runtime is not None:
+            self._runtime.unload(plugin.id)
+        return plugin
+
+    async def list_versions(self, plugin_id: uuid.UUID) -> list[PluginVersion]:
+        """版本树（GET /plugins/{id}/versions；version 号倒序由仓储保证）。"""
+        plugin = await self._require_plugin(plugin_id)
+        return await self._repo.list_versions(plugin.id)
 
     async def get_detail(self, plugin_id: uuid.UUID) -> tuple[Plugin, list[PluginVersion]]:
         """详情（含版本树，api/01 §5.6 GET /plugins/{id}）。"""

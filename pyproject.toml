@@ -4,7 +4,8 @@ name = "ontology-agent"
 version = "0.1.0"
 requires-python = ">=3.11"
 dependencies = [
-  "fastmcp>=2.12.5,<3",  # 4.x 需 starlette>=1.0 与 fastapi starlette<0.51 冲突——禁解锁
+  "cryptography>=42",
+    "fastmcp>=2.12.5,<3",  # 4.x 需 starlette>=1.0 与 fastapi starlette<0.51 冲突——禁解锁
     "fastapi>=0.115", "uvicorn[standard]>=0.30", "sqlalchemy>=2.0", "alembic>=1.13",
   "psycopg[binary]>=3.1", "docker>=7.1", "pydantic>=2.7", "pydantic-settings>=2.2", "redis>=5",
   "pyjwt>=2.8",  # M1 网关 JWT 签发/校验（08 §2.1 claims；HS256 起，RS256/JWKS 随 M3）
@@ -53,6 +54,8 @@ forbidden_modules = [
 ignore_imports = [
     "services.platform.db.uow -> services.agent.data.repo_impl.session_repo",
     "services.platform.db.uow -> services.agent.domain.repo.session_repo",
+    "services.platform.db.uow -> services.agent.data.repo_impl.agent_repo",  # 2026-09-27 agents CRUD 批（TODO(M4) 收口同批）
+    "services.platform.db.uow -> services.agent.domain.repo.agent_repo",
     "services.platform.db.registry -> services.agent.data.orm",
     "services.platform.db.registry -> services.iam.data.orm",
     "services.platform.db.registry -> services.kb.data.orm",
@@ -95,6 +98,7 @@ ignore_imports = [
     # 路由挂载边（gateway→<模块>.api 为契约许可面；其间接链经模块内部分层属合法，逐边豁免）
     "services.gateway.app -> services.iam.api.auth",
     "services.gateway.app -> services.agent.api.sessions",
+    "services.gateway.app -> services.agent.api.agents",  # 2026-09-27 agents CRUD 批（挂载边同 sessions 先例）
     "services.gateway.app -> services.agent.api.tasks",
     "services.gateway.app -> services.kb.api.kb",
     "services.gateway.app -> services.ontology.api.ontology",
@@ -102,9 +106,16 @@ ignore_imports = [
     # UoW 仓储装配组合点（契约一同款豁免；TODO(M4) 收口）
     "services.platform.db.uow -> services.agent.data.repo_impl.session_repo",
     "services.platform.db.uow -> services.agent.domain.repo.session_repo",
+    "services.platform.db.uow -> services.agent.data.repo_impl.agent_repo",  # 2026-09-27 agents CRUD 批
+    "services.platform.db.uow -> services.agent.domain.repo.agent_repo",
+    "services.gateway.app -> services.agent.business.task_worker",  # 任务执行 worker 组合根装配（2026-09-27 批，mcp.bootstrap 单边豁免同款）
+    "services.gateway.app -> services.agent.data.repo_impl.task_poller",  # 任务 worker 轮询器组合根装配（同上）
+    "services.gateway.app -> services.agent.domain.model.task",  # RunRetryPolicy 组合根注入（同上）
     # 候选审核端口组合点（契约六同款豁免；TODO(M4) 收口）
     "services.gateway.app -> services.review.business.candidates",
     # 4.2 组合根收口装配边（lifespan 装配，TODO(M4) UoW 收口一并复核）
+    "services.gateway.app -> services.agent.business.capabilities.fs",  # 能力层 P0（docs/Agent/06）
+    "services.gateway.app -> services.agent.business.capabilities.web",
     "services.gateway.app -> services.ontology.data.repo_impl.ontology_repo",  # 本体制品装载器绑定
     # P1-1 收口（2026-09-27 M4 验收条件一）：MCP registry 共享工厂（services/mcp/bootstrap）
     # ——gateway 与独立进程同一装配面；原 kb.business/iam.data/mcp.providers 三条直连边
@@ -130,9 +141,15 @@ source_modules = ["services.gateway", "services.iam", "services.ontology", "serv
 forbidden_modules = ["services.agent.data"]
 ignore_imports = [
     "services.gateway.app -> services.agent.api.sessions",
+    "services.gateway.app -> services.agent.api.agents",  # 2026-09-27 agents CRUD 批
     "services.gateway.app -> services.agent.api.tasks",
     "services.gateway.app -> services.platform.db.uow",
     "services.platform.db.uow -> services.agent.data.repo_impl.session_repo",  # TODO(M4) 收口
+    "services.platform.db.uow -> services.agent.data.repo_impl.agent_repo",  # 同上（agents CRUD 批）
+    "services.gateway.app -> services.agent.data.repo_impl.task_poller",  # 任务 worker 轮询器装配（writeback_repo 同款豁免，2026-09-27 批）
+    # spill 存储装配边（2026-09-27 批）：sessions 组合根持有 LocalDirSpillStore（ontology 本地目录先例，
+    # M4 切 MinIO）；mcp.a2a 经 sessions 的传递链由本边豁免
+    "services.agent.api.sessions -> services.agent.data.spill_store",
 ]
 
 [[tool.importlinter.contracts]]

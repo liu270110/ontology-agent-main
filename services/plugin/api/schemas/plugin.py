@@ -41,6 +41,12 @@ class SubmitIn(BaseModel):
     version_id: UUID
 
 
+class PluginUpdateIn(BaseModel):
+    """更新插件元数据（api/01 §5.6 PUT /plugins/{id}；slug/kind 登记后不可变，仅开放展示名）。"""
+
+    name: str = Field(min_length=1, max_length=128)
+
+
 class PluginOut(BaseModel):
     id: UUID
     slug: str
@@ -77,6 +83,13 @@ class PluginVersionOut(BaseModel):
 
 class PluginDetailOut(PluginOut):
     versions: list[PluginVersionOut]
+
+
+class PluginVersionListOut(BaseModel):
+    """版本树（api/01 §5.6 GET /plugins/{id}/versions）。"""
+
+    plugin_id: UUID
+    items: list[PluginVersionOut]
 
 
 class PluginPageOut(BaseModel):

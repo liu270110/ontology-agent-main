@@ -50,7 +50,7 @@ export function SettingsPage() {
             </button>
           ))}
           <div className="menu-sep my-2" />
-          <Link to="/approvals" className="sn text-label-2">← 返回审批中心</Link>
+          <Link to="/console/approvals" className="sn text-label-2">← 返回审批中心</Link>
         </nav>
 
         {/* 内容层 */}

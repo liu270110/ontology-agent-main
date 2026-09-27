@@ -14,6 +14,7 @@
  *   ELECTRON_START_URL  dev 模式起始 URL（设置后优先于 oa:// 协议）
  *   OA_WEB_DIST         覆盖 Web dist 目录（默认 dev: ../../dist；打包: resources/webapp）
  *   DESKTOP_SHOT        设置后窗口 ready-to-show 3s 自动 capturePage 存 PNG（QA 验收），完成后退出
+ *   DESKTOP_CONSOLE_SHOT 设置后自动打开管理控制台窗口并截图（双区 IA 验收），完成后退出
  *   DESKTOP_SHOT_DELAY  截图前延迟毫秒数（默认 3000；dev 冷启动 Vite 转换慢时可调大）
  *   DESKTOP_SHOT_QUIT   =0 时截图后不退出（默认退出，供无人值守验收）
  */
@@ -52,6 +53,7 @@ function resolveWebDist(): string {
 const WEB_DIST = resolveWebDist()
 
 let mainWindow: BrowserWindow | null = null
+let consoleWindow: BrowserWindow | null = null
 let tray: Tray | null = null
 let trayReady = false
 let isQuitting = false
@@ -202,6 +204,72 @@ function createMainWindow(): BrowserWindow {
   return win
 }
 
+/** 管理控制台窗口（双区 IA：主页=常用功能，控制台=管理/设置/观测，独立窗口承载）。 */
+function createConsoleWindow(): BrowserWindow {
+  const dark = nativeTheme.shouldUseDarkColors
+  const win = new BrowserWindow({
+    width: 1120,
+    height: 760,
+    minWidth: 900,
+    minHeight: 600,
+    title: `${APP_TITLE} · 管理控制台`,
+    backgroundColor: dark ? '#0b0f14' : '#f8fafc',
+    show: false,
+    autoHideMenuBar: true,
+    icon: nativeImage.createFromDataURL(iconPng),
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
+      spellcheck: false,
+    },
+  })
+  win.once('ready-to-show', () => win.show())
+
+  // 同主窗口安全口径：禁新窗口、拦跨源导航
+  win.webContents.setWindowOpenHandler(({ url }) => {
+    if (/^https?:/i.test(url)) void shell.openExternal(url)
+    return { action: 'deny' }
+  })
+  win.webContents.on('will-navigate', (event, url) => {
+    if (isAllowedUrl(url)) return
+    event.preventDefault()
+    if (/^https?:/i.test(url)) void shell.openExternal(url)
+  })
+
+  win.on('closed', () => {
+    if (consoleWindow === win) consoleWindow = null
+  })
+
+  // QA 验收钩子：DESKTOP_CONSOLE_SHOT 设置时控制台加载完成后自动截图（截完退出）
+  const shotPath = process.env.DESKTOP_CONSOLE_SHOT
+  if (shotPath) {
+    win.webContents.once('did-finish-load', () => {
+      setTimeout(() => {
+        void (async () => {
+          try {
+            const image = await win.webContents.capturePage()
+            fs.mkdirSync(path.dirname(shotPath), { recursive: true })
+            fs.writeFileSync(shotPath, image.toPNG())
+            console.log(`[oa-desktop] console screenshot saved: ${shotPath} (${image.toPNG().length} bytes)`)
+          } catch (err) {
+            console.error('[oa-desktop] console screenshot failed:', err)
+          } finally {
+            if (process.env.DESKTOP_SHOT_QUIT !== '0') app.quit()
+          }
+        })()
+      }, Number(process.env.DESKTOP_SHOT_DELAY ?? 3000))
+    })
+  }
+
+  const startUrl = process.env.ELECTRON_START_URL
+    ? `${process.env.ELECTRON_START_URL}/console`
+    : `${SCHEME}://${HOST}/console`
+  void win.loadURL(startUrl)
+  return win
+}
+
 /** 托盘：图标 + 显示/退出菜单；失败时降级（关闭即退出，不驻留）。 */
 function createTray(): void {
   try {
@@ -240,6 +308,15 @@ function registerIpc(): void {
     mainWindow?.setTitle(title)
     return true
   })
+  // 双区 IA：控制台独立窗口（已开则聚前）
+  ipcMain.handle('oa:openConsole', () => {
+    if (!consoleWindow || consoleWindow.isDestroyed()) consoleWindow = createConsoleWindow()
+    else {
+      consoleWindow.show()
+      consoleWindow.focus()
+    }
+    return true
+  })
 }
 
 const gotLock = app.requestSingleInstanceLock()
@@ -254,6 +331,13 @@ if (!gotLock) {
     registerIpc()
     mainWindow = createMainWindow()
     createTray()
+    // QA 验收（双区 IA）：DESKTOP_CONSOLE_SHOT 时由主进程直接开控制台窗口（createConsoleWindow
+    // 内的截图钩子负责拍照退出）——渲染层不会自发调用 oa:openConsole，必须主进程侧触发
+    if (process.env.DESKTOP_CONSOLE_SHOT) {
+      mainWindow.webContents.once('did-finish-load', () => {
+        consoleWindow = createConsoleWindow()
+      })
+    }
   })
 
   app.on('before-quit', () => {

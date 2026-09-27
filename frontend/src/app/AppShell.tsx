@@ -1,18 +1,20 @@
 import { useEffect, useRef, useState } from 'react'
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
-import { Bell, LogOut, PanelLeft, Search, Settings } from 'lucide-react'
+import { Bell, LogOut, PanelLeft, Search, Settings, ShieldCheck } from 'lucide-react'
 import { useUiStore } from '@/stores/ui-store'
 import { useAuthStore } from '@/stores/auth-store'
 import { ThemeToggle } from '@/components/theme-toggle'
 import { CommandMenu } from '@/components/command-menu/command-menu'
 import { RouteGlyph } from '@/components/command-menu/route-glyph'
-import { ROUTES } from './routes'
+import { MAIN_ROUTES } from './routes'
 
 /** 应用壳（16 篇 §5.2 / 03 篇 AppLayout）：液态玻璃壳层——根容器挂 .app-stage 静态双光斑底
  *  （board.css .app 配方，玻璃折射的彩色来源），侧边栏 .glass-side（board.css .sb 配方）、
  *  顶栏 .material-bar（board.css .bbar 配方）；菜单按当前用户 roles 过滤，事实源
  *  = routes.tsx meta.roles，08 篇 §2.2 角色矩阵映射；组内全部不可见时连组标题一起隐藏。
  *  顶栏（⌘K / 主题三态 / 通知占位 / 用户菜单「退出登录」）+ CommandMenu。
+ *  双区 IA（2026-09-28 裁决）：主侧边栏只留 7 常用项；管理类入口收进管理控制台
+ *  （sb-foot「管理控制台」按钮 → /console）；侧边栏 Logo 点击回主页启动台。
  *  用户名显示邮箱前缀——JWT claims 无显示名字段（R13 建议后端补 name claim / me 端点）。 */
 
 export function AppShell() {
@@ -25,9 +27,11 @@ export function AppShell() {
   const toggleSidebar = useUiStore(s => s.toggleSidebar)
   const setCommandOpen = useUiStore(s => s.setCommandOpen)
 
-  const groups = [...new Set(ROUTES.map(r => r.group))]
+  const groups = [...new Set(MAIN_ROUTES.map(r => r.group))]
+  // 双区 IA：console 区路由不进主侧边栏；sidebar:false（版本评审/Playground/Agent 管理等）与
+  // hidden（深链直达）同样收敛，仅留 7 常用项
   const visibleIn = (group: string) =>
-    ROUTES.filter(r => r.group === group && !r.hidden && visibleFor(r, hasAnyRole))
+    MAIN_ROUTES.filter(r => r.group === group && !r.hidden && r.sidebar !== false && visibleFor(r, hasAnyRole))
 
   async function onLogout() {
     // 16 §5.2 ③：POST /auth/logout（失败也照常本地清态）→ 回登录页
@@ -39,7 +43,15 @@ export function AppShell() {
     <div className="app-stage flex h-screen bg-bg text-label">
       <aside className={`glass-side flex flex-col py-4 transition-all ${collapsed ? 'w-16' : 'w-60'}`}>
         <div className="flex items-center gap-2 px-4 pb-4">
-          <span className="flex h-7 w-7 flex-none items-center justify-center rounded-lg bg-accent-soft text-accent">◆</span>
+          <button
+            type="button"
+            aria-label="回主页"
+            title="回主页"
+            onClick={() => navigate('/')}
+            className="flex h-7 w-7 flex-none items-center justify-center rounded-lg bg-accent-soft text-accent hover:brightness-95"
+          >
+            ◆
+          </button>
           {!collapsed && <b className="truncate text-sm">ontology-agent</b>}
         </div>
         <nav className="min-h-0 flex-1 overflow-y-auto" aria-label="主导航">
@@ -79,15 +91,28 @@ export function AppShell() {
               {user?.roles?.[0] ?? '成员'} · {user?.tenantId ?? '默认租户'}
             </small>
           )}
-          <button
-            type="button"
-            aria-label="设置"
-            title="设置"
-            onClick={() => navigate('/settings')}
-            className="ml-auto flex h-7 w-7 flex-none items-center justify-center rounded-lg text-label-2 hover:bg-black/5 dark:hover:bg-white/[.07]"
-          >
-            <Settings size={15} aria-hidden />
-          </button>
+          {/* 双区 IA：管理类入口收进管理控制台（独立窗口心智） */}
+          <div className="ml-auto flex flex-none items-center gap-1">
+            <button
+              type="button"
+              aria-label="管理控制台"
+              title="管理控制台"
+              data-testid="shell-console-entry"
+              onClick={() => navigate('/console')}
+              className="flex h-7 w-7 items-center justify-center rounded-lg text-label-2 hover:bg-black/5 dark:hover:bg-white/[.07]"
+            >
+              <ShieldCheck size={15} aria-hidden />
+            </button>
+            <button
+              type="button"
+              aria-label="设置"
+              title="设置"
+              onClick={() => navigate('/settings')}
+              className="flex h-7 w-7 items-center justify-center rounded-lg text-label-2 hover:bg-black/5 dark:hover:bg-white/[.07]"
+            >
+              <Settings size={15} aria-hidden />
+            </button>
+          </div>
         </div>
       </aside>
 
@@ -185,6 +210,6 @@ function UserMenu({
   )
 }
 
-function visibleFor(r: (typeof ROUTES)[number], hasAnyRole: (roles: string[]) => boolean): boolean {
+function visibleFor(r: (typeof MAIN_ROUTES)[number], hasAnyRole: (roles: string[]) => boolean): boolean {
   return !r.roles || r.roles.length === 0 || hasAnyRole(r.roles)
 }

@@ -25,11 +25,12 @@ if sys.platform == "win32":
 
     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
+from services.writeback.api.ledger import router as writeback_ledger_router
+from services.writeback.api.schemas.ledger import WritebackLedgerOut
+
 from services.gateway.middlewares import ErrorCode, GlobalExceptionMiddleware
 from services.mcp.server import TOOL_SPECS
 from services.platform.deps import Principal, get_current_principal
-from services.writeback.api.ledger import router as writeback_ledger_router
-from services.writeback.api.schemas.ledger import WritebackLedgerOut
 from services.writeback.business.action_dispatcher import project_status
 from services.writeback.domain.model import WritebackAction, WritebackLedger
 

@@ -155,9 +155,7 @@ async def run_retrieval_eval(
                 }
             )
             continue
-        result = await search.search(
-            tenant_id=tenant_id, query=case.question, kb_id=kb_id, top_k=top_k, mode=case.mode
-        )
+        result = await search.search(tenant_id=tenant_id, query=case.question, kb_id=kb_id, top_k=top_k, mode=case.mode)
         returned = [c.doc_id for c in result.citations]
         first_rank = next(
             (rank for rank, doc_id in enumerate(returned, start=1) if doc_id in set(expected_uuids)),
@@ -247,6 +245,11 @@ async def run_retrieval_eval(
             )
     logger.info(
         "retrieval_eval done: run_id=%s cases=%d hit@k=%s mrr=%s skipped=%d passed=%s",
-        run.id, len(cases), metrics["hit_at_k"], metrics["mrr"], metrics["n_skipped"], passed,
+        run.id,
+        len(cases),
+        metrics["hit_at_k"],
+        metrics["mrr"],
+        metrics["n_skipped"],
+        passed,
     )
     return RetrievalEvalReport(run_id=run.id, metrics=metrics)

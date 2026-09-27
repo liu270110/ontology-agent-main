@@ -119,8 +119,8 @@ async def test_retrieval_eval_metrics_layers_and_persistence(kb_pg, tmp_path) ->
     async with kb_pg() as db:
         run = (await db.execute(select(EvaluationRun).where(EvaluationRun.id == report.run_id))).scalar_one()
         results = (
-            await db.execute(select(EvaluationResult).where(EvaluationResult.run_id == report.run_id))
-        ).scalars().all()
+            (await db.execute(select(EvaluationResult).where(EvaluationResult.run_id == report.run_id))).scalars().all()
+        )
     assert run.benchmark_type == "retrieval_qa" and run.passed is True
     assert {r.case_id: r.verdict for r in results} == {"c1": "pass", "c2": "pass", "c3": "fail"}
 
@@ -141,8 +141,8 @@ async def test_retrieval_eval_skips_missing_expected_docs(kb_pg, tmp_path) -> No
     assert report.metrics["hit_at_k"] == 1.0
     async with kb_pg() as db:
         rows = (
-            await db.execute(select(EvaluationResult).where(EvaluationResult.run_id == report.run_id))
-        ).scalars().all()
+            (await db.execute(select(EvaluationResult).where(EvaluationResult.run_id == report.run_id))).scalars().all()
+        )
     assert {r.case_id: r.verdict for r in rows} == {"ok": "pass", "gone": "skip"}
 
 

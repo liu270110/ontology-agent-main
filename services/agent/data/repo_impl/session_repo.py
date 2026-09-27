@@ -260,10 +260,14 @@ class PgSessionRepository:
         return [_message_to_domain(r) for r in rows]
 
     async def count_messages_by_role(self, session_id: uuid.UUID, role: str) -> int:
-        stmt = select(func.count()).select_from(MessageORM).where(
-            MessageORM.session_id == session_id,
-            MessageORM.tenant_id == self._tenant_id,
-            MessageORM.role == role,
+        stmt = (
+            select(func.count())
+            .select_from(MessageORM)
+            .where(
+                MessageORM.session_id == session_id,
+                MessageORM.tenant_id == self._tenant_id,
+                MessageORM.role == role,
+            )
         )
         return int((await self._db.execute(stmt)).scalar_one())
 

@@ -539,9 +539,7 @@ async def _align_by_llm(
         # AttributeError/TypeError 等编程错误不在捕获面，照常上抛响亮失败。
         logger.warning("align tier-3 LLM unavailable, degrade to needs_review", exc_info=True)
         for name in names:
-            decisions[name] = _AlignDecision(
-                name=name, status=_ALIGN_NEEDS_REVIEW, reason="LLM 判定不可用或输出不合法"
-            )
+            decisions[name] = _AlignDecision(name=name, status=_ALIGN_NEEDS_REVIEW, reason="LLM 判定不可用或输出不合法")
         return
     mapped = {
         str(item.get("name")): item.get("target") for item in mappings if isinstance(item, dict) and item.get("name")
@@ -738,8 +736,7 @@ async def run_validate(ctx: StepContext) -> None:
                         DocumentChunk.id.in_(referenced_chunk_ids) if referenced_chunk_ids else false(),
                     )
                 )
-            )
-            .all()
+            ).all()
             if referenced_chunk_ids
             else []
         )

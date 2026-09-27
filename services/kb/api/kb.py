@@ -869,10 +869,6 @@ async def batch_decide_candidates(
             )
             counts["failed"] += 1
         except Exception as exc:  # noqa: BLE001 逐条隔离兜底（LookupError/DB 异常同款记失败，不 500 整批）
-            results.append(
-                BatchCandidateDecisionItemOut(candidate_id=item.candidate_id, ok=False, error=f"500 {exc}")
-            )
+            results.append(BatchCandidateDecisionItemOut(candidate_id=item.candidate_id, ok=False, error=f"500 {exc}"))
             counts["failed"] += 1
-    return BatchCandidateDecisionOut(
-        results=results, meta=BatchCandidateDecisionMetaOut(**counts)
-    )
+    return BatchCandidateDecisionOut(results=results, meta=BatchCandidateDecisionMetaOut(**counts))

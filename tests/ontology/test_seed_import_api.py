@@ -248,34 +248,22 @@ async def test_种子导入成功_读模型四表投影落位(seed_api: SeedApiE
     # Assert —— 四表行存在：类数与种子自检口径一致（同一 lint/投影产出），其余三表非空
     async with seed_api.factory() as db:
         classes = (
-            (await db.execute(select(OntoClassORM).where(OntoClassORM.tenant_id == seed_api.tenant_id)))
-            .scalars()
-            .all()
+            (await db.execute(select(OntoClassORM).where(OntoClassORM.tenant_id == seed_api.tenant_id))).scalars().all()
         )
         properties = (
             (await db.execute(select(OntoPropertyORM).where(OntoPropertyORM.tenant_id == seed_api.tenant_id)))
             .scalars()
             .all()
         )
-        axioms = (
-            (await db.execute(select(AxiomORM).where(AxiomORM.tenant_id == seed_api.tenant_id))).scalars().all()
-        )
-        rules = ((await db.execute(select(RuleORM).where(RuleORM.tenant_id == seed_api.tenant_id))).scalars().all())
+        axioms = (await db.execute(select(AxiomORM).where(AxiomORM.tenant_id == seed_api.tenant_id))).scalars().all()
+        rules = (await db.execute(select(RuleORM).where(RuleORM.tenant_id == seed_api.tenant_id))).scalars().all()
         changeset_row = (
-            (
-                await db.execute(
-                    select(OntologyChangesetORM).where(OntologyChangesetORM.tenant_id == seed_api.tenant_id)
-                )
-            )
+            (await db.execute(select(OntologyChangesetORM).where(OntologyChangesetORM.tenant_id == seed_api.tenant_id)))
             .scalars()
             .one()
         )
         version_row = (
-            (
-                await db.execute(
-                    select(OntologyVersionORM).where(OntologyVersionORM.tenant_id == seed_api.tenant_id)
-                )
-            )
+            (await db.execute(select(OntologyVersionORM).where(OntologyVersionORM.tenant_id == seed_api.tenant_id)))
             .scalars()
             .one()
         )

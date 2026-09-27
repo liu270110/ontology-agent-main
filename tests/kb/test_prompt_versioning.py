@@ -91,9 +91,7 @@ _EXPECTED_SYSTEM_PROMPT_V2 = """你是电力配电网领域的知识抽取引擎
 7. 文本没有任何可抽取内容时返回 {"candidates": []}。"""
 
 _EXPECTED_CATALOG_TEXT = (
-    f"- 类 {_PW}Feeder（标签：馈线）\n"
-    f"- 类 {_PW}OutageOrder（标签：抢修工单）\n"
-    "- 属性 hasStatus（标签：工单状态）"
+    f"- 类 {_PW}Feeder（标签：馈线）\n- 类 {_PW}OutageOrder（标签：抢修工单）\n- 属性 hasStatus（标签：工单状态）"
 )
 
 _EXPECTED_USER_PROMPT = (

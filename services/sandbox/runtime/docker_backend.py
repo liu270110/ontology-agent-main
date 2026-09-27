@@ -17,10 +17,10 @@ import time
 from collections.abc import Callable
 from pathlib import Path
 
-import docker
 from docker.errors import APIError, NotFound
 from docker.types import LogConfig
 
+import docker
 from services.platform.config import get_settings
 from services.sandbox.runtime.types import Scenario, TrustLevel
 

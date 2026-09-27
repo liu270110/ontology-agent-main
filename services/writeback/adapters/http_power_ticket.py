@@ -98,14 +98,10 @@ class HttpPowerTicketAdapter:
     async def check_health(self) -> HealthReport:
         """连通性/鉴权预检：只报布尔与详情，不抛错（探测面语义）。"""
         try:
-            resp = await self._client.get(
-                f"{self._base_url}/health", headers=self._headers(), timeout=self._timeout
-            )
+            resp = await self._client.get(f"{self._base_url}/health", headers=self._headers(), timeout=self._timeout)
         except httpx.HTTPError as exc:
             return HealthReport(ok=False, detail={"system": SYSTEM_NAME, "error": str(exc)})
-        return HealthReport(
-            ok=resp.is_success, detail={"system": SYSTEM_NAME, "status_code": resp.status_code}
-        )
+        return HealthReport(ok=resp.is_success, detail={"system": SYSTEM_NAME, "status_code": resp.status_code})
 
     async def execute(self, req: WritebackRequest) -> WritebackReceipt:
         """创建工单（幂等键透传 ``Idempotency-Key`` 头；受理即回凭证 §2.3）。"""

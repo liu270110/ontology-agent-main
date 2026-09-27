@@ -215,9 +215,7 @@ class KnowledgeSearchService:
     ) -> None:
         """埋点守卫：store 任何异常吞掉 + DEBUG 留痕（§6.1 零成本埋点纪律：统计不伤主链路）。"""
         try:
-            await store.record_search_hits(
-                tenant_id=tenant_id, kb_collection_id=kb_collection_id, chunk_ids=chunk_ids
-            )
+            await store.record_search_hits(tenant_id=tenant_id, kb_collection_id=kb_collection_id, chunk_ids=chunk_ids)
         except Exception:  # noqa: BLE001 —— 吞掉是设计意图（埋点旁路，绝不外溢到检索调用方）
             logger.debug(
                 "usage 埋点失败（不影响检索主链路）: tenant=%s kb=%s chunks=%d",

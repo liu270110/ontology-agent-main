@@ -215,9 +215,7 @@ def patch_hybrid(monkeypatch: pytest.MonkeyPatch) -> list[SearchHit]:
     return hits
 
 
-async def test_search挂钩_注入store_citations计数落行(
-    kb_factory: Any, patch_hybrid: list[SearchHit]
-) -> None:
+async def test_search挂钩_注入store_citations计数落行(kb_factory: Any, patch_hybrid: list[SearchHit]) -> None:
     store = UsageStore(kb_factory)
     service = _make_service(usage_store=store)
     result = await service.search(tenant_id=TENANT, query="q", kb_id=KB)

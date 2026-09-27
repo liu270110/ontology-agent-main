@@ -519,6 +519,7 @@ class BatchCandidateDecisionOut(BaseModel):
 # 换版可产生数千条 needs_review 候选，逐条复核不可运行——按 subject 分组聚合展示，复核人
 # 按组全量裁决；逐行留痕（open 单 payload["decisions"] + 行内审计，见 business/review_queue）。
 
+
 class ReviewQueueSampleOut(BaseModel):
     """组内样本引用（≤3 条，最旧优先）：回指候选事实与 chunk/document 出处。"""
 

@@ -1,0 +1,2139 @@
+{
+  "meta": {
+    "generated_at": "2026-09-27T01:07:02.131780+00:00",
+    "base_url": "http://127.0.0.1:18001/v1",
+    "model": "local-main",
+    "config_source": "services.platform.config",
+    "mode": "llm_live",
+    "target_precision": 0.95,
+    "n_docs": 12,
+    "n_gold": 42,
+    "recall_strict_plain": 0.3571,
+    "match_rule": "strict=NFKC+去空白+小写 (s,p,o) 全等；loose=谓词全等+主/宾含混匹配（全等/互相包含/二元组 Jaccard≥0.6）；confidence 降序贪心一对一指派",
+    "llm_calls": 24,
+    "llm_prompt_tokens": 8672,
+    "llm_completion_tokens": 7767,
+    "llm_latency_median_s": 60.576,
+    "note": "LLM 实跑口径（模型/提示词绑定，变更须按架构 08 篇 §7.2 回归）"
+  },
+  "variants": [
+    {
+      "name": "plain",
+      "prompt_version": "poc2-v1-plain",
+      "n_candidates": 66,
+      "n_strict_tp": 15,
+      "n_loose_tp": 20,
+      "precision_strict": 0.2273,
+      "precision_loose": 0.303,
+      "ece_strict": 0.753,
+      "buckets_strict": [
+        {
+          "label": "0.0-0.1",
+          "n": 1,
+          "accuracy": 0.0,
+          "avg_confidence": 0.0
+        },
+        {
+          "label": "0.1-0.2",
+          "n": 0,
+          "accuracy": 0.0,
+          "avg_confidence": 0.0
+        },
+        {
+          "label": "0.2-0.3",
+          "n": 0,
+          "accuracy": 0.0,
+          "avg_confidence": 0.0
+        },
+        {
+          "label": "0.3-0.4",
+          "n": 0,
+          "accuracy": 0.0,
+          "avg_confidence": 0.0
+        },
+        {
+          "label": "0.4-0.5",
+          "n": 0,
+          "accuracy": 0.0,
+          "avg_confidence": 0.0
+        },
+        {
+          "label": "0.5-0.6",
+          "n": 0,
+          "accuracy": 0.0,
+          "avg_confidence": 0.0
+        },
+        {
+          "label": "0.6-0.7",
+          "n": 0,
+          "accuracy": 0.0,
+          "avg_confidence": 0.0
+        },
+        {
+          "label": "0.7-0.8",
+          "n": 1,
+          "accuracy": 0.0,
+          "avg_confidence": 0.7
+        },
+        {
+          "label": "0.8-0.9",
+          "n": 0,
+          "accuracy": 0.0,
+          "avg_confidence": 0.0
+        },
+        {
+          "label": "0.9-1.0",
+          "n": 64,
+          "accuracy": 0.2344,
+          "avg_confidence": 1.0
+        }
+      ],
+      "threshold_plan_strict": {
+        "auto_pass_threshold": null,
+        "cum_precision_at_threshold": null,
+        "auto_pass_rate": 0.0,
+        "review_queue_rate": 1.0,
+        "stratified_sample_rates": {},
+        "overall_sample_rate": 0.0
+      },
+      "errors": [
+        "fault-001: json_parse_failed: '{\"relations\": [{\"subject\": \"10kV滨河线153开关\", \"subject_type\": \"开关\", \"predicate\": \"affectsFeeder\", \"object\": \"10kV滨河线\", \"obj'"
+      ],
+      "ece_loose": 0.6773,
+      "buckets_loose": [
+        {
+          "label": "0.0-0.1",
+          "n": 1,
+          "accuracy": 0.0,
+          "avg_confidence": 0.0
+        },
+        {
+          "label": "0.1-0.2",
+          "n": 0,
+          "accuracy": 0.0,
+          "avg_confidence": 0.0
+        },
+        {
+          "label": "0.2-0.3",
+          "n": 0,
+          "accuracy": 0.0,
+          "avg_confidence": 0.0
+        },
+        {
+          "label": "0.3-0.4",
+          "n": 0,
+          "accuracy": 0.0,
+          "avg_confidence": 0.0
+        },
+        {
+          "label": "0.4-0.5",
+          "n": 0,
+          "accuracy": 0.0,
+          "avg_confidence": 0.0
+        },
+        {
+          "label": "0.5-0.6",
+          "n": 0,
+          "accuracy": 0.0,
+          "avg_confidence": 0.0
+        },
+        {
+          "label": "0.6-0.7",
+          "n": 0,
+          "accuracy": 0.0,
+          "avg_confidence": 0.0
+        },
+        {
+          "label": "0.7-0.8",
+          "n": 1,
+          "accuracy": 0.0,
+          "avg_confidence": 0.7
+        },
+        {
+          "label": "0.8-0.9",
+          "n": 0,
+          "accuracy": 0.0,
+          "avg_confidence": 0.0
+        },
+        {
+          "label": "0.9-1.0",
+          "n": 64,
+          "accuracy": 0.3125,
+          "avg_confidence": 1.0
+        }
+      ]
+    },
+    {
+      "name": "nudge",
+      "prompt_version": "poc2-v2-nudge",
+      "n_candidates": 72,
+      "n_strict_tp": 14,
+      "n_loose_tp": 20,
+      "precision_strict": 0.1944,
+      "precision_loose": 0.2778,
+      "ece_strict": 0.5778,
+      "buckets_strict": [
+        {
+          "label": "0.0-0.1",
+          "n": 0,
+          "accuracy": 0.0,
+          "avg_confidence": 0.0
+        },
+        {
+          "label": "0.1-0.2",
+          "n": 0,
+          "accuracy": 0.0,
+          "avg_confidence": 0.0
+        },
+        {
+          "label": "0.2-0.3",
+          "n": 0,
+          "accuracy": 0.0,
+          "avg_confidence": 0.0
+        },
+        {
+          "label": "0.3-0.4",
+          "n": 0,
+          "accuracy": 0.0,
+          "avg_confidence": 0.0
+        },
+        {
+          "label": "0.4-0.5",
+          "n": 0,
+          "accuracy": 0.0,
+          "avg_confidence": 0.0
+        },
+        {
+          "label": "0.5-0.6",
+          "n": 2,
+          "accuracy": 0.0,
+          "avg_confidence": 0.5
+        },
+        {
+          "label": "0.6-0.7",
+          "n": 13,
+          "accuracy": 0.1538,
+          "avg_confidence": 0.6
+        },
+        {
+          "label": "0.7-0.8",
+          "n": 19,
+          "accuracy": 0.1053,
+          "avg_confidence": 0.7
+        },
+        {
+          "label": "0.8-0.9",
+          "n": 17,
+          "accuracy": 0.1765,
+          "avg_confidence": 0.8029
+        },
+        {
+          "label": "0.9-1.0",
+          "n": 21,
+          "accuracy": 0.3333,
+          "avg_confidence": 0.9452
+        }
+      ],
+      "threshold_plan_strict": {
+        "auto_pass_threshold": null,
+        "cum_precision_at_threshold": null,
+        "auto_pass_rate": 0.0,
+        "review_queue_rate": 1.0,
+        "stratified_sample_rates": {},
+        "overall_sample_rate": 0.0
+      },
+      "errors": [],
+      "ece_loose": 0.4944,
+      "buckets_loose": [
+        {
+          "label": "0.0-0.1",
+          "n": 0,
+          "accuracy": 0.0,
+          "avg_confidence": 0.0
+        },
+        {
+          "label": "0.1-0.2",
+          "n": 0,
+          "accuracy": 0.0,
+          "avg_confidence": 0.0
+        },
+        {
+          "label": "0.2-0.3",
+          "n": 0,
+          "accuracy": 0.0,
+          "avg_confidence": 0.0
+        },
+        {
+          "label": "0.3-0.4",
+          "n": 0,
+          "accuracy": 0.0,
+          "avg_confidence": 0.0
+        },
+        {
+          "label": "0.4-0.5",
+          "n": 0,
+          "accuracy": 0.0,
+          "avg_confidence": 0.0
+        },
+        {
+          "label": "0.5-0.6",
+          "n": 2,
+          "accuracy": 0.0,
+          "avg_confidence": 0.5
+        },
+        {
+          "label": "0.6-0.7",
+          "n": 13,
+          "accuracy": 0.2308,
+          "avg_confidence": 0.6
+        },
+        {
+          "label": "0.7-0.8",
+          "n": 19,
+          "accuracy": 0.1579,
+          "avg_confidence": 0.7
+        },
+        {
+          "label": "0.8-0.9",
+          "n": 17,
+          "accuracy": 0.2353,
+          "avg_confidence": 0.8029
+        },
+        {
+          "label": "0.9-1.0",
+          "n": 21,
+          "accuracy": 0.4762,
+          "avg_confidence": 0.9452
+        }
+      ]
+    }
+  ],
+  "per_doc": [
+    {
+      "doc_id": "fault-001",
+      "n_gold": 4,
+      "plain": {
+        "n_candidates": 0,
+        "n_strict": 0,
+        "n_loose": 0
+      },
+      "nudge": {
+        "n_candidates": 10,
+        "n_strict": 0,
+        "n_loose": 0
+      }
+    },
+    {
+      "doc_id": "fault-002",
+      "n_gold": 4,
+      "plain": {
+        "n_candidates": 4,
+        "n_strict": 1,
+        "n_loose": 1
+      },
+      "nudge": {
+        "n_candidates": 7,
+        "n_strict": 0,
+        "n_loose": 1
+      }
+    },
+    {
+      "doc_id": "fault-003",
+      "n_gold": 5,
+      "plain": {
+        "n_candidates": 8,
+        "n_strict": 1,
+        "n_loose": 3
+      },
+      "nudge": {
+        "n_candidates": 6,
+        "n_strict": 1,
+        "n_loose": 2
+      }
+    },
+    {
+      "doc_id": "dispatch-001",
+      "n_gold": 3,
+      "plain": {
+        "n_candidates": 4,
+        "n_strict": 2,
+        "n_loose": 2
+      },
+      "nudge": {
+        "n_candidates": 5,
+        "n_strict": 2,
+        "n_loose": 2
+      }
+    },
+    {
+      "doc_id": "dispatch-002",
+      "n_gold": 3,
+      "plain": {
+        "n_candidates": 4,
+        "n_strict": 1,
+        "n_loose": 1
+      },
+      "nudge": {
+        "n_candidates": 5,
+        "n_strict": 1,
+        "n_loose": 2
+      }
+    },
+    {
+      "doc_id": "dispatch-003",
+      "n_gold": 3,
+      "plain": {
+        "n_candidates": 3,
+        "n_strict": 0,
+        "n_loose": 0
+      },
+      "nudge": {
+        "n_candidates": 5,
+        "n_strict": 0,
+        "n_loose": 1
+      }
+    },
+    {
+      "doc_id": "ticket-001",
+      "n_gold": 2,
+      "plain": {
+        "n_candidates": 5,
+        "n_strict": 1,
+        "n_loose": 1
+      },
+      "nudge": {
+        "n_candidates": 4,
+        "n_strict": 1,
+        "n_loose": 1
+      }
+    },
+    {
+      "doc_id": "ticket-002",
+      "n_gold": 3,
+      "plain": {
+        "n_candidates": 8,
+        "n_strict": 1,
+        "n_loose": 1
+      },
+      "nudge": {
+        "n_candidates": 6,
+        "n_strict": 1,
+        "n_loose": 1
+      }
+    },
+    {
+      "doc_id": "ledger-001",
+      "n_gold": 4,
+      "plain": {
+        "n_candidates": 10,
+        "n_strict": 2,
+        "n_loose": 2
+      },
+      "nudge": {
+        "n_candidates": 6,
+        "n_strict": 3,
+        "n_loose": 3
+      }
+    },
+    {
+      "doc_id": "ledger-002",
+      "n_gold": 5,
+      "plain": {
+        "n_candidates": 6,
+        "n_strict": 3,
+        "n_loose": 4
+      },
+      "nudge": {
+        "n_candidates": 7,
+        "n_strict": 2,
+        "n_loose": 3
+      }
+    },
+    {
+      "doc_id": "analysis-001",
+      "n_gold": 3,
+      "plain": {
+        "n_candidates": 4,
+        "n_strict": 2,
+        "n_loose": 2
+      },
+      "nudge": {
+        "n_candidates": 4,
+        "n_strict": 2,
+        "n_loose": 1
+      }
+    },
+    {
+      "doc_id": "analysis-002",
+      "n_gold": 3,
+      "plain": {
+        "n_candidates": 10,
+        "n_strict": 1,
+        "n_loose": 3
+      },
+      "nudge": {
+        "n_candidates": 7,
+        "n_strict": 1,
+        "n_loose": 3
+      }
+    }
+  ],
+  "candidates": [
+    {
+      "variant": "plain",
+      "doc_id": "fault-002",
+      "subject": "10kV朝阳线北段312开关",
+      "subject_type": "开关",
+      "predicate": "affectsFeeder",
+      "object": "朝阳线北段",
+      "object_type": "馈线",
+      "confidence": 1.0,
+      "matched_strict": false,
+      "matched_loose": false
+    },
+    {
+      "variant": "plain",
+      "doc_id": "fault-002",
+      "subject": "朝阳线北段",
+      "subject_type": "馈线",
+      "predicate": "hasStatus",
+      "object": "失电",
+      "object_type": "区段",
+      "confidence": 1.0,
+      "matched_strict": true,
+      "matched_loose": true
+    },
+    {
+      "variant": "plain",
+      "doc_id": "fault-002",
+      "subject": "故障工单GD-2026-0301",
+      "subject_type": "工单",
+      "predicate": "dispatchedTo",
+      "object": "朝阳线北段",
+      "object_type": "区段",
+      "confidence": 1.0,
+      "matched_strict": false,
+      "matched_loose": false
+    },
+    {
+      "variant": "plain",
+      "doc_id": "fault-002",
+      "subject": "抢修一班",
+      "subject_type": "抢修队",
+      "predicate": "crewLead",
+      "object": "朝阳线北段",
+      "object_type": "区段",
+      "confidence": 1.0,
+      "matched_strict": false,
+      "matched_loose": false
+    },
+    {
+      "variant": "plain",
+      "doc_id": "fault-003",
+      "subject": "东环线工业区段",
+      "subject_type": "区段",
+      "predicate": "affectsFeeder",
+      "object": "东环线",
+      "object_type": "馈线",
+      "confidence": 1.0,
+      "matched_strict": false,
+      "matched_loose": false
+    },
+    {
+      "variant": "plain",
+      "doc_id": "fault-003",
+      "subject": "东环线工业区段",
+      "subject_type": "区段",
+      "predicate": "hasStatus",
+      "object": "停电",
+      "object_type": "状态",
+      "confidence": 1.0,
+      "matched_strict": false,
+      "matched_loose": false
+    },
+    {
+      "variant": "plain",
+      "doc_id": "fault-003",
+      "subject": "东环线工业区段",
+      "subject_type": "区段",
+      "predicate": "restoredAt",
+      "object": "3月5日11时20分",
+      "object_type": "时间",
+      "confidence": 1.0,
+      "matched_strict": false,
+      "matched_loose": true
+    },
+    {
+      "variant": "plain",
+      "doc_id": "fault-003",
+      "subject": "东环线工业区段",
+      "subject_type": "区段",
+      "predicate": "dispatchedTo",
+      "object": "抢修二班",
+      "object_type": "抢修队",
+      "confidence": 1.0,
+      "matched_strict": false,
+      "matched_loose": false
+    },
+    {
+      "variant": "plain",
+      "doc_id": "fault-003",
+      "subject": "抢修二班",
+      "subject_type": "抢修队",
+      "predicate": "crewLead",
+      "object": "张建国",
+      "object_type": "人员",
+      "confidence": 1.0,
+      "matched_strict": true,
+      "matched_loose": true
+    },
+    {
+      "variant": "plain",
+      "doc_id": "fault-003",
+      "subject": "东环线工业区段",
+      "subject_type": "区段",
+      "predicate": "inSection",
+      "object": "东环线工业区段",
+      "object_type": "区段",
+      "confidence": 1.0,
+      "matched_strict": false,
+      "matched_loose": true
+    },
+    {
+      "variant": "plain",
+      "doc_id": "fault-003",
+      "subject": "东环线工业区段",
+      "subject_type": "区段",
+      "predicate": "orderNo",
+      "object": "未提及",
+      "object_type": "工单",
+      "confidence": 0.0,
+      "matched_strict": false,
+      "matched_loose": false
+    },
+    {
+      "variant": "plain",
+      "doc_id": "fault-003",
+      "subject": "东环线工业区段",
+      "subject_type": "区段",
+      "predicate": "confirmedAt",
+      "object": "3月5日9时05分",
+      "object_type": "时间",
+      "confidence": 1.0,
+      "matched_strict": false,
+      "matched_loose": false
+    },
+    {
+      "variant": "plain",
+      "doc_id": "dispatch-001",
+      "subject": "西城线",
+      "subject_type": "馈线",
+      "predicate": "hasStatus",
+      "object": "受控",
+      "object_type": "状态",
+      "confidence": 1.0,
+      "matched_strict": true,
+      "matched_loose": true
+    },
+    {
+      "variant": "plain",
+      "doc_id": "dispatch-001",
+      "subject": "西城线",
+      "subject_type": "馈线",
+      "predicate": "affectsFeeder",
+      "object": "西城线",
+      "object_type": "馈线",
+      "confidence": 1.0,
+      "matched_strict": false,
+      "matched_loose": false
+    },
+    {
+      "variant": "plain",
+      "doc_id": "dispatch-001",
+      "subject": "纺织厂",
+      "subject_type": "用户",
+      "predicate": "dispatchedTo",
+      "object": "南郊线",
+      "object_type": "馈线",
+      "confidence": 1.0,
+      "matched_strict": false,
+      "matched_loose": false
+    },
+    {
+      "variant": "plain",
+      "doc_id": "dispatch-001",
+      "subject": "南郊线",
+      "subject_type": "馈线",
+      "predicate": "hasStatus",
+      "object": "正常",
+      "object_type": "状态",
+      "confidence": 1.0,
+      "matched_strict": true,
+      "matched_loose": true
+    },
+    {
+      "variant": "plain",
+      "doc_id": "dispatch-002",
+      "subject": "开发区线517开关",
+      "subject_type": "开关",
+      "predicate": "affectsFeeder",
+      "object": "开发区线",
+      "object_type": "馈线",
+      "confidence": 1.0,
+      "matched_strict": false,
+      "matched_loose": false
+    },
+    {
+      "variant": "plain",
+      "doc_id": "dispatch-002",
+      "subject": "开发区线工业区段",
+      "subject_type": "区段",
+      "predicate": "inSection",
+      "object": "开发区线",
+      "object_type": "馈线",
+      "confidence": 1.0,
+      "matched_strict": false,
+      "matched_loose": false
+    },
+    {
+      "variant": "plain",
+      "doc_id": "dispatch-002",
+      "subject": "开发区线",
+      "subject_type": "馈线",
+      "predicate": "hasStatus",
+      "object": "正常",
+      "object_type": "状态",
+      "confidence": 1.0,
+      "matched_strict": true,
+      "matched_loose": true
+    },
+    {
+      "variant": "plain",
+      "doc_id": "dispatch-002",
+      "subject": "停电事件",
+      "subject_type": "事件",
+      "predicate": "confirmedAt",
+      "object": "13时00分",
+      "object_type": "时间",
+      "confidence": 1.0,
+      "matched_strict": false,
+      "matched_loose": false
+    },
+    {
+      "variant": "plain",
+      "doc_id": "dispatch-003",
+      "subject": "滨河线",
+      "subject_type": "馈线",
+      "predicate": "affectsFeeder",
+      "object": "东段",
+      "object_type": "区段",
+      "confidence": 1.0,
+      "matched_strict": false,
+      "matched_loose": false
+    },
+    {
+      "variant": "plain",
+      "doc_id": "dispatch-003",
+      "subject": "滨河线",
+      "subject_type": "馈线",
+      "predicate": "restoredAt",
+      "object": "14时10分",
+      "object_type": "时间",
+      "confidence": 1.0,
+      "matched_strict": false,
+      "matched_loose": false
+    },
+    {
+      "variant": "plain",
+      "doc_id": "dispatch-003",
+      "subject": "GD-2026-0301",
+      "subject_type": "工单",
+      "predicate": "confirmedAt",
+      "object": "14时10分",
+      "object_type": "时间",
+      "confidence": 1.0,
+      "matched_strict": false,
+      "matched_loose": false
+    },
+    {
+      "variant": "plain",
+      "doc_id": "ticket-001",
+      "subject": "滨河线153开关",
+      "subject_type": "开关",
+      "predicate": "hasStatus",
+      "object": "运行",
+      "object_type": "区段",
+      "confidence": 1.0,
+      "matched_strict": true,
+      "matched_loose": true
+    },
+    {
+      "variant": "plain",
+      "doc_id": "ticket-001",
+      "subject": "滨河线153开关",
+      "subject_type": "开关",
+      "predicate": "affectsFeeder",
+      "object": "滨河线",
+      "object_type": "馈线",
+      "confidence": 1.0,
+      "matched_strict": false,
+      "matched_loose": false
+    },
+    {
+      "variant": "plain",
+      "doc_id": "ticket-001",
+      "subject": "滨河线153开关",
+      "subject_type": "开关",
+      "predicate": "dispatchedTo",
+      "object": "抢修一班",
+      "object_type": "抢修队",
+      "confidence": 1.0,
+      "matched_strict": false,
+      "matched_loose": false
+    },
+    {
+      "variant": "plain",
+      "doc_id": "ticket-001",
+      "subject": "滨河线153开关",
+      "subject_type": "开关",
+      "predicate": "crewLead",
+      "object": "李卫东",
+      "object_type": "抢修队",
+      "confidence": 1.0,
+      "matched_strict": false,
+      "matched_loose": false
+    },
+    {
+      "variant": "plain",
+      "doc_id": "ticket-001",
+      "subject": "滨河线153开关",
+      "subject_type": "开关",
+      "predicate": "orderNo",
+      "object": "P-2026-0042",
+      "object_type": "工单",
+      "confidence": 1.0,
+      "matched_strict": false,
+      "matched_loose": false
+    },
+    {
+      "variant": "plain",
+      "doc_id": "ticket-002",
+      "subject": "朝阳线312开关",
+      "subject_type": "开关",
+      "predicate": "inSection",
+      "object": "朝阳线北段",
+      "object_type": "区段",
+      "confidence": 1.0,
+      "matched_strict": false,
+      "matched_loose": false
+    },
+    {
+      "variant": "plain",
+      "doc_id": "ticket-002",
+      "subject": "朝阳线312开关",
+      "subject_type": "开关",
+      "predicate": "affectsFeeder",
+      "object": "朝阳线",
+      "object_type": "馈线",
+      "confidence": 1.0,
+      "matched_strict": false,
+      "matched_loose": false
+    },
+    {
+      "variant": "plain",
+      "doc_id": "ticket-002",
+      "subject": "朝阳线312开关",
+      "subject_type": "开关",
+      "predicate": "hasStatus",
+      "object": "热备用",
+      "object_type": "状态",
+      "confidence": 1.0,
+      "matched_strict": true,
+      "matched_loose": true
+    },
+    {
+      "variant": "plain",
+      "doc_id": "ticket-002",
+      "subject": "朝阳线312开关",
+      "subject_type": "开关",
+      "predicate": "hasStatus",
+      "object": "冷备用",
+      "object_type": "状态",
+      "confidence": 1.0,
+      "matched_strict": false,
+      "matched_loose": false
+    },
+    {
+      "variant": "plain",
+      "doc_id": "ticket-002",
+      "subject": "朝阳线312开关",
+      "subject_type": "开关",
+      "predicate": "dispatchedTo",
+      "object": "抢修三班",
+      "object_type": "抢修队",
+      "confidence": 1.0,
+      "matched_strict": false,
+      "matched_loose": false
+    },
+    {
+      "variant": "plain",
+      "doc_id": "ticket-002",
+      "subject": "朝阳线312开关",
+      "subject_type": "开关",
+      "predicate": "orderNo",
+      "object": "P-2026-0045",
+      "object_type": "工单",
+      "confidence": 1.0,
+      "matched_strict": false,
+      "matched_loose": false
+    },
+    {
+      "variant": "plain",
+      "doc_id": "ticket-002",
+      "subject": "朝阳线北段",
+      "subject_type": "区段",
+      "predicate": "confirmedAt",
+      "object": "操作前",
+      "object_type": "时间",
+      "confidence": 1.0,
+      "matched_strict": false,
+      "matched_loose": false
+    },
+    {
+      "variant": "plain",
+      "doc_id": "ticket-002",
+      "subject": "朝阳线北段",
+      "subject_type": "区段",
+      "predicate": "restoredAt",
+      "object": "操作前",
+      "object_type": "时间",
+      "confidence": 1.0,
+      "matched_strict": false,
+      "matched_loose": false
+    },
+    {
+      "variant": "plain",
+      "doc_id": "ledger-001",
+      "subject": "城东1号配变",
+      "subject_type": "配变",
+      "predicate": "inSection",
+      "object": "滨河线东段",
+      "object_type": "区段",
+      "confidence": 1.0,
+      "matched_strict": true,
+      "matched_loose": true
+    },
+    {
+      "variant": "plain",
+      "doc_id": "ledger-001",
+      "subject": "城东1号配变",
+      "subject_type": "配变",
+      "predicate": "hasStatus",
+      "object": "正常",
+      "object_type": "状态",
+      "confidence": 1.0,
+      "matched_strict": true,
+      "matched_loose": true
+    },
+    {
+      "variant": "plain",
+      "doc_id": "ledger-001",
+      "subject": "城东1号配变",
+      "subject_type": "配变",
+      "predicate": "affectsFeeder",
+      "object": "滨河线",
+      "object_type": "馈线",
+      "confidence": 1.0,
+      "matched_strict": false,
+      "matched_loose": false
+    },
+    {
+      "variant": "plain",
+      "doc_id": "ledger-001",
+      "subject": "城东1号配变",
+      "subject_type": "配变",
+      "predicate": "inSection",
+      "object": "滨河线东段",
+      "object_type": "区段",
+      "confidence": 1.0,
+      "matched_strict": false,
+      "matched_loose": false
+    },
+    {
+      "variant": "plain",
+      "doc_id": "ledger-001",
+      "subject": "城东1号配变",
+      "subject_type": "配变",
+      "predicate": "affectsFeeder",
+      "object": "滨河线",
+      "object_type": "馈线",
+      "confidence": 1.0,
+      "matched_strict": false,
+      "matched_loose": false
+    },
+    {
+      "variant": "plain",
+      "doc_id": "ledger-001",
+      "subject": "城东1号配变",
+      "subject_type": "配变",
+      "predicate": "affectsFeeder",
+      "object": "滨河线",
+      "object_type": "馈线",
+      "confidence": 1.0,
+      "matched_strict": false,
+      "matched_loose": false
+    },
+    {
+      "variant": "plain",
+      "doc_id": "ledger-001",
+      "subject": "城东1号配变",
+      "subject_type": "配变",
+      "predicate": "affectsFeeder",
+      "object": "滨河线",
+      "object_type": "馈线",
+      "confidence": 1.0,
+      "matched_strict": false,
+      "matched_loose": false
+    },
+    {
+      "variant": "plain",
+      "doc_id": "ledger-001",
+      "subject": "城东1号配变",
+      "subject_type": "配变",
+      "predicate": "affectsFeeder",
+      "object": "滨河线",
+      "object_type": "馈线",
+      "confidence": 1.0,
+      "matched_strict": false,
+      "matched_loose": false
+    },
+    {
+      "variant": "plain",
+      "doc_id": "ledger-001",
+      "subject": "城东1号配变",
+      "subject_type": "配变",
+      "predicate": "affectsFeeder",
+      "object": "滨河线",
+      "object_type": "馈线",
+      "confidence": 1.0,
+      "matched_strict": false,
+      "matched_loose": false
+    },
+    {
+      "variant": "plain",
+      "doc_id": "ledger-001",
+      "subject": "城东1号配变",
+      "subject_type": "配变",
+      "predicate": "affectsFeeder",
+      "object": "滨河线",
+      "object_type": "馈线",
+      "confidence": 1.0,
+      "matched_strict": false,
+      "matched_loose": false
+    },
+    {
+      "variant": "plain",
+      "doc_id": "ledger-002",
+      "subject": "开发区2号配变",
+      "subject_type": "配变",
+      "predicate": "rdf:type",
+      "object": "配变",
+      "object_type": "配变",
+      "confidence": 1.0,
+      "matched_strict": true,
+      "matched_loose": true
+    },
+    {
+      "variant": "plain",
+      "doc_id": "ledger-002",
+      "subject": "开发区2号配变",
+      "subject_type": "配变",
+      "predicate": "inSection",
+      "object": "工业区段",
+      "object_type": "区段",
+      "confidence": 1.0,
+      "matched_strict": false,
+      "matched_loose": true
+    },
+    {
+      "variant": "plain",
+      "doc_id": "ledger-002",
+      "subject": "开发区2号配变",
+      "subject_type": "配变",
+      "predicate": "hasStatus",
+      "object": "运行",
+      "object_type": "状态",
+      "confidence": 1.0,
+      "matched_strict": true,
+      "matched_loose": true
+    },
+    {
+      "variant": "plain",
+      "doc_id": "ledger-002",
+      "subject": "开发区2号配变",
+      "subject_type": "配变",
+      "predicate": "affectsFeeder",
+      "object": "开发区线",
+      "object_type": "馈线",
+      "confidence": 1.0,
+      "matched_strict": false,
+      "matched_loose": false
+    },
+    {
+      "variant": "plain",
+      "doc_id": "ledger-002",
+      "subject": "纺织厂",
+      "subject_type": "用户",
+      "predicate": "affectsFeeder",
+      "object": "开发区线",
+      "object_type": "馈线",
+      "confidence": 1.0,
+      "matched_strict": false,
+      "matched_loose": false
+    },
+    {
+      "variant": "plain",
+      "doc_id": "ledger-002",
+      "subject": "抢修三班",
+      "subject_type": "抢修队",
+      "predicate": "crewLead",
+      "object": "王志强",
+      "object_type": "人员",
+      "confidence": 1.0,
+      "matched_strict": true,
+      "matched_loose": true
+    },
+    {
+      "variant": "plain",
+      "doc_id": "analysis-001",
+      "subject": "滨河线",
+      "subject_type": "馈线",
+      "predicate": "affectsFeeder",
+      "object": "滨河线东段",
+      "object_type": "区段",
+      "confidence": 1.0,
+      "matched_strict": false,
+      "matched_loose": false
+    },
+    {
+      "variant": "plain",
+      "doc_id": "analysis-001",
+      "subject": "滨河线",
+      "subject_type": "馈线",
+      "predicate": "hasStatus",
+      "object": "正常",
+      "object_type": "状态",
+      "confidence": 1.0,
+      "matched_strict": true,
+      "matched_loose": true
+    },
+    {
+      "variant": "plain",
+      "doc_id": "analysis-001",
+      "subject": "人民医院",
+      "subject_type": "用户",
+      "predicate": "inSection",
+      "object": "滨河线东段",
+      "object_type": "区段",
+      "confidence": 1.0,
+      "matched_strict": true,
+      "matched_loose": true
+    },
+    {
+      "variant": "plain",
+      "doc_id": "analysis-001",
+      "subject": "滨河线",
+      "subject_type": "馈线",
+      "predicate": "dispatchedTo",
+      "object": "双回路改造",
+      "object_type": "事件",
+      "confidence": 0.7,
+      "matched_strict": false,
+      "matched_loose": false
+    },
+    {
+      "variant": "plain",
+      "doc_id": "analysis-002",
+      "subject": "朝阳线",
+      "subject_type": "馈线",
+      "predicate": "affectsFeeder",
+      "object": "GD-2026-0305",
+      "object_type": "工单",
+      "confidence": 1.0,
+      "matched_strict": false,
+      "matched_loose": false
+    },
+    {
+      "variant": "plain",
+      "doc_id": "analysis-002",
+      "subject": "GD-2026-0305",
+      "subject_type": "工单",
+      "predicate": "dispatchedTo",
+      "object": "抢修三班",
+      "object_type": "抢修队",
+      "confidence": 1.0,
+      "matched_strict": false,
+      "matched_loose": true
+    },
+    {
+      "variant": "plain",
+      "doc_id": "analysis-002",
+      "subject": "GD-2026-0305",
+      "subject_type": "工单",
+      "predicate": "confirmedAt",
+      "object": "12时30分",
+      "object_type": "时间",
+      "confidence": 1.0,
+      "matched_strict": false,
+      "matched_loose": false
+    },
+    {
+      "variant": "plain",
+      "doc_id": "analysis-002",
+      "subject": "朝阳线",
+      "subject_type": "馈线",
+      "predicate": "restoredAt",
+      "object": "12时30分",
+      "object_type": "时间",
+      "confidence": 1.0,
+      "matched_strict": true,
+      "matched_loose": true
+    },
+    {
+      "variant": "plain",
+      "doc_id": "analysis-002",
+      "subject": "朝阳线",
+      "subject_type": "馈线",
+      "predicate": "hasStatus",
+      "object": "停运",
+      "object_type": "状态",
+      "confidence": 1.0,
+      "matched_strict": false,
+      "matched_loose": true
+    },
+    {
+      "variant": "plain",
+      "doc_id": "analysis-002",
+      "subject": "朝阳线",
+      "subject_type": "馈线",
+      "predicate": "inSection",
+      "object": "朝阳线",
+      "object_type": "区段",
+      "confidence": 1.0,
+      "matched_strict": false,
+      "matched_loose": false
+    },
+    {
+      "variant": "plain",
+      "doc_id": "analysis-002",
+      "subject": "朝阳线",
+      "subject_type": "馈线",
+      "predicate": "affectsFeeder",
+      "object": "GD-2026-0305",
+      "object_type": "工单",
+      "confidence": 1.0,
+      "matched_strict": false,
+      "matched_loose": false
+    },
+    {
+      "variant": "plain",
+      "doc_id": "analysis-002",
+      "subject": "朝阳线",
+      "subject_type": "馈线",
+      "predicate": "hasStatus",
+      "object": "停运",
+      "object_type": "状态",
+      "confidence": 1.0,
+      "matched_strict": false,
+      "matched_loose": false
+    },
+    {
+      "variant": "plain",
+      "doc_id": "analysis-002",
+      "subject": "朝阳线",
+      "subject_type": "馈线",
+      "predicate": "restoredAt",
+      "object": "12时30分",
+      "object_type": "时间",
+      "confidence": 1.0,
+      "matched_strict": false,
+      "matched_loose": false
+    },
+    {
+      "variant": "plain",
+      "doc_id": "analysis-002",
+      "subject": "朝阳线",
+      "subject_type": "馈线",
+      "predicate": "affectsFeeder",
+      "object": "GD-2026-0305",
+      "object_type": "工单",
+      "confidence": 1.0,
+      "matched_strict": false,
+      "matched_loose": false
+    },
+    {
+      "variant": "nudge",
+      "doc_id": "fault-001",
+      "subject": "10kV滨河线153开关",
+      "subject_type": "开关",
+      "predicate": "affectsFeeder",
+      "object": "10kV滨河线",
+      "object_type": "馈线",
+      "confidence": 0.95,
+      "matched_strict": false,
+      "matched_loose": false
+    },
+    {
+      "variant": "nudge",
+      "doc_id": "fault-001",
+      "subject": "10kV滨河线153开关",
+      "subject_type": "开关",
+      "predicate": "hasStatus",
+      "object": "过流保护动作跳闸",
+      "object_type": "状态",
+      "confidence": 0.85,
+      "matched_strict": false,
+      "matched_loose": false
+    },
+    {
+      "variant": "nudge",
+      "doc_id": "fault-001",
+      "subject": "10kV滨河线",
+      "subject_type": "馈线",
+      "predicate": "inSection",
+      "object": "滨河线东段",
+      "object_type": "区段",
+      "confidence": 0.9,
+      "matched_strict": false,
+      "matched_loose": false
+    },
+    {
+      "variant": "nudge",
+      "doc_id": "fault-001",
+      "subject": "滨河线东段",
+      "subject_type": "区段",
+      "predicate": "affectsFeeder",
+      "object": "10kV滨河线",
+      "object_type": "馈线",
+      "confidence": 0.8,
+      "matched_strict": false,
+      "matched_loose": false
+    },
+    {
+      "variant": "nudge",
+      "doc_id": "fault-001",
+      "subject": "滨河线东段",
+      "subject_type": "区段",
+      "predicate": "affectsFeeder",
+      "object": "滨河线",
+      "object_type": "馈线",
+      "confidence": 0.7,
+      "matched_strict": false,
+      "matched_loose": false
+    },
+    {
+      "variant": "nudge",
+      "doc_id": "fault-001",
+      "subject": "滨河线东段",
+      "subject_type": "区段",
+      "predicate": "affectsFeeder",
+      "object": "滨河线东段全部用户",
+      "object_type": "用户",
+      "confidence": 0.6,
+      "matched_strict": false,
+      "matched_loose": false
+    },
+    {
+      "variant": "nudge",
+      "doc_id": "fault-001",
+      "subject": "滨河线东段",
+      "subject_type": "区段",
+      "predicate": "affectsFeeder",
+      "object": "人民医院",
+      "object_type": "用户",
+      "confidence": 0.6,
+      "matched_strict": false,
+      "matched_loose": false
+    },
+    {
+      "variant": "nudge",
+      "doc_id": "fault-001",
+      "subject": "滨河线东段",
+      "subject_type": "区段",
+      "predicate": "affectsFeeder",
+      "object": "纺织厂",
+      "object_type": "用户",
+      "confidence": 0.6,
+      "matched_strict": false,
+      "matched_loose": false
+    },
+    {
+      "variant": "nudge",
+      "doc_id": "fault-001",
+      "subject": "滨河线东段",
+      "subject_type": "区段",
+      "predicate": "affectsFeeder",
+      "object": "滨河线东段",
+      "object_type": "区段",
+      "confidence": 0.5,
+      "matched_strict": false,
+      "matched_loose": false
+    },
+    {
+      "variant": "nudge",
+      "doc_id": "fault-001",
+      "subject": "滨河线东段",
+      "subject_type": "区段",
+      "predicate": "affectsFeeder",
+      "object": "滨河线",
+      "object_type": "馈线",
+      "confidence": 0.7,
+      "matched_strict": false,
+      "matched_loose": false
+    },
+    {
+      "variant": "nudge",
+      "doc_id": "fault-002",
+      "subject": "10kV朝阳线北段312开关",
+      "subject_type": "开关",
+      "predicate": "affectsFeeder",
+      "object": "朝阳线北段",
+      "object_type": "馈线",
+      "confidence": 0.9,
+      "matched_strict": false,
+      "matched_loose": false
+    },
+    {
+      "variant": "nudge",
+      "doc_id": "fault-002",
+      "subject": "10kV朝阳线北段312开关",
+      "subject_type": "开关",
+      "predicate": "hasStatus",
+      "object": "跳闸",
+      "object_type": "状态",
+      "confidence": 0.7,
+      "matched_strict": false,
+      "matched_loose": false
+    },
+    {
+      "variant": "nudge",
+      "doc_id": "fault-002",
+      "subject": "朝阳线北段",
+      "subject_type": "馈线",
+      "predicate": "inSection",
+      "object": "朝阳线北段",
+      "object_type": "区段",
+      "confidence": 0.8,
+      "matched_strict": false,
+      "matched_loose": false
+    },
+    {
+      "variant": "nudge",
+      "doc_id": "fault-002",
+      "subject": "故障工单GD-2026-0301",
+      "subject_type": "工单",
+      "predicate": "orderNo",
+      "object": "GD-2026-0301",
+      "object_type": "工单",
+      "confidence": 1.0,
+      "matched_strict": false,
+      "matched_loose": true
+    },
+    {
+      "variant": "nudge",
+      "doc_id": "fault-002",
+      "subject": "故障工单GD-2026-0301",
+      "subject_type": "工单",
+      "predicate": "dispatchedTo",
+      "object": "朝阳线北段",
+      "object_type": "馈线",
+      "confidence": 0.8,
+      "matched_strict": false,
+      "matched_loose": false
+    },
+    {
+      "variant": "nudge",
+      "doc_id": "fault-002",
+      "subject": "抢修一班",
+      "subject_type": "抢修队",
+      "predicate": "crewLead",
+      "object": "抢修一班",
+      "object_type": "抢修队",
+      "confidence": 0.7,
+      "matched_strict": false,
+      "matched_loose": false
+    },
+    {
+      "variant": "nudge",
+      "doc_id": "fault-002",
+      "subject": "朝阳线北段",
+      "subject_type": "馈线",
+      "predicate": "affectsFeeder",
+      "object": "朝阳线北段",
+      "object_type": "馈线",
+      "confidence": 0.6,
+      "matched_strict": false,
+      "matched_loose": false
+    },
+    {
+      "variant": "nudge",
+      "doc_id": "fault-003",
+      "subject": "东环线工业区段",
+      "subject_type": "区段",
+      "predicate": "inSection",
+      "object": "978开关",
+      "object_type": "开关",
+      "confidence": 0.8,
+      "matched_strict": false,
+      "matched_loose": false
+    },
+    {
+      "variant": "nudge",
+      "doc_id": "fault-003",
+      "subject": "978开关",
+      "subject_type": "开关",
+      "predicate": "affectsFeeder",
+      "object": "东环线",
+      "object_type": "馈线",
+      "confidence": 0.7,
+      "matched_strict": false,
+      "matched_loose": false
+    },
+    {
+      "variant": "nudge",
+      "doc_id": "fault-003",
+      "subject": "东环线工业区段",
+      "subject_type": "区段",
+      "predicate": "hasStatus",
+      "object": "停电",
+      "object_type": "状态",
+      "confidence": 0.6,
+      "matched_strict": false,
+      "matched_loose": false
+    },
+    {
+      "variant": "nudge",
+      "doc_id": "fault-003",
+      "subject": "东环线工业区段",
+      "subject_type": "区段",
+      "predicate": "restoredAt",
+      "object": "3月5日11时20分",
+      "object_type": "时间",
+      "confidence": 0.9,
+      "matched_strict": false,
+      "matched_loose": true
+    },
+    {
+      "variant": "nudge",
+      "doc_id": "fault-003",
+      "subject": "东环线工业区段",
+      "subject_type": "区段",
+      "predicate": "dispatchedTo",
+      "object": "抢修二班",
+      "object_type": "抢修队",
+      "confidence": 0.7,
+      "matched_strict": false,
+      "matched_loose": false
+    },
+    {
+      "variant": "nudge",
+      "doc_id": "fault-003",
+      "subject": "抢修二班",
+      "subject_type": "抢修队",
+      "predicate": "crewLead",
+      "object": "张建国",
+      "object_type": "人员",
+      "confidence": 0.8,
+      "matched_strict": true,
+      "matched_loose": true
+    },
+    {
+      "variant": "nudge",
+      "doc_id": "dispatch-001",
+      "subject": "西城线",
+      "subject_type": "馈线",
+      "predicate": "hasStatus",
+      "object": "受控",
+      "object_type": "状态",
+      "confidence": 0.9,
+      "matched_strict": true,
+      "matched_loose": true
+    },
+    {
+      "variant": "nudge",
+      "doc_id": "dispatch-001",
+      "subject": "西城线",
+      "subject_type": "馈线",
+      "predicate": "affectsFeeder",
+      "object": "西城线",
+      "object_type": "馈线",
+      "confidence": 0.7,
+      "matched_strict": false,
+      "matched_loose": false
+    },
+    {
+      "variant": "nudge",
+      "doc_id": "dispatch-001",
+      "subject": "纺织厂",
+      "subject_type": "用户",
+      "predicate": "dispatchedTo",
+      "object": "南郊线",
+      "object_type": "馈线",
+      "confidence": 0.8,
+      "matched_strict": false,
+      "matched_loose": false
+    },
+    {
+      "variant": "nudge",
+      "doc_id": "dispatch-001",
+      "subject": "南郊线",
+      "subject_type": "馈线",
+      "predicate": "hasStatus",
+      "object": "正常",
+      "object_type": "状态",
+      "confidence": 0.9,
+      "matched_strict": true,
+      "matched_loose": true
+    },
+    {
+      "variant": "nudge",
+      "doc_id": "dispatch-001",
+      "subject": "南郊线",
+      "subject_type": "馈线",
+      "predicate": "affectsFeeder",
+      "object": "南郊线",
+      "object_type": "馈线",
+      "confidence": 0.7,
+      "matched_strict": false,
+      "matched_loose": false
+    },
+    {
+      "variant": "nudge",
+      "doc_id": "dispatch-002",
+      "subject": "开发区线517开关",
+      "subject_type": "开关",
+      "predicate": "affectsFeeder",
+      "object": "开发区线",
+      "object_type": "馈线",
+      "confidence": 0.8,
+      "matched_strict": false,
+      "matched_loose": false
+    },
+    {
+      "variant": "nudge",
+      "doc_id": "dispatch-002",
+      "subject": "开发区线工业区段",
+      "subject_type": "区段",
+      "predicate": "inSection",
+      "object": "开发区线",
+      "object_type": "馈线",
+      "confidence": 0.7,
+      "matched_strict": false,
+      "matched_loose": false
+    },
+    {
+      "variant": "nudge",
+      "doc_id": "dispatch-002",
+      "subject": "开发区线",
+      "subject_type": "馈线",
+      "predicate": "hasStatus",
+      "object": "正常",
+      "object_type": "状态",
+      "confidence": 0.6,
+      "matched_strict": true,
+      "matched_loose": true
+    },
+    {
+      "variant": "nudge",
+      "doc_id": "dispatch-002",
+      "subject": "开发区线",
+      "subject_type": "馈线",
+      "predicate": "restoredAt",
+      "object": "13时00分",
+      "object_type": "时间",
+      "confidence": 0.7,
+      "matched_strict": false,
+      "matched_loose": false
+    },
+    {
+      "variant": "nudge",
+      "doc_id": "dispatch-002",
+      "subject": "开发区线",
+      "subject_type": "馈线",
+      "predicate": "confirmedAt",
+      "object": "13时00分",
+      "object_type": "时间",
+      "confidence": 0.6,
+      "matched_strict": false,
+      "matched_loose": true
+    },
+    {
+      "variant": "nudge",
+      "doc_id": "dispatch-003",
+      "subject": "滨河线",
+      "subject_type": "馈线",
+      "predicate": "affectsFeeder",
+      "object": "东段",
+      "object_type": "区段",
+      "confidence": 0.8,
+      "matched_strict": false,
+      "matched_loose": false
+    },
+    {
+      "variant": "nudge",
+      "doc_id": "dispatch-003",
+      "subject": "滨河线",
+      "subject_type": "馈线",
+      "predicate": "hasStatus",
+      "object": "恢复正常",
+      "object_type": "状态",
+      "confidence": 0.7,
+      "matched_strict": false,
+      "matched_loose": true
+    },
+    {
+      "variant": "nudge",
+      "doc_id": "dispatch-003",
+      "subject": "GD-2026-0301",
+      "subject_type": "工单",
+      "predicate": "orderNo",
+      "object": "GD-2026-0301",
+      "object_type": "工单",
+      "confidence": 1.0,
+      "matched_strict": false,
+      "matched_loose": false
+    },
+    {
+      "variant": "nudge",
+      "doc_id": "dispatch-003",
+      "subject": "GD-2026-0301",
+      "subject_type": "工单",
+      "predicate": "confirmedAt",
+      "object": "14时10分",
+      "object_type": "时间",
+      "confidence": 0.9,
+      "matched_strict": false,
+      "matched_loose": false
+    },
+    {
+      "variant": "nudge",
+      "doc_id": "dispatch-003",
+      "subject": "滨河线",
+      "subject_type": "馈线",
+      "predicate": "restoredAt",
+      "object": "14时10分",
+      "object_type": "时间",
+      "confidence": 0.7,
+      "matched_strict": false,
+      "matched_loose": false
+    },
+    {
+      "variant": "nudge",
+      "doc_id": "ticket-001",
+      "subject": "滨河线153开关",
+      "subject_type": "开关",
+      "predicate": "hasStatus",
+      "object": "运行",
+      "object_type": "区段",
+      "confidence": 0.7,
+      "matched_strict": true,
+      "matched_loose": true
+    },
+    {
+      "variant": "nudge",
+      "doc_id": "ticket-001",
+      "subject": "滨河线153开关",
+      "subject_type": "开关",
+      "predicate": "affectsFeeder",
+      "object": "滨河线",
+      "object_type": "馈线",
+      "confidence": 0.8,
+      "matched_strict": false,
+      "matched_loose": false
+    },
+    {
+      "variant": "nudge",
+      "doc_id": "ticket-001",
+      "subject": "滨河线153开关",
+      "subject_type": "开关",
+      "predicate": "dispatchedTo",
+      "object": "抢修一班",
+      "object_type": "抢修队",
+      "confidence": 0.9,
+      "matched_strict": false,
+      "matched_loose": false
+    },
+    {
+      "variant": "nudge",
+      "doc_id": "ticket-001",
+      "subject": "滨河线153开关",
+      "subject_type": "开关",
+      "predicate": "crewLead",
+      "object": "李卫东",
+      "object_type": "抢修队",
+      "confidence": 0.8,
+      "matched_strict": false,
+      "matched_loose": false
+    },
+    {
+      "variant": "nudge",
+      "doc_id": "ticket-002",
+      "subject": "朝阳线312开关",
+      "subject_type": "开关",
+      "predicate": "inSection",
+      "object": "朝阳线北段",
+      "object_type": "区段",
+      "confidence": 0.9,
+      "matched_strict": false,
+      "matched_loose": false
+    },
+    {
+      "variant": "nudge",
+      "doc_id": "ticket-002",
+      "subject": "朝阳线312开关",
+      "subject_type": "开关",
+      "predicate": "affectsFeeder",
+      "object": "朝阳线",
+      "object_type": "馈线",
+      "confidence": 0.8,
+      "matched_strict": false,
+      "matched_loose": false
+    },
+    {
+      "variant": "nudge",
+      "doc_id": "ticket-002",
+      "subject": "朝阳线312开关",
+      "subject_type": "开关",
+      "predicate": "dispatchedTo",
+      "object": "抢修三班",
+      "object_type": "抢修队",
+      "confidence": 0.7,
+      "matched_strict": false,
+      "matched_loose": false
+    },
+    {
+      "variant": "nudge",
+      "doc_id": "ticket-002",
+      "subject": "朝阳线312开关",
+      "subject_type": "开关",
+      "predicate": "hasStatus",
+      "object": "热备用",
+      "object_type": "区段",
+      "confidence": 0.6,
+      "matched_strict": true,
+      "matched_loose": true
+    },
+    {
+      "variant": "nudge",
+      "doc_id": "ticket-002",
+      "subject": "朝阳线312开关",
+      "subject_type": "开关",
+      "predicate": "hasStatus",
+      "object": "冷备用",
+      "object_type": "区段",
+      "confidence": 0.6,
+      "matched_strict": false,
+      "matched_loose": false
+    },
+    {
+      "variant": "nudge",
+      "doc_id": "ticket-002",
+      "subject": "朝阳线北段",
+      "subject_type": "区段",
+      "predicate": "inSection",
+      "object": "朝阳线",
+      "object_type": "馈线",
+      "confidence": 0.8,
+      "matched_strict": false,
+      "matched_loose": false
+    },
+    {
+      "variant": "nudge",
+      "doc_id": "ledger-001",
+      "subject": "城东1号配变",
+      "subject_type": "配变",
+      "predicate": "rdf:type",
+      "object": "配变",
+      "object_type": "配变",
+      "confidence": 1.0,
+      "matched_strict": true,
+      "matched_loose": true
+    },
+    {
+      "variant": "nudge",
+      "doc_id": "ledger-001",
+      "subject": "城东1号配变",
+      "subject_type": "配变",
+      "predicate": "inSection",
+      "object": "滨河线东段",
+      "object_type": "区段",
+      "confidence": 0.8,
+      "matched_strict": true,
+      "matched_loose": true
+    },
+    {
+      "variant": "nudge",
+      "doc_id": "ledger-001",
+      "subject": "城东1号配变",
+      "subject_type": "配变",
+      "predicate": "hasStatus",
+      "object": "正常",
+      "object_type": "状态",
+      "confidence": 1.0,
+      "matched_strict": true,
+      "matched_loose": true
+    },
+    {
+      "variant": "nudge",
+      "doc_id": "ledger-001",
+      "subject": "城东1号配变",
+      "subject_type": "配变",
+      "predicate": "affectsFeeder",
+      "object": "滨河线",
+      "object_type": "馈线",
+      "confidence": 0.7,
+      "matched_strict": false,
+      "matched_loose": false
+    },
+    {
+      "variant": "nudge",
+      "doc_id": "ledger-001",
+      "subject": "城东1号配变",
+      "subject_type": "配变",
+      "predicate": "restoredAt",
+      "object": "3月15日",
+      "object_type": "时间",
+      "confidence": 0.6,
+      "matched_strict": false,
+      "matched_loose": false
+    },
+    {
+      "variant": "nudge",
+      "doc_id": "ledger-001",
+      "subject": "城东1号配变",
+      "subject_type": "配变",
+      "predicate": "dispatchedTo",
+      "object": "实验中学",
+      "object_type": "用户",
+      "confidence": 0.9,
+      "matched_strict": false,
+      "matched_loose": false
+    },
+    {
+      "variant": "nudge",
+      "doc_id": "ledger-002",
+      "subject": "开发区2号配变",
+      "subject_type": "配变",
+      "predicate": "rdf:type",
+      "object": "配变",
+      "object_type": "配变",
+      "confidence": 1.0,
+      "matched_strict": true,
+      "matched_loose": true
+    },
+    {
+      "variant": "nudge",
+      "doc_id": "ledger-002",
+      "subject": "开发区2号配变",
+      "subject_type": "配变",
+      "predicate": "inSection",
+      "object": "工业区段",
+      "object_type": "区段",
+      "confidence": 0.8,
+      "matched_strict": false,
+      "matched_loose": true
+    },
+    {
+      "variant": "nudge",
+      "doc_id": "ledger-002",
+      "subject": "开发区2号配变",
+      "subject_type": "配变",
+      "predicate": "hasStatus",
+      "object": "运行",
+      "object_type": "状态",
+      "confidence": 1.0,
+      "matched_strict": true,
+      "matched_loose": true
+    },
+    {
+      "variant": "nudge",
+      "doc_id": "ledger-002",
+      "subject": "开发区2号配变",
+      "subject_type": "配变",
+      "predicate": "affectsFeeder",
+      "object": "开发区线",
+      "object_type": "馈线",
+      "confidence": 0.7,
+      "matched_strict": false,
+      "matched_loose": false
+    },
+    {
+      "variant": "nudge",
+      "doc_id": "ledger-002",
+      "subject": "开发区2配变",
+      "subject_type": "配变",
+      "predicate": "affectsFeeder",
+      "object": "开发区线",
+      "object_type": "馈线",
+      "confidence": 0.5,
+      "matched_strict": false,
+      "matched_loose": false
+    },
+    {
+      "variant": "nudge",
+      "doc_id": "ledger-002",
+      "subject": "纺织厂",
+      "subject_type": "用户",
+      "predicate": "affectsFeeder",
+      "object": "开发区线",
+      "object_type": "馈线",
+      "confidence": 0.6,
+      "matched_strict": false,
+      "matched_loose": false
+    },
+    {
+      "variant": "nudge",
+      "doc_id": "ledger-002",
+      "subject": "王志强",
+      "subject_type": "抢修队",
+      "predicate": "crewLead",
+      "object": "抢修三班",
+      "object_type": "抢修队",
+      "confidence": 0.7,
+      "matched_strict": false,
+      "matched_loose": false
+    },
+    {
+      "variant": "nudge",
+      "doc_id": "analysis-001",
+      "subject": "滨河线",
+      "subject_type": "馈线",
+      "predicate": "affectsFeeder",
+      "object": "滨河线东段",
+      "object_type": "区段",
+      "confidence": 0.8,
+      "matched_strict": false,
+      "matched_loose": false
+    },
+    {
+      "variant": "nudge",
+      "doc_id": "analysis-001",
+      "subject": "滨河线",
+      "subject_type": "馈线",
+      "predicate": "hasStatus",
+      "object": "正常",
+      "object_type": "状态",
+      "confidence": 0.7,
+      "matched_strict": true,
+      "matched_loose": false
+    },
+    {
+      "variant": "nudge",
+      "doc_id": "analysis-001",
+      "subject": "人民医院",
+      "subject_type": "用户",
+      "predicate": "inSection",
+      "object": "滨河线东段",
+      "object_type": "区段",
+      "confidence": 0.9,
+      "matched_strict": true,
+      "matched_loose": true
+    },
+    {
+      "variant": "nudge",
+      "doc_id": "analysis-001",
+      "subject": "滨河线",
+      "subject_type": "馈线",
+      "predicate": "dispatchedTo",
+      "object": "双回路改造",
+      "object_type": "事件",
+      "confidence": 0.6,
+      "matched_strict": false,
+      "matched_loose": false
+    },
+    {
+      "variant": "nudge",
+      "doc_id": "analysis-002",
+      "subject": "朝阳线",
+      "subject_type": "馈线",
+      "predicate": "affectsFeeder",
+      "object": "朝阳线",
+      "object_type": "馈线",
+      "confidence": 1.0,
+      "matched_strict": false,
+      "matched_loose": false
+    },
+    {
+      "variant": "nudge",
+      "doc_id": "analysis-002",
+      "subject": "朝阳线",
+      "subject_type": "馈线",
+      "predicate": "hasStatus",
+      "object": "停运",
+      "object_type": "状态",
+      "confidence": 0.7,
+      "matched_strict": false,
+      "matched_loose": true
+    },
+    {
+      "variant": "nudge",
+      "doc_id": "analysis-002",
+      "subject": "朝阳线",
+      "subject_type": "馈线",
+      "predicate": "restoredAt",
+      "object": "12时30分",
+      "object_type": "时间",
+      "confidence": 0.8,
+      "matched_strict": true,
+      "matched_loose": true
+    },
+    {
+      "variant": "nudge",
+      "doc_id": "analysis-002",
+      "subject": "GD-2026-0305",
+      "subject_type": "工单",
+      "predicate": "dispatchedTo",
+      "object": "抢修三班",
+      "object_type": "抢修队",
+      "confidence": 1.0,
+      "matched_strict": false,
+      "matched_loose": true
+    },
+    {
+      "variant": "nudge",
+      "doc_id": "analysis-002",
+      "subject": "GD-2026-0305",
+      "subject_type": "工单",
+      "predicate": "orderNo",
+      "object": "GD-2026-0305",
+      "object_type": "工单",
+      "confidence": 1.0,
+      "matched_strict": false,
+      "matched_loose": false
+    },
+    {
+      "variant": "nudge",
+      "doc_id": "analysis-002",
+      "subject": "朝阳线",
+      "subject_type": "馈线",
+      "predicate": "confirmedAt",
+      "object": "3月16日",
+      "object_type": "时间",
+      "confidence": 0.9,
+      "matched_strict": false,
+      "matched_loose": false
+    },
+    {
+      "variant": "nudge",
+      "doc_id": "analysis-002",
+      "subject": "朝阳线",
+      "subject_type": "馈线",
+      "predicate": "inSection",
+      "object": "朝阳线",
+      "object_type": "馈线",
+      "confidence": 0.6,
+      "matched_strict": false,
+      "matched_loose": false
+    }
+  ]
+}

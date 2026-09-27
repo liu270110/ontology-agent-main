@@ -24,6 +24,8 @@ interface OaDesktopAppInfo {
 interface OaDesktopBridge {
   appInfo(): Promise<OaDesktopAppInfo>
   setWindowTitle(title: string): Promise<boolean>
+  /** 打开/聚焦管理控制台独立窗口（双区 IA；Web 环境无此能力，调用方需降级为路由跳转） */
+  openConsole(): Promise<boolean>
 }
 
 interface Window {

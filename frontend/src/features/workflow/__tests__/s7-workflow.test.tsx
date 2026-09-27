@@ -190,7 +190,7 @@ describe('S7 工作流域', () => {
     fireEvent.click(screen.getByTestId('wf-publish-go'))
     await waitFor(() => expect(publishes).toHaveLength(1))
     expect(publishes[0].note).toContain('断点 BP-1')
-    await waitFor(() => expect(window.location.pathname).toBe('/approvals'), { timeout: 8000 })
+    await waitFor(() => expect(window.location.pathname).toBe('/console/approvals'), { timeout: 8000 }) // 双区 IA：旧 /approvals 已 redirect
     expect(window.location.search).toContain('ref=apr-wfp-0926')
     // 审批中心页面就绪（治理域 S6 既有页）
     expect(await screen.findByTestId('apr-card-CR-031', {}, { timeout: 10_000 })).toBeInTheDocument()

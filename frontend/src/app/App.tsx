@@ -1,13 +1,14 @@
 import { Suspense, lazy } from 'react'
-import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
+import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { Toaster } from 'sonner'
 import { AppShell } from './AppShell'
+import { ConsoleShell, ConsoleIndex } from './ConsoleShell'
 import { RequireAuth } from './RequireAuth'
 import { RouteGuard } from './RouteGuard'
 import { ErrorBoundary } from './ErrorBoundary'
 import { ThemeProvider } from './providers/theme-provider'
-import { ROUTES } from './routes'
+import { CONSOLE_ROUTES, MAIN_ROUTES, type RouteMeta } from './routes'
 import { PlaceholderPage } from './PlaceholderPage'
 import { LoginPage } from '@/features/auth/pages/LoginPage'
 
@@ -39,9 +40,10 @@ const AdminPage = lazy(() => import('@/features/admin/pages/AdminPage').then(m =
 const TasksPage = lazy(() => import('@/features/tasks/pages/TasksPage').then(m => ({ default: m.TasksPage })))
 const SettingsPage = lazy(() => import('@/features/settings/pages/SettingsPage').then(m => ({ default: m.SettingsPage })))
 
-/** 已挂实页的路由（M1 起增量）；其余 ROUTES 元数据路由渲染壳内占位页（30 篇 §2 切片表）。 */
+/** 已挂实页的路由（M1 起增量）；其余路由元数据渲染壳内占位页（30 篇 §2 切片表）。
+ *  双区 IA：管理页宿主路径改挂 /console/*（ConsoleShell），旧路径由 LEGACY_REDIRECTS 保书签。 */
 const PAGES: Record<string, React.ReactNode> = {
-  '/': <DashboardPage />,
+  '/': <DashboardPage />, // 主页启动台（双区 IA，2026-09-28 裁决）
   '/chat': <ChatPage />,
   '/chat/new': <ChatPage />, // IX-EX-01 去对话深链（?entity= 携带实体上下文）
   '/chat/group/:sessionId': <GroupChatPage />, // S7 协作域：Agent 群聊（IX-GRP-01~05）
@@ -58,19 +60,35 @@ const PAGES: Record<string, React.ReactNode> = {
   '/memory': <MemoryPage />, // S5 平台域：记忆管理（IX-MEM-01~03）
   '/agents': <AgentListPage />, // S5 平台域：Agent 卡片列表（IX-AGT-01/04）
   '/agents/:agentId': <AgentDetailPage />, // S5 平台域：Agent 详情四 Tab（IX-AGT-02/03）
-  '/marketplace': <MarketPage />, // S5 扩展中心：插件市场（IX-MKT-01~03）
-  '/tools': <ToolsPage />, // S5 扩展中心：工具与技能（IX-TLS-01~03）
-  '/mcp': <McpPage />, // S5 扩展中心：MCP 管理（IX-MCP-01~03）
-  '/approvals': <ApprovalListPage />, // S6 治理域：审批中心（IX-APR-01~02）
-  '/admin': <AdminPage />, // S6 治理域：系统管理五 Tab（IX-ADM-01~09）
+  '/console/market': <MarketPage />, // S5 扩展中心：插件市场（IX-MKT-01~03）
+  '/console/tools': <ToolsPage />, // S5 扩展中心：工具与技能（IX-TLS-01~03）
+  '/console/mcp': <McpPage />, // S5 扩展中心：MCP 管理（IX-MCP-01~03）
+  '/console/approvals': <ApprovalListPage />, // S6 治理域：审批中心（IX-APR-01~02）
+  '/console/admin': <AdminPage />, // S6 治理域：系统管理五 Tab（IX-ADM-01~09）
   '/tasks': <TasksPage />, // S6 治理域：任务中心（IX-TSK-01~04）
   '/settings': <SettingsPage />, // S6 治理域：个人设置（IX-SET-01~04）
-  '/system': <Navigate to="/admin" replace />, // 26 篇宿主路径定稿 /admin：旧路径别名重定向
+}
+
+/** 旧管理路径 → /console/*（双区 IA 保书签；查询串透传，/admin?tab=audit 类深链不丢） */
+const LEGACY_REDIRECTS: Array<[from: string, to: string]> = [
+  ['/approvals', '/console/approvals'],
+  ['/admin', '/console/admin'],
+  ['/mcp', '/console/mcp'],
+  ['/marketplace', '/console/market'],
+  ['/tools', '/console/tools'],
+  ['/system', '/console/admin'], // 26 篇宿主路径定稿 /admin：S1 深链守卫旧别名
+]
+
+/** 旧路径重定向（查询串透传）。包 RequireAuth：匿名深链 /system 仍以原路径进 ?next=（S1 用例）。 */
+function LegacyRedirect({ to }: { to: string }) {
+  const search = useLocation().search
+  return <Navigate to={`${to}${search}`} replace />
 }
 
 /** 应用根：Provider 装配 + 路由（路由元数据见 routes.tsx）。
  *  层序：ErrorBoundary 兜底 → ThemeProvider（html .dark 切换，30 篇 §3-3）→ Query → Router。
- *  受护路由：RequireAuth（认证）→ AppShell → RouteGuard（meta.roles/meta.permission → 403 占位）。 */
+ *  受护路由：RequireAuth（认证）→ AppShell / ConsoleShell → RouteGuard（meta.roles/meta.permission → 403）。
+ *  双区 IA：/console 嵌套布局路由（ConsoleShell）挂管理页；旧管理路径 LegacyRedirect 保书签。 */
 export function App() {
   return (
     <ErrorBoundary>
@@ -87,7 +105,7 @@ export function App() {
                   </RequireAuth>
                 }
               >
-                {ROUTES.map(meta => (
+                {MAIN_ROUTES.map(meta => (
                   <Route
                     key={meta.path}
                     path={meta.path}
@@ -97,6 +115,37 @@ export function App() {
                   />
                 ))}
               </Route>
+              {/* 管理控制台区：独立布局独立导航（双区 IA，2026-09-28 裁决） */}
+              <Route path="/console" element={<RequireAuth><ConsoleShell /></RequireAuth>}>
+                <Route
+                  index
+                  element={
+                    <RouteGuard meta={CONSOLE_INDEX_META}>
+                      <ConsoleIndex />
+                    </RouteGuard>
+                  }
+                />
+                {CONSOLE_ROUTES.map(meta => (
+                  <Route
+                    key={meta.path}
+                    path={meta.path.replace('/console/', '')}
+                    element={
+                      <RouteGuard meta={meta}>{PAGES[meta.path] ?? <PlaceholderPage meta={meta} />}</RouteGuard>
+                    }
+                  />
+                ))}
+              </Route>
+              {LEGACY_REDIRECTS.map(([from, to]) => (
+                <Route
+                  key={from}
+                  path={from}
+                  element={
+                    <RequireAuth>
+                      <LegacyRedirect to={to} />
+                    </RequireAuth>
+                  }
+                />
+              ))}
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
       </Suspense>
@@ -108,3 +157,6 @@ export function App() {
     </ErrorBoundary>
   )
 }
+
+/** /console 首页守卫元数据（无角色/scope 限制；分区卡片按当前用户可见性过滤） */
+const CONSOLE_INDEX_META: RouteMeta = { path: '/console', title: '管理控制台', icon: 'gear', group: '治理' }

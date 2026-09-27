@@ -206,7 +206,7 @@ export function WorkbenchPage() {
     resetDirty()
     toast.success('已提交评审', { description: '审批中心已出现卡片；工作台转只读锁定态' })
     setSubmitOpen(false)
-    navigate('/approvals')
+    navigate('/console/approvals')
   }
 
   // ---- 版本下拉 ----

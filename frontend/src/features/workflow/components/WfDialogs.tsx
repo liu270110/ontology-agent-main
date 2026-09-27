@@ -264,7 +264,7 @@ export function PublishDialog({
         toast.success('已转审批中心 workflow_publish 工单（team 档）· 审批通过后版本 +1')
         onClose()
         onPublished()
-        navigate(`/approvals?ref=${r.approval_id ?? ''}`)
+        navigate(`/console/approvals?ref=${r.approval_id ?? ''}`)
       } else {
         toast.success(`发布完成 · 版本 +1（${r.next_version ?? ''}）`)
         onClose()

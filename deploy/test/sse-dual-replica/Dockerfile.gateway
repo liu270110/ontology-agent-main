@@ -1,0 +1,23 @@
+# deploy/test/sse-dual-replica/Dockerfile.gateway — 双副本 SSE 压测专用网关镜像（批次 B-①）。
+# 仓库尚无正式网关 Dockerfile（deploy/README 规划中的 gateway 服务未落 compose），
+# 本镜像仅为压测资产：构建上下文=仓库根，依赖唯一事实源 requirements.txt（pyproject 薄导出）。
+# 构建由 docker-compose.sse-dual.yml 的 build 段触发，不手工 docker build。
+FROM python:3.11-slim
+
+ENV PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
+
+WORKDIR /app
+
+# 先装依赖再拷源码：requirements 未变时源码改动不击穿依赖层缓存
+COPY requirements.txt ./
+RUN pip install -r requirements.txt
+
+COPY alembic.ini ./
+COPY services ./services
+
+EXPOSE 8000
+
+# 应用工厂入口（services/gateway/app.py 模块 docstring 同款；生产挂载另有入口层 services/main）
+CMD ["uvicorn", "services.gateway.app:create_app", "--factory", "--host", "0.0.0.0", "--port", "8000"]

@@ -1,0 +1,90 @@
+# deploy/test/sse-dual-replica/docker-compose.sse-dual.yml
+# 批次 B-① 双副本 SSE 压测 compose override（评审-2026-09-28-M0-M3阶段验收审核 §4 批次 B）。
+#
+# 用法（仓库根目录执行；base=lite 档三存储 + 本 override 追加两个网关副本）：
+#   docker compose -f deploy/docker-compose.yml -f deploy/test/sse-dual-replica/docker-compose.sse-dual.yml up -d
+#   # 首次需先构建网关镜像：
+#   docker compose -f deploy/docker-compose.yml -f deploy/test/sse-dual-replica/docker-compose.sse-dual.yml build
+#
+# 拓扑（api/02 §5 多副本语义的实测形态）：
+#   gateway-a :8364 ─┐
+#                    ├─ 共享同一 Redis（SSE Stream）/ PG（会话与事件权威）── 网关无状态
+#   gateway-b :8365 ─┘
+#   - 两副本同 env 同镜像同网段（compose 默认网络 onto-agent_default），无会话粘性——
+#     任意副本可服务任意会话的重连与订阅（02 §5 推论），这正是压测要证明的性质；
+#   - 端口错开 8364/8365（容器内同为 8000），供脚本按副本定向收发；
+#   - OA_JWT_SECRET 两副本同源：A 签发的令牌 B 可验（安全面 §6）；
+#   - 不配 OA_LLM_*：无模型渠道时对话流走 RUN_ERROR(5002) 收敛——主干波事件照常
+#     经 hub 发布（RUN_STARTED/RETRIEVAL_EVIDENCE/RUN_ERROR ≥3 条/轮），压测不依赖外部 LLM。
+#
+# 前置：PG 须已迁移到 head（见同目录 README.md「前置条件」；一次性迁移可用本镜像跑 alembic）。
+# 清理：docker compose -f <同上两文件> down   # 三存储卷保留；加 -v 连卷删。
+
+name: onto-agent  # 与 base 同项目：三存储复用同一组卷与默认网络
+
+services:
+  gateway-a:
+    build:
+      context: ..  # 仓库根（COPY requirements.txt / alembic.ini / services）
+      dockerfile: deploy/test/sse-dual-replica/Dockerfile.gateway
+    image: onto-agent-gateway:sse-dual
+    environment:
+      OA_DEPLOY_PROFILE: lite
+      OA_PG_HOST: postgres
+      OA_PG_PORT: "5432"
+      OA_PG_USER: ${OA_PG_USER:-onto}
+      OA_PG_PASSWORD: ${OA_PG_PASSWORD:-onto_dev}
+      OA_PG_DB: ${OA_PG_DB:-onto}
+      OA_REDIS_URL: redis://redis:6379/0      # 跨副本 SSE Stream 共享面（redis_hub）
+      OA_MINIO_ENDPOINT: minio:9000
+      OA_MINIO_USER: ${OA_MINIO_USER:-onto}
+      OA_MINIO_PASSWORD: ${OA_MINIO_PASSWORD:-onto_dev}
+      OA_JWT_SECRET: ${OA_JWT_SECRET:-dev-only-change-me}
+      OA_SSE_HEARTBEAT_SECONDS: ${OA_SSE_HEARTBEAT_SECONDS:-15}  # 02 §5 建议值，压测后冻结
+    ports:
+      - "8364:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request as u; u.urlopen('http://127.0.0.1:8000/api/v1/healthz', timeout=3)"]
+      interval: 5s
+      timeout: 5s
+      retries: 24
+      start_period: 10s
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  gateway-b:
+    image: onto-agent-gateway:sse-dual
+    build:
+      context: ..
+      dockerfile: deploy/test/sse-dual-replica/Dockerfile.gateway
+    environment:
+      OA_DEPLOY_PROFILE: lite
+      OA_PG_HOST: postgres
+      OA_PG_PORT: "5432"
+      OA_PG_USER: ${OA_PG_USER:-onto}
+      OA_PG_PASSWORD: ${OA_PG_PASSWORD:-onto_dev}
+      OA_PG_DB: ${OA_PG_DB:-onto}
+      OA_REDIS_URL: redis://redis:6379/0
+      OA_MINIO_ENDPOINT: minio:9000
+      OA_MINIO_USER: ${OA_MINIO_USER:-onto}
+      OA_MINIO_PASSWORD: ${OA_MINIO_PASSWORD:-onto_dev}
+      OA_JWT_SECRET: ${OA_JWT_SECRET:-dev-only-change-me}
+      OA_SSE_HEARTBEAT_SECONDS: ${OA_SSE_HEARTBEAT_SECONDS:-15}
+    ports:
+      - "8365:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request as u; u.urlopen('http://127.0.0.1:8000/api/v1/healthz', timeout=3)"]
+      interval: 5s
+      timeout: 5s
+      retries: 24
+      start_period: 10s
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped

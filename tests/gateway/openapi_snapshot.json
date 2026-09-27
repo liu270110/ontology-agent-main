@@ -4424,6 +4424,172 @@
         "title": "ReviewCandidatePageOut",
         "type": "object"
       },
+      "ReviewQueueBatchDecideIn": {
+        "additionalProperties": false,
+        "description": "全组批量裁决请求（OntRAG §7 批量审核交互）：decision 映射 kb_facts.status。",
+        "properties": {
+          "comment": {
+            "anyOf": [
+              {
+                "maxLength": 512,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Comment"
+          },
+          "decision": {
+            "enum": [
+              "authoritative",
+              "rejected"
+            ],
+            "title": "Decision",
+            "type": "string"
+          },
+          "subject": {
+            "maxLength": 1024,
+            "minLength": 1,
+            "title": "Subject",
+            "type": "string"
+          }
+        },
+        "required": [
+          "subject",
+          "decision"
+        ],
+        "title": "ReviewQueueBatchDecideIn",
+        "type": "object"
+      },
+      "ReviewQueueBatchDecideOut": {
+        "additionalProperties": false,
+        "description": "全组裁决结果：decided=裁决行数；trail_recorded=其中落到 open 单留痕的行数\n（行内审计恒写不计入——无单行也有痕，见 business/review_queue 复用结论）。",
+        "properties": {
+          "decided": {
+            "title": "Decided",
+            "type": "integer"
+          },
+          "decision": {
+            "title": "Decision",
+            "type": "string"
+          },
+          "subject": {
+            "title": "Subject",
+            "type": "string"
+          },
+          "trail_recorded": {
+            "title": "Trail Recorded",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "subject",
+          "decision",
+          "decided",
+          "trail_recorded"
+        ],
+        "title": "ReviewQueueBatchDecideOut",
+        "type": "object"
+      },
+      "ReviewQueueGroupOut": {
+        "additionalProperties": false,
+        "description": "一个 subject/主题聚合组（subject_type 为组属性；最旧组优先由服务层排序保证）。",
+        "properties": {
+          "count": {
+            "title": "Count",
+            "type": "integer"
+          },
+          "oldest_created_at": {
+            "format": "date-time",
+            "title": "Oldest Created At",
+            "type": "string"
+          },
+          "samples": {
+            "items": {
+              "$ref": "#/components/schemas/ReviewQueueSampleOut"
+            },
+            "title": "Samples",
+            "type": "array"
+          },
+          "subject": {
+            "title": "Subject",
+            "type": "string"
+          },
+          "subject_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Subject Type"
+          }
+        },
+        "required": [
+          "subject",
+          "count",
+          "oldest_created_at"
+        ],
+        "title": "ReviewQueueGroupOut",
+        "type": "object"
+      },
+      "ReviewQueueSampleOut": {
+        "additionalProperties": false,
+        "description": "组内样本引用（≤3 条，最旧优先）：回指候选事实与 chunk/document 出处。",
+        "properties": {
+          "chunk_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Chunk Id"
+          },
+          "document_id": {
+            "format": "uuid",
+            "title": "Document Id",
+            "type": "string"
+          },
+          "fact_id": {
+            "format": "uuid",
+            "title": "Fact Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "fact_id",
+          "document_id"
+        ],
+        "title": "ReviewQueueSampleOut",
+        "type": "object"
+      },
+      "ReviewQueueSummaryOut": {
+        "additionalProperties": false,
+        "description": "聚合复核队列响应（groups 空列表=空队列合法态；total=队列候选总条数）。",
+        "properties": {
+          "groups": {
+            "items": {
+              "$ref": "#/components/schemas/ReviewQueueGroupOut"
+            },
+            "title": "Groups",
+            "type": "array"
+          },
+          "total": {
+            "default": 0,
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "title": "ReviewQueueSummaryOut",
+        "type": "object"
+      },
       "RunOut": {
         "additionalProperties": false,
         "properties": {
@@ -6624,6 +6790,70 @@
           }
         },
         "summary": "终审候选实例列表（分页；quote/violations/align 全量透出）",
+        "tags": [
+          "knowledge-base"
+        ]
+      }
+    },
+    "/api/v1/kb/review-queue": {
+      "get": {
+        "description": "§7.1 批次纪律聚合面：每组 subject/subject_type/计数/最旧 created_at/样本引用 ≤3 条。\n\n空队列返回 groups=[]（合法态）；样本取组内最旧 3 条（复核人先看最早堆积的候选）。",
+        "operationId": "review_queue_summary_api_v1_kb_review_queue_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReviewQueueSummaryOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "needs_review 聚合复核队列（按 subject 分组：计数/最旧/样本 ≤3）",
+        "tags": [
+          "knowledge-base"
+        ]
+      }
+    },
+    "/api/v1/kb/review-queue/batch-decide": {
+      "post": {
+        "description": "同 subject 全组裁决（跨文档聚拢，组级原子：要么全裁要么全不裁）；返回裁决行数。\n\n留痕逐行：open 单 payload[\"decisions\"] 复用 ReviewTicketService（best-effort）+ 行内\nmeta[\"review_queue\"] 审计恒写（无单也有痕）；非法 decision 由 DTO Literal 先行 422；\n空组幂等返回 decided=0（行数即真值，不 404）。",
+        "operationId": "review_queue_batch_decide_api_v1_kb_review_queue_batch_decide_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReviewQueueBatchDecideIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReviewQueueBatchDecideOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "按 subject 全组批量裁决（authoritative/rejected，逐行留痕）",
         "tags": [
           "knowledge-base"
         ]

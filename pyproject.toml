@@ -56,6 +56,7 @@ ignore_imports = [
     "services.platform.db.registry -> services.agent.data.orm",
     "services.platform.db.registry -> services.iam.data.orm",
     "services.platform.db.registry -> services.kb.data.orm",
+    "services.platform.db.registry -> services.kb.data.connector_orm",  # TODO(M5): 连接器两表注册随 kb-connector-v1（多源接入 §3）
     "services.platform.db.registry -> services.ontology.data.orm",
     "services.platform.db.registry -> services.review.data.orm",
     "services.platform.db.registry -> services.memory.data.orm",

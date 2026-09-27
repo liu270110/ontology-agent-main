@@ -3,7 +3,7 @@ import { Navigate, useNavigate, useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { useAuthStore, isTokenPair } from '@/stores/auth-store'
 import { describeError } from '@/lib/errors'
-import { ROLE_LABEL, joinInviteLink, previewInviteLink } from '@/features/admin/api'
+import { ROLE_LABEL, joinInviteLink, previewInviteLink } from '@/lib/invite'
 import { MfaStepCard } from '../components/MfaStepCard'
 
 /** 登录页（16 篇 §5.1 + 28 篇 §2 v1.8）：玻璃卡 + 双色光晕；zod 级校验先以内联规则实现。
@@ -102,7 +102,7 @@ export function LoginPage() {
               data-testid="join-banner"
               className="max-w-[440px] rounded-xl border border-green/40 bg-green/10 px-4 py-2.5 text-center text-xs text-green [text-wrap:balance]"
             >
-              你受邀加入〈{joinPreview.data.tenant_name}〉工作区 · 角色〈{ROLE_LABEL[joinPreview.data.role] ?? joinPreview.data.role}〉，注册后将自动加入
+              你受邀加入〈{joinPreview.data.tenant_name}〉工作区 · 角色〈{ROLE_LABEL[joinPreview.data.role ?? ''] ?? joinPreview.data.role}〉，注册后将自动加入
             </div>
           )}
           {joinPreview.isError && (

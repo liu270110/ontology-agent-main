@@ -1,4 +1,4 @@
-import { ApiError, api } from '@/api/client'
+import { api } from '@/api/client'
 
 /** 系统管理域 API（契约=api/01 §5.8 admin + §6.5 writeback 台账 + §5.2 tasks 事件；
  *  groups/roles-matrix/models-写入/trace 展开/导出为预登记，见 mocks/admin-handlers.ts 头注）。
@@ -19,9 +19,7 @@ export interface AdminUser {
   invite_link_id?: string
 }
 
-export const ROLE_LABEL: Record<string, string> = {
-  super_admin: '超级管理员', admin: '管理员', ontologist: '知识工程师', curator: '业务专家', member: '成员', guest: '访客',
-}
+export { ROLE_LABEL } from '@/lib/invite'
 export const ROLE_BADGE: Record<string, string> = {
   super_admin: 'b-purple', admin: 'b-blue', ontologist: 'b-orange', curator: 'b-green', member: 'b-gray', guest: 'b-gray',
 }
@@ -155,11 +153,6 @@ export interface InviteLink {
   status: 'active' | 'revoked' | 'expired'
 }
 
-export interface InviteLinkPreview {
-  tenant_name: string
-  role: string
-  valid: boolean
-}
 
 /** 生成邀请链接（角色 + 有效期 24h/7d/30d） */
 export function createInviteLink(body: { role: string; expires_in_hours: 24 | 168 | 720 }) {
@@ -171,25 +164,5 @@ export const listInviteLinks = () =>
 export const revokeInviteLink = (id: string) =>
   api.delete<{ id: string; status: 'revoked' }>(`/admin/invite-links/${id}`)
 
-const API_BASE = import.meta.env.VITE_API_BASE ?? '/api/v1'
-
-/** 受邀预览（匿名 GET；client 无匿名 GET 手段且不可改——此处裸 fetch 自行解信封，
- *  未命中/已失效 → 410 {code:3410} → ApiError，调用方以 retry:false 查询承接红条） */
-export async function previewInviteLink(token: string): Promise<InviteLinkPreview> {
-  const res = await fetch(`${API_BASE}/admin/invite-links/${encodeURIComponent(token)}/preview`)
-  const body = (await res.json().catch(() => null)) as
-    | { code?: number; message?: string; data?: InviteLinkPreview }
-    | null
-  if (!res.ok || !body || body.code !== 0) {
-    throw new ApiError(body?.code ?? -1, body?.message ?? `HTTP ${res.status}`, res.status)
-  }
-  return body.data as InviteLinkPreview
-}
-
-/** 受邀加入（匿名 POST；登录/注册成功后 fire-and-forget 调用，幂等——既有账号不重复建） */
-export function joinInviteLink(token: string, body: { email: string; display_name: string }) {
-  return api.postAnonymous<{ joined: boolean; tenant_name: string }>(
-    `/admin/invite-links/${encodeURIComponent(token)}/join`,
-    body,
-  )
-}
+export { previewInviteLink, joinInviteLink } from '@/lib/invite'
+export type { InviteLinkPreview } from '@/lib/invite'

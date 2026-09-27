@@ -1364,6 +1364,225 @@
         "title": "DocumentCreateIn",
         "type": "object"
       },
+      "DocumentDeleteCascade": {
+        "additionalProperties": false,
+        "description": "级联删除计数（R17-b；DB FK 无 ON DELETE CASCADE → 应用层手动级联后按表计数）。",
+        "properties": {
+          "chunks": {
+            "default": 0,
+            "title": "Chunks",
+            "type": "integer"
+          }
+        },
+        "title": "DocumentDeleteCascade",
+        "type": "object"
+      },
+      "DocumentDeleteData": {
+        "additionalProperties": false,
+        "description": "删除结果 data 面（R17-b：幂等——文档不存在亦 200 deleted=false，cascade 归零）。",
+        "properties": {
+          "cascade": {
+            "$ref": "#/components/schemas/DocumentDeleteCascade"
+          },
+          "deleted": {
+            "title": "Deleted",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "deleted"
+        ],
+        "title": "DocumentDeleteData",
+        "type": "object"
+      },
+      "DocumentDeleteEnvelope": {
+        "additionalProperties": false,
+        "description": "删除成功信封（R17-b：恒 200，deleted 区分命中/幂等未命中）。",
+        "properties": {
+          "code": {
+            "default": 0,
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "$ref": "#/components/schemas/DocumentDeleteData"
+          },
+          "message": {
+            "default": "ok",
+            "title": "Message",
+            "type": "string"
+          }
+        },
+        "required": [
+          "data"
+        ],
+        "title": "DocumentDeleteEnvelope",
+        "type": "object"
+      },
+      "DocumentDetailData": {
+        "additionalProperties": false,
+        "description": "单文档详情 data 面（R17-a）：复用列表行全字段（chunk_count/error 在列）+ 定位字段。",
+        "properties": {
+          "chunk_count": {
+            "default": 0,
+            "title": "Chunk Count",
+            "type": "integer"
+          },
+          "collection_id": {
+            "format": "uuid",
+            "title": "Collection Id",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "doc_type": {
+            "enum": [
+              "PDF",
+              "Word",
+              "Excel",
+              "CSV",
+              "图片"
+            ],
+            "title": "Doc Type",
+            "type": "string"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "indexed_today": {
+            "default": false,
+            "title": "Indexed Today",
+            "type": "boolean"
+          },
+          "job_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Job Id"
+          },
+          "mime_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mime Type"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "pipeline": {
+            "$ref": "#/components/schemas/DocumentPipelineProgress"
+          },
+          "progress": {
+            "default": 0,
+            "title": "Progress",
+            "type": "integer"
+          },
+          "size": {
+            "default": 0,
+            "title": "Size",
+            "type": "integer"
+          },
+          "size_bytes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Size Bytes"
+          },
+          "status": {
+            "enum": [
+              "pending",
+              "extracting",
+              "indexed",
+              "failed"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "tier": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tier"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "doc_type",
+          "status",
+          "created_at",
+          "updated_at",
+          "collection_id"
+        ],
+        "title": "DocumentDetailData",
+        "type": "object"
+      },
+      "DocumentDetailEnvelope": {
+        "additionalProperties": false,
+        "description": "详情成功信封（R17-a：同列表信封口径，前端 apiFetchEnvelope 强信封解包）。",
+        "properties": {
+          "code": {
+            "default": 0,
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "$ref": "#/components/schemas/DocumentDetailData"
+          },
+          "message": {
+            "default": "ok",
+            "title": "Message",
+            "type": "string"
+          }
+        },
+        "required": [
+          "data"
+        ],
+        "title": "DocumentDetailEnvelope",
+        "type": "object"
+      },
       "DocumentListData": {
         "additionalProperties": false,
         "description": "列表 data 面（信封解包后形态：{items,total,next_cursor} + offset/limit）。",
@@ -1376,7 +1595,7 @@
             "type": "array"
           },
           "limit": {
-            "default": 100,
+            "default": 50,
             "title": "Limit",
             "type": "integer"
           },
@@ -5893,7 +6112,7 @@
     },
     "/api/v1/kb/documents": {
       "get": {
-        "description": "当前有效文档分页（bi-temporal：valid_to IS NULL，最新优先），R51 联调补齐。\n\nlive 对账契约（2026-09-28）：① 前端 client apiFetchEnvelope 强信封解包 → 返回\n{code,message,data:{items,total,next_cursor}}；② items=前端 KbDocument 全字段\n（name/doc_type/size_bytes/chunk_count/status 四态/progress/job_id/error/updated_at/\nindexed_today）+ pipeline{step,total}/size/created_at/tier；③ ?status=（前端四态别名\n或后端八态原值）与 ?type=（五类文档类型）均为可选过滤。空列表合法。",
+        "description": "当前有效文档分页（bi-temporal：valid_to IS NULL，最新优先），R51 联调补齐。\n\nlive 对账契约（2026-09-28）：① 前端 client apiFetchEnvelope 强信封解包 → 返回\n{code,message,data:{items,total,next_cursor}}；② items=前端 KbDocument 全字段\n（name/doc_type/size_bytes/chunk_count/status 四态/progress/job_id/error/updated_at/\nindexed_today）+ pipeline{step,total}/size/created_at/tier；③ ?status=（前端四态别名\n或后端八态原值）与 ?type=（五类文档类型）均为可选过滤；④ ?q= 名称模糊（title ILIKE，\nLIKE 通配符转义防注入）+ ?limit=/?offset= 分页（缺省 50，上限 200）。空列表合法。",
         "operationId": "list_documents_api_v1_kb_documents_get",
         "parameters": [
           {
@@ -5948,6 +6167,23 @@
           },
           {
             "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 128,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Q"
+            }
+          },
+          {
+            "in": "query",
             "name": "offset",
             "required": false,
             "schema": {
@@ -5962,7 +6198,7 @@
             "name": "limit",
             "required": false,
             "schema": {
-              "default": 100,
+              "default": 50,
               "maximum": 200,
               "minimum": 1,
               "title": "Limit",
@@ -5992,7 +6228,7 @@
             "description": "Validation Error"
           }
         },
-        "summary": "文档列表（管理页；status/type 可选过滤 + 流水线进度投影）",
+        "summary": "文档列表（管理页；status/type/q 可选过滤 + offset/limit 分页）",
         "tags": [
           "knowledge-base"
         ]
@@ -6033,6 +6269,92 @@
           }
         },
         "summary": "上传文档（M2 JSON 内容直传；checksum 幂等）",
+        "tags": [
+          "knowledge-base"
+        ]
+      }
+    },
+    "/api/v1/kb/documents/{document_id}": {
+      "delete": {
+        "description": "级联删除文档（api/01 §5.15 对账行 DELETE /kb/documents/{id}）。\n\nDB FK（document_chunks/kb_pipeline_step/kb_facts → documents.id）均无 ON DELETE CASCADE\n且 kb_facts.chunk_id 还指向 document_chunks.id → 应用层按依赖逆序手动级联后删文档行。\n幂等：文档不存在（含他人租户，deny-by-default 同口径）亦 200 deleted=false，不 404。",
+        "operationId": "delete_document_api_v1_kb_documents__document_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "document_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Document Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentDeleteEnvelope"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "删除文档（R17-b：硬删 + 应用层级联；幂等）",
+        "tags": [
+          "knowledge-base"
+        ]
+      },
+      "get": {
+        "description": "单文档详情（api/01 §5 kb 行 GET /kb/documents/{id}）：复用列表投影 + 定位字段。\n\n404 = 文档域既有口径（_load_document：code 404「文档不存在」，api/01 §5 登记的 404*）。",
+        "operationId": "get_document_api_v1_kb_documents__document_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "document_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Document Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentDetailEnvelope"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "文档详情（R17-a live 对账补齐：列表 DTO 全字段 + chunk 计数/error）",
         "tags": [
           "knowledge-base"
         ]

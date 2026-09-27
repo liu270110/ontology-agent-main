@@ -1,0 +1,22 @@
+{
+  "targets": [
+    {
+      "name": "example-remote",
+      "transport": "streamable_http",
+      "url": "http://127.0.0.1:9800/mcp",
+      "headers": {},
+      "timeout_s": 10.0,
+      "tool_ttl_s": 300.0,
+      "enabled": false
+    },
+    {
+      "name": "example-local",
+      "transport": "stdio",
+      "command": "python",
+      "args": ["-m", "some_external_mcp_server"],
+      "env": {},
+      "timeout_s": 15.0,
+      "enabled": false
+    }
+  ]
+}

@@ -147,20 +147,31 @@ async def test_GET_admin_reviews_缺省待审队列_过滤与分页(review_seed)
     )
     principal = _principal(seed)
     async with seed.factory() as db:
-        # Act：缺省口径=待审队列（pending_review）
+        # Act：缺省口径=待审队列（pending_review）；R50 起 REST 面返回 {code,message,data} 信封
         page = await list_reviews(principal, db)
         # Assert：draft 不入队，三条待审全可见
-        assert {i.id for i in page.items} == {t1, t2, t3}
-        assert page.offset == 0 and page.limit == 20
+        assert page.code == 0 and page.message == "ok"
+        assert {i.id for i in page.data.items} == {t1, t2, t3}
+        assert page.data.total == 3 and page.data.offset == 0 and page.data.limit == 20
+        assert page.data.next_cursor is None
+        # Act / Assert：前端别名 status=pending ≡ 缺省待审口径（R50 联调修复）
+        pending = await list_reviews(principal, db, status_filter="pending")
+        assert {i.id for i in pending.data.items} == {t1, t2, t3}
+        # Act / Assert：前端别名 status=done=已裁决终态（此刻尚无终态单）
+        done = await list_reviews(principal, db, status_filter="done")
+        assert done.data.items == [] and done.data.total == 0
         # Act / Assert：target_type 过滤
         by_type = await list_reviews(principal, db, target_type="knowledge_instance")
-        assert [i.id for i in by_type.items] == [t3]
+        assert [i.id for i in by_type.data.items] == [t3]
         # Act / Assert：status 过滤（终态单经显式 status 查看）+ 分页
         await decide_review(t1, DecisionIn(action="approve"), principal, _request(seed))
         approved = await list_reviews(principal, db, status_filter="approved")
-        assert [i.id for i in approved.items] == [t1] and approved.items[0].reviewer_id == seed.approver_a
+        assert [i.id for i in approved.data.items] == [t1] and approved.data.items[0].reviewer_id == seed.approver_a
+        # approved 单此刻亦落入 done（终态）口径
+        done_after = await list_reviews(principal, db, status_filter="done")
+        assert {i.id for i in done_after.data.items} == {t1}
         paged = await list_reviews(principal, db, offset=0, limit=2)
-        assert len(paged.items) == 2 and {i.id for i in paged.items} <= {t2, t3}
+        assert len(paged.data.items) == 2 and {i.id for i in paged.data.items} <= {t2, t3}
 
 
 def test_DecisionIn_extra字段拒绝_驳回必附理由_action枚举():

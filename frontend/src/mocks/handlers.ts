@@ -182,7 +182,7 @@ export const handlers = [
       const otp = (body.otp ?? '').trim()
       if (otp.length === 8 || otp === '123456') {
         activeMfaToken = null
-        return HttpResponse.json({ code: 0, message: 'ok', data: tokenPairFor(MFA_EMAIL) })
+        return HttpResponse.json(tokenPairFor(MFA_EMAIL))
       }
       recordFailure()
       if (rateLimited()) return jsonErr(1005, '操作过于频繁', 429, { 'Retry-After': '120' })
@@ -202,7 +202,7 @@ export const handlers = [
       if (rateLimited()) return jsonErr(1005, '操作过于频繁', 429, { 'Retry-After': '120' })
       return jsonErr(1002, '邮箱或密码错误', 401)
     }
-    return HttpResponse.json({ code: 0, message: 'ok', data: tokenPairFor(email) })
+    return HttpResponse.json(tokenPairFor(email))
   }),
 
   // POST /auth/refresh（api/01 §5.9：匿名，body 携 refresh token；refresh typ 校验）
@@ -213,7 +213,7 @@ export const handlers = [
       return jsonErr(1003, '刷新令牌无效', 401)
     }
     const email = Object.keys(DIRECTORY).find(e => subFor(e) === payload.sub) ?? 'admin@example.com'
-    return HttpResponse.json({ code: 0, message: 'ok', data: tokenPairFor(email) })
+    return HttpResponse.json(tokenPairFor(email))
   }),
 
   http.post('*/api/v1/auth/logout', () => new HttpResponse(null, { status: 204 })),

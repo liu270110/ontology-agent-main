@@ -20,6 +20,7 @@
     GET  /memory/sessions/{sid}/blocks        读 L1 会话块
     PUT  /memory/sessions/{sid}/blocks/{blk}  写 L1 会话块
     POST /memory/sessions/{sid}/settle        手动沉淀（幂等登记闸门，202 语义 200 壳）
+    GET  /memory/profile/{uid}                画像聚合视图（§5.2 按类型分组 top 置信，owner 维度）
     GET  /memory/reviews                      待复核队列（limit 20）
     POST /memory/promotions（records 权威版）  记录升级申请（memory_promotions 表；fact 版
                                               过渡路由改挂 /memory/facts/{id}/promotions）
@@ -493,6 +494,16 @@ def get_pipeline() -> tuple:
 Pipe = Annotated[tuple, Depends(get_pipeline)]
 
 
+def _parse_optional_uuid(raw: str | None) -> uuid.UUID | None:
+    """可选用户头解析（dev 模式，TODO(M1) JWT）：缺失/非法值一律忽略置 None，不报错。"""
+    if raw is None:
+        return None
+    try:
+        return uuid.UUID(raw)
+    except ValueError:
+        return None
+
+
 def _rec_fields(rec) -> dict:
     return {
         "id": rec.id,
@@ -556,7 +567,13 @@ async def put_block(session_id: uuid.UUID, block: str, body: BlockPutRequest, sv
 
 
 @router.post("/sessions/{session_id}/settle", response_model=dict)
-async def settle_session(session_id: uuid.UUID, body: SettleRequest, pipe: Pipe, tid: Tid) -> dict:
+async def settle_session(
+    session_id: uuid.UUID,
+    body: SettleRequest,
+    pipe: Pipe,
+    tid: Tid,
+    x_user_id: str | None = Header(default=None, alias="X-User-Id"),
+) -> dict:
     """手动沉淀（在线路径，不过 IdleGate——§5.5.2 空闲调度只管后台自动沉淀）。
 
     幂等：确定性键 manual:{session_id}:{sha256(transcript)} 走登记闸门（与计划"组装走 settle_session_task"同语义），
@@ -571,13 +588,23 @@ async def settle_session(session_id: uuid.UUID, body: SettleRequest, pipe: Pipe,
             "data": {"added": 0, "duplicates": 0, "to_review": 0, "skipped": "idempotent"},
         }
     result = await pipeline.settle_session(
-        tenant_id=tid, session_id=session_id, transcript=body.transcript, now=datetime.now(UTC)
+        tenant_id=tid,
+        session_id=session_id,
+        transcript=body.transcript,
+        now=datetime.now(UTC),
+        owner_user_id=_parse_optional_uuid(x_user_id),  # 归属用户（dev 头；非法值已静默忽略）
     )
     return {
         "code": 0,
         "message": "ok",
         "data": {"added": result.added, "duplicates": result.duplicates, "to_review": result.to_review},
     }
+
+
+@router.get("/profile/{user_id}", summary="画像聚合视图（按 mem: 类型分组 top 置信事实，§5.2）")
+async def get_profile(user_id: uuid.UUID, svc: Svc, tid: Tid) -> dict:
+    data = await svc.profile(tenant_id=tid, user_id=user_id)
+    return {"code": 0, "message": "ok", "data": data}
 
 
 @router.get("/reviews", response_model=dict)

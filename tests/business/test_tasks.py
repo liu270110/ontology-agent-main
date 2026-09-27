@@ -67,9 +67,11 @@ class FakeRepo:
 class FakePipeline:
     def __init__(self):
         self.calls = 0
+        self.last_kw: dict = {}
 
     async def settle_session(self, **kw):
         self.calls += 1
+        self.last_kw = kw
         from services.memory.business.consolidation_pipeline import SettleResult
 
         return SettleResult(added=1, duplicates=0, to_review=0)
@@ -122,6 +124,25 @@ async def test_settle_task_idempotent_skip():
     await settle_session_task(deps, **kw)
     await settle_session_task(deps, **kw)
     assert pipe.calls == 1  # 二次幂等跳过
+
+
+async def test_settle_task_passes_owner_to_pipeline():
+    """owner_user_id 透传（任务 2）：任务参数与 payload 均携带归属用户。"""
+    repo, pipe = FakeRepo(), FakePipeline()
+    deps = _deps(repo, pipe)
+    owner = uuid.uuid4()
+    await settle_session_task(
+        deps,
+        tenant_id=TENANT,
+        session_id=uuid.uuid4(),
+        transcript="t",
+        idempotency_key="k-owner",
+        now=NOW,
+        owner_user_id=owner,
+    )
+    assert pipe.last_kw.get("owner_user_id") == owner
+    payload = next(iter(repo.tasks.values()))["payload"]
+    assert payload.get("owner_user_id") == str(owner)
 
 
 async def test_decay_scan_expires_low_score():

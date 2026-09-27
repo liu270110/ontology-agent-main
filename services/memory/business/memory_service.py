@@ -119,14 +119,27 @@ class MemoryService:
     async def warmup(self, *, tenant_id: uuid.UUID, user_id: uuid.UUID, session_id: uuid.UUID) -> int:
         """会话启动预热（规格 §5.2：top-K 高置信 L2 预填 L1 记忆块，单次查询）。
 
-        user 维度过滤依赖 owner 列（当前 memory_records 无，计划 2 迁移补 `owner_user_id`），
-        v1 实际为租户级 top-K。
+        owner_user_id 过滤已生效（c3d5e7f9a1b3）：只预热本人记录。
         """
-        records = await self.repo.list_recent(tenant_id, subject_user_layer=MemoryLayer.USER, limit=self.top_k)
+        records = await self.repo.list_recent(
+            tenant_id, subject_user_layer=MemoryLayer.USER, limit=self.top_k, owner_user_id=user_id
+        )
         if records:
             profile = "\n".join(f"- {r.content}" for r in records)
             await self.l1.set_block(session_id, "user_profile", profile)
         return len(records)
+
+    async def profile(
+        self, *, tenant_id: uuid.UUID, user_id: uuid.UUID, per_type_limit: int = 5
+    ) -> dict[str, list[dict]]:
+        """画像聚合视图（§5.2 / Memobase 适配）：按 record_type 分组 top 置信事实，只读投影零存储。"""
+        records = await self.repo.list_profile_records(tenant_id, owner_user_id=user_id, limit=200)
+        grouped: dict[str, list[dict]] = {}
+        for r in sorted(records, key=lambda x: x.confidence, reverse=True):
+            grouped.setdefault(str(r.record_type), []).append(
+                {"content": r.content, "confidence": r.confidence, "created_at": r.created_at}
+            )
+        return {k: v[:per_type_limit] for k, v in grouped.items()}
 
     async def archive_l1(self, *, tenant_id: uuid.UUID, session_id: uuid.UUID, now: datetime) -> MemoryRecord:
         """会话结束归档（规格 §1.1：L1 轨迹 → EPISODE 记录）。"""

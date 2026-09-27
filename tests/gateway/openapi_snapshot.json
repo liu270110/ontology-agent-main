@@ -7632,6 +7632,60 @@
         ]
       }
     },
+    "/api/v1/memory/profile/{user_id}": {
+      "get": {
+        "operationId": "get_profile_api_v1_memory_profile__user_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "user_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "User Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Tenant-Id",
+            "required": true,
+            "schema": {
+              "title": "X-Tenant-Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Get Profile Api V1 Memory Profile  User Id  Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "画像聚合视图（按 mem: 类型分组 top 置信事实，§5.2）",
+        "tags": [
+          "memory"
+        ]
+      }
+    },
     "/api/v1/memory/promotions": {
       "get": {
         "description": "升级单记录（★ promotions 记录面）：登记行投影倒序分页；无登记 → items=[] 契约形状。\n用户缺省仅本人登记；他人 user_id → 403（audit 同款授权矩阵）。",
@@ -8146,6 +8200,22 @@
               "format": "uuid",
               "title": "Session Id",
               "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-User-Id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-User-Id"
             }
           },
           {

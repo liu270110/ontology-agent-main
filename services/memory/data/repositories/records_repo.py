@@ -17,6 +17,7 @@ from services.memory.domain.model.memory import MemoryLayer, MemoryRecord
 _INGEST_COLUMNS = (
     "id",
     "tenant_id",
+    "owner_user_id",
     "layer",
     "record_type",
     "subject_iri",
@@ -52,7 +53,15 @@ class MemoryRepository(Protocol):
     async def search_keyword(
         self, tenant_id: uuid.UUID, *, text_q: str, limit: int, layer: int | None = None
     ) -> list[MemoryRecord]: ...
-    async def list_recent(self, tenant_id: uuid.UUID, *, subject_user_layer: int, limit: int) -> list[MemoryRecord]: ...
+    async def list_recent(
+        self, tenant_id: uuid.UUID, *, subject_user_layer: int, limit: int, owner_user_id: uuid.UUID | None = None
+    ) -> list[MemoryRecord]: ...
+    async def list_profile_records(
+        self, tenant_id: uuid.UUID, *, owner_user_id: uuid.UUID, limit: int
+    ) -> list[MemoryRecord]:
+        """画像聚合源（§5.2）：该用户 L2 活跃记录，置信度降序。"""
+        ...
+
     async def list_by_subject(
         self, tenant_id: uuid.UUID, subject_iri: str, *, states: tuple[str, ...] = ("active",)
     ) -> list[MemoryRecord]: ...
@@ -134,13 +143,36 @@ class PgMemoryRepository(MemoryRepository):
             rows = (await s.scalars(stmt)).all()
             return [to_domain(r) for r in rows]
 
-    async def list_recent(self, tenant_id: uuid.UUID, *, subject_user_layer: int, limit: int) -> list[MemoryRecord]:
+    async def list_recent(
+        self, tenant_id: uuid.UUID, *, subject_user_layer: int, limit: int, owner_user_id: uuid.UUID | None = None
+    ) -> list[MemoryRecord]:
         stmt = (
             select(MemoryRecordORM)
             .where(
                 MemoryRecordORM.tenant_id == tenant_id,
                 MemoryRecordORM.state == "active",
                 MemoryRecordORM.layer == subject_user_layer,
+            )
+            .order_by(MemoryRecordORM.confidence.desc(), MemoryRecordORM.created_at.desc())
+            .limit(limit)
+        )
+        if owner_user_id is not None:  # 参数化追加（owner 列可空，防 = None 恒假陷阱）
+            stmt = stmt.where(MemoryRecordORM.owner_user_id == owner_user_id)
+        async with self._sm() as s:
+            rows = (await s.scalars(stmt)).all()
+            return [to_domain(r) for r in rows]
+
+    async def list_profile_records(
+        self, tenant_id: uuid.UUID, *, owner_user_id: uuid.UUID, limit: int
+    ) -> list[MemoryRecord]:
+        """画像聚合源（§5.2）：该用户 L2 活跃记录，置信度降序。"""
+        stmt = (
+            select(MemoryRecordORM)
+            .where(
+                MemoryRecordORM.tenant_id == tenant_id,
+                MemoryRecordORM.owner_user_id == owner_user_id,
+                MemoryRecordORM.layer == MemoryLayer.USER,
+                MemoryRecordORM.state == "active",
             )
             .order_by(MemoryRecordORM.confidence.desc(), MemoryRecordORM.created_at.desc())
             .limit(limit)

@@ -31,15 +31,23 @@ class StubService:
     async def get_l1(self, session_id):
         return {"persona": "p"}
 
+    async def profile(self, *, tenant_id, user_id, per_type_limit=5):
+        return {
+            "mem:Preference": [{"content": "偏好深色主题", "confidence": 0.9, "created_at": NOW}],
+            "mem:FactClaim": [{"content": "A 负责人是张三", "confidence": 0.8, "created_at": NOW}],
+        }
+
 
 class StubPipeline:
     def __init__(self) -> None:
         self.calls = 0
+        self.last_owner = None
 
-    async def settle_session(self, *, tenant_id, session_id, transcript, now, idempotency_key=None):
+    async def settle_session(self, *, tenant_id, session_id, transcript, now, idempotency_key=None, owner_user_id=None):
         from services.memory.business.consolidation_pipeline import SettleResult
 
         self.calls += 1
+        self.last_owner = owner_user_id
         return SettleResult(added=2, duplicates=1, to_review=0)
 
 
@@ -206,6 +214,48 @@ def test_settle_idempotent_second_call_skipped(wired):
 def test_promotion_unknown_record_404(client):
     resp = client.post("/api/v1/memory/promotions", headers=_h(), json={"record_id": str(uuid.uuid4()), "to_layer": 3})
     assert resp.status_code == 404
+
+
+def test_profile_200(client):
+    """画像聚合视图（§5.2）：stub 数据两类分组返回。"""
+    resp = client.get(f"/api/v1/memory/profile/{uuid.uuid4()}", headers=_h())
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["code"] == 0
+    data = body["data"]
+    assert set(data) == {"mem:Preference", "mem:FactClaim"}
+    assert data["mem:Preference"][0]["content"] == "偏好深色主题"
+    assert data["mem:FactClaim"][0]["confidence"] == 0.8
+
+
+def test_profile_missing_tenant_422(client):
+    resp = client.get(f"/api/v1/memory/profile/{uuid.uuid4()}")
+    assert resp.status_code == 422
+
+
+def test_settle_passes_owner_header_to_pipeline(wired):
+    """settle 端点 X-User-Id 头（dev 模式）→ pipeline.settle_session(owner_user_id=...)。"""
+    client, pipeline, _repo = wired
+    owner = uuid.uuid4()
+    resp = client.post(
+        f"/api/v1/memory/sessions/{uuid.uuid4()}/settle",
+        headers={**_h(), "X-User-Id": str(owner)},
+        json={"transcript": "t"},
+    )
+    assert resp.status_code == 200
+    assert pipeline.last_owner == owner
+
+
+def test_settle_invalid_user_header_ignored(wired):
+    """X-User-Id 非法值静默忽略置 None（不报错，dev 宽松语义）。"""
+    client, pipeline, _repo = wired
+    resp = client.post(
+        f"/api/v1/memory/sessions/{uuid.uuid4()}/settle",
+        headers={**_h(), "X-User-Id": "not-a-uuid"},
+        json={"transcript": "t"},
+    )
+    assert resp.status_code == 200
+    assert pipeline.last_owner is None
 
 
 def test_promotion_to_layer_2_rejected_422(client):

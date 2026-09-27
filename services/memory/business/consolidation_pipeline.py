@@ -68,6 +68,7 @@ class ConsolidationPipeline:
         transcript: str,
         now: datetime,
         idempotency_key: str | None = None,
+        owner_user_id: uuid.UUID | None = None,
     ) -> SettleResult:
         """会话沉淀入口；幂等键命中时短路（不调 LLM），登记由调用方负责。"""
         if idempotency_key and await self._repo.idempotent_hit(tenant_id, idempotency_key):
@@ -91,6 +92,7 @@ class ConsolidationPipeline:
             rec = MemoryRecord(
                 id=uuid.uuid4(),
                 tenant_id=tenant_id,
+                owner_user_id=owner_user_id,  # 归属用户（§9.2-5 债务偿还；None=租户级无主记录）
                 layer=MemoryLayer.USER,
                 record_type=c.record_type,
                 subject_iri=c.subject_iri,

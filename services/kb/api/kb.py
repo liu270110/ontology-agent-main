@@ -82,6 +82,7 @@ from services.kb.api.schemas.kb import (
     ui_status_of,
 )
 from services.kb.business.kb_pipeline import M2_FULL_STEPS, PipelineError, run_pipeline
+from services.kb.business.search_service import rerank_hits_by_source_context
 from services.kb.data.orm import Document, DocumentChunk, KbCollection, KbFact, KbPipelineStep
 from services.kb.retrieval.embed import AclPushdown, OllamaEmbedder, bm25_search, vector_search
 from services.kb.retrieval.graph import ClassHierarchy, build_class_hierarchy, expand_graph
@@ -533,6 +534,10 @@ async def search(body: KbSearchIn, principal: KbReadDep, request: Request, sessi
         mode=body.mode,
         entity_type_filter=body.entity_type_filter,
     )
+    # source_context 软路由（多源接入 §5.2 v1，service 层共用助手）：None=原序零开销零 SQL；
+    # 非空=按文档 meta.source_system 加权重排（不剔除）。answers 摘要仍按融合相关度取——
+    # 分组返回 schema 随 v1.5 语境术语表落地。
+    final_hits = await rerank_hits_by_source_context(session, result.hits, source_context=body.source_context)
     latency_ms = int((time.perf_counter() - started) * 1000)
     return KbSearchOut(
         query=result.query,
@@ -542,8 +547,8 @@ async def search(body: KbSearchIn, principal: KbReadDep, request: Request, sessi
         degraded_reasons=result.degraded_reasons,
         channels=result.channels,
         latency_ms=latency_ms,
-        hits=[_hit_to_out(hit) for hit in result.hits],
-        citations=[_hit_to_citation(hit) for hit in result.hits],
+        hits=[_hit_to_out(hit) for hit in final_hits],
+        citations=[_hit_to_citation(hit) for hit in final_hits],
         evidence=KbEvidenceOut(graph_paths=[_path_to_out(path) for path in result.graph_paths])
         if body.with_evidence
         else KbEvidenceOut(graph_paths=[]),

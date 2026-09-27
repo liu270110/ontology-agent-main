@@ -1,3 +1,4 @@
+import { Suspense, lazy } from 'react'
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { Toaster } from 'sonner'
@@ -9,32 +10,34 @@ import { ThemeProvider } from './providers/theme-provider'
 import { ROUTES } from './routes'
 import { PlaceholderPage } from './PlaceholderPage'
 import { LoginPage } from '@/features/auth/pages/LoginPage'
-import { DashboardPage } from '@/features/dashboard/pages/DashboardPage'
-import { ChatPage } from '@/features/chat/pages/ChatPage'
-import { GroupChatPage } from '@/features/group/pages/GroupChatPage'
-import { WorkflowListPage } from '@/features/workflow/pages/WorkflowListPage'
-import { WorkflowEditorPage } from '@/features/workflow/pages/WorkflowEditorPage'
-import { DocumentsPage } from '@/features/kb/pages/DocumentsPage'
-import { ReviewPage } from '@/features/kb/pages/ReviewPage'
-import { PlaygroundPage } from '@/features/kb/pages/PlaygroundPage'
-import { ProjectListPage } from '@/features/ontology/pages/ProjectListPage'
-import { WorkbenchPage } from '@/features/ontology/pages/WorkbenchPage'
-import { VersionsPage } from '@/features/ontology/pages/VersionsPage'
-import { ExplorePage } from '@/features/explore/pages/ExplorePage'
-import { MemoryPage } from '@/features/memory/pages/MemoryPage'
-import { AgentListPage } from '@/features/agents/pages/AgentListPage'
-import { AgentDetailPage } from '@/features/agents/pages/AgentDetailPage'
-import { MarketPage } from '@/features/market/pages/MarketPage'
-import { ToolsPage } from '@/features/tools/pages/ToolsPage'
-import { McpPage } from '@/features/mcp/pages/McpPage'
-import { ApprovalListPage } from '@/features/approvals/pages/ApprovalListPage'
-import { AdminPage } from '@/features/admin/pages/AdminPage'
-import { TasksPage } from '@/features/tasks/pages/TasksPage'
-import { SettingsPage } from '@/features/settings/pages/SettingsPage'
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { retry: 1, refetchOnWindowFocus: false } },
 })
+
+// S8 路由级代码分割：域页面懒加载（首包=框架+登录；29 篇 FE-ADR-FE3 依赖台账配套）
+const DashboardPage = lazy(() => import('@/features/dashboard/pages/DashboardPage').then(m => ({ default: m.DashboardPage })))
+const ChatPage = lazy(() => import('@/features/chat/pages/ChatPage').then(m => ({ default: m.ChatPage })))
+const GroupChatPage = lazy(() => import('@/features/group/pages/GroupChatPage').then(m => ({ default: m.GroupChatPage })))
+const WorkflowListPage = lazy(() => import('@/features/workflow/pages/WorkflowListPage').then(m => ({ default: m.WorkflowListPage })))
+const WorkflowEditorPage = lazy(() => import('@/features/workflow/pages/WorkflowEditorPage').then(m => ({ default: m.WorkflowEditorPage })))
+const DocumentsPage = lazy(() => import('@/features/kb/pages/DocumentsPage').then(m => ({ default: m.DocumentsPage })))
+const ReviewPage = lazy(() => import('@/features/kb/pages/ReviewPage').then(m => ({ default: m.ReviewPage })))
+const PlaygroundPage = lazy(() => import('@/features/kb/pages/PlaygroundPage').then(m => ({ default: m.PlaygroundPage })))
+const ProjectListPage = lazy(() => import('@/features/ontology/pages/ProjectListPage').then(m => ({ default: m.ProjectListPage })))
+const WorkbenchPage = lazy(() => import('@/features/ontology/pages/WorkbenchPage').then(m => ({ default: m.WorkbenchPage })))
+const VersionsPage = lazy(() => import('@/features/ontology/pages/VersionsPage').then(m => ({ default: m.VersionsPage })))
+const ExplorePage = lazy(() => import('@/features/explore/pages/ExplorePage').then(m => ({ default: m.ExplorePage })))
+const MemoryPage = lazy(() => import('@/features/memory/pages/MemoryPage').then(m => ({ default: m.MemoryPage })))
+const AgentListPage = lazy(() => import('@/features/agents/pages/AgentListPage').then(m => ({ default: m.AgentListPage })))
+const AgentDetailPage = lazy(() => import('@/features/agents/pages/AgentDetailPage').then(m => ({ default: m.AgentDetailPage })))
+const MarketPage = lazy(() => import('@/features/market/pages/MarketPage').then(m => ({ default: m.MarketPage })))
+const ToolsPage = lazy(() => import('@/features/tools/pages/ToolsPage').then(m => ({ default: m.ToolsPage })))
+const McpPage = lazy(() => import('@/features/mcp/pages/McpPage').then(m => ({ default: m.McpPage })))
+const ApprovalListPage = lazy(() => import('@/features/approvals/pages/ApprovalListPage').then(m => ({ default: m.ApprovalListPage })))
+const AdminPage = lazy(() => import('@/features/admin/pages/AdminPage').then(m => ({ default: m.AdminPage })))
+const TasksPage = lazy(() => import('@/features/tasks/pages/TasksPage').then(m => ({ default: m.TasksPage })))
+const SettingsPage = lazy(() => import('@/features/settings/pages/SettingsPage').then(m => ({ default: m.SettingsPage })))
 
 /** 已挂实页的路由（M1 起增量）；其余 ROUTES 元数据路由渲染壳内占位页（30 篇 §2 切片表）。 */
 const PAGES: Record<string, React.ReactNode> = {
@@ -74,7 +77,8 @@ export function App() {
       <ThemeProvider>
         <QueryClientProvider client={queryClient}>
           <BrowserRouter>
-            <Routes>
+            <Suspense fallback={null}>
+      <Routes>
               <Route path="/login" element={<LoginPage />} />
               <Route
                 element={
@@ -95,6 +99,7 @@ export function App() {
               </Route>
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
+      </Suspense>
           </BrowserRouter>
           {/* 全局 Toast（sonner；S3 起供各域操作反馈；z 层随 --z-toast 令牌） */}
           <Toaster position="top-center" richColors closeButton />

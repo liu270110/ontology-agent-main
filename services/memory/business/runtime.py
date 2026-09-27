@@ -13,14 +13,19 @@
 
 from __future__ import annotations
 
+from collections.abc import Awaitable, Callable, Mapping
+from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
 from redis import asyncio as aioredis
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from services.memory.data.l1 import RedisL1Store
-from services.memory.data.repo_impl.fact_repo import PgL2FactRepository
+from services.memory.data.repo_impl.fact_repo import PgL2FactRepository, record_faithfulness_sample
 from services.memory.domain.repo.fact_repo import L1MemoryStore, L2FactRepository
+
+if TYPE_CHECKING:  # 仅类型注解
+    from sqlalchemy.ext.asyncio import async_sessionmaker
 
 _WINDOW_KEEP_DEFAULT = 20  # 与 RedisL1Store 默认滑窗同参（memory §7；实测后随 config 冻结）
 
@@ -45,3 +50,23 @@ def build_l2_repo(db: AsyncSession, tenant_id: UUID) -> L2FactRepository:
     （repo_factory 默认值注入）。
     """
     return PgL2FactRepository(db, tenant_id)
+
+
+def build_faithfulness_audit_sink(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> Callable[[Mapping[str, Any]], Awaitable[bool]]:
+    """忠实度抽检审计汇（08 §7.4；agent chat_orchestrator 组合根注入，跨模块经本公开面）。
+
+    每次采样命中开短事务落 audit_logs 一行结构化 JSON（record_faithfulness_sample——
+    evaluation 形状 PG 汇的欠账期替代面，论证见 chat_orchestrator 汇注释）；audit_logs
+    表缺失返回 False（调用方降级为仅日志），存储异常上抛由编排器「留痕失败只告警」纪律
+    消化，不阻断对话流尾。
+    """
+
+    async def sink(entry: Mapping[str, Any]) -> bool:
+        async with session_factory() as db:
+            written = await record_faithfulness_sample(db, **entry)
+            await db.commit()
+            return written
+
+    return sink

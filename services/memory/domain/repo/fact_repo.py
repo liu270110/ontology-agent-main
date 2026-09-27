@@ -8,11 +8,26 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from typing import Protocol, runtime_checkable
 from uuid import UUID
 
 from services.memory.domain.model.l1 import L1Snapshot, MemoryBlock, WindowMessage
 from services.memory.domain.model.l2_fact import FactCategory, FactStatus, L2Fact
+
+
+@runtime_checkable
+class FactEmbedderPort(Protocol):
+    """嵌入端口（memory §7 嵌入列；lite=pgvector 直写直查）。
+
+    实现在 services.memory.data.vector.FactEmbedder（Ollama /api/embed）；business 层
+    （沉淀管线）仅消费本端口，禁触 data/infra——与 L1MemoryStore 同款端口纪律。
+    任何不可用（模型离线/列缺失）由实现抛 data 层 EmbeddingUnavailableError，调用方降级。
+    """
+
+    async def embed(self, texts: Sequence[str]) -> list[list[float]]:
+        """批量嵌入；输入顺序即输出顺序；失败抛实现侧降级异常。"""
+        ...
 
 
 @runtime_checkable
@@ -52,7 +67,25 @@ class L2FactRepository(Protocol):
         ...
 
     async def recent_candidates(self, user_id: UUID, *, limit: int) -> list[L2Fact]:
-        """新近通道候选（活跃事实按 created_at 倒序）；向量通道随 M3 嵌入接入（见报告欠账）。"""
+        """新近通道候选（活跃事实按 created_at 倒序）；向量通道见 data/vector.py（M3 接入）。"""
+        ...
+
+    async def save_embedding(self, fact_id: UUID, vector: Sequence[float], *, model: str | None = None) -> bool:
+        """向量回写（pgvector 列 raw SQL，data/vector.py 执行；列缺失抛降级异常）。
+
+        model=None → 实现侧缺省模型标注（embedding_ref）；返回是否写入（fact 未命中=False）；
+        向量是召回加速面非正确性依赖，调用方可降级。
+        """
+        ...
+
+    async def chain_for_user(self, user_id: UUID, fact_id: UUID, *, limit: int = 50) -> list[L2Fact]:
+        """版本链回放（api/01 §5.5 GET /memory/facts/{id}/timeline 数据面）。
+
+        从 fact_id 起双向行走 supersedes 链（旧事实.supersedes_id=新事实 id）：先沿
+        supersedes_id 回溯旧版，再逐级取 successor（WHERE supersedes_id=:current），
+        返回按代际从旧到新排序的链上事实（含 fact_id 本身；未命中/跨租户=空列表）。
+        limit 截断防环/超长链。
+        """
         ...
 
 

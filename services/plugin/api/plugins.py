@@ -2,10 +2,13 @@
 
     GET  /plugins                    市场列表            plugin:read     200
     GET  /plugins/{id}               详情（含版本树）    plugin:read     200 / 404*
+    PUT  /plugins/{id}               更新元数据（展示名）plugin:write    200 / 404*、4501
+    DELETE /plugins/{id}             弃用下架（软删终态）plugin:write    200 / 404*、4501
+    GET  /plugins/{id}/versions      版本树              plugin:read     200 / 404*
     POST /plugins                    上传插件包登记      plugin:write    201 / 3001
     POST /plugins/{id}/versions      新增版本（版本管理；登记册外补充端点，漂移见模块报告）
-    POST /plugins/{id}/submit        提交上架审核        review:submit   202 / 4701
-    POST /plugins/{id}/install       安装已发布版本      plugin:install  202 / 45xx
+    POST /plugins/{id}/submit        提交上架审核        review:submit   202 / 4701、4503
+    POST /plugins/{id}/install       安装已发布版本      plugin:install  202 / 45xx（4509 验签拒绝）
     POST /plugins/{id}/enable        启用                plugin:admin    200 / 45xx
     POST /plugins/{id}/disable       停用                plugin:admin    200 / 45xx
 
@@ -21,16 +24,20 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query, Request, status
 
+from services.platform.config import get_settings
 from services.platform.deps import Principal, SessionDep, require_scope
 from services.platform.errors import GatewayError
 from services.platform.kernel import DomainError
+from services.platform.security import PluginSigner
 from services.plugin.api.schemas.plugin import (
     InstallOut,
     PluginCreateIn,
     PluginDetailOut,
     PluginOut,
     PluginPageOut,
+    PluginUpdateIn,
     PluginVersionIn,
+    PluginVersionListOut,
     PluginVersionOut,
     SubmitIn,
     SubmitOut,
@@ -55,7 +62,7 @@ PluginAdminDep = Annotated[Principal, Depends(require_scope("plugin:admin"))]
 
 
 def _market(request: Request, db: SessionDep, principal: Principal) -> PluginMarketService:
-    """用例装配（每请求绑定请求会话；审批/工单端口为 lifespan 单例）。"""
+    """用例装配（每请求绑定请求会话；审批/工单端口为 lifespan 单例；签名器吃 config 平台钥）。"""
     runtime = getattr(request.app.state, "plugin_runtime", None)
     review = getattr(request.app.state, "plugin_review", None)
     approvals = getattr(request.app.state, "review_approvals", None)
@@ -67,6 +74,7 @@ def _market(request: Request, db: SessionDep, principal: Principal) -> PluginMar
         review=review,
         approvals=approvals,
         runtime=runtime,
+        signer=PluginSigner(get_settings().platform_plugin_signing_key),
     )
 
 
@@ -75,7 +83,15 @@ def _domain_error(exc: DomainError) -> GatewayError:
     message = str(exc)
     head = message[:4]
     code = int(head) if head.isdigit() else 4501
-    status_code = {4503: 422, 4506: 503, 4701: 409, 4702: 403, 4703: 409}.get(code, 409)
+    status_code = {
+        4503: 422,  # 门禁未通过（可修复的清单问题）
+        4506: 503,  # 沙箱后端不可用
+        4509: 403,  # 两级验签失败（安全拒绝）
+        4510: 503,  # 平台签名密钥缺失（fail-closed 配置故障）
+        4701: 409,
+        4702: 403,
+        4703: 409,
+    }.get(code, 409)
     return GatewayError(code, message, status_code=status_code)
 
 
@@ -116,6 +132,47 @@ async def get_plugin(
     return PluginDetailOut(
         **PluginOut.from_domain(plugin).model_dump(), versions=[PluginVersionOut.from_domain(v) for v in versions]
     )
+
+
+@router.put("/{plugin_id}", summary="更新插件元数据（slug/kind 不可变，仅展示名）")
+async def update_plugin(
+    plugin_id: uuid.UUID, body: PluginUpdateIn, principal: PluginWriteDep, db: SessionDep, request: Request
+) -> PluginDetailOut:
+    market = _market(request, db, principal)
+    try:
+        plugin = await market.update_metadata(plugin_id=plugin_id, name=body.name)
+    except LookupError as exc:
+        raise _not_found(exc) from exc
+    except DomainError as exc:
+        raise _domain_error(exc) from exc
+    _detail_plugin, versions = await market.get_detail(plugin.id)
+    return PluginDetailOut(
+        **PluginOut.from_domain(plugin).model_dump(), versions=[PluginVersionOut.from_domain(v) for v in versions]
+    )
+
+
+@router.delete("/{plugin_id}", summary="弃用下架（deprecated 软删终态，不物理删除——全程可追溯）")
+async def delete_plugin(plugin_id: uuid.UUID, principal: PluginWriteDep, db: SessionDep, request: Request) -> PluginOut:
+    market = _market(request, db, principal)
+    try:
+        plugin = await market.deprecate(plugin_id=plugin_id)
+    except LookupError as exc:
+        raise _not_found(exc) from exc
+    except DomainError as exc:
+        raise _domain_error(exc) from exc
+    return PluginOut.from_domain(plugin)
+
+
+@router.get("/{plugin_id}/versions", summary="版本树（version 号倒序）")
+async def list_plugin_versions(
+    plugin_id: uuid.UUID, principal: PluginReadDep, db: SessionDep, request: Request
+) -> PluginVersionListOut:
+    market = _market(request, db, principal)
+    try:
+        versions = await market.list_versions(plugin_id)
+    except LookupError as exc:
+        raise _not_found(exc) from exc
+    return PluginVersionListOut(plugin_id=plugin_id, items=[PluginVersionOut.from_domain(v) for v in versions])
 
 
 @router.post("", status_code=status.HTTP_201_CREATED, summary="上传插件包（登记 draft + 首版本）")

@@ -1,21 +1,28 @@
-"""插件市场全链测试（上架→审核→发布，治理三档各一例；进程内 Fake 装配，AAA+中文命名）。
+"""插件市场全链测试（上架→审核→真签发布→安装，治理三档各一例；进程内 Fake 装配，AAA+中文命名）。
 
-覆盖：三档全链（solo 自批/team 禁自批+他人批/enterprise 双签四眼）、门禁失败退回、
-重复提交 4701、发布后 runtime 注册联动、安装与启停。
+覆盖：三档全链（solo 自批/team 禁自批+他人批/enterprise 双签四眼）、门禁链失败退回、
+重复提交 4701、发布真签（Skills §5.1 两级签名，占位签退役）与验签拒绝面、安装与启停、
+§5.6 剩余用例（PUT 元数据 / DELETE 弃用软删 / GET 版本树）。
 """
 
 from __future__ import annotations
 
+import copy
 import uuid
 
 import pytest
 from helpers import CHECKSUM, VALID_SERVER_JSON, FakeReviewPort, FakeTierReader
 
+from services.platform import security
 from services.platform.kernel import DomainError
+from services.platform.security import PLATFORM_SIG_PREFIX, PluginSigner
 from services.plugin.business.lifecycle import PluginMarketService
 from services.plugin.domain.model.plugin import Plugin, PluginKind, PluginStatus, PluginVersion, ToolBinding
 from services.plugin.runtime.registry import PluginRuntime
 from services.review.domain.approval_chain import GovernanceTier
+
+# 进程内平台钥（dev key 口径；与生产 OA_PLATFORM_PLUGIN_SIGNING_KEY 同一消费点）
+PLATFORM_SIGNER = PluginSigner(security.generate_signing_key())
 
 
 class FakePluginRepository:
@@ -84,7 +91,9 @@ class FakeBindingRepository:
 
 
 def _market(
-    tier: GovernanceTier, runtime: PluginRuntime | None = None
+    tier: GovernanceTier,
+    runtime: PluginRuntime | None = None,
+    signer: PluginSigner | None = PLATFORM_SIGNER,
 ) -> tuple[PluginMarketService, FakeReviewPort, uuid.UUID, PluginRuntime | None]:
     repo = FakePluginRepository()
     tenant_id = uuid.uuid4()
@@ -95,6 +104,7 @@ def _market(
         review=review,
         approvals=FakeApprovalServiceShim(review, FakeTierReader(tier)),
         runtime=runtime,
+        signer=signer,
     )
     return service, review, tenant_id, runtime
 
@@ -320,3 +330,192 @@ async def test_安装与启停_未发布版本拒绝_安装默认停用_enable�
     assert all(not b.enabled for b in disabled)
     # Assert：聚合域真值 suspended（PG 存储投影回读为 published——三值 CHECK 见报告漂移节）
     assert (await service.get_detail(plugin.id))[0].status is PluginStatus.SUSPENDED
+
+
+# ---------------------------------------------------------------- 两级签名（Skills §5.1）
+
+
+async def test_发布真签_两级签名可验_上架态回填manifest签名():
+    # Arrange
+    service, _review, tenant_id, _rt = _market(GovernanceTier.SOLO)
+    publisher = uuid.uuid4()
+    plugin, _ver, ticket_id = await _submit_listing(service, tenant_id, publisher)
+    # Act：终审通过 → 发布联动平台真签
+    outcome = await service.review_decision(
+        tenant_id=tenant_id, ticket_id=ticket_id, action="approve", approver_id=publisher
+    )
+    # Assert：占位签退役——plugins.signature 为 128 位 hex 真签，且与 manifest 回填一致
+    assert outcome.published is True
+    detail_plugin, versions = await service.get_detail(plugin.id)
+    assert detail_plugin.signature is not None and detail_plugin.signature.startswith(PLATFORM_SIG_PREFIX)
+    assert len(detail_plugin.signature) == len(PLATFORM_SIG_PREFIX) + 128
+    ver = versions[0]
+    assert ver.server_json["x-platform"]["signature"] == detail_plugin.signature  # 上架态必填回填
+    # Assert：两级验签全过（先平台签后开发者签）
+    assert PLATFORM_SIGNER.verify_platform(
+        server_json=ver.server_json,
+        checksum=ver.checksum,
+        publisher_signature=ver.server_json["x-platform"]["publisher_signature"],
+        platform_signature=detail_plugin.signature,
+    )
+
+
+async def test_发布缺开发者签名_4509拒绝():
+    service, _review, tenant_id, _rt = _market(GovernanceTier.SOLO)
+    publisher = uuid.uuid4()
+    server_json = copy.deepcopy(VALID_SERVER_JSON)
+    del server_json["x-platform"]["publisher_signature"]  # 缺第一级签名
+    plugin, ver = await service.create_listing(
+        tenant_id=tenant_id,
+        publisher_id=publisher,
+        slug="nosig",
+        name="无签插件",
+        kind=PluginKind.MCP_SERVER,
+        version="1.0.0",
+        server_json=server_json,
+        artifact_key=f"plugin-packages/x/{CHECKSUM[:8]}/package.zip",
+        checksum=CHECKSUM,
+    )
+    ticket_id = await service.submit_for_review(
+        tenant_id=tenant_id, plugin_id=plugin.id, version_id=ver.id, submitter_id=publisher
+    )
+    # Act / Assert：发布拒绝 4509（平台签对象=发布者签名+清单，第一级必须先在）
+    with pytest.raises(DomainError) as exc:
+        await service.review_decision(tenant_id=tenant_id, ticket_id=ticket_id, action="approve", approver_id=publisher)
+    assert int(str(exc.value)[:4]) == 4509
+    assert (await service.get_detail(plugin.id))[0].status is PluginStatus.IN_REVIEW  # 未发布
+
+
+async def test_发布_开发者签与清单不符_4509拒绝():
+    service, _review, tenant_id, _rt = _market(GovernanceTier.SOLO)
+    publisher = uuid.uuid4()
+    server_json = copy.deepcopy(VALID_SERVER_JSON)
+    server_json["description"] = "签名后被篡改的描述"  # 内嵌开发者签不再覆盖此清单
+    plugin, ver = await service.create_listing(
+        tenant_id=tenant_id,
+        publisher_id=publisher,
+        slug="tampered",
+        name="篡改插件",
+        kind=PluginKind.MCP_SERVER,
+        version="1.0.0",
+        server_json=server_json,
+        artifact_key=f"plugin-packages/x/{CHECKSUM[:8]}/package.zip",
+        checksum=CHECKSUM,
+    )
+    ticket_id = await service.submit_for_review(
+        tenant_id=tenant_id, plugin_id=plugin.id, version_id=ver.id, submitter_id=publisher
+    )
+    with pytest.raises(DomainError) as exc:
+        await service.review_decision(tenant_id=tenant_id, ticket_id=ticket_id, action="approve", approver_id=publisher)
+    assert int(str(exc.value)[:4]) == 4509
+
+
+async def test_平台密钥缺失_发布拒绝4510_fail_closed():
+    service, _review, tenant_id, _rt = _market(GovernanceTier.SOLO)
+    publisher = uuid.uuid4()
+    plugin, ver, ticket_id = await _submit_listing(service, tenant_id, publisher)
+    keyless = PluginMarketService(
+        repo=service._repo,  # 共享仓储（工单目标版本必须可见；仅换签名器）
+        bindings=FakeBindingRepository(tenant_id),
+        review=service._review,
+        approvals=service._approvals,
+        runtime=None,
+        signer=PluginSigner(None),  # 密钥未配置（开发期未供 dev key 的事故形态）
+    )
+    # Act / Assert：fail-closed 拒绝发布（4510），插件未推进
+    with pytest.raises(DomainError) as exc:
+        await keyless.review_decision(tenant_id=tenant_id, ticket_id=ticket_id, action="approve", approver_id=publisher)
+    assert int(str(exc.value)[:4]) == 4510
+    assert (await service.get_detail(plugin.id))[0].status is PluginStatus.IN_REVIEW
+
+
+async def test_安装_清单发布后被篡改_4509拒装():
+    service, _review, tenant_id, _rt = _market(GovernanceTier.SOLO)
+    publisher = uuid.uuid4()
+    plugin, _ver, ticket_id = await _submit_listing(service, tenant_id, publisher)
+    await service.review_decision(tenant_id=tenant_id, ticket_id=ticket_id, action="approve", approver_id=publisher)
+    # Act：发布后篡改版本清单（绕过平台链直改存储——验签是最后一道闸）
+    _plugin, versions = await service.get_detail(plugin.id)
+    versions[0].server_json["description"] = "安装前被篡改"
+    # Act / Assert：安装拒绝 4509
+    with pytest.raises(DomainError) as exc:
+        await service.install(tenant_id=tenant_id, plugin_id=plugin.id)
+    assert int(str(exc.value)[:4]) == 4509
+
+
+# ---------------------------------------------------------------- §5.6 剩余用例（PUT/DELETE/GET versions）
+
+
+async def test_PUT_更新元数据_仅展示名_deprecated终态拒绝():
+    service, _review, tenant_id, _rt = _market(GovernanceTier.SOLO)
+    publisher = uuid.uuid4()
+    plugin, _ver, ticket_id = await _submit_listing(service, tenant_id, publisher)
+    # Act：更新展示名（draft 态即可改；slug/kind 不可变不在用例面）
+    updated = await service.update_metadata(plugin_id=plugin.id, name="天气插件 Pro")
+    assert updated.name == "天气插件 Pro"
+    # Arrange：发布 → 弃用（终态）
+    await service.review_decision(tenant_id=tenant_id, ticket_id=ticket_id, action="approve", approver_id=publisher)
+    await service.deprecate(plugin_id=plugin.id)
+    # Act / Assert：终态元数据不可变更 → 4501
+    with pytest.raises(DomainError) as exc:
+        await service.update_metadata(plugin_id=plugin.id, name="改名尝试")
+    assert int(str(exc.value)[:4]) == 4501
+
+
+async def test_DELETE_弃用软删_市场默认视图不可见_runtime卸载_可回放():
+    runtime = PluginRuntime()
+    service, _review, tenant_id, runtime = _market(GovernanceTier.SOLO, runtime)
+    publisher = uuid.uuid4()
+    plugin, _ver, ticket_id = await _submit_listing(service, tenant_id, publisher)
+    await service.review_decision(tenant_id=tenant_id, ticket_id=ticket_id, action="approve", approver_id=publisher)
+    assert runtime.get(plugin.id) is not None  # 发布已注册
+    # Act：弃用（软删终态，不物理删除）
+    deprecated = await service.deprecate(plugin_id=plugin.id)
+    # Assert：域终态 + 市场默认视图排除 + runtime 卸载；记录仍可按 id 回放（全程可追溯）
+    assert deprecated.status is PluginStatus.DEPRECATED
+    assert all(p.id != plugin.id for p in await service.list_market())
+    assert runtime.get(plugin.id) is None
+    assert (await service.get_detail(plugin.id))[0].status is PluginStatus.DEPRECATED
+
+
+async def test_DELETE_draft插件_4501非法迁移():
+    service, _review, tenant_id, _rt = _market(GovernanceTier.SOLO)
+    plugin, _ver = await service.create_listing(
+        tenant_id=tenant_id,
+        publisher_id=uuid.uuid4(),
+        slug="draftdel",
+        name="草稿件",
+        kind=PluginKind.MCP_SERVER,
+        version="0.1.0",
+        server_json=VALID_SERVER_JSON,
+        artifact_key=f"plugin-packages/x/{CHECKSUM[:8]}/package.zip",
+        checksum=CHECKSUM,
+    )
+    # Act / Assert：draft → deprecated 非法迁移（状态机权威，Skills §4）
+    with pytest.raises(DomainError) as exc:
+        await service.deprecate(plugin_id=plugin.id)
+    assert int(str(exc.value)[:4]) == 4501
+
+
+async def test_GET_versions_版本树_多版本可见():
+    service, _review, tenant_id, _rt = _market(GovernanceTier.SOLO)
+    plugin, ver = await service.create_listing(
+        tenant_id=tenant_id,
+        publisher_id=uuid.uuid4(),
+        slug="versioned",
+        name="多版插件",
+        kind=PluginKind.MCP_SERVER,
+        version="1.0.0",
+        server_json=VALID_SERVER_JSON,
+        artifact_key=f"plugin-packages/x/{CHECKSUM[:8]}/package.zip",
+        checksum=CHECKSUM,
+    )
+    await service.add_version(
+        plugin_id=plugin.id,
+        version="1.1.0",
+        server_json=VALID_SERVER_JSON,
+        artifact_key=f"plugin-packages/x/{CHECKSUM[:8]}/package-110.zip",
+        checksum=CHECKSUM,
+    )
+    versions = await service.list_versions(plugin.id)
+    assert {v.version for v in versions} == {ver.version, "1.1.0"}

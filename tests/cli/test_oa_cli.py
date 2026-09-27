@@ -33,6 +33,7 @@ AuthHandler = Callable[[httpx.Request], httpx.Response]
 
 # --------------------------------------------------------------- 夹具与小工具
 
+
 @pytest.fixture()
 def creds_path(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     """把凭据文件指到临时目录，并隔离 OA_BASE_URL 环境变量（保证基址确定性）。"""
@@ -119,6 +120,7 @@ def _search_payload() -> dict:
 
 # --------------------------------------------------------------- login
 
+
 def test_login_success_writes_credentials_file(creds_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     captured: dict = {}
 
@@ -173,6 +175,7 @@ def test_login_unreachable_exits_3(creds_path: Path, monkeypatch: pytest.MonkeyP
 
 # --------------------------------------------------------------- 未登录前置（用法错误=2）
 
+
 def test_protected_command_without_login_exits_2_with_clear_message(creds_path: Path) -> None:
     for args in (["whoami"], ["kb", "search", "任意查询"], ["ontology", "list"]):
         result = _invoke(*args)
@@ -181,6 +184,7 @@ def test_protected_command_without_login_exits_2_with_clear_message(creds_path: 
 
 
 # --------------------------------------------------------------- kb search
+
 
 def test_kb_search_renders_citations_table(creds_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     _seed_credentials(creds_path)
@@ -236,6 +240,7 @@ def test_kb_search_falls_back_to_hits_projection(creds_path: Path, monkeypatch: 
 
 
 # --------------------------------------------------------------- whoami / status / ontology list
+
 
 def test_whoami_renders_identity(creds_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     _seed_credentials(creds_path)

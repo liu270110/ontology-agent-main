@@ -8,13 +8,13 @@ from __future__ import annotations
 import uuid
 
 import pytest
-from conftest import NOW, TENANT_ID, ScriptedAdapter, StepClock, make_dispatcher, make_mock_stack
 
 from services.writeback.adapters.base import AdapterError, BizStatusResult
 from services.writeback.adapters.mock_power_ticket import ACTION_IRI_CREATE_ORDER
 from services.writeback.business.action_dispatcher import project_entry
 from services.writeback.business.policy import WritebackPolicy
 from services.writeback.domain.model import LedgerStatus, WritebackAction, WritebackError, WritebackLedger
+from tests.writeback.conftest import NOW, TENANT_ID, ScriptedAdapter, StepClock, make_dispatcher, make_mock_stack
 
 ACTION_IRI = ACTION_IRI_CREATE_ORDER
 
@@ -274,7 +274,7 @@ def test_项目投影_输出契约对齐api03():
 
 
 def _receipt_of(req):
-    from conftest import _receipt
+    from tests.writeback.conftest import _receipt
 
     return _receipt(req.idempotency_key)
 

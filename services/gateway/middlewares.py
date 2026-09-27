@@ -215,20 +215,22 @@ class AuditLogMiddleware(BaseHTTPMiddleware):
         if request.method not in _WRITE_METHODS:
             return await call_next(request)
 
+        # 主体上下文在 ⑥ 入口定格（02 §3：⑥ 必须装配在 ③④ 内层）——禁在响应期回读共享
+        # request.state（内层 JWT 届时已写入 claims，乱序装配「审计先于JWT」将不可观测）
+        entry_claims = getattr(request.state, "jwt_claims", None)
         started = time.perf_counter()
         response = await call_next(request)
         latency_ms = int((time.perf_counter() - started) * 1000)
         try:
-            await self._record(request, response.status_code, latency_ms)
+            await self._record(request, entry_claims, response.status_code, latency_ms)
         except Exception:  # noqa: BLE001  ——审计失败不阻塞主流程
             logger.exception("audit log write failed: path=%s", request.url.path)
         return response
 
-    async def _record(self, request: Request, status_code: int, latency_ms: int) -> None:
+    async def _record(self, request: Request, claims: dict | None, status_code: int, latency_ms: int) -> None:
         factory = getattr(request.app.state, "audit_session_factory", None)
         if factory is None:  # lifespan 未初始化存储（单测/降级）→ 跳过落库
             return
-        claims = getattr(request.state, "jwt_claims", None)
         template = _route_template(request.url.path)
         resource_type = template.split("/")[2] if template.count("/") >= 2 else None
         digest = hashlib.sha256(request.url.query.encode("utf-8")).hexdigest()[:32]

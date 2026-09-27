@@ -10,8 +10,10 @@ import uuid
 from typing import TYPE_CHECKING
 
 import pytest
+from helpers import publisher_signed_fields
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from services.platform.security import PLATFORM_SIG_PREFIX, PluginSigner
 from services.plugin.business.lifecycle import PluginMarketService
 from services.plugin.data.repo_impl.plugin_repo import PgPluginRepository, PgToolBindingRepository
 from services.plugin.domain.model.plugin import Plugin, PluginKind, PluginStatus, PluginVersion
@@ -24,6 +26,7 @@ if TYPE_CHECKING:
 pytestmark = pytest.mark.integration
 
 CHECKSUM = "d" * 64
+PLATFORM_SIGNER = PluginSigner("ab" * 32)  # 进程内 dev key（发布真签联动）
 
 
 def _server_json() -> dict:
@@ -37,6 +40,7 @@ def _server_json() -> dict:
             "schema_version": "1",
             "category": "data-tools",
             "required_scopes": ["weather:read"],
+            "compatible_protocol_versions": ["2025-06-18"],
             "tools": [
                 {
                     "name": f"it.weather.{uuid.uuid4().hex[:8]}",
@@ -49,6 +53,13 @@ def _server_json() -> dict:
     }
 
 
+def _signed_server_json() -> dict:
+    """带开发者签名的清单（发布联动前置——平台签对象=发布者签名+清单，Skills §5.1）。"""
+    server_json = _server_json()
+    server_json["x-platform"].update(publisher_signed_fields(server_json, CHECKSUM))
+    return server_json
+
+
 def _market(seed: PluginSeed, db: AsyncSession) -> PluginMarketService:
     """每会话装配（仓储构造期绑定会话与租户；审批面走 PG 工单服务）。"""
     tickets = ReviewTicketService(seed.factory)
@@ -58,6 +69,7 @@ def _market(seed: PluginSeed, db: AsyncSession) -> PluginMarketService:
         review=tickets,
         approvals=ReviewApprovalService(tickets, PgGovernanceTierReader(seed.factory)),
         runtime=seed.runtime,
+        signer=PLATFORM_SIGNER,
     )
 
 
@@ -140,7 +152,7 @@ async def test_上架全链_PG_in_review由open工单重建_发布联动runtime(
             name="IT 插件",
             kind=PluginKind.MCP_SERVER,
             version="1.0.0",
-            server_json=_server_json(),
+            server_json=_signed_server_json(),
             artifact_key=f"plugin-packages/{slug}/1.0.0/package.zip",
             checksum=CHECKSUM,
         )
@@ -155,10 +167,14 @@ async def test_上架全链_PG_in_review由open工单重建_发布联动runtime(
         outcome = await service.review_decision(
             tenant_id=seed.tenant_id, ticket_id=ticket_id, action="approve", approver_id=seed.publisher_id
         )
+        published = await service.get_detail(plugin.id)  # 仓储回读（发布联动改写的是重建实例）
+        published_signature = published[0].signature
         await db.commit()
     # Assert：工单 published、插件 published、runtime 已注册（候选非成品出口门禁）
     assert outcome.published is True
     assert seed.runtime.get(plugin.id) is not None
+    # Assert：PG 链发布即平台真签（占位签退役；PG 回填 server_json 持久化经 save_version）
+    assert published_signature is not None and published_signature.startswith(PLATFORM_SIG_PREFIX)
 
 
 async def test_安装绑定_默认停用_enable持久化_租户隔离(plugin_seed):
@@ -166,7 +182,7 @@ async def test_安装绑定_默认停用_enable持久化_租户隔离(plugin_see
     seed = plugin_seed
     slug = f"it-{uuid.uuid4().hex[:10]}"
     async with seed.factory() as db:
-        plugin, _ver, service = await _create_and_publish(seed, db, slug, _server_json())
+        plugin, _ver, service = await _create_and_publish(seed, db, slug, _signed_server_json())
         # Act：安装（tools.enabled=false 默认——外部默认不可信）
         bindings = await service.install(tenant_id=seed.tenant_id, plugin_id=plugin.id)
         await db.commit()

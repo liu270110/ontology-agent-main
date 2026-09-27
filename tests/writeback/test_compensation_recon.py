@@ -5,11 +5,11 @@ from __future__ import annotations
 import uuid
 
 import pytest
-from conftest import NOW, TENANT_ID, ScriptedAdapter, make_dispatcher, make_mock_stack
 
 from services.writeback.adapters.base import AdapterError, BizStatusResult
 from services.writeback.adapters.mock_power_ticket import ACTION_IRI_CREATE_ORDER
 from services.writeback.domain.model import LedgerStatus, WritebackAction, WritebackError, WritebackLedger
+from tests.writeback.conftest import NOW, TENANT_ID, ScriptedAdapter, make_dispatcher, make_mock_stack
 
 ACTION_IRI = ACTION_IRI_CREATE_ORDER
 
@@ -201,7 +201,7 @@ async def test_对账一致无差异_报告零处置():
 
 
 async def test_对账_unknown超时挂人工队列():
-    from conftest import StepClock
+    from tests.writeback.conftest import StepClock
 
     def lost_response(req):
         raise TimeoutError()  # 响应丢失 → unknown

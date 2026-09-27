@@ -54,6 +54,126 @@ class DocumentOut(BaseModel):
     created: bool = True  # 幂等命中既有文档时为 False（§8.0 精确重复拒收并幂等返回）
 
 
+# ---------------------------------------------------------------- 文档列表（R51 联调补齐 GET /kb/documents）
+
+KbDocUiStatus = Literal["pending", "extracting", "indexed", "failed"]  # 前端 KbDocStatus 四态
+KbDocType = Literal["PDF", "Word", "Excel", "CSV", "图片"]  # 前端 FileTypeBadge 五类
+
+# 后端 documents.status 八态（database/01 DDL）→ 前端四态收敛：
+# 抽取中=preprocessed/extracting/aligning/validating；等待=pending_review（候选待人工终审，
+# 非入库非失败，重抽可用）；uploaded=待抽取。pending_review 不映射 extracting——避免前端
+# 1.5s 轮询永不收敛（StatusBadge 仅对 extracting 行轮询）。
+_UI_STATUS_OF: dict[str, KbDocUiStatus] = {
+    "uploaded": "pending",
+    "preprocessed": "extracting",
+    "extracting": "extracting",
+    "aligning": "extracting",
+    "validating": "extracting",
+    "pending_review": "pending",
+    "indexed": "indexed",
+    "failed": "failed",
+}
+
+# 前端状态筛（?status=）→ 后端八态集合（正反同表维护，词汇表收敛无注入面）
+DOCUMENT_UI_STATUS_FILTER: dict[str, tuple[str, ...]] = {
+    "pending": ("uploaded", "pending_review"),
+    "extracting": ("preprocessed", "extracting", "aligning", "validating"),
+    "indexed": ("indexed",),
+    "failed": ("failed",),
+}
+
+# ?status= 接受面：前端四态别名 + 后端八态原值（原值走 (value,) 单值过滤）
+DocumentStatusQuery = Literal[
+    KbDocUiStatus,
+    "uploaded",
+    "preprocessed",
+    "aligning",
+    "validating",
+    "pending_review",
+]
+
+# 前端类型筛（?type=）→ (title 后缀 LIKE 模式, mime ILIKE 模式)（?type= 可选过滤）
+DOCUMENT_TYPE_FILTER: dict[KbDocType, tuple[tuple[str, ...], tuple[str, ...]]] = {
+    "PDF": (("%.pdf",), ("application/pdf%",)),
+    "Word": (("%.doc", "%.docx"), ("%msword%", "%wordprocessingml%")),
+    "Excel": (("%.xls", "%.xlsx"), ("%ms-excel%", "%spreadsheetml%")),
+    "CSV": (("%.csv",), ("text/csv%",)),
+    "图片": (("%.png", "%.jpg", "%.jpeg", "%.gif", "%.webp", "%.bmp", "%.svg"), ("image/%",)),
+}
+
+
+def ui_status_of(document_status: str) -> KbDocUiStatus:
+    """后端八态 → 前端四态（未登记状态兜底 pending，不炸列表）。"""
+    return _UI_STATUS_OF.get(document_status, "pending")
+
+
+def doc_type_of(title: str, mime_type: str | None) -> KbDocType:
+    """标题扩展名优先、mime 兜底的文档类型投影（mock 同款兜底=图片）。"""
+    ext = title.rsplit(".", 1)[-1].upper() if "." in title else ""
+    if ext == "PDF" or "pdf" in (mime_type or "").lower():
+        return "PDF"
+    if ext in ("DOC", "DOCX") or any(k in (mime_type or "").lower() for k in ("msword", "wordprocessingml")):
+        return "Word"
+    if ext in ("XLS", "XLSX") or any(k in (mime_type or "").lower() for k in ("ms-excel", "spreadsheetml")):
+        return "Excel"
+    if ext == "CSV" or "csv" in (mime_type or "").lower():
+        return "CSV"
+    return "图片"
+
+
+class DocumentPipelineProgress(BaseModel):
+    """流水线进度（R51 对账 DTO：step=已完成步数，total=全流水线步数）。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    step: int = 0
+    total: int = 0
+
+
+class DocumentListItem(BaseModel):
+    """文档管理页行 DTO（live 对账口径：前端 KbDocument 全字段 + pipeline/tier/created_at）。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    id: uuid.UUID
+    name: str  # = documents.title
+    doc_type: KbDocType
+    size: int = 0  # 字节（对账 DTO 命名）
+    size_bytes: int | None = None  # 同义字段（前端 KbDocument.size_bytes）
+    chunk_count: int = 0
+    status: KbDocUiStatus
+    progress: int = 0  # 0-100（done 步 / 流水线总步）
+    pipeline: DocumentPipelineProgress = Field(default_factory=DocumentPipelineProgress)
+    tier: str | None = None  # 文档分层后端未建模，恒 None（对账 DTO 占位）
+    job_id: str | None = None  # lite 流水线进程内执行，无独立任务号
+    error: str | None = None  # failed 步错误摘录
+    created_at: datetime
+    updated_at: datetime
+    indexed_today: bool = False  # 当日入库（前端规模统计带）
+
+
+class DocumentListData(BaseModel):
+    """列表 data 面（信封解包后形态：{items,total,next_cursor} + offset/limit）。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    items: list[DocumentListItem] = Field(default_factory=list)
+    total: int = 0
+    next_cursor: str | None = None  # 前端 listDocuments DTO 契约字段（offset/limit 分页恒 None）
+    offset: int = 0
+    limit: int = 100
+
+
+class DocumentListEnvelope(BaseModel):
+    """列表成功信封（live 对账口径：前端 client apiFetchEnvelope 强信封解包——同 R50 注）。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    code: int = 0
+    message: str = "ok"
+    data: DocumentListData
+
+
 class PipelineStartOut(BaseModel):
     model_config = ConfigDict(extra="forbid")
     document_id: uuid.UUID

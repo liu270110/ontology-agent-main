@@ -2,6 +2,8 @@
 
 端点（api/01 登记册 kb 行；OntRAG §5 检索契约 REST 子集）：
     POST /kb/collections                      建库
+    GET  /kb/documents                        文档列表（R51 联调补齐：信封 + 前端
+                                              KbDocument DTO；status/type 可选过滤）
     POST /kb/documents                        JSON 内容直传（MinIO 随 M3；checksum 幂等）
     POST /kb/documents/{id}/pipeline/start    后台流水线（202 受理；M2 lite 四步 / M2 full
                                               七步中段 extract/align/validate 已插回）
@@ -14,6 +16,9 @@ scope：kb:write（写路径）/ kb:read（检索与进度），deny-by-default�
 mode=global/drift 无社区摘要索引 → 降级 local 且 degraded=true（drift/完整档二期）；
 流水线 embed 步软降级（document.meta["degraded"]=["embed"]，可重跑补向量）。
 检索响应 = OntRAG §5 契约 REST 子集全量（citations/evidence.graph_paths/answers/usage）。
+ACL 标签面接线（OntRAG §4.3，2026-09-27 任务 1）：X-Acl-Tags 请求头（逗号分隔）→
+AclPushdown（开关 OA_KB_ACL_FILTER_ENABLED + 标签面双条件激活）→ 三路同源谓词下推；
+无头 = no-op（调用方未接入标签面，兼容红线）。
 """
 
 from __future__ import annotations
@@ -23,20 +28,29 @@ import logging
 import time
 import uuid
 from collections.abc import Sequence
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Annotated
 
-from fastapi import APIRouter, BackgroundTasks, Depends, Request, status
-from sqlalchemy import select
+from fastapi import APIRouter, BackgroundTasks, Depends, Query, Request, status
+from sqlalchemy import func, or_, select
 from sqlalchemy.exc import IntegrityError
 
 from services.kb.api.schemas.kb import (
+    DOCUMENT_TYPE_FILTER,
+    DOCUMENT_UI_STATUS_FILTER,
     CollectionCreateIn,
     CollectionOut,
     DocumentCreateIn,
+    DocumentListData,
+    DocumentListEnvelope,
+    DocumentListItem,
     DocumentOut,
+    DocumentPipelineProgress,
+    DocumentStatusQuery,
     KbAnswerOut,
     KbAnswerSentenceOut,
     KbCitationOut,
+    KbDocType,
     KbEvidenceOut,
     KbGraphNodeOut,
     KbGraphPathOut,
@@ -48,10 +62,12 @@ from services.kb.api.schemas.kb import (
     PipelineProgressOut,
     PipelineStartOut,
     PipelineStepOut,
+    doc_type_of,
+    ui_status_of,
 )
 from services.kb.business.kb_pipeline import M2_FULL_STEPS, PipelineError, run_pipeline
-from services.kb.data.orm import Document, KbCollection, KbPipelineStep
-from services.kb.retrieval.embed import OllamaEmbedder, bm25_search, vector_search
+from services.kb.data.orm import Document, DocumentChunk, KbCollection, KbPipelineStep
+from services.kb.retrieval.embed import AclPushdown, OllamaEmbedder, bm25_search, vector_search
 from services.kb.retrieval.graph import ClassHierarchy, build_class_hierarchy, expand_graph
 from services.kb.retrieval.retrieve import ExtractiveAnswer, GraphExpansion, GraphPath, SearchHit, hybrid_search
 from services.ontology.business.hierarchy_service import get_class_hierarchy
@@ -76,6 +92,21 @@ KbWriteDep = Annotated[Principal, Depends(require_scope("kb:write"))]
 logger = logging.getLogger("services.gateway.kb")
 
 _HIERARCHY_TTL_SECONDS = 300.0  # 类层次进程内缓存 TTL（任务口径：lite 档不追发布事件失效；示例值）
+
+
+def _acl_tags_from_request(request: Request) -> list[str] | None:
+    """调用方 acl 标签面提取（OntRAG §4.3；X-Acl-Tags 请求头，逗号分隔）。
+
+    - 无头 → None：调用方未接入标签面，开关开启也不激活谓词（no-op，兼容红线）；
+    - 有头空值 → []：显式空标签面，deny-by-default（仅未标注文档可见）；
+    - 有头 → 去空白后逐段取标签。
+    标签面属调用方授权上下文，只从请求头（通道侧信道）采集，禁从 body/query 参数采集
+    （不可信输入不作授权依据，capability_provider 红线同源）。
+    """
+    raw = request.headers.get("x-acl-tags")
+    if raw is None:
+        return None
+    return [tag.strip() for tag in raw.split(",") if tag.strip()]
 
 
 def _embedder(state: object) -> OllamaEmbedder:
@@ -206,6 +237,101 @@ def _document_out(doc: Document, *, created: bool) -> DocumentOut:
     )
 
 
+@router.get("/documents", summary="文档列表（管理页；status/type 可选过滤 + 流水线进度投影）")
+async def list_documents(
+    principal: KbReadDep,
+    session: SessionDep,
+    status_filter: Annotated[DocumentStatusQuery | None, Query(alias="status")] = None,
+    type_filter: Annotated[KbDocType | None, Query(alias="type")] = None,
+    offset: Annotated[int, Query(ge=0)] = 0,
+    limit: Annotated[int, Query(ge=1, le=200)] = 100,
+) -> DocumentListEnvelope:
+    """当前有效文档分页（bi-temporal：valid_to IS NULL，最新优先），R51 联调补齐。
+
+    live 对账契约（2026-09-28）：① 前端 client apiFetchEnvelope 强信封解包 → 返回
+    {code,message,data:{items,total,next_cursor}}；② items=前端 KbDocument 全字段
+    （name/doc_type/size_bytes/chunk_count/status 四态/progress/job_id/error/updated_at/
+    indexed_today）+ pipeline{step,total}/size/created_at/tier；③ ?status=（前端四态别名
+    或后端八态原值）与 ?type=（五类文档类型）均为可选过滤。空列表合法。
+    """
+    statuses: tuple[str, ...] | None = None
+    if status_filter is not None:
+        statuses = DOCUMENT_UI_STATUS_FILTER.get(status_filter, (status_filter,))
+
+    conditions = [Document.tenant_id == principal.tenant_id, Document.valid_to.is_(None)]
+    if statuses is not None:
+        conditions.append(Document.status.in_(statuses))
+    if type_filter is not None:
+        title_patterns, mime_patterns = DOCUMENT_TYPE_FILTER[type_filter]
+        conditions.append(
+            or_(
+                or_(*(Document.title.ilike(p) for p in title_patterns)),
+                or_(*(Document.mime_type.ilike(p) for p in mime_patterns)),
+            )
+        )
+
+    total = (await session.execute(select(func.count()).select_from(Document).where(*conditions))).scalar_one()
+    docs = (
+        (
+            await session.execute(
+                select(Document).where(*conditions).order_by(Document.created_at.desc()).offset(offset).limit(limit)
+            )
+        )
+        .scalars()
+        .all()
+    )
+
+    chunk_counts: dict[uuid.UUID, int] = {}
+    step_stats: dict[uuid.UUID, tuple[int, str | None]] = {}
+    if docs:
+        doc_ids = [doc.id for doc in docs]
+        for doc_id, count in (
+            await session.execute(
+                select(DocumentChunk.document_id, func.count())
+                .where(DocumentChunk.document_id.in_(doc_ids))
+                .group_by(DocumentChunk.document_id)
+            )
+        ).all():
+            chunk_counts[doc_id] = count
+        for row in (
+            await session.execute(
+                select(KbPipelineStep.document_id, KbPipelineStep.status, KbPipelineStep.error)
+                .where(KbPipelineStep.tenant_id == principal.tenant_id, KbPipelineStep.document_id.in_(doc_ids))
+                .order_by(KbPipelineStep.created_at)
+            )
+        ).all():
+            done, err = step_stats.get(row.document_id, (0, None))
+            if row.status == "done":
+                done += 1
+            elif row.status == "failed" and err is None:
+                err = (row.error or "流水线步骤失败")[:200]
+            step_stats[row.document_id] = (done, err)
+
+    total_steps = len(M2_FULL_STEPS)
+    today = datetime.now(UTC).date()
+    items = [
+        DocumentListItem(
+            id=doc.id,
+            name=doc.title,
+            doc_type=doc_type_of(doc.title, doc.mime_type),
+            size=doc.size_bytes or 0,
+            size_bytes=doc.size_bytes,
+            chunk_count=chunk_counts.get(doc.id, 0),
+            status=ui_status_of(doc.status),
+            progress=100
+            if doc.status == "indexed"
+            else int(round(100 * step_stats.get(doc.id, (0, None))[0] / total_steps)),
+            pipeline=DocumentPipelineProgress(step=step_stats.get(doc.id, (0, None))[0], total=total_steps),
+            error=step_stats.get(doc.id, (0, None))[1] if doc.status == "failed" else None,
+            created_at=doc.created_at,
+            updated_at=doc.updated_at,
+            indexed_today=(doc.status == "indexed" and doc.updated_at.date() == today),
+        )
+        for doc in docs
+    ]
+    return DocumentListEnvelope(data=DocumentListData(items=items, total=total, offset=offset, limit=limit))
+
+
 @router.post(
     "/documents/{document_id}/pipeline/start",
     status_code=status.HTTP_202_ACCEPTED,
@@ -325,10 +451,17 @@ async def search(body: KbSearchIn, principal: KbReadDep, request: Request, sessi
     降级：嵌入路不可用 → BM25-only（degraded=true, reason=vector_unavailable）；
     mode=global/drift 无社区摘要索引 → local 降级（degraded=true, reason=mode_downgraded:*，二期）；
     图路无已发布本体读模型 → 层次闭包退化为类自身，同类扩展照常（非降级）。
+    ACL：X-Acl-Tags 头 + OA_KB_ACL_FILTER_ENABLED 开关双条件激活 → 三路同源谓词下推（§4.3）；
+    无头 = no-op（调用方未接入标签面，零行为变化红线）。
     """
     started = time.perf_counter()
     embedder = _embedder(request.app.state)
     hierarchy = await _class_hierarchy(request, session, principal.tenant_id, body.ontology_version)
+    acl = await AclPushdown.prepare(
+        session,
+        enabled=request.app.state.settings.kb_acl_filter_enabled,
+        allowed_tags=_acl_tags_from_request(request),
+    )
 
     async def bm25_fn(query: str, top_k: int) -> list[SearchHit]:
         rows = await bm25_search(
@@ -339,6 +472,7 @@ async def search(body: KbSearchIn, principal: KbReadDep, request: Request, sessi
             collection_id=body.kb_id,
             as_of=body.as_of,
             include_superseded=body.include_superseded,
+            acl=acl,
         )
         return [_dict_to_hit(r) for r in rows]
 
@@ -352,6 +486,7 @@ async def search(body: KbSearchIn, principal: KbReadDep, request: Request, sessi
             collection_id=body.kb_id,
             as_of=body.as_of,
             include_superseded=body.include_superseded,
+            acl=acl,
         )
         return [_dict_to_hit(r) for r in rows]
 
@@ -367,6 +502,7 @@ async def search(body: KbSearchIn, principal: KbReadDep, request: Request, sessi
             entity_type_filter=body.entity_type_filter,
             as_of=body.as_of,
             include_superseded=body.include_superseded,
+            acl=acl,
         )
 
     result = await hybrid_search(

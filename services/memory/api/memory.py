@@ -1,4 +1,4 @@
-"""L2 memory 路由（api/01 §5.5 登记册六端点；memory §5 契约）。
+"""L2 memory 路由（api/01 §5.5 登记册 + ★ 端点补齐；memory §5 契约）。
 
     GET  /memory                              读记忆（按 layer/key 过滤）
     POST /memory/search                       语义检索（M3 过渡：关键词+新近双通道 RRF）
@@ -6,6 +6,13 @@
     POST /memory/facts/{id}/invalidate        失效标记（墓碑式软删，无 DELETE 端点）
     POST /memory/consolidate                  触发 L1→L2 沉淀（202 受理，后台执行）
     GET  /memory/context                      组装会话上下文记忆（mode=full|light）
+    ── ★ 端点（api/01 §5.5 登记册补齐，2026-09-28）──
+    GET  /memory/l1/{session_id}              读 L1 工作记忆快照（blocks/window/state）
+    GET  /memory/facts                        查询用户事实（分页、status/category 过滤）
+    GET  /memory/facts/{id}/timeline          事实变更时间线（产生/升级/失效全程留痕）
+    POST /memory/promotions                   发起 L2→L3 升级申请单（202，409* 重复）
+    GET  /memory/promotions                   升级单记录回放（M5 前占位面：登记行投影）
+    GET  /memory/audit                        记忆审计查询（按 user/session 回放）
 
 scope：memory:read / memory:write，deny-by-default（08 §2.5）。
 授权矩阵（memory §5.3）：用户读写本人记忆；跨用户 → 403（2002）。
@@ -17,32 +24,47 @@ from __future__ import annotations
 import logging
 import uuid
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Annotated, Literal
+from typing import TYPE_CHECKING, Annotated, Any, Literal
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Query, Request, status
 
 from services.memory.api.schemas.memory import (
+    AuditEntryOut,
+    AuditPageOut,
     ConsolidateIn,
     ConsolidateOut,
     FactOut,
     FactPageOut,
+    FactTimelineOut,
     FactWrittenOut,
     L1ReadOut,
     MemoryContextOut,
     MemorySearchIn,
     MemorySearchOut,
     MemoryWriteIn,
+    PromotionIn,
+    PromotionOut,
+    PromotionPageOut,
+    PromotionRecordOut,
     SearchHitOut,
 )
 from services.memory.business.consolidation import consolidate_session
 from services.memory.business.context import build_memory_context, merge_l2_hits
 from services.memory.business.pipeline_store import RedisCheckpointStore, RedisDeadLetterSink
+from services.memory.business.timeline import build_timeline
 from services.memory.data.l1 import RedisL1Store
-from services.memory.data.repo_impl.fact_repo import PgL2FactRepository
+from services.memory.data.repo_impl.fact_repo import (
+    MemoryAuditUnavailableError,
+    PgL2FactRepository,
+    promotion_exists,
+    query_memory_audit,
+    query_promotions,
+    record_memory_promotion,
+)
 from services.memory.domain.model.l2_fact import FactCategory, FactStatus, L2Fact, fact_fingerprint
 from services.memory.domain.repo.fact_repo import L1MemoryStore  # 运行时 import：FastAPI 装饰期解析注解
 from services.platform.deps import Principal, SessionDep, get_redis, require_scope
-from services.platform.errors import GatewayError
+from services.platform.errors import ErrorCode, GatewayError
 
 if TYPE_CHECKING:  # 仅类型注解（运行时零 import——app.py 同款纪律）
     from sqlalchemy.ext.asyncio import AsyncSession
@@ -104,11 +126,16 @@ async def read_memory(
         if session_id is None:
             raise GatewayError(3001, "layer=l1 需提供 session_id", status_code=400)
         return L1ReadOut.from_snapshot(await l1.read(principal.tenant_id, session_id))
-    uid = _resolve_user(principal, user_id)
-    facts = await _repo(db, principal.tenant_id).list_for_user(
-        uid, status=status_filter, category=category, offset=offset, limit=limit
+    # layer=l2 与 ★ GET /memory/facts 同一查询面（登记册双路径并存，委托实现零双源）
+    return await list_facts(
+        principal=principal,
+        db=db,
+        user_id=user_id,
+        status_filter=status_filter,
+        category=category,
+        offset=offset,
+        limit=limit,
     )
-    return FactPageOut(items=[FactOut.from_domain(f) for f in facts], offset=offset, limit=limit)
 
 
 @router.post("/search", summary="语义检索（M3 过渡：双通道 RRF；向量通道随嵌入接入）")
@@ -271,7 +298,129 @@ async def memory_context(
     return MemoryContextOut.from_bundle(bundle)
 
 
+# ---------------------------------------------------------------- ★ 端点（api/01 §5.5 登记册补齐）
+
+
+@router.get("/l1/{session_id}", summary="读 L1 工作记忆（blocks / window / state，memory §5.1）")
+async def read_l1_snapshot(principal: MemoryReadDep, l1: L1StoreDep, session_id: uuid.UUID) -> L1ReadOut:
+    """L1 快照（★ GET /memory/l1/{session_id}）：tenant 硬过滤；键缺失=新会话空快照非 404，
+    Redis 不可达=degraded 标注（memory §4 降级语义，不阻塞会话）——登记册 404* 预留
+    会话存在性校验（sessions 表归 agent 模块，M4 经 gateway 聚合面接入）。"""
+    return L1ReadOut.from_snapshot(await l1.read(principal.tenant_id, session_id))
+
+
+@router.get("/facts", summary="查询用户事实（分页、status / category 过滤）")
+async def list_facts(
+    principal: MemoryReadDep,
+    db: SessionDep,
+    user_id: uuid.UUID | None = None,
+    status_filter: Annotated[FactStatus | None, Query(alias="status")] = None,
+    category: FactCategory | None = None,
+    offset: Annotated[int, Query(ge=0)] = 0,
+    limit: Annotated[int, Query(ge=1, le=100)] = 20,
+) -> FactPageOut:
+    """用户事实分页查询（★ GET /memory/facts）：status/category 过滤，created_at 倒序。"""
+    uid = _resolve_user(principal, user_id)
+    facts = await _repo(db, principal.tenant_id).list_for_user(
+        uid, status=status_filter, category=category, offset=offset, limit=limit
+    )
+    return FactPageOut(items=[FactOut.from_domain(f) for f in facts], offset=offset, limit=limit)
+
+
+@router.get("/facts/{fact_id}/timeline", summary="事实变更时间线（产生 / 升级 / 失效全程留痕，FR-MEM-06）")
+async def fact_timeline(fact_id: uuid.UUID, principal: MemoryReadDep, db: SessionDep) -> FactTimelineOut:
+    """版本链时间线（★ GET /memory/facts/{id}/timeline）：supersedes 链双向回放 →
+    事件流投影（business.timeline 纯函数）；未命中/跨用户一律 404（不泄露存在性）。"""
+    chain = await _repo(db, principal.tenant_id).chain_for_user(principal.user_id, fact_id)
+    if not chain:
+        raise GatewayError(404, "记忆事实不存在", status_code=404)
+    return FactTimelineOut.from_domain(build_timeline(chain, fact_id))
+
+
+@router.post(
+    "/promotions",
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="发起 L2→L3 升级申请单（M5 前占位登记：仅审计留痕，不写 L3、不建工单）",
+)
+async def create_promotion(
+    body: PromotionIn, request: Request, principal: MemoryWriteDep, db: SessionDep
+) -> PromotionOut:
+    """L2→L3 升级申请（★ POST /memory/promotions）：登记=audit_logs 一行（memory §2 门禁表
+    M5 前口径）；同事实重复申请 409*（bare code，02 §7 登记后回填）；审计存储缺失 503。"""
+    fact = await _repo(db, principal.tenant_id).get(body.fact_id)
+    if fact is None or fact.user_id != principal.user_id:  # 未命中或跨用户一律 404
+        raise GatewayError(404, "记忆事实不存在", status_code=404)
+    if await promotion_exists(db, tenant_id=principal.tenant_id, fact_id=body.fact_id):
+        raise GatewayError(409, "该事实已存在 L2→L3 升级申请单", status_code=409)
+    promotion_id = uuid.uuid4()
+    try:
+        await record_memory_promotion(
+            db,
+            tenant_id=principal.tenant_id,
+            actor_id=principal.user_id,
+            fact_id=body.fact_id,
+            promotion_id=promotion_id,
+            session_id=body.session_id,
+            reason=body.reason,
+            trace_id=getattr(request.state, "trace_id", None),
+        )
+    except MemoryAuditUnavailableError as exc:
+        raise GatewayError(ErrorCode.STORAGE_UNAVAILABLE, "审计存储不可用，升级单无法登记", status_code=503) from exc
+    return PromotionOut(promotion_id=promotion_id, fact_id=body.fact_id)
+
+
+@router.get("/promotions", summary="升级单记录回放（M5 前占位面：audit_logs 登记行投影）")
+async def list_promotions(
+    principal: MemoryReadDep,
+    db: SessionDep,
+    user_id: uuid.UUID | None = None,
+    offset: Annotated[int, Query(ge=0)] = 0,
+    limit: Annotated[int, Query(ge=1, le=100)] = 20,
+) -> PromotionPageOut:
+    """升级单记录（★ promotions 记录面）：登记行投影倒序分页；无登记 → items=[] 契约形状。
+    用户缺省仅本人登记；他人 user_id → 403（audit 同款授权矩阵）。"""
+    uid = _resolve_user(principal, user_id)
+    rows = await query_promotions(db, tenant_id=principal.tenant_id, user_id=uid, offset=offset, limit=limit)
+    return PromotionPageOut(items=[_promotion_record_out(r) for r in rows], offset=offset, limit=limit)
+
+
+@router.get("/audit", summary="记忆审计查询（按 user/session 回放；管理员全租户，用户仅本人）")
+async def memory_audit(
+    principal: MemoryReadDep,
+    db: SessionDep,
+    user_id: uuid.UUID | None = None,
+    session_id: uuid.UUID | None = None,
+    offset: Annotated[int, Query(ge=0)] = 0,
+    limit: Annotated[int, Query(ge=1, le=200)] = 50,
+) -> AuditPageOut:
+    """记忆域审计回放（★ GET /memory/audit）：audit_logs 中 memory.* 动作（含 promotions
+    登记行），user/session 过滤（session 走 params_digest->>session_id）；跨用户 403（2002，
+    授权矩阵「平台管理员审计只读」以 admin 角色放行全租户）。表缺失 → 空列表降级。"""
+    is_admin = "admin" in principal.roles
+    if not is_admin and user_id is not None and user_id != principal.user_id:
+        raise GatewayError(2002, "仅可回放本人记忆审计", status_code=403)
+    actor = user_id if (is_admin or user_id is not None) else principal.user_id
+    rows = await query_memory_audit(
+        db, tenant_id=principal.tenant_id, user_id=actor, session_id=session_id, offset=offset, limit=limit
+    )
+    return AuditPageOut(items=[AuditEntryOut(**r) for r in rows], offset=offset, limit=limit)
+
+
 # ---------------------------------------------------------------- 内部
+
+
+def _promotion_record_out(row: dict[str, Any]) -> PromotionRecordOut:
+    """audit_logs 登记行 → 升级单记录 DTO（promotion_id/fact_id/reason 存 params_digest）。"""
+    digest = row.get("params_digest") or {}
+    session_id = digest.get("session_id")
+    return PromotionRecordOut(
+        promotion_id=uuid.UUID(digest["promotion_id"]) if digest.get("promotion_id") else uuid.UUID(str(row["id"])),
+        fact_id=uuid.UUID(str(row["resource_id"])),
+        requested_by=row.get("actor_id"),
+        reason=str(digest.get("reason") or ""),
+        session_id=uuid.UUID(session_id) if session_id else None,
+        created_at=row["created_at"],
+    )
 
 
 def _hit_out(hit: L2Hit) -> SearchHitOut:

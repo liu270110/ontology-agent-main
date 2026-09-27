@@ -64,7 +64,8 @@ def test_迁移链单头_a1b2c3d4e5f6():
         if down:
             downs.add(down.group(1))
     heads = revisions - downs
-    assert heads == {"a1b2c3d4e5f6"}
+    # 不变量=单头（迁移只增不改，链可持续生长；不锁具体 revision id）
+    assert len(heads) == 1, f"迁移链出现多头: {sorted(heads)}"
 
 
 # ---------------------------------------------------------------- PG 夹具

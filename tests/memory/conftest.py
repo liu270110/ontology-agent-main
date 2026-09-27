@@ -64,6 +64,17 @@ async def mem_seed() -> AsyncIterator[MemorySeed]:
     try:
         async with probe.connect() as conn:
             await conn.execute(text("SELECT 1 FROM memory_l2_facts LIMIT 1"))
+            # 会话种子前置列（27 篇 X15 并行批 ORM 已加 type/routing、迁移未入库时干净跳过，
+            # 勿以 setup ERROR 染红门禁——本夹具契约「schema 未迁移即跳过」的组成部分）
+            cols = await conn.execute(
+                text(
+                    "SELECT count(*) FROM information_schema.columns "
+                    "WHERE table_name = 'sessions' AND column_name IN ('type', 'routing')"
+                )
+            )
+            if int(cols.scalar_one()) != 2:
+                await probe.dispose()
+                pytest.skip("本地 PG sessions 表缺 type/routing 列（并行批迁移未应用），跳过 memory 集成用例")
     except (OSError, SQLAlchemyError):
         await probe.dispose()
         pytest.skip("本地 PG 不可达或 memory_l2_facts 未迁移，跳过 memory 集成用例")
@@ -126,6 +137,9 @@ async def mem_seed() -> AsyncIterator[MemorySeed]:
     async with factory() as db, db.begin():
         from services.memory.data.orm import MemoryL2Fact as MemoryL2FactORM
 
+        await db.execute(
+            text("DELETE FROM audit_logs WHERE tenant_id = CAST(:tid AS uuid)"), {"tid": str(tenant_id)}
+        )  # ★ 端点副作用（promotions 登记行）先于租户清理（FK 逆序，standards/01 §2.9）
         await db.execute(delete(MemoryL2FactORM).where(MemoryL2FactORM.tenant_id == tenant_id))
         await db.execute(delete(SessionORM).where(SessionORM.tenant_id == tenant_id))
         await db.execute(delete(AgentORM).where(AgentORM.id == agent.id))

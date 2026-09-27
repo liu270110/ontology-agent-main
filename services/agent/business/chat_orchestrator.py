@@ -19,6 +19,7 @@ import hashlib
 import logging
 import time
 from collections.abc import AsyncIterator, Awaitable, Callable, Mapping
+from typing import Any
 from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -36,7 +37,7 @@ from services.agent.business.chat_events import (
 from services.agent.business.kernel.budget import Budget
 from services.agent.business.kernel.dispatcher import ExtensionDispatcher
 from services.agent.business.kernel.loop import AgentKernel
-from services.agent.domain.model.kernel_context import TaskRef, TenantContext
+from services.agent.domain.model.kernel_context import KernelEvent, TaskRef, TenantContext
 from services.agent.domain.model.task import RunStatus
 from services.memory.domain.repo.fact_repo import L1MemoryStore
 from services.platform.errors import ErrorCode
@@ -76,10 +77,11 @@ class FaithfulnessSampler:
 
 
 async def _default_faithfulness_sink(outcome: ChatOutcome) -> None:
-    """缺省抽检留痕汇：结构化审计日志（占位）——「faithfulness 检查任务占位」的最小实现。
+    """缺省抽检留痕汇：结构化审计日志（直接构造编排器的兜底面，单测装配用）。
 
-    08 §7.4 评估批次接入时由组合根注入 PG 汇（evaluation 占位行），本函数仅日志兜底；
-    字段=对账四元组 + citations 数 + degraded（判定本体消费的最小上下文）。
+    组合根（build_chat_orchestrator）已注入 PG 形状汇=同一结构化日志 + audit_logs 一行
+    （chat.faithfulness_sample，evaluation 形状欠账论证见该汇注释）；本函数字段=
+    对账四元组 + citations 数 + degraded（判定本体消费的最小上下文）。
     """
     _faithfulness_logger.info(
         "faithfulness.sample: tenant=%s session=%s task=%s run=%s citations=%d degraded=%s answer_chars=%d",
@@ -104,7 +106,11 @@ class ChatOrchestrator:
         policy: ChatPolicy | None = None,
         result_sink: Callable[[ChatOutcome], Awaitable[None]] | None = None,
         faithfulness_hook: Callable[[ChatOutcome], Awaitable[None]] | None = None,
+        kernel_ledger_sink_factory: Callable[[UUID, UUID], Callable[[KernelEvent], Awaitable[None]]] | None = None,
+        spill_store: Any | None = None,  # SpillStore（02 §11.2-11：超大结果→有界预览+locator）
+        extra_tool_bindings: tuple = (),  # 能力层 P0（docs/Agent/06）：fs/web 等工具绑定，经 B1 门禁链注册
     ) -> None:
+        self._extra_tool_bindings = tuple(extra_tool_bindings)
         self._adapters = dict(adapters)
         self._assembler = assembler
         self._policy = policy or ChatPolicy()
@@ -112,13 +118,17 @@ class ChatOrchestrator:
         # LLM/检索绝不在其中——由端点注入，None=跳过 PG 回写仅 L1）
         self._result_sink = result_sink
         # 在线忠实度抽检挂点（08 §7.4）：开关关/采样率 0 → 恒不抽（零行为变化）；
-        # hook 缺省=结构化日志占位汇，评估批次接入时组合根注入 PG 汇替换
+        # hook 缺省=结构化日志兜底汇（直接构造面），组合根工厂注入 PG 形状汇（2026-09-28）
         self._sampler = (
             FaithfulnessSampler(rate=self._policy.faithfulness_sample_rate)
             if self._policy.faithfulness_sampling_enabled and self._policy.faithfulness_sample_rate > 0
             else None
         )
         self._faithfulness_hook = faithfulness_hook or _default_faithfulness_sink
+        # C1 内核账本投影工厂（2026-09-27 批）：factory(task_id, run_id) → sink(KernelEvent)；
+        # None=不投影（内存账本兜底）。落点=PG task_events（组合根经 sessions.build_kernel_ledger_sink_factory）。
+        self._ledger_sink_factory = kernel_ledger_sink_factory
+        self._spill_store = spill_store
 
     async def stream_chat(self, command: ChatCommand) -> AsyncIterator[ChatEvent]:
         """执行一次对话，产出主干波事件流（消费方取消 → 内核取消清单收敛后重抛）。"""
@@ -263,13 +273,21 @@ class ChatOrchestrator:
             message=command.message,
             history=tuple((m.role, m.content) for m in window[1:7]),  # window[0]=本条消息
             context_text=context.context_text,
+            system_prompt=command.member_system_prompt,
         )
         dispatcher = ExtensionDispatcher()
         dispatcher.register_agent_slot(adapter)  # AgentSlot 契约面（02 §4.2，同一注册表）
         dispatcher.register_planning_strategy(adapter.turn_planner(turn))
         dispatcher.register_context_provider(adapter.turn_context_provider(turn))
         dispatcher.register_tool(adapter.turn_tool(turn, box, on_event))
+        for binding in self._extra_tool_bindings:  # 能力层 P0（docs/Agent/06）：fs/web 等工具经 B1 门禁链注册
+            dispatcher.register_tool(binding)
         kernel = AgentKernel(dispatcher)
+        ledger_sink = (
+            self._ledger_sink_factory(command.task_id, command.run_id)
+            if self._ledger_sink_factory is not None
+            else None
+        )
         ctx = TenantContext(
             tenant_id=command.tenant_id,
             user_id=command.user_id,
@@ -287,7 +305,7 @@ class ChatOrchestrator:
             duration_s=self._policy.total_budget_s,
             max_tokens=None,
         )
-        return await kernel.run(task, ctx, budget=budget)
+        return await kernel.run(task, ctx, budget=budget, ledger_sink=ledger_sink, spill_store=self._spill_store)
 
     # ── 收尾与映射 ────────────────────────────────────────────────────────
     @staticmethod
@@ -369,6 +387,9 @@ def build_chat_orchestrator(
     policy: ChatPolicy | None = None,
     claude_adapter: ClaudeAdapter | None = None,
     result_sink: Callable[[ChatOutcome], Awaitable[None]] | None = None,
+    kernel_ledger_sink_factory: Callable[[UUID, UUID], Callable[[KernelEvent], Awaitable[None]]] | None = None,
+    spill_store: Any | None = None,
+    extra_tool_bindings: tuple = (),
 ) -> ChatOrchestrator:
     """组合根工厂：装配双适配器 + 上下文组装器（gateway/app.py 最小接线的唯一入口）。
 
@@ -399,4 +420,58 @@ def build_chat_orchestrator(
         ollama_base_url=ollama_base_url,
         policy=policy,
     )
-    return ChatOrchestrator(adapters=adapters, assembler=assembler, policy=policy, result_sink=result_sink)
+
+    # 在线忠实度抽检汇（08 §7.4 / 10 篇缺口②，2026-09-28 接管收口升 PG 形状）：
+    # evaluation 形状 PG 汇欠账——evaluation_results 需父行 evaluation_runs，其 benchmark_type
+    # CHECK IN ('retrieval_qa','agent_task','extraction_precision')（迁移 367b405f344b 冻结）
+    # 拒绝 faithfulness 自定义值，且禁改枚举/禁改迁移 → 采样命中改落 audit_logs 结构化 JSON
+    # （chat.faithfulness_sample，经 memory.business.runtime 公开面短事务写入）+ 结构化日志；
+    # LLM-as-judge 判定本体不落库（digest 置 llm_judge=pending），随评估批次接入后回填。
+    from services.memory.business.runtime import build_faithfulness_audit_sink
+
+    faithfulness_audit = build_faithfulness_audit_sink(session_factory)
+
+    async def _faithfulness_pg_sink(outcome: ChatOutcome) -> None:
+        """采样命中汇：结构化日志 + audit_logs 一行（对账标识 + 判定上下文入 params_digest）。"""
+        _faithfulness_logger.info(
+            "faithfulness.sample: tenant=%s session=%s task=%s run=%s citations=%d degraded=%s answer_chars=%d",
+            outcome.tenant_id,
+            outcome.session_id,
+            outcome.task_id,
+            outcome.run_id,
+            len(outcome.citations),
+            outcome.degraded,
+            len(outcome.answer),
+        )
+        written = await faithfulness_audit(
+            {
+                "tenant_id": outcome.tenant_id,
+                "run_id": outcome.run_id,
+                "trace_id": None,  # ChatOutcome 不携 trace_id（C2 贯穿标识随 command 终态落 task_events）
+                "digest": {
+                    "session_id": str(outcome.session_id),
+                    "task_id": str(outcome.task_id),
+                    "status": outcome.status,
+                    "degraded": outcome.degraded,
+                    "answer_chars": len(outcome.answer),
+                    "citations": len(outcome.citations),
+                    "usage": dict(outcome.usage),
+                    "cost_ms": outcome.cost_ms,
+                    "benchmark_type": "faithfulness",  # 期望登记值：evaluation_runs CHECK 冻结，欠账待迁移
+                    "llm_judge": "pending",  # LLM-as-judge 判定本体随评估批次接入（本批不做，登记欠账）
+                },
+            }
+        )
+        if not written:
+            _faithfulness_logger.debug("faithfulness 抽检未落 audit_logs（表缺失，仅日志留痕）")
+
+    return ChatOrchestrator(
+        adapters=adapters,
+        assembler=assembler,
+        policy=policy,
+        result_sink=result_sink,
+        faithfulness_hook=_faithfulness_pg_sink,
+        kernel_ledger_sink_factory=kernel_ledger_sink_factory,
+        spill_store=spill_store,
+        extra_tool_bindings=extra_tool_bindings,
+    )

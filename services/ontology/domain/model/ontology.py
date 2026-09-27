@@ -4,6 +4,10 @@
 不变式只写聚合方法（validator 只做形状校验）；聚合不持有 TBox 内容——head_version 仅制品指针
 （OntologyVersionRef），编辑期内存图归 L5 应用态（04 篇 §9 裁决）。
 
+治理档位（08 §2.4 全平台权威）：发布审批链判定单一收敛点=services/review/domain/approval_chain
+（纯函数；L4 纯度唯一许可的跨模块 import 边）；档位来源显式化——publish/approve 调用链注入
+``governance_tier`` 参数（缺省 solo=种子默认），聚合禁直读租户 settings（2026-09-27 M5 条件二收口）。
+
 状态机（04 篇 §10 全平台状态机索引 · changeset 行）：draft/in_review/published/rejected/rolled_back；
 同本体单活跃 changeset（draft/in_review）——内存断言在此，并发硬保证=PG 部分唯一索引
 uk_changesets_one_active（database/01 §3.4，04 篇 §2.1 并发型不变式归存储）。
@@ -19,6 +23,12 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from services.platform.kernel import DomainError
+from services.review.domain.approval_chain import (
+    GovernanceTier,
+    parse_governance_tier,
+    required_signatures,
+    resolve_decision,
+)
 
 
 class OntologyStatus(StrEnum):
@@ -42,13 +52,36 @@ class ChangesetStatus(StrEnum):
 # 活跃 changeset 状态集：与 PG 部分唯一索引 uk_changesets_one_active WHERE 子句同口径（database/01 §3.4）
 ACTIVE_CHANGESET_STATES = (ChangesetStatus.DRAFT, ChangesetStatus.IN_REVIEW)
 
-# 治理档位（ontology §6.3 档位钩子；档位权威=08 篇）：M1 仅 solo 档——提交人即审批人，全程留痕
-_GOVERNANCE_TIERS = ("solo", "team", "enterprise")
-_CURRENT_TIER = "solo"
+# 治理档位（ontology §6.3 档位钩子；档位权威=08 §2.4 全平台定义）：判定单一收敛点=
+# services/review/domain/approval_chain（parse/required_signatures/resolve_decision）——本聚合
+# 只经调用链注入的 governance_tier 参数消费，禁直读租户 settings（L4 纯度）、禁散写档位裁决
+# （2026-09-27 M5 交付验收条件二收口，_CURRENT_TIER 散写常量已删除；review.domain 纯函数
+# 为 L4 契约明文许可的唯一跨模块 import 边）。
 
 
 def _now() -> datetime:
     return datetime.now(UTC)
+
+
+def _signature_records(approvals: dict[str, Any]) -> list[dict[str, Any]]:
+    """审批留痕 → 签名记录序列（回放/累积统一载体）：signatures 列表优先；收敛点接线前的
+    旧格式单签留痕（顶层 approver_id，无 signatures）合成为单记录，保证存量行可回放。"""
+    records = approvals.get("signatures")
+    if isinstance(records, list):
+        return [record for record in records if isinstance(record, dict)]
+    legacy = approvals.get("approver_id")  # 旧格式（2026-09-27 接线前留痕）：单签
+    return [{"approver_id": str(legacy)}] if legacy else []
+
+
+def _approver_ids(records: list[dict[str, Any]]) -> tuple[uuid.UUID, ...]:
+    """签名记录 → 审批人 id 序列（畸形留痕跳过不炸链，review 侧 _prior_approvers 同口径）。"""
+    result: list[uuid.UUID] = []
+    for record in records:
+        try:
+            result.append(uuid.UUID(str(record["approver_id"])))
+        except (KeyError, TypeError, ValueError):
+            continue
+    return tuple(result)
 
 
 class OntologyVersionRef(BaseModel):
@@ -75,7 +108,7 @@ class OntologyChangeset(BaseModel):
     status: ChangesetStatus = ChangesetStatus.DRAFT
     gate_ok: bool = False  # 预检门禁（lint+SHACL+一致性）结论；submit 前必须为 True（§6.1 进入条件）
     gate_report: dict[str, Any] = Field(default_factory=dict)  # 门禁报告留痕（结果可追溯，04 §5）
-    approvals: dict[str, Any] = Field(default_factory=dict)  # 审批留痕（solo 档：提交人即审批人）
+    approvals: dict[str, Any] = Field(default_factory=dict)  # 审批留痕：signatures 签名序列 + 最新一签摘要（08 §2.4）
     applicant_id: uuid.UUID | None = None
     reviewer_id: uuid.UUID | None = None
     review_comment: str | None = None
@@ -113,20 +146,41 @@ class OntologyChangeset(BaseModel):
 
     # ---- 五动词之二/三：approve / reject（in_review；rejected 必附理由，04 §2 review 行） ----
 
-    def approve(self, reviewer_id: uuid.UUID, note: str = "") -> None:
+    def approve(self, reviewer_id: uuid.UUID, note: str = "", *, governance_tier: str = "solo") -> None:
+        """审批留痕（链强度判定走 review.domain.approval_chain 收敛点，08 §2.4 全平台权威）。
+
+        - solo（缺省）：允许 reviewer==applicant（提交人即审批人，高置信留痕语义）；
+        - team：禁自批（approver==applicant 即 4702）；
+        - enterprise：双负责人四眼——两个互不相同且均非提交人的审批人依序签齐。
+
+        签名逐笔累积进 ``approvals["signatures"]``（JSONB 整体重赋值，全程留痕可回放）；
+        顶层 approver_id/note/decided_at/tier 保持为最新一签摘要（旧消费面兼容）。缺省档位
+        solo=种子默认（08 §2.4：settings 未写 governance_tier 回落 solo），向后兼容 M1 行为。
+        """
         if self.status is not ChangesetStatus.IN_REVIEW:
             raise DomainError(
                 f"4203 CHANGESET_ILLEGAL_TRANSITION: 非法迁移 {self.status.value} → 审批（须 in_review，ontology §6.1）"
             )
-        # solo 档允许 reviewer==applicant（提交人即审批人）；四眼原则禁令=enterprise 档（§6.3，随 M4 档位配置）
-        self.reviewer_id = reviewer_id
-        self.review_comment = note or None
-        self.approvals = {
+        tier = parse_governance_tier(governance_tier)
+        prior_records = _signature_records(self.approvals)
+        decision = resolve_decision(
+            tier,
+            action="approve",
+            submitter_id=self.applicant_id,
+            approver_id=reviewer_id,
+            prior_approvers=_approver_ids(prior_records),
+        )
+        if not decision.allowed:
+            raise DomainError(f"4702 APPROVER_NOT_ALLOWED: {decision.reason}")
+        record = {
             "approver_id": str(reviewer_id),
             "note": note,
             "decided_at": _now().isoformat(),
-            "tier": _CURRENT_TIER,
+            "tier": tier.value,
         }
+        self.reviewer_id = reviewer_id
+        self.review_comment = note or None
+        self.approvals = {**record, "signatures": [*prior_records, record]}
 
     def reject(self, reviewer_id: uuid.UUID, reason: str) -> None:
         if self.status is not ChangesetStatus.IN_REVIEW:
@@ -253,11 +307,13 @@ class Ontology(BaseModel):
         *,
         version_ref: OntologyVersionRef,
         actor_id: uuid.UUID | None = None,
+        governance_tier: str = "solo",
     ) -> OntologyPublished:
         """发布：in_review 变更单 → published，head_version 推进为新版本指针（版本不可变，只增不改）。
 
-        断言次序（ontology §6.3）：门禁（任何档位不可跳过）→ 审批按档位（M1 仅 solo：提交人即审批人）。
-        version_ref 由 L6 仓储发布事务产出（制品写成功→PG 版本行），聚合只认指针不碰内容。
+        断言次序（ontology §6.3）：门禁（任何档位不可跳过）→ 审批按注入档位走 approval_chain
+        收敛点（缺省 solo=种子默认，向后兼容 M1）。version_ref 由 L6 仓储发布事务产出
+        （制品写成功→PG 版本行），聚合只认指针不碰内容。
         """
         changeset = self.active_changeset
         if changeset is None or changeset.status is not ChangesetStatus.IN_REVIEW:
@@ -266,7 +322,7 @@ class Ontology(BaseModel):
         if not gate_ok:
             raise DomainError("4204 GATE_REQUIRED: 门禁（OntologyGate）任何档位不可跳过（ontology §6.3）")
         effective = approvals or changeset.approvals  # 允许复用 approve 动词的留痕记录
-        self._assert_approvals(changeset, effective)
+        self._assert_approvals(changeset, effective, governance_tier)
         changeset.status = ChangesetStatus.PUBLISHED
         changeset.published_at = _now()
         changeset.approvals = effective
@@ -282,14 +338,39 @@ class Ontology(BaseModel):
             published_by=actor_id,
         )
 
-    def _assert_approvals(self, changeset: OntologyChangeset, approvals: dict[str, Any]) -> None:
-        """审批按档位断言（ontology §6.3 治理档位钩子）：M1 仅 solo 档，审批留痕必须可追溯。"""
-        if _CURRENT_TIER not in _GOVERNANCE_TIERS:  # pragma: no cover - 配置常量自检
-            raise DomainError("4207 TIER_INVALID: 治理档位配置非法")
-        approver = approvals.get("approver_id")
-        if not approver:
-            raise DomainError("4205 APPROVAL_REQUIRED: 发布审批缺失（solo 档：提交人即审批人，须留痕）")
-        if changeset.applicant_id is not None and str(changeset.applicant_id) != str(approver):
+    def _assert_approvals(
+        self, changeset: OntologyChangeset, approvals: dict[str, Any], governance_tier: str = "solo"
+    ) -> None:
+        """发布审批断言（08 §2.4 收敛点接线，2026-09-27 M5 交付验收条件二收口）。
+
+        链强度判定（禁自批/四眼查重/签名数）全部走 review.domain.approval_chain 单一收敛点：
+        对留痕签名序列**逐签回放** approve 动词同款 resolve_decision（篡改/越档留痕无法通过回放），
+        再按 required_signatures 校验签齐。本体侧仅保留 §6.3 M1 钩子的 solo 窄化——
+        「提交人即审批人」（与 08 §2.4 solo 定义同源的发布终审语义，pinned by tests/ontology）：
+        收敛点 solo 对他人代批留痕放行（审核工单面语义），发布终审在本聚合收紧，是唯一保留的
+        档位相关窄化项（取舍论证见 M5 收口报告）。
+        """
+        tier = parse_governance_tier(governance_tier)
+        prior: tuple[uuid.UUID, ...] = ()
+        for approver in _approver_ids(_signature_records(approvals)):
+            decision = resolve_decision(
+                tier,
+                action="approve",
+                submitter_id=changeset.applicant_id,
+                approver_id=approver,
+                prior_approvers=prior,
+            )
+            if not decision.allowed:
+                raise DomainError(f"4702 APPROVER_NOT_ALLOWED: {decision.reason}")
+            prior = (*prior, approver)
+        if not prior:
+            raise DomainError("4205 APPROVAL_REQUIRED: 发布审批缺失（审批留痕必须可追溯，ontology §6.3/08 §2.4）")
+        required = required_signatures(tier)
+        if len(prior) < required:
+            raise DomainError(
+                f"4205 APPROVAL_INCOMPLETE: 审批签名不足 {len(prior)}/{required}（{tier.value} 档，08 §2.4）"
+            )
+        if tier is GovernanceTier.SOLO and changeset.applicant_id is not None and prior[-1] != changeset.applicant_id:
             raise DomainError("4205 APPROVAL_MISMATCH: solo 档审批人必须为提交人本人（ontology §6.3）")
 
     # ---- 回滚：把旧版本发布为新版本，不改写历史（ontology §6.1/04 §2） ----

@@ -5,7 +5,6 @@ from __future__ import annotations
 import uuid
 
 import pytest
-from conftest import TENANT_ID, ScriptedAdapter, make_dispatcher
 
 from services.mcp.providers import ActionCapabilityProvider
 from services.mcp.registry import CapabilityRegistry
@@ -18,6 +17,7 @@ from services.platform.ports.capability_provider import (
 )
 from services.writeback.adapters.mock_power_ticket import ACTION_IRI_CREATE_ORDER
 from services.writeback.domain.model import WritebackError
+from tests.writeback.conftest import TENANT_ID, ScriptedAdapter, make_dispatcher
 
 CTX = CallContext(tenant_id=TENANT_ID, trace_id="t-action-roundtrip", scopes=("action:invoke",))
 

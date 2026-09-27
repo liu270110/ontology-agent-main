@@ -1,20 +1,28 @@
 """L2 事实仓储 PG 实现（services.memory.domain.repo.fact_repo.L2FactRepository）。
 
 租户作用域构造期绑定（04 §4）；仓储不提交——提交归调用方会话管理
-（SessionDep 自动提交 / 后台任务显式 commit）。禁裸 SQL（本文件零 text()）。
+（SessionDep 自动提交 / 后台任务显式 commit）。
+
+裸 SQL 纪律（2026-09-28 接管收口修订）：本文件以 ORM 为主；文末「记忆审计执行层」段
+为唯一裸 SQL 例外——audit_logs 归 iam.data 模块私有（import-linter 禁 memory import），
+读写走 raw SQL + information_schema 列探测（前身为 data/audit.py，因「memory.data 模块
+私有」契约仅豁免本模块与 data.l1 两条消费边而并入；data/audit.py 留迁移指针）。
 """
 
 from __future__ import annotations
 
+import json
 import uuid
+from collections.abc import Sequence
 from datetime import UTC, datetime
-from typing import cast
+from typing import Any, cast
 from uuid import UUID
 
-from sqlalchemy import or_, select
+from sqlalchemy import or_, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from services.memory.data.orm import MemoryL2Fact as MemoryL2FactORM
+from services.memory.data.vector import EMBED_MODEL, set_fact_embedding
 from services.memory.domain.model.l2_fact import FactCategory, FactStatus, L2Fact
 
 
@@ -168,6 +176,46 @@ class PgL2FactRepository:
         rows = (await self._session.execute(stmt)).scalars().all()
         return [_to_domain(row) for row in rows]
 
+    async def save_embedding(self, fact_id: UUID, vector: Sequence[float], *, model: str | None = None) -> bool:
+        """向量回写（raw SQL 委托 data/vector.py——embedding 列不在 ORM 映射，embed.py 先例）。"""
+        return await set_fact_embedding(self._session, fact_id=fact_id, vector=vector, model=model or EMBED_MODEL)
+
+    async def chain_for_user(self, user_id: UUID, fact_id: UUID, *, limit: int = 50) -> list[L2Fact]:
+        """版本链双向回放（timeline 数据面；协议注释=契约，此实现按代际从旧到新返回）。"""
+        anchor = await self.get(fact_id)
+        if anchor is None or anchor.user_id != user_id:
+            return []
+        older: list[L2Fact] = []
+        current = anchor
+        while current.supersedes_id is not None and len(older) < limit:
+            prev = await self.get(current.supersedes_id)
+            if prev is None or prev.user_id != user_id:  # 链断（跨用户/缺失）即止
+                break
+            older.append(prev)
+            current = prev
+        newer: list[L2Fact] = []
+        current = anchor
+        while len(older) + len(newer) < limit:
+            rows = (
+                (
+                    await self._session.execute(
+                        select(MemoryL2FactORM).where(
+                            MemoryL2FactORM.tenant_id == self._tenant_id,
+                            MemoryL2FactORM.user_id == user_id,
+                            MemoryL2FactORM.supersedes_id == current.id,
+                        )
+                    )
+                )
+                .scalars()
+                .all()
+            )
+            if not rows:
+                break
+            successor = _to_domain(rows[0])
+            newer.append(successor)
+            current = successor
+        return [*reversed(older), anchor, *newer]
+
     async def _get_orm(self, fact_id: UUID) -> MemoryL2FactORM | None:
         row = (
             await self._session.execute(
@@ -190,3 +238,192 @@ def _query_terms(query: str, *, min_len: int = 2, max_terms: int = 8) -> list[st
         if len(seen) >= max_terms:
             break
     return list(seen)
+
+
+# ---------------------------------------------------------------- 记忆审计执行层（api/01 §5.5 ★ 端点）
+
+# audit_logs 归 iam.data 模块私有（import-linter「iam.data 模块私有」禁 memory import），
+# 读写统一走本段 raw SQL + information_schema 列探测（原 data/audit.py 全量并入，函数语义
+# 不变）；表缺失（未迁移环境）→ 查询空列表 / 登记抛降级异常，调用方降级消化。
+# 本段被 api/memory.py 与 business/runtime.py 消费——二者对 data 层仅本模块与 data.l1
+# 两条豁免边（pyproject 冻结，新增消费面必须复用既有边，禁另开模块）。
+
+_AUDIT_READY_SQL = "SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'audit_logs')"
+
+_MEMORY_ACTION_PREDICATE = "(action LIKE 'memory.%' OR action LIKE '%/memory%')"
+
+_AUDIT_FIELDS = (
+    "id, actor_type, actor_id, action, resource_type, resource_id, params_digest, result, trace_id, created_at"
+)
+
+
+class MemoryAuditUnavailableError(RuntimeError):
+    """审计存储不可用（audit_logs 表缺失）——调用方据此降级。"""
+
+
+async def memory_audit_ready(session: AsyncSession) -> bool:
+    """audit_logs 表是否存在（未迁移环境 → 查询降级空集/登记 503）。"""
+    row = await session.execute(text(_AUDIT_READY_SQL))
+    return bool(row.scalar())
+
+
+async def query_memory_audit(
+    session: AsyncSession,
+    *,
+    tenant_id: uuid.UUID,
+    user_id: uuid.UUID | None = None,
+    session_id: uuid.UUID | None = None,
+    offset: int = 0,
+    limit: int = 50,
+) -> list[dict[str, Any]]:
+    """记忆域审计回放（tenant 硬过滤；user/session 可选过滤，均缺省=全租户记忆动作）。
+
+    会话过滤走 params_digest->>'session_id'（promotions 登记行携带；中间件路径行无该键
+    自然不命中）。表缺失 → 空列表（降级非失败，L1 同款口径）。
+    """
+    if not await memory_audit_ready(session):
+        return []
+    predicates = [_MEMORY_ACTION_PREDICATE]
+    params: dict[str, Any] = {"tenant_id": str(tenant_id), "offset": offset, "limit": limit}
+    if user_id is not None:
+        predicates.append("actor_id = CAST(:user_id AS uuid)")
+        params["user_id"] = str(user_id)
+    if session_id is not None:
+        predicates.append("params_digest->>'session_id' = :session_id")
+        params["session_id"] = str(session_id)
+    rows = await session.execute(
+        text(
+            f"SELECT {_AUDIT_FIELDS} FROM audit_logs "
+            f"WHERE tenant_id = CAST(:tenant_id AS uuid) AND {' AND '.join(predicates)} "
+            "ORDER BY created_at DESC, id OFFSET :offset LIMIT :limit"
+        ),
+        params,
+    )
+    return [dict(r) for r in rows.mappings()]
+
+
+async def promotion_exists(session: AsyncSession, *, tenant_id: uuid.UUID, fact_id: uuid.UUID) -> bool:
+    """同事实是否已有升级登记行（POST /memory/promotions 409* 冲突判定面；表缺失=False 放行首登记）。"""
+    if not await memory_audit_ready(session):
+        return False
+    row = await session.execute(
+        text(
+            "SELECT 1 FROM audit_logs WHERE tenant_id = CAST(:tenant_id AS uuid) "
+            "AND action = 'memory.promotion' AND resource_id = :fact_id LIMIT 1"
+        ),
+        {"tenant_id": str(tenant_id), "fact_id": str(fact_id)},
+    )
+    return row.first() is not None
+
+
+async def query_promotions(
+    session: AsyncSession,
+    *,
+    tenant_id: uuid.UUID,
+    user_id: uuid.UUID | None = None,
+    offset: int = 0,
+    limit: int = 20,
+) -> list[dict[str, Any]]:
+    """升级单登记行回放（GET /memory/promotions：audit_logs 投影，created_at 倒序分页）。
+
+    M5 审核工作流接入前登记面=audit_logs 行本身（memory §1 裁决框），故记录即审计行投影；
+    表缺失 → 空列表（占位面契约形状恒成立，audit 查询同款降级口径）。
+    """
+    if not await memory_audit_ready(session):
+        return []
+    predicates = ["action = 'memory.promotion'"]
+    params: dict[str, Any] = {"tenant_id": str(tenant_id), "offset": offset, "limit": limit}
+    if user_id is not None:
+        predicates.append("actor_id = CAST(:user_id AS uuid)")
+        params["user_id"] = str(user_id)
+    rows = await session.execute(
+        text(
+            f"SELECT {_AUDIT_FIELDS} FROM audit_logs "
+            f"WHERE tenant_id = CAST(:tenant_id AS uuid) AND {' AND '.join(predicates)} "
+            "ORDER BY created_at DESC, id OFFSET :offset LIMIT :limit"
+        ),
+        params,
+    )
+    return [dict(r) for r in rows.mappings()]
+
+
+async def record_memory_promotion(
+    session: AsyncSession,
+    *,
+    tenant_id: uuid.UUID,
+    actor_id: uuid.UUID,
+    fact_id: uuid.UUID,
+    promotion_id: uuid.UUID,
+    session_id: uuid.UUID | None = None,
+    reason: str | None = None,
+    trace_id: str | None = None,
+) -> None:
+    """L2→L3 升级申请单登记（占位面：仅审计留痕，不写 L3、不建工单——memory §1 裁决框）。"""
+    if not await memory_audit_ready(session):
+        raise MemoryAuditUnavailableError("audit_logs 表不可用（迁移未应用），升级单无法登记")
+    digest = {
+        "promotion_id": str(promotion_id),
+        "fact_id": str(fact_id),
+        "from_layer": "l2",
+        "to_layer": "l3",
+        "session_id": str(session_id) if session_id else None,
+        "reason": (reason or "")[:200],  # params_digest=脱敏摘要（08 §3）：截断入账
+        "note": "L2→L3 升级单占位登记：审核工作流随 M5 接入（memory §1/§2）",
+    }
+    await session.execute(
+        text(
+            "INSERT INTO audit_logs (id, tenant_id, actor_type, actor_id, action, resource_type, "
+            "resource_id, params_digest, result, trace_id, created_at) "
+            "VALUES (CAST(:id AS uuid), CAST(:tenant_id AS uuid), 'user', CAST(:actor_id AS uuid), "
+            "'memory.promotion', 'memory', :resource_id, CAST(:digest AS jsonb), 'success', :trace_id, now())"
+        ),
+        {
+            "id": str(uuid.uuid4()),
+            "tenant_id": str(tenant_id),
+            "actor_id": str(actor_id),
+            "resource_id": str(fact_id),
+            "digest": _json_dumps(digest),
+            "trace_id": trace_id,
+        },
+    )
+
+
+async def record_faithfulness_sample(
+    session: AsyncSession,
+    *,
+    tenant_id: uuid.UUID,
+    run_id: uuid.UUID,
+    digest: dict[str, Any],
+    trace_id: str | None = None,
+) -> bool:
+    """对话忠实度抽检命中留痕：audit_logs 一行结构化 JSON（evaluation 汇欠账期的替代面）。
+
+    - actor_type='system'（平台采样动作）、actor_id=NULL（ChatOutcome 无 user_id；
+      数据主体经 digest.session_id 关联 sessions 表回溯）；
+    - digest 携带对账标识 + 判定待定标记（llm_judge=pending，随评估批次回填）；
+    - 表缺失 → False（调用方降级为仅结构化日志，不阻断对话流尾）。
+    """
+    if not await memory_audit_ready(session):
+        return False
+    await session.execute(
+        text(
+            "INSERT INTO audit_logs (id, tenant_id, actor_type, actor_id, action, resource_type, "
+            "resource_id, params_digest, result, trace_id, created_at) "
+            "VALUES (CAST(:id AS uuid), CAST(:tenant_id AS uuid), 'system', NULL, "
+            "'chat.faithfulness_sample', 'chat_run', :resource_id, CAST(:digest AS jsonb), "
+            "'success', :trace_id, now())"
+        ),
+        {
+            "id": str(uuid.uuid4()),
+            "tenant_id": str(tenant_id),
+            "resource_id": str(run_id),
+            "digest": _json_dumps(digest),
+            "trace_id": trace_id,
+        },
+    )
+    return True
+
+
+def _json_dumps(payload: dict[str, Any]) -> str:
+    """dict → JSON 字符串（CAST(:digest AS jsonb) 入参；std lib 即可，无第三方序列化面）。"""
+    return json.dumps(payload, ensure_ascii=False)

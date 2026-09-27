@@ -110,6 +110,40 @@
   <div class="batchbar" style="position:static;margin-top:14px">已选 <b>1</b> 项<button class="btn btn-p btn-sm">批量通过</button><button class="btn btn-g btn-sm">驳回</button></div>
 </div>
 
+<h2>Tooltip + ECharts 色板（theme.ts 同源）</h2>
+<div class="grid">
+  <div class="card">
+    <div class="text-dim" style="font-size:11px;margin-bottom:10px">Tooltip（patterns.css .tooltip，hover 查看；React 基元 = components/tooltip.tsx，另支持下方方位 / focus / Esc）</div>
+    <div class="row" style="gap:16px">
+      <span class="tooltip"><button class="btn btn-g btn-sm">悬停我</button><span class="tip">SHACL 校验通过 · 0 违规</span></span>
+      <span class="tooltip"><span class="badge b-blue" style="cursor:help">GB/T 31486</span><span class="tip">国家标准 · 动力电池循环寿命要求</span></span>
+    </div>
+  </div>
+  <div class="card">
+    <div class="text-dim" style="font-size:11px;margin-bottom:8px">ECharts 分类色板（echartsTheme / echartsThemeDark.color，序 1~6 为 palette 稳定序，7~8 补 red / label-3）</div>
+    <div class="row" style="margin-bottom:10px">
+      <span style="display:inline-flex;align-items:center;gap:4px;font-size:10px;color:var(--label-2)"><i style="width:14px;height:14px;border-radius:4px;background:#0071e3"></i>0071e3</span>
+      <span style="display:inline-flex;align-items:center;gap:4px;font-size:10px;color:var(--label-2)"><i style="width:14px;height:14px;border-radius:4px;background:#30b0c7"></i>30b0c7</span>
+      <span style="display:inline-flex;align-items:center;gap:4px;font-size:10px;color:var(--label-2)"><i style="width:14px;height:14px;border-radius:4px;background:#af52de"></i>af52de</span>
+      <span style="display:inline-flex;align-items:center;gap:4px;font-size:10px;color:var(--label-2)"><i style="width:14px;height:14px;border-radius:4px;background:#34c759"></i>34c759</span>
+      <span style="display:inline-flex;align-items:center;gap:4px;font-size:10px;color:var(--label-2)"><i style="width:14px;height:14px;border-radius:4px;background:#ff9500"></i>ff9500</span>
+      <span style="display:inline-flex;align-items:center;gap:4px;font-size:10px;color:var(--label-2)"><i style="width:14px;height:14px;border-radius:4px;background:#5856d6"></i>5856d6</span>
+      <span style="display:inline-flex;align-items:center;gap:4px;font-size:10px;color:var(--label-2)"><i style="width:14px;height:14px;border-radius:4px;background:#ff3b30"></i>ff3b30</span>
+      <span style="display:inline-flex;align-items:center;gap:4px;font-size:10px;color:var(--label-2)"><i style="width:14px;height:14px;border-radius:4px;background:#aeaeb2"></i>aeaeb2</span>
+    </div>
+    <div class="row" style="background:#1c1c1e;border-radius:8px;padding:8px 10px">
+      <span style="display:inline-flex;align-items:center;gap:4px;font-size:10px;color:#a1a1a6"><i style="width:14px;height:14px;border-radius:4px;background:#0a84ff"></i>0a84ff</span>
+      <span style="display:inline-flex;align-items:center;gap:4px;font-size:10px;color:#a1a1a6"><i style="width:14px;height:14px;border-radius:4px;background:#40c8e0"></i>40c8e0</span>
+      <span style="display:inline-flex;align-items:center;gap:4px;font-size:10px;color:#a1a1a6"><i style="width:14px;height:14px;border-radius:4px;background:#bf5af2"></i>bf5af2</span>
+      <span style="display:inline-flex;align-items:center;gap:4px;font-size:10px;color:#a1a1a6"><i style="width:14px;height:14px;border-radius:4px;background:#30d158"></i>30d158</span>
+      <span style="display:inline-flex;align-items:center;gap:4px;font-size:10px;color:#a1a1a6"><i style="width:14px;height:14px;border-radius:4px;background:#ff9f0a"></i>ff9f0a</span>
+      <span style="display:inline-flex;align-items:center;gap:4px;font-size:10px;color:#a1a1a6"><i style="width:14px;height:14px;border-radius:4px;background:#7d7aff"></i>7d7aff</span>
+      <span style="display:inline-flex;align-items:center;gap:4px;font-size:10px;color:#a1a1a6"><i style="width:14px;height:14px;border-radius:4px;background:#ff453a"></i>ff453a</span>
+      <span style="display:inline-flex;align-items:center;gap:4px;font-size:10px;color:#a1a1a6"><i style="width:14px;height:14px;border-radius:4px;background:#636366"></i>636366</span>
+    </div>
+  </div>
+</div>
+
 <p class="sub" style="margin-top:32px">样式库 v1.2 · 全部类名与设计稿画板同源 · 验收：23 篇 DoD · 详见 docs/架构设计/24 篇</p>
 </body>
 </html>

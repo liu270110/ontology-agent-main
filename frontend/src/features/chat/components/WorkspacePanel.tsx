@@ -231,10 +231,10 @@ export function WorkspacePanel({ sessionId }: { sessionId: string }) {
               role="tab"
               data-testid={`ws-tab-${t.key}`}
               aria-selected={tab === t.key}
-              className={`seg-btn flex-1 ${tab === t.key ? 'on' : ''}`}
+              className={`seg-btn flex-1 whitespace-nowrap ${tab === t.key ? 'on' : ''}`}
               onClick={() => setTab(t.key)}
             >
-              <t.icon size={11} className="mr-1 inline align-[-1px]" aria-hidden />
+              <t.icon size={11} className="mr-0.5 inline align-[-1px]" aria-hidden />
               {t.label}
             </button>
           ))}
@@ -245,21 +245,24 @@ export function WorkspacePanel({ sessionId }: { sessionId: string }) {
         <div className="scroll-thin min-h-0 flex-1 overflow-y-auto px-2.5 py-2">
           <div className="mono px-1.5 pb-1 text-[10.5px] text-label-3">/workspace/</div>
           {tree ? (
-            <TreeNode
-              node={tree.root}
-              depth={0}
-              expanded={expanded}
-              pickedPath={preview?.path ?? null}
-              onToggle={p =>
-                setExpanded(s => {
-                  const n = new Set(s)
-                  if (n.has(p)) n.delete(p)
-                  else n.add(p)
-                  return n
-                })
-              }
-              onPick={n => void pick(n)}
-            />
+            tree.root.children?.map(c => (
+              <TreeNode
+                key={c.path}
+                node={c}
+                depth={0}
+                expanded={expanded}
+                pickedPath={preview?.path ?? null}
+                onToggle={p =>
+                  setExpanded(s => {
+                    const n = new Set(s)
+                    if (n.has(p)) n.delete(p)
+                    else n.add(p)
+                    return n
+                  })
+                }
+                onPick={n => void pick(n)}
+              />
+            ))
           ) : (
             <div className="px-1.5 py-3 text-[11.5px] text-label-3">正在读取沙箱文件树…</div>
           )}
@@ -277,8 +280,8 @@ export function WorkspacePanel({ sessionId }: { sessionId: string }) {
                 {l.kind === 'cmd' ? `$ ${l.text}` : l.text}
               </div>
             ))}
-            <div className="flex items-center gap-0" style={{ color: 'var(--green)' }}>
-              $
+            <div className="flex items-center gap-1.5" style={{ color: 'var(--green)' }}>
+              <span aria-hidden>$</span>
               <input
                 data-testid="ws-term-input"
                 value={cmd}
@@ -288,12 +291,14 @@ export function WorkspacePanel({ sessionId }: { sessionId: string }) {
                 }}
                 disabled={execBusy}
                 aria-label="终端命令"
-                className="w-full flex-1 border-none bg-transparent font-mono text-[11px] text-label outline-none"
-                placeholder={execBusy ? '执行中…' : '输入命令（白名单 ls/pwd/cat/head/tail）'}
+                title="受限 shell：白名单 ls / pwd / cat / head / tail"
+                className="w-full min-w-0 flex-1 border-none bg-transparent font-mono text-[11px] text-label outline-none"
+                placeholder={execBusy ? '执行中…' : '输入命令…'}
               />
             </div>
             <div ref={termEndRef} />
           </div>
+          <div className="pt-1 text-[10px] text-label-3">白名单命令：ls · pwd · cat · head · tail（其余走审批链）</div>
         </div>
       )}
 

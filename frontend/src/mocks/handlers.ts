@@ -1,7 +1,12 @@
 import { http, HttpResponse } from 'msw'
+import { groupHandlers } from './group-handlers'
+import { kbHandlers } from './kb-handlers'
+import { ontologyHandlers } from './ontology-handlers'
+import { platformHandlers } from './platform-handlers'
+import { adminHandlers } from './admin-handlers'
 
 /** MSW 契约 mock（16 篇 §8）：按 api/01 + api/02 契约仿真，后端就绪后经 VITE_ENABLE_MOCK=0 关闭切真接口。
- *  覆盖：auth / sessions（含 SSE 事件流仿真——M3 主干波 11 事件按 §3.3 帧流样例编排）。
+ *  覆盖：auth / sessions（含 SSE 事件流仿真——M3 主干波 11 事件按 §3.3 帧流样例编排）+ kb（独立 kb-handlers.ts）。
  *  S1 认证契约化：**任意合法 email + 密码≥6 位成功**（演示写死用户已移除），假 JWT claims
  *  按 08 篇 §2.1 build_claims（sub/tenant_id/roles/scopes/typ/jti/iat/exp）。预登记契约
  *  （后端 M1 未实现，前端代码就绪，live 不触发）：mfa@example.com → 200 {mfa_required, mfa_token}
@@ -16,6 +21,11 @@ const DIRECTORY: Record<string, { roles: string[]; scopes: string[] }> = {
   'member@example.com': {
     roles: ['member'],
     scopes: ['session:chat', 'kb:read', 'memory:read', 'agent:read', 'plugin:read', 'tool:read', 'dashboard:view'],
+  },
+  // S6 治理域演示账号（super_admin 全量；仅演示/截图用，s1 契约断言不涉及）
+  'super@example.com': {
+    roles: ['super_admin'],
+    scopes: ['user:manage', 'tenant:manage', 'admin:read', 'admin:write', 'session:chat', 'session:read', 'session:write', 'ontology:read', 'ontology:write', 'kb:read', 'kb:write', 'memory:read', 'agent:read', 'agent:write', 'plugin:read', 'tool:read', 'tool:manage', 'review:read', 'review:approve', 'approval:decide', 'dashboard:view', 'audit:read'],
   },
   'mfa@example.com': {
     roles: ['member'],
@@ -158,6 +168,11 @@ function scriptFor(sessionId: string, question: string): { frames: string[]; ids
 }
 
 export const handlers = [
+  ...groupHandlers, // S7 协作域（api/01 §5.2 群聊 X15 + §5.11 workflows X16，见 group-handlers.ts；注册于首位，重叠路径非群聊请求 return undefined 放行）
+  ...kbHandlers, // S3 知识域（api/01 §5.4/§6.2，见 kb-handlers.ts）
+  ...ontologyHandlers, // S4 本体域 + 图谱浏览（api/01 §5.3/§6.3/§6.4 + §5.4 graph，见 ontology-handlers.ts）
+  ...adminHandlers, // S6 治理域（api/01 §5.8/§6.5/§5.2/§5.9/§5.13，见 admin-handlers.ts；GET /tasks 带 ?agent= 时回落 platform）
+  ...platformHandlers, // S5 平台域（api/01 §5.1/§5.5/§5.6/§5.7 + §6.7，见 platform-handlers.ts）
   http.post('*/api/v1/auth/login', async ({ request }) => {
     const body = (await request.json()) as { email?: string; password?: string; mfa_token?: string; otp?: string }
 

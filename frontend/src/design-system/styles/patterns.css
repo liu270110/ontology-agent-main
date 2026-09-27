@@ -297,3 +297,20 @@
   background:transparent;border-left:1px solid var(--separator);transition:background var(--dur-1) var(--ease)}
 .split-handle:hover,.split-handle.active{background:linear-gradient(180deg,transparent,var(--accent-soft),transparent)}
 body.ix-dragging{user-select:none;cursor:col-resize}
+
+/* ---- 上下文窗口指示器（Context Window Meter，24 篇 §4.14） ----
+   语义：让用户知道"Agent 还有多少记忆空间"；
+   阈值：>80% orange（可压缩）> 95% red（必须压缩）；
+   展开明细 = system/messages/tools/context 各段 token 占比 */
+.ctx-meter{display:flex;align-items:center;gap:8px;
+  font-family:var(--mono);font-size:10px;color:var(--label-3)}
+.ctx-bar{flex:1;height:3px;border-radius:2px;background:rgba(0,0,0,.06);overflow:hidden;position:relative}
+.dark .ctx-bar{background:rgba(255,255,255,.08)}
+.ctx-bar i{display:block;height:100%;border-radius:2px;transition:width var(--dur-3) var(--ease)}
+.ctx-bar i.ok{background:var(--accent)}
+.ctx-bar i.warn{background:var(--orange)}
+.ctx-bar i.bad{background:var(--red)}
+.ctx-num{white-space:nowrap}
+.ctx-compact{border:none;background:var(--accent-soft);color:var(--accent);font-size:10px;
+  font-family:var(--font);font-weight:600;border-radius:var(--r-pill);padding:2px 8px;cursor:pointer}
+.ctx-compact:hover{background:var(--accent);color:var(--on-accent)}

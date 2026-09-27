@@ -11,6 +11,7 @@ import {
   Plug,
   Puzzle,
   Settings,
+  ShieldCheck,
   User,
   Workflow,
   Wrench,
@@ -34,6 +35,7 @@ const ICONS: Record<string, LucideIcon> = {
   gear: Settings,
   user: User,
   workflow: Workflow,
+  shield: ShieldCheck,
 }
 
 export function RouteGlyph({ icon, size = 15 }: { icon: string; size?: number }) {

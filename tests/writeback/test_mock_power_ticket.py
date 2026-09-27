@@ -5,7 +5,6 @@ from __future__ import annotations
 import uuid
 
 import pytest
-from conftest import TENANT_ID
 
 from services.writeback.adapters.base import AdapterError, CompensationRequest, WritebackRequest
 from services.writeback.adapters.mock_power_ticket import (
@@ -15,6 +14,7 @@ from services.writeback.adapters.mock_power_ticket import (
     mock_power_ticket_meta,
 )
 from services.writeback.domain.model import WritebackAction
+from tests.writeback.conftest import TENANT_ID
 
 KEY = f"{TENANT_ID}:instance-1"
 

@@ -4,10 +4,9 @@ from __future__ import annotations
 
 import asyncio
 
-from conftest import FakeOutboxPoller, make_event
-
 from services.writeback.business.relay import CollectingPublisher, OutboxRelay
 from services.writeback.domain.model import OutboxStatus
+from tests.writeback.conftest import FakeOutboxPoller, make_event
 
 
 async def test_relay扫pending发布并标记published():

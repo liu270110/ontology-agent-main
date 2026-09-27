@@ -6,13 +6,23 @@ export const qk = {
   },
   session: {
     root: ['session'] as const,
-    list: (params?: { cursor?: string }) => ['session', 'list', params ?? {}] as const,
+    list: (params?: { cursor?: string; limit?: number }) => ['session', 'list', params ?? {}] as const,
     messages: (sessionId: string) => ['session', 'messages', sessionId] as const,
+  },
+  tasks: {
+    root: ['tasks'] as const,
+    list: (params?: { status?: string; type?: string; limit?: number }) => ['tasks', 'list', params ?? {}] as const,
   },
   kb: {
     documents: (params?: { q?: string; cursor?: string }) => ['kb', 'documents', params ?? {}] as const,
   },
   ontology: {
     list: (params?: { q?: string; cursor?: string }) => ['ontology', 'list', params ?? {}] as const,
+  },
+  /** 工作台聚合计数（S8 dashboard 真数据接入；列表键复用 session/tasks 域键带参形态） */
+  dashboard: {
+    pendingReviews: ['dashboard', 'pending-reviews'] as const,
+    ontologyCount: ['dashboard', 'ontology-count'] as const,
+    todaySessions: ['dashboard', 'today-sessions'] as const,
   },
 } as const

@@ -1,5 +1,5 @@
 import '@testing-library/jest-dom/vitest'
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeAll, afterAll, describe, expect, it } from 'vitest'
 import { http, HttpResponse } from 'msw'
 import { App } from '@/app/App'
@@ -196,4 +196,76 @@ describe('S3 知识域', () => {
     fireEvent.click(screen.getByRole('button', { name: /历史/ }))
     expect(await screen.findByText('循环寿命的测试要求是什么？')).toBeInTheDocument()
   }, 20_000)
+
+  // ---- S8 上传链路 live 对账（2026-09-28）：POST /kb/documents 成功/失败两态 + 行内重试 ----
+
+  it('⑤ S8 上传失败态：错误横幅 + 失败行可重试 → 重试成功关弹窗刷新列表', async () => {
+    await loginAndGo('/kb')
+    expect(await screen.findByRole('heading', { name: '知识库文档' }, { timeout: 10_000 })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /上传文档/ }))
+    const dialog = await screen.findByRole('dialog', { name: '上传文档' })
+
+    // 双文件：一个走成功分支，一个命中 kb-handlers 失败态哨兵（文件名含「失败」→ 5002）
+    const input = document.querySelector('input[type="file"]') as HTMLInputElement
+    fireEvent.change(input, {
+      target: {
+        files: [
+          new File(['台区,容量\nK-77,400kVA\n'], '台区清单.csv', { type: 'text/csv' }),
+          new File(['哨兵内容'], '抽取失败样本.csv', { type: 'text/csv' }),
+        ],
+      },
+    })
+    await within(dialog).findByText('台区清单.csv')
+    fireEvent.click(screen.getByTestId('upload-submit'))
+
+    // 失败态：弹窗保持 + 错误横幅（lib/errors 映射 5002 文案）+ 逐行状态（已登记 / 失败）
+    const banner = await screen.findByTestId('upload-error')
+    expect(banner).toHaveTextContent('1 个文件上传失败')
+    expect(banner).toHaveTextContent('上游模型服务异常')
+    expect(within(dialog).getByText('台区清单.csv').closest('li')).toHaveTextContent('已登记')
+    expect(within(dialog).getByText('抽取失败样本.csv').closest('li')).toHaveTextContent('失败')
+
+    // 单行重试：切到 POST /kb/documents 成功分支（含 pipeline/start 桩，fake id 不在 mock 花名册）
+    // → 全部完成 → 关弹窗 + 列表已刷新
+    server.use(
+      http.post('*/api/v1/kb/documents', () =>
+        HttpResponse.json({ code: 0, message: 'ok', data: { id: 'd-990', name: '抽取失败样本.csv', status: 'pending' } }),
+      ),
+      http.post('*/api/v1/kb/documents/:id/pipeline/start', () =>
+        HttpResponse.json({ code: 0, message: 'ok', data: { job_id: 'job-990' } }, { status: 202 }),
+      ),
+    )
+    fireEvent.click(within(dialog).getByLabelText('重试上传 抽取失败样本.csv'))
+    await waitFor(
+      () => expect(screen.queryByRole('dialog', { name: '上传文档' })).not.toBeInTheDocument(),
+      { timeout: 5_000 },
+    )
+    // onUploaded 失效刷新：首个成功文件已入表（弹窗关闭后队列行不再存在，唯一匹配=表格行）
+    expect(await screen.findByText('台区清单.csv', undefined, { timeout: 10_000 })).toBeInTheDocument()
+  }, 30_000)
+
+  it('⑥ S8 上传 collection 解析失败（409 同名知识库）→ 横幅映射文案 + 行内失败', async () => {
+    // live 缺口（R53）：后端无 GET /kb/collections 列表，409 时前端拿不到既有集合 id → 须报错可重试
+    server.use(
+      http.post('*/api/v1/kb/collections', () =>
+        HttpResponse.json({ code: 409, message: '同名知识库已存在', data: null }, { status: 409 }),
+      ),
+    )
+    await loginAndGo('/kb')
+    expect(await screen.findByRole('heading', { name: '知识库文档' }, { timeout: 10_000 })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /上传文档/ }))
+    const dialog = await screen.findByRole('dialog', { name: '上传文档' })
+    const input = document.querySelector('input[type="file"]') as HTMLInputElement
+    fireEvent.change(input, {
+      target: { files: [new File(['馈线,状态\nF5,运行\n'], '馈线状态.csv', { type: 'text/csv' })] },
+    })
+    await within(dialog).findByText('馈线状态.csv')
+    fireEvent.click(screen.getByTestId('upload-submit'))
+
+    const banner = await screen.findByTestId('upload-error')
+    expect(banner).toHaveTextContent('同名知识库已存在')
+    expect(within(dialog).getByText('馈线状态.csv').closest('li')).toHaveTextContent('失败')
+    expect(within(dialog).getByLabelText('重试上传 馈线状态.csv')).toBeEnabled()
+    expect(screen.queryByRole('dialog', { name: '上传文档' })).toBeInTheDocument()
+  }, 30_000)
 })

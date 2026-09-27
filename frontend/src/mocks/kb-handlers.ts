@@ -105,6 +105,7 @@ const KB_CANDIDATES: KbCandidate[] = [
 let docSeq = 105
 let candSeq = 134
 let jobSeq = 218
+const COLLECTION_IDS: Record<string, string> = {}
 
 /** 登记后推进抽取流水线（setTimeout 驱动状态机；indexed 时追加候选）。 */
 function schedulePipeline(doc: KbDoc, jobPrefix = 'job') {
@@ -208,16 +209,39 @@ export const kbHandlers = [
     HttpResponse.json({ code: 0, message: 'ok', data: { items: KB_DOCS, next_cursor: null } }),
   ),
 
-  // 登记文档（201；真实后端另返 MinIO 预签名上传地址，mock 直接收编元数据）
+  // 知识库集合（S8 live 对账补齐：live POST /kb/collections → 201 裸 CollectionOut，同名 409；
+  // 后端无 GET 列表端点（R53），前端 ensureCollectionId 按名创建+缓存 → mock 按名稳定发号）
+  http.post('*/api/v1/kb/collections', async ({ request }) => {
+    const body = (await request.json()) as { name?: string }
+    const name = body.name?.trim() || '未命名知识库'
+    COLLECTION_IDS[name] ??= `col-${Object.keys(COLLECTION_IDS).length + 1}`
+    return HttpResponse.json({
+      code: 0,
+      message: 'ok',
+      data: { id: COLLECTION_IDS[name], name, description: null, embedding_model: 'bge-m3', status: 'active', created_at: new Date().toISOString() },
+    })
+  }),
+
+  // 登记文档（S8 live 实测：M2 JSON 内容直传 {collection_id,title,content,mime_type?}，200 裸
+  // DocumentOut，checksum 幂等 created=false；mock 收编元数据即返回信封 KbDoc）。
+  // 失败态哨兵（S8 上传链路用例）：文件名含「失败」→ 5002 模拟服务异常，行内可重试。
   http.post('*/api/v1/kb/documents', async ({ request }) => {
-    const body = (await request.json()) as { name?: string; size_bytes?: number; content_type?: string }
-    const name = body.name?.trim() || '未命名文档'
+    const body = (await request.json()) as {
+      collection_id?: string
+      title?: string
+      name?: string
+      content?: string
+      size_bytes?: number
+      content_type?: string
+    }
+    const name = body.title?.trim() || body.name?.trim() || '未命名文档'
+    if (name.includes('失败')) return jsonErr(5002, '上游模型服务异常', 500)
     const ext = (name.split('.').pop() ?? '').toUpperCase()
     const doc: KbDoc = {
       id: `d-${++docSeq}`,
       name,
       doc_type: ext === 'PDF' ? 'PDF' : ext === 'DOC' || ext === 'DOCX' ? 'Word' : ext === 'XLS' || ext === 'XLSX' ? 'Excel' : ext === 'CSV' ? 'CSV' : '图片',
-      size_bytes: body.size_bytes ?? 0,
+      size_bytes: body.size_bytes ?? (body.content ? body.content.length : 0),
       chunk_count: 0,
       status: 'pending',
       progress: 0,

@@ -1,13 +1,17 @@
 import { FormEvent, useState } from 'react'
 import { Navigate, useNavigate, useSearchParams } from 'react-router-dom'
+import { useQuery } from '@tanstack/react-query'
 import { useAuthStore, isTokenPair } from '@/stores/auth-store'
 import { describeError } from '@/lib/errors'
+import { ROLE_LABEL, joinInviteLink, previewInviteLink } from '@/features/admin/api'
 import { MfaStepCard } from '../components/MfaStepCard'
 
 /** 登录页（16 篇 §5.1 + 28 篇 §2 v1.8）：玻璃卡 + 双色光晕；zod 级校验先以内联规则实现。
  *  流程：zod 前置校验 → POST /auth/login → 成功写 auth-store → 按 ?next= 回跳（缺省 /）；
  *  返回 200 {mfa_required:true, mfa_token}（X17 预登记，后端 M1 未实现，live 不触发）→ MfaStepCard 二步。
- *  错误：1002 统一「邮箱或密码错误」防枚举；1005/429 限速提示含剩余时间（lib/errors 单点映射）。 */
+ *  错误：1002 统一「邮箱或密码错误」防枚举；1005/429 限速提示含剩余时间（lib/errors 单点映射）。
+ *  链接邀请（2026-09-28 ★ invite-links 切片）：?join=<token> 页顶提示条——GET preview（retry:false）
+ *  成功显绿条（租户/角色），410/未命中显红条；登录成功后 fire-and-forget 调 join 端点自动加入。 */
 
 /** 版本脚注（画板 p-login 基线同款；随 release 出版手动同步 package.json version） */
 const VERSION_FOOTER = 'v0.1.0-m1 · build 20260926'
@@ -26,6 +30,14 @@ export function LoginPage() {
   const [mfaToken, setMfaToken] = useState<string | null>(null)
 
   const nextPath = params.get('next') ?? params.get('redirect') ?? '/'
+  /** 链接邀请 token（/login?join=<token>；匿名 preview 校验 → 页顶提示条） */
+  const joinToken = params.get('join')
+  const joinPreview = useQuery({
+    queryKey: ['invite-preview', joinToken],
+    queryFn: () => previewInviteLink(joinToken as string),
+    enabled: !!joinToken,
+    retry: false, // 410 失效是终态，不重试
+  })
 
   if (status === 'authenticated' && !mfaToken) {
     return <Navigate to={nextPath} replace />
@@ -44,6 +56,10 @@ export function LoginPage() {
     try {
       const result = await login(email, password)
       if (isTokenPair(result)) {
+        // 链接邀请：登录/注册成功后 fire-and-forget 自动加入（失败不打断跳转）
+        if (joinToken) {
+          void joinInviteLink(joinToken, { email, display_name: email.split('@')[0] ?? email }).catch(() => {})
+        }
         navigate(nextPath, { replace: true })
       } else {
         // 200 {mfa_required, mfa_token}：进入二步验证步（mfa_token 一次性）
@@ -77,6 +93,29 @@ export function LoginPage() {
     <div className="login-stage relative flex min-h-screen items-center justify-center overflow-hidden bg-bg">
       <div className="login-wash lw1 blob-drift" />
       <div className="login-wash lw2 blob-drift" style={{ animationDelay: '-7s' }} />
+      {/* 链接邀请提示条（页顶）：preview 成功显绿条（租户/角色），410/未命中显红条 */}
+      {joinToken && (
+        <div className="absolute inset-x-0 top-6 z-10 flex justify-center px-4">
+          {joinPreview.data && (
+            <div
+              role="status"
+              data-testid="join-banner"
+              className="max-w-[440px] rounded-xl border border-green/40 bg-green/10 px-4 py-2.5 text-center text-xs text-green"
+            >
+              你受邀加入〈{joinPreview.data.tenant_name}〉工作区 · 角色〈{ROLE_LABEL[joinPreview.data.role] ?? joinPreview.data.role}〉，注册后将自动加入
+            </div>
+          )}
+          {joinPreview.isError && (
+            <div
+              role="alert"
+              data-testid="join-banner-error"
+              className="max-w-[440px] rounded-xl border border-red/40 bg-red/10 px-4 py-2.5 text-center text-xs text-red"
+            >
+              ⚠ 邀请链接已失效或已过期
+            </div>
+          )}
+        </div>
+      )}
       <form onSubmit={onSubmit} className="login-card glass glass-sheen-loop w-[360px] rounded-3xl p-8">
         <div className="login-logo flex h-10 w-10 items-center justify-center rounded-xl bg-accent-soft text-accent">◆</div>
         <h1 className="mt-4 text-lg font-bold">ontology-agent</h1>

@@ -5,8 +5,9 @@ import { toast } from 'sonner'
 import { Modal } from '@/components/modal'
 import { relativeTime } from '@/lib/reltime'
 import {
-  ROLE_BADGE, ROLE_LABEL, disableUser, inviteUsers, listUsers, updateUser,
-  type AdminUser,
+  ROLE_BADGE, ROLE_LABEL, createInviteLink, disableUser, inviteUsers, listInviteLinks, listUsers,
+  revokeInviteLink, updateUser,
+  type AdminUser, type InviteLink,
 } from '../api'
 
 /** 用户 Tab（26 篇 §10.2 p-admin users）：用户表 + IX-ADM-01 邀请成员（邮箱 chip 化批量）
@@ -63,8 +64,13 @@ export function UsersTab() {
                   </span>
                 </td>
                 <td className="px-4 py-2.5">
-                  <span className={`badge ${u.status === 'active' ? 'b-green' : u.status === 'invited' ? 'b-orange' : 'b-gray'}`}>
-                    {u.status === 'active' ? '在职' : u.status === 'invited' ? '已邀请' : '已停用'}
+                  <span className="flex flex-wrap items-center gap-1">
+                    <span className={`badge ${u.status === 'active' ? 'b-green' : u.status === 'invited' ? 'b-orange' : 'b-gray'}`}>
+                      {u.status === 'active' ? '在职' : u.status === 'invited' ? '已邀请' : '已停用'}
+                    </span>
+                    {u.status === 'invited' && u.invited_via === 'link' && (
+                      <span className="badge b-blue" data-testid={`adm-user-via-link-${u.id}`}>链接邀请</span>
+                    )}
                   </span>
                 </td>
                 <td className="px-4 py-2.5 text-label-2">{u.last_login_at ? relativeTime(u.last_login_at) : '—'}</td>
@@ -96,15 +102,31 @@ export function UsersTab() {
   )
 }
 
-/** IX-ADM-01 邀请成员（520px）：邮箱 chip 化批量（Enter/逗号/批量粘贴解析）+ 角色下拉
- *  （默认 member）+ 附言 + 已存在账号检测提示。 */
+/** 邀请链接倒计时文案（<24h 显小时，否则显天；过期即「已过期」） */
+function countdownText(expiresAt: string): string {
+  const ms = new Date(expiresAt).getTime() - Date.now()
+  if (ms <= 0) return '已过期'
+  const h = Math.floor(ms / 3_600_000)
+  if (h < 24) return `${h} 小时后失效`
+  return `${Math.floor(h / 24)} 天后失效`
+}
+
+/** IX-ADM-01 邀请成员（520px）：双模式 seg（邮箱邀请｜链接邀请，2026-09-28 链接邀请切片——
+ *  Dify 式链接自助加入：角色/有效期 → 生成 → 复制分享，成员经 /login?join= 自助加入）。
+ *  邮箱分支（chip 化批量 Enter/逗号/批量粘贴解析 + 角色下拉 + 附言 + 已存在账号检测）原样保留。 */
 function InviteModal({ onClose }: { onClose: () => void }) {
   const qc = useQueryClient()
+  const [mode, setMode] = useState<'email' | 'link'>('email')
   const [chips, setChips] = useState<string[]>([])
   const [draft, setDraft] = useState('')
   const [role, setRole] = useState('member')
   const [note, setNote] = useState('')
   const [existing, setExisting] = useState<{ email: string; name: string }[]>([])
+  // 链接邀请态：角色 + 有效期（24h/7d/30d）+ 已生成链接 + 复制反馈（2s 还原）
+  const [linkRole, setLinkRole] = useState('member')
+  const [expiresHours, setExpiresHours] = useState<24 | 168 | 720>(24)
+  const [createdLink, setCreatedLink] = useState<InviteLink | null>(null)
+  const [copied, setCopied] = useState(false)
 
   const addChips = (raw: string) => {
     const parts = raw.split(/[,;\s]+/).map(s => s.trim()).filter(Boolean)
@@ -127,6 +149,38 @@ function InviteModal({ onClose }: { onClose: () => void }) {
     onError: e => toast.error(e.message),
   })
 
+  // 已生成的邀请链接（弹窗下方列表：GET 拉取 + DELETE 撤销）
+  const linksQuery = useQuery({ queryKey: ['admin', 'invite-links'], queryFn: listInviteLinks })
+  const links = useMemo(() => linksQuery.data?.items ?? [], [linksQuery.data])
+
+  const createLink = useMutation({
+    mutationFn: () => createInviteLink({ role: linkRole, expires_in_hours: expiresHours }),
+    onSuccess: link => {
+      setCreatedLink(link)
+      toast.success('邀请链接已生成，复制分享给成员即可自助加入')
+      void qc.invalidateQueries({ queryKey: ['admin', 'invite-links'] })
+    },
+    onError: e => toast.error(e.message),
+  })
+
+  const revokeLink = useMutation({
+    mutationFn: (id: string) => revokeInviteLink(id),
+    onSuccess: () => {
+      toast.success('邀请链接已撤销（立即失效，不可逆）')
+      void qc.invalidateQueries({ queryKey: ['admin', 'invite-links'] })
+    },
+    onError: e => toast.error(e.message),
+  })
+
+  const copyLink = async () => {
+    if (!createdLink) return
+    try {
+      await navigator.clipboard.writeText(createdLink.url)
+      setCopied(true)
+      window.setTimeout(() => setCopied(false), 2000)
+    } catch { /* clipboard 异常静默（jsdom / 非 https 降级） */ }
+  }
+
   return (
     <Modal
       open
@@ -134,68 +188,165 @@ function InviteModal({ onClose }: { onClose: () => void }) {
       title="邀请成员"
       width={520}
       footer={
-        <>
-          <button type="button" className="btn btn-g" onClick={onClose}>取消</button>
-          <button
-            type="button"
-            className="btn btn-p"
-            data-testid="adm-invite-send"
-            disabled={chips.length === 0 || mutation.isPending}
-            onClick={() => mutation.mutate()}
-          >
-            发送邀请（{chips.length}）
-          </button>
-        </>
+        mode === 'email' ? (
+          <>
+            <button type="button" className="btn btn-g" onClick={onClose}>取消</button>
+            <button
+              type="button"
+              className="btn btn-p"
+              data-testid="adm-invite-send"
+              disabled={chips.length === 0 || mutation.isPending}
+              onClick={() => mutation.mutate()}
+            >
+              发送邀请（{chips.length}）
+            </button>
+          </>
+        ) : (
+          /* 链接模式 footer 只留「关闭」：生成按钮在表单内，与「发送邀请」互斥 */
+          <button type="button" className="btn btn-g" data-testid="adm-invite-close" onClick={onClose}>关闭</button>
+        )
       }
     >
-      <div className="field">
-        <label className="field-label" htmlFor="adm-invite-emails">邮箱（回车 / 逗号分隔，支持批量粘贴）</label>
-        <div className="flex min-h-[38px] flex-wrap items-center gap-1.5 rounded-xl border border-separator bg-surface px-2 py-1.5">
-          {chips.map(c => (
-            <span key={c} className="badge b-blue" data-testid={`adm-invite-chip-${c}`}>
-              {c}
-              <button type="button" aria-label={`移除 ${c}`} onClick={() => setChips(prev => prev.filter(x => x !== c))}>×</button>
-            </span>
-          ))}
-          <input
-            id="adm-invite-emails"
-            data-testid="adm-invite-input"
-            className="min-w-[180px] flex-1 border-0 bg-transparent text-[13px] outline-none"
-            placeholder="name@example.com"
-            value={draft}
-            onChange={e => setDraft(e.target.value)}
-            onKeyDown={e => {
-              if (e.key === 'Enter' || e.key === ',') { e.preventDefault(); if (draft) addChips(draft) }
-              if (e.key === 'Backspace' && !draft && chips.length) setChips(prev => prev.slice(0, -1))
-            }}
-            onBlur={() => draft && addChips(draft)}
-            onPaste={e => {
-              const text = e.clipboardData.getData('text')
-              if (text && /[,;\s]/.test(text)) { e.preventDefault(); addChips(text) }
-            }}
-          />
-        </div>
+      {/* 双模式切换（生成按钮在表单内，footer 随模式切换） */}
+      <div className="seg mb-4" data-testid="adm-invite-mode">
+        <button type="button" className={`seg-btn ${mode === 'email' ? 'on' : ''}`} data-testid="adm-invite-mode-email" onClick={() => setMode('email')}>邮箱邀请</button>
+        <button type="button" className={`seg-btn ${mode === 'link' ? 'on' : ''}`} data-testid="adm-invite-mode-link" onClick={() => setMode('link')}>链接邀请</button>
       </div>
-      <div className="field">
-        <label className="field-label" htmlFor="adm-invite-role">初始角色（默认 member）</label>
-        <select id="adm-invite-role" data-testid="adm-invite-role" className="input" value={role} onChange={e => setRole(e.target.value)}>
-          {Object.entries(ROLE_LABEL).filter(([k]) => k !== 'super_admin').map(([k, v]) => (
-            <option key={k} value={k}>{v}</option>
-          ))}
-        </select>
-      </div>
-      <div className="field">
-        <label className="field-label" htmlFor="adm-invite-note">附言（可选）</label>
-        <input id="adm-invite-note" className="input" value={note} onChange={e => setNote(e.target.value)} placeholder="将随邀请邮件展示" />
-      </div>
-      {existing.length > 0 && (
-        <div className="al-warn alert" data-testid="adm-invite-existing">
-          <div>
-            <b>{existing.length} 个账号已存在，已跳过</b>
-            {existing.map(x => <div key={x.email} className="mono text-[11px]">{x.email} · {x.name}</div>)}
+      {mode === 'email' ? (
+        <>
+          <div className="field">
+            <label className="field-label" htmlFor="adm-invite-emails">邮箱（回车 / 逗号分隔，支持批量粘贴）</label>
+            <div className="flex min-h-[38px] flex-wrap items-center gap-1.5 rounded-xl border border-separator bg-surface px-2 py-1.5">
+              {chips.map(c => (
+                <span key={c} className="badge b-blue" data-testid={`adm-invite-chip-${c}`}>
+                  {c}
+                  <button type="button" aria-label={`移除 ${c}`} onClick={() => setChips(prev => prev.filter(x => x !== c))}>×</button>
+                </span>
+              ))}
+              <input
+                id="adm-invite-emails"
+                data-testid="adm-invite-input"
+                className="min-w-[180px] flex-1 border-0 bg-transparent text-[13px] outline-none"
+                placeholder="name@example.com"
+                value={draft}
+                onChange={e => setDraft(e.target.value)}
+                onKeyDown={e => {
+                  if (e.key === 'Enter' || e.key === ',') { e.preventDefault(); if (draft) addChips(draft) }
+                  if (e.key === 'Backspace' && !draft && chips.length) setChips(prev => prev.slice(0, -1))
+                }}
+                onBlur={() => draft && addChips(draft)}
+                onPaste={e => {
+                  const text = e.clipboardData.getData('text')
+                  if (text && /[,;\s]/.test(text)) { e.preventDefault(); addChips(text) }
+                }}
+              />
+            </div>
           </div>
-        </div>
+          <div className="field">
+            <label className="field-label" htmlFor="adm-invite-role">初始角色（默认 member）</label>
+            <select id="adm-invite-role" data-testid="adm-invite-role" className="input" value={role} onChange={e => setRole(e.target.value)}>
+              {Object.entries(ROLE_LABEL).filter(([k]) => k !== 'super_admin').map(([k, v]) => (
+                <option key={k} value={k}>{v}</option>
+              ))}
+            </select>
+          </div>
+          <div className="field">
+            <label className="field-label" htmlFor="adm-invite-note">附言（可选）</label>
+            <input id="adm-invite-note" className="input" value={note} onChange={e => setNote(e.target.value)} placeholder="将随邀请邮件展示" />
+          </div>
+          {existing.length > 0 && (
+            <div className="al-warn alert" data-testid="adm-invite-existing">
+              <div>
+                <b>{existing.length} 个账号已存在，已跳过</b>
+                {existing.map(x => <div key={x.email} className="mono text-[11px]">{x.email} · {x.name}</div>)}
+              </div>
+            </div>
+          )}
+        </>
+      ) : (
+        <>
+          <div className="field">
+            <label className="field-label" htmlFor="adm-invite-link-role">初始角色（加入即获此角色）</label>
+            <select id="adm-invite-link-role" data-testid="adm-invite-link-role" className="input" value={linkRole} onChange={e => setLinkRole(e.target.value)}>
+              {Object.entries(ROLE_LABEL).filter(([k]) => k !== 'super_admin').map(([k, v]) => (
+                <option key={k} value={k}>{v}</option>
+              ))}
+            </select>
+          </div>
+          <div className="field">
+            <span className="field-label">有效期</span>
+            <div className="seg" data-testid="adm-invite-exp-seg">
+              {([['24 小时', 24], ['7 天', 168], ['30 天', 720]] as [string, 24 | 168 | 720][]).map(([label, hours]) => (
+                <button
+                  key={hours}
+                  type="button"
+                  className={`seg-btn ${expiresHours === hours ? 'on' : ''}`}
+                  data-testid={`adm-invite-exp-${hours}`}
+                  onClick={() => setExpiresHours(hours)}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+          <button
+            type="button"
+            className="btn btn-p w-full"
+            data-testid="adm-invite-link-create"
+            disabled={createLink.isPending}
+            onClick={() => createLink.mutate()}
+          >
+            生成邀请链接
+          </button>
+          {createdLink && (
+            <div className="mt-3 rounded-xl border border-separator bg-surface-2 p-3" data-testid="adm-invite-link-result">
+              <div className="flex items-center gap-2">
+                <code className="mono min-w-0 flex-1 truncate text-[11px] text-label-2" data-testid="adm-invite-link-url" title={createdLink.url}>
+                  {createdLink.url}
+                </code>
+                <button type="button" className="btn btn-g btn-sm flex-none" data-testid="adm-invite-link-copy" onClick={() => void copyLink()}>
+                  {copied ? '已复制 ✓' : '复制链接'}
+                </button>
+              </div>
+              <div className="mt-1.5 text-[11px] text-label-3" data-testid="adm-invite-link-countdown">
+                {ROLE_LABEL[createdLink.role] ?? createdLink.role} · {countdownText(createdLink.expires_at)} · 成员经链接注册后自助加入
+              </div>
+            </div>
+          )}
+        </>
       )}
+      {/* 已生成的邀请链接（弹窗下方，双模式均可见）：链接/角色/倒计时/状态/撤销 */}
+      <div className="hairline-t mt-4 pt-3">
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-semibold text-label-2">已生成的邀请链接</span>
+          <span className="text-[11px] text-label-3">撤销立即失效且不可逆</span>
+        </div>
+        {links.length === 0 ? (
+          <div className="mt-2 text-[11px] text-label-3">暂无邀请链接（生成后在此列出，供撤销管理）</div>
+        ) : (
+          <div className="mt-2 space-y-1.5">
+            {links.map(l => (
+              <div key={l.id} className="flex items-center gap-2 rounded-lg bg-surface-2 px-2.5 py-1.5" data-testid={`adm-invite-link-row-${l.id}`}>
+                <code className="mono min-w-0 flex-1 truncate text-[11px] text-label-3" title={l.url}>{l.url}</code>
+                <span className={`badge flex-none ${ROLE_BADGE[l.role] ?? 'b-gray'}`}>{ROLE_LABEL[l.role] ?? l.role}</span>
+                <span className="flex-none text-[11px] text-label-3">{countdownText(l.expires_at)}</span>
+                <span className={`badge flex-none ${l.status === 'active' ? 'b-green' : l.status === 'expired' ? 'b-orange' : 'b-gray'}`}>
+                  {l.status === 'active' ? '生效中' : l.status === 'expired' ? '已过期' : '已撤销'}
+                </span>
+                <button
+                  type="button"
+                  className="btn btn-d btn-sm flex-none"
+                  data-testid={`adm-invite-revoke-${l.id}`}
+                  disabled={l.status !== 'active' || revokeLink.isPending}
+                  onClick={() => revokeLink.mutate(l.id)}
+                >
+                  撤销
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
     </Modal>
   )
 }

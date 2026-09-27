@@ -1,7 +1,8 @@
 """检索融合与上下文组装（docs/memory/多层记忆设计.md §3 检索管线，M3 过渡子集）。
 
-- 通道：L1 全量常驻（不参与排序）+ L2 关键词/新近双通道 RRF（full）；light=仅 L2 新近通道
-  top-k（§3 轻检索降级口径：仅 L1 全量 + L2 top-k）；
+- 通道：L1 全量常驻（不参与排序）+ L2 关键词/新近/向量三通道 RRF（full；向量通道由
+  调用方嵌入查询后以 vector_hits 注入，嵌入/列不可用降级为双通道，api/01 §5.5 search）；
+  light=仅 L2 新近通道 top-k（§3 轻检索降级口径：仅 L1 全量 + L2 top-k）；
 - 权重（§3 加权表）：score = w_layer(0.9) × relevance(1.0) × time_decay（半衰期 config 注入）；
 - L3（M5 延后）/L4（knowledge.search 域）恒空集（§1 裁决框：读写接口保留、返回空集）；
 - 推理分级：合并与衰减全部为确定性规则，无 LLM（复用 retrieval.rrf_merge）。
@@ -9,6 +10,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from datetime import datetime
 from typing import Final
 from uuid import UUID
@@ -87,14 +89,21 @@ async def merge_l2_hits(
     rrf_k: int,
     half_life_days: float,
     now: datetime,
+    vector_hits: Sequence[L2Fact] = (),
 ) -> list[L2Hit]:
-    """L2 双通道召回融合（context 与 /search 共用）：关键词（full 且有 query）+ 新近 → RRF → 衰减。"""
+    """L2 多通道召回融合（context 与 /search 共用）：关键词/向量/新近 → RRF → 衰减。
+
+    vector_hits=调用方向量通道召回（api 层嵌入查询后经 data/vector.py 取回；缺省空=未启用
+    该路，不标降级——降级判定归调用方，kb hybrid_search 同款分层）。"""
     candidates: dict[UUID, L2Fact] = {}
     channels: dict[str, list[UUID]] = {}
     if mode == "full" and query:
         keyword_hits = await repo.search_candidates(user_id, query, limit=top_k)
         channels["keyword"] = [fact.id for fact in keyword_hits]
         candidates.update({fact.id: fact for fact in keyword_hits})
+    if vector_hits:
+        channels["vector"] = [fact.id for fact in vector_hits]
+        candidates.update({fact.id: fact for fact in vector_hits})
     recent_hits = await repo.recent_candidates(user_id, limit=top_k)
     channels["recent"] = [fact.id for fact in recent_hits]
     candidates.update({fact.id: fact for fact in recent_hits})

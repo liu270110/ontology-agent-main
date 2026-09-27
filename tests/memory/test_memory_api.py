@@ -1,7 +1,9 @@
-"""memory 六端点集成测试（api/01 §5.5；本地 PG 不可达自动跳过；端点函数直调=tests/gateway 同款）。
+"""memory 六端点 + ★ 端点集成测试（api/01 §5.5；本地 PG 不可达自动跳过；端点函数直调=tests/gateway 同款）。
 
 覆盖：l1/l2 写入（指纹幂等）、读过滤、检索、invalidate 墓碑 404/幂等、context 形状与来源标注、
-consolidate 202 受理、跨用户 403（授权矩阵验收）。
+consolidate 202 受理、跨用户 403（授权矩阵验收）；
+★ 补齐（2026-09-28）：GET /memory/l1/{sid} 快照、GET /memory/facts 分页过滤、
+GET /memory/facts/{id}/timeline 留痕、promotions 登记与记录面、GET /memory/audit 回放。
 """
 
 from __future__ import annotations
@@ -16,8 +18,14 @@ from starlette.requests import Request as StarletteRequest
 from services.gateway.app import create_app
 from services.memory.api.memory import (
     consolidate_memory,
+    create_promotion,
+    fact_timeline,
     invalidate_fact,
+    list_facts,
+    list_promotions,
+    memory_audit,
     memory_context,
+    read_l1_snapshot,
     read_memory,
     search_memory,
     write_memory,
@@ -27,6 +35,7 @@ from services.memory.api.schemas.memory import (
     ConsolidateIn,
     MemorySearchIn,
     MemoryWriteIn,
+    PromotionIn,
     SourceRefsIn,
     WindowMessageIn,
 )
@@ -281,3 +290,191 @@ async def test_GET_memory_context_full与light_形状与降级标注(mem_seed):
     # Assert：light 恒标 degraded（轻检索降级观测位）
     assert light.meta["mode"] == "light" and light.meta["degraded"] is True
     assert [h["fact_id"] for h in light.data["l2"]] == [str(fact.id)]
+
+
+# ── ★ 端点（api/01 §5.5 补齐，2026-09-28）────────────────────────────────
+
+
+async def test_GET_memory_l1_sessionid_快照读写一致(mem_seed):
+    # Arrange：L1 三件套写入
+    body = MemoryWriteIn(
+        level="l1",
+        session_id=mem_seed.session_id,
+        blocks=[BlockIn(key="task", title="任务", content="停电归因分析")],
+        window=[WindowMessageIn(role="user", content="查一下城东停电原因")],
+        state={"step": "grounding"},
+    )
+    async with mem_seed.factory() as db:
+        await write_memory(body, principal=mem_seed.principal, db=db, l1=_store(mem_seed))
+        # Act：★ 专用快照端点
+        snap = await read_l1_snapshot(principal=mem_seed.principal, l1=_store(mem_seed), session_id=mem_seed.session_id)
+    # Assert：blocks/window/state 与写入一致；键缺失=新会话空快照非 404（degraded=False）
+    assert snap.session_id == mem_seed.session_id and snap.degraded is False
+    assert snap.blocks["task"].content == "停电归因分析"
+    assert snap.window[0].content == "查一下城东停电原因"
+    assert snap.state == {"step": "grounding"}
+
+
+async def test_GET_memory_facts_分页过滤_跨用户403(mem_seed):
+    # Arrange：经仓储直写 2 条不同类别
+    async with mem_seed.factory() as db:
+        repo = mem_seed.repo(db)
+        f1 = L2Fact(
+            id=uuid4(),
+            tenant_id=mem_seed.tenant_id,
+            user_id=mem_seed.user_id,
+            content="事实甲",
+            category=FactCategory.FACT,
+            confidence=0.9,
+            decay_score=0.9,
+        )
+        f2 = L2Fact(
+            id=uuid4(),
+            tenant_id=mem_seed.tenant_id,
+            user_id=mem_seed.user_id,
+            content="偏好乙",
+            category=FactCategory.PREFERENCE,
+            confidence=0.9,
+            decay_score=0.9,
+        )
+        await repo.add(f1)
+        await repo.add(f2)
+        await db.commit()
+        # Act / Assert：category 过滤 + 分页形状
+        page = await list_facts(
+            principal=mem_seed.principal, db=db, status_filter=FactStatus.ACTIVE, category=FactCategory.PREFERENCE
+        )
+        assert [i.fact_id for i in page.items] == [f2.id] and page.offset == 0
+        one = await list_facts(principal=mem_seed.principal, db=db, limit=1)
+        assert one.limit == 1 and len(one.items) == 1
+        # Act / Assert：显式他人 user_id → 403+2002（授权矩阵）
+        from services.platform.errors import GatewayError
+
+        with pytest.raises(GatewayError) as ei:
+            await list_facts(principal=mem_seed.principal, db=db, user_id=uuid4())
+    assert (ei.value.code, ei.value.status_code) == (2002, 403)
+
+
+async def test_GET_memory_facts_timeline_产生失效留痕_未知404(mem_seed):
+    async with mem_seed.factory() as db:
+        repo = mem_seed.repo(db)
+        fact = L2Fact(
+            id=uuid4(),
+            tenant_id=mem_seed.tenant_id,
+            user_id=mem_seed.user_id,
+            content="将走时间线的事实",
+            category=FactCategory.FACT,
+            confidence=0.9,
+            decay_score=0.9,
+            valid_from=datetime.now(UTC),
+        )
+        await repo.add(fact)
+        await db.commit()
+        # Act / Assert：新事实 → 单 created 事件，chain=自身
+        tl = await fact_timeline(fact.id, principal=mem_seed.principal, db=db)
+        assert tl.fact_id == fact.id and tl.chain == [fact.id]
+        assert [e.type for e in tl.events] == ["created"]
+        # Act / Assert：失效后事件追加（FR-MEM-06 全程留痕）
+        fact.invalidate(datetime.now(UTC))
+        await repo.save_state(fact)
+        await db.commit()
+        tl2 = await fact_timeline(fact.id, principal=mem_seed.principal, db=db)
+        assert [e.type for e in tl2.events] == ["created", "invalidated"]
+        assert tl2.events[1].at is not None
+        # Act / Assert：未知 id → 404（不泄露存在性）
+        from services.platform.errors import GatewayError
+
+        with pytest.raises(GatewayError) as ei:
+            await fact_timeline(uuid4(), principal=mem_seed.principal, db=db)
+    assert ei.value.status_code == 404
+
+
+async def test_POST_memory_promotions_202登记_重复409_未知404(mem_seed):
+    from services.platform.errors import GatewayError
+
+    async with mem_seed.factory() as db:
+        # Arrange：先写一条 L2 事实
+        written = await write_memory(
+            _write_l2_body("可升级事实：城东馈线甲常载 80%", mem_seed),
+            principal=mem_seed.principal,
+            db=db,
+            l1=_store(mem_seed),
+        )
+        await db.commit()
+        # Act：发起升级单（202 占位登记=audit_logs 一行）
+        out = await create_promotion(
+            PromotionIn(fact_id=written.fact_id, reason="高频复用", session_id=mem_seed.session_id),
+            request=_request(mem_seed),
+            principal=mem_seed.principal,
+            db=db,
+        )
+        await db.commit()
+        # Assert：registered 占位态
+        assert out.fact_id == written.fact_id and out.status == "registered"
+        # Act / Assert：同事实重复申请 → 409*
+        with pytest.raises(GatewayError) as ei:
+            await create_promotion(
+                PromotionIn(fact_id=written.fact_id),
+                request=_request(mem_seed),
+                principal=mem_seed.principal,
+                db=db,
+            )
+        assert ei.value.status_code == 409
+        # Act / Assert：未知事实 → 404
+        with pytest.raises(GatewayError) as ei2:
+            await create_promotion(
+                PromotionIn(fact_id=uuid4()), request=_request(mem_seed), principal=mem_seed.principal, db=db
+            )
+    assert ei2.value.status_code == 404
+
+
+async def test_GET_memory_promotions_登记行投影(mem_seed):
+    async with mem_seed.factory() as db:
+        written = await write_memory(
+            _write_l2_body("投影面事实", mem_seed), principal=mem_seed.principal, db=db, l1=_store(mem_seed)
+        )
+        await db.commit()
+        out = await create_promotion(
+            PromotionIn(fact_id=written.fact_id, reason="审计回放依据", session_id=mem_seed.session_id),
+            request=_request(mem_seed),
+            principal=mem_seed.principal,
+            db=db,
+        )
+        await db.commit()
+        # Act：★ 记录面（M5 前占位：audit_logs 登记行投影）
+        page = await list_promotions(principal=mem_seed.principal, db=db)
+        # Assert：登记行 → 契约形状
+        assert page.limit == 20 and len(page.items) == 1
+        rec = page.items[0]
+        assert rec.promotion_id == out.promotion_id
+        assert rec.fact_id == written.fact_id and rec.status == "registered"
+        assert rec.reason == "审计回放依据" and rec.session_id == mem_seed.session_id
+        assert rec.requested_by == mem_seed.user_id and rec.created_at is not None
+
+
+async def test_GET_memory_audit_升级单回放_会话过滤_跨用户403(mem_seed):
+    from services.platform.errors import GatewayError
+
+    async with mem_seed.factory() as db:
+        written = await write_memory(
+            _write_l2_body("审计回放事实", mem_seed), principal=mem_seed.principal, db=db, l1=_store(mem_seed)
+        )
+        await db.commit()
+        await create_promotion(
+            PromotionIn(fact_id=written.fact_id, session_id=mem_seed.session_id),
+            request=_request(mem_seed),
+            principal=mem_seed.principal,
+            db=db,
+        )
+        await db.commit()
+        # Act：按 session 回放（digest 携 session_id）
+        page = await memory_audit(principal=mem_seed.principal, db=db, session_id=mem_seed.session_id)
+        # Assert：memory.* 动作可见（升级单登记行）
+        assert len(page.items) == 1
+        entry = page.items[0]
+        assert entry.action == "memory.promotion" and entry.resource_id == str(written.fact_id)
+        assert entry.result == "success" and entry.actor_id == mem_seed.user_id
+        # Act / Assert：跨用户回放 → 403+2002
+        with pytest.raises(GatewayError) as ei:
+            await memory_audit(principal=mem_seed.principal, db=db, user_id=uuid4())
+    assert (ei.value.code, ei.value.status_code) == (2002, 403)

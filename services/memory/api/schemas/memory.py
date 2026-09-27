@@ -1,16 +1,19 @@
-"""memory API DTO（api/01 §5.5 六端点 + §6.6 示例形状）。"""
+"""memory API DTO（api/01 §5.5 端点登记册 + §6.6 示例形状；新增 DTO 一律 extra=forbid）。"""
 
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Literal
+from typing import Any, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from services.memory.business.context import ContextBundle
+from services.memory.business.timeline import FactTimeline, TimelineEvent
 from services.memory.domain.model.l1 import L1Snapshot, MemoryBlock, WindowMessage
 from services.memory.domain.model.l2_fact import FactCategory, L2Fact
+
+_FORBID = ConfigDict(extra="forbid")  # 契约面：未知字段拒绝（api/01 §5.5 新增端点统一口径）
 
 # ---------------------------------------------------------------- 写入
 
@@ -151,7 +154,9 @@ class L1ReadOut(BaseModel):
 
 
 class MemorySearchIn(BaseModel):
-    """POST /memory/search：语义检索（M3 过渡=关键词+新近双通道 RRF；向量通道随嵌入接入）。"""
+    """POST /memory/search：语义检索（关键词+向量+新近三路 RRF；向量不可用降级双通道）。"""
+
+    model_config = _FORBID
 
     query: str = Field(min_length=1, max_length=2048)
     top_k: int = Field(default=8, ge=1, le=50)
@@ -168,7 +173,7 @@ class SearchHitOut(BaseModel):
 
 class MemorySearchOut(BaseModel):
     items: list[SearchHitOut]
-    degraded: bool = True  # M3 过渡：向量通道未接入恒 True（观测位）
+    degraded: bool = False  # 向量通道不可用（模型离线/列缺失）→ True（观测位，不阻断检索）
 
 
 class MemoryContextOut(BaseModel):
@@ -208,3 +213,118 @@ class ConsolidateIn(BaseModel):
 class ConsolidateOut(BaseModel):
     session_id: UUID
     status: Literal["accepted"] = "accepted"
+
+
+# ---------------------------------------------------------------- ★ 端点（api/01 §5.5 登记册补齐）
+
+
+class FactTimelineEventOut(BaseModel):
+    """时间线事件（产生/升级/失效三元组；FR-MEM-06 全程留痕）。"""
+
+    model_config = _FORBID
+
+    type: Literal["created", "superseded", "invalidated"]
+    at: datetime
+    fact_id: UUID
+    superseded_by: UUID | None = None
+    note: str = ""
+
+    @classmethod
+    def from_domain(cls, event: TimelineEvent) -> FactTimelineEventOut:
+        return cls(
+            type=event.type,  # type: ignore[arg-type]  # 业务层事件类型为三值字面量子集
+            at=event.at,
+            fact_id=event.fact_id,
+            superseded_by=event.superseded_by,
+            note=event.note,
+        )
+
+
+class FactTimelineOut(BaseModel):
+    """GET /memory/facts/{id}/timeline 响应（版本链 + 全程留痕事件，时间升序）。"""
+
+    model_config = _FORBID
+
+    fact_id: UUID
+    chain: list[UUID]
+    events: list[FactTimelineEventOut]
+
+    @classmethod
+    def from_domain(cls, timeline: FactTimeline) -> FactTimelineOut:
+        return cls(
+            fact_id=timeline.fact_id,
+            chain=timeline.chain,
+            events=[FactTimelineEventOut.from_domain(e) for e in timeline.events],
+        )
+
+
+class PromotionIn(BaseModel):
+    """POST /memory/promotions：发起 L2→L3 升级申请单（M5 前仅登记，memory §1/§2）。"""
+
+    model_config = _FORBID
+
+    fact_id: UUID
+    reason: str | None = Field(default=None, max_length=500)  # 升级依据（入审计摘要时截断 200）
+    session_id: UUID | None = None  # 溯源会话（审计回放按 session 过滤用，可缺省）
+
+
+class PromotionOut(BaseModel):
+    """POST /memory/promotions 响应（202 受理；审核工作流随 M5 接入前为占位登记态）。"""
+
+    model_config = _FORBID
+
+    promotion_id: UUID
+    fact_id: UUID
+    status: Literal["registered"] = "registered"
+    note: str = "L2→L3 升级单占位登记：审核工作流随 M5 接入（memory §1 裁决框）"
+
+
+class PromotionRecordOut(BaseModel):
+    """GET /memory/promotions 单条升级登记（audit_logs 登记行投影；M5 前占位面）。"""
+
+    model_config = _FORBID
+
+    promotion_id: UUID
+    fact_id: UUID
+    status: Literal["registered"] = "registered"
+    requested_by: UUID | None = None
+    reason: str = ""
+    session_id: UUID | None = None
+    created_at: datetime
+
+
+class PromotionPageOut(BaseModel):
+    """GET /memory/promotions 响应（created_at 倒序分页；无登记 → items=[] 契约形状）。"""
+
+    model_config = _FORBID
+
+    items: list[PromotionRecordOut]
+    offset: int
+    limit: int
+
+
+class AuditEntryOut(BaseModel):
+    """单条记忆审计记录（audit_logs 投影：谁/何时/动作/资源/摘要/trace）。"""
+
+    model_config = _FORBID
+
+    id: UUID
+    actor_type: str
+    actor_id: UUID | None = None
+    action: str
+    resource_type: str | None = None
+    resource_id: str | None = None
+    params_digest: dict[str, Any] | None = None
+    result: str
+    trace_id: str | None = None
+    created_at: datetime
+
+
+class AuditPageOut(BaseModel):
+    """GET /memory/audit 响应（按 user/session 回放；created_at 倒序分页）。"""
+
+    model_config = _FORBID
+
+    items: list[AuditEntryOut]
+    offset: int
+    limit: int

@@ -14,7 +14,9 @@
 - 抽取双路径：有 ModelPort 走 LLM 抽取（低频语义判断，输出过 JSON Schema 校验——宪法第 2 条）；
   无 ModelPort 时自编辑记忆块**确定性物化**（块本身是已策展内容，不依赖引擎，§1 裁决框 M3 过渡）；
 - 幂等（§5.4）：以事实指纹（规范化文本+category）判重，重跑不产生重复事实；
-- 写入侧防线（§9.2）：来源指针必填（source_session_id）、低于置信度阈值的候选直接丢弃。
+- 写入侧防线（§9.2）：来源指针必填（source_session_id）、低于置信度阈值的候选直接丢弃；
+- 向量通道（M3 lite=pgvector，api/01 §5.5 search 三路 RRF 的写入侧）：embedder 给出时
+  逐条事实嵌入回写（最佳努力——失败 DEBUG 留痕不影响落账，向量是召回加速面非正确性依赖）。
 """
 
 from __future__ import annotations
@@ -32,7 +34,7 @@ from sqlalchemy.exc import IntegrityError
 from services.memory.business.pipeline_store import CheckpointStore, DeadLetterSink
 from services.memory.domain.model.l1 import L1Snapshot
 from services.memory.domain.model.l2_fact import FactCategory, FactStatus, L2Fact, fact_fingerprint
-from services.memory.domain.repo.fact_repo import L2FactRepository
+from services.memory.domain.repo.fact_repo import FactEmbedderPort, L2FactRepository
 from services.platform.ports.model_port import ModelPort
 
 if TYPE_CHECKING:
@@ -134,6 +136,7 @@ async def consolidate_session(
     session_id: UUID,
     agent_id: UUID | None = None,
     model_port: ModelPort | None = None,
+    embedder: FactEmbedderPort | None = None,
     trace_id: str | None = None,
     now: datetime | None = None,
     checkpoint: CheckpointStore | None = None,
@@ -142,7 +145,8 @@ async def consolidate_session(
     """沉淀一个会话的 L1 → L2：抽取 → 判定 → 写入（状态机步进，checkpoint 断点续跑，§2.1）。
 
     checkpoint/dead_letters 缺省 None：退化为无断点单发执行（失败直接上抛，不入死信）——
-    单测/直调口径；生产装配（api/memory.py）两者必接。
+    单测/直调口径；生产装配（api/memory.py）两者必接。embedder 缺省 None=不嵌向量
+    （关键词/新近通道恒可用；api 层组合时注入 app.state 嵌入单例）。
     """
     moment = now or datetime.now(UTC)
     saved = await checkpoint.load(tenant_id, session_id) if checkpoint is not None else None
@@ -183,6 +187,9 @@ async def consolidate_session(
                 # 兜底不产生脏数据；repo.add 在 SAVEPOINT 内 flush，保存点回滚不污染会话。
                 run.duplicates += 1
                 logger.info("consolidation 并发同指纹跳过（另一写入者已落库，幂等兜底 §5.4）: fact=%s", fact.id)
+            else:
+                if embedder is not None:  # 写入侧向量回写（最佳努力，失败不进死信不回滚落账）
+                    await _embed_written(repo, embedder, fact)
             run.plan.pop(0)
             await _persist(checkpoint, tenant_id, session_id, run, current)
     except Exception as exc:
@@ -220,6 +227,19 @@ async def consolidate_session(
 
 
 # ---------------------------------------------------------------- 状态机三步
+
+
+async def _embed_written(repo: L2FactRepository, embedder: FactEmbedderPort, fact: L2Fact) -> None:
+    """落账事实向量回写（最佳努力）：嵌入/列不可用 → DEBUG 留痕跳过，不影响沉淀结果。
+
+    异常面从宽（noqa: BLE001）——embedder 为端口注入，第三方实现异常一律不进死信、
+    不回滚已落账事实（向量是召回加速面，非正确性依赖；重跑可经 checkpoint 续跑补写）。
+    """
+    try:
+        vectors = await embedder.embed([fact.content])
+        await repo.save_embedding(fact.id, vectors[0])
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("consolidation 嵌入降级跳过（fact=%s）: %s", fact.id, exc)
 
 
 async def _step_extracting(

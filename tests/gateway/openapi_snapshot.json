@@ -595,6 +595,155 @@
         "title": "AuditPageOut",
         "type": "object"
       },
+      "BatchCandidateDecisionIn": {
+        "additionalProperties": false,
+        "description": "批量决策条目（candidate_id 定位候选；action/edit 语义同单条）。",
+        "properties": {
+          "action": {
+            "enum": [
+              "accept",
+              "reject",
+              "edit_accept"
+            ],
+            "title": "Action",
+            "type": "string"
+          },
+          "candidate_id": {
+            "format": "uuid",
+            "title": "Candidate Id",
+            "type": "string"
+          },
+          "edit": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CandidateEditIn"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "action",
+          "candidate_id"
+        ],
+        "title": "BatchCandidateDecisionIn",
+        "type": "object"
+      },
+      "BatchCandidateDecisionItemOut": {
+        "additionalProperties": false,
+        "description": "批量逐条结果（部分成功语义：单条失败不整批回滚）。",
+        "properties": {
+          "candidate_id": {
+            "format": "uuid",
+            "title": "Candidate Id",
+            "type": "string"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          }
+        },
+        "required": [
+          "candidate_id",
+          "ok"
+        ],
+        "title": "BatchCandidateDecisionItemOut",
+        "type": "object"
+      },
+      "BatchCandidateDecisionMetaOut": {
+        "additionalProperties": false,
+        "description": "批量结果汇总（响应 meta；edited=edit_accept 成功数，accept/reject 成功各计 accepted/rejected）。",
+        "properties": {
+          "accepted": {
+            "title": "Accepted",
+            "type": "integer"
+          },
+          "edited": {
+            "title": "Edited",
+            "type": "integer"
+          },
+          "failed": {
+            "title": "Failed",
+            "type": "integer"
+          },
+          "rejected": {
+            "title": "Rejected",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "accepted",
+          "rejected",
+          "edited",
+          "failed"
+        ],
+        "title": "BatchCandidateDecisionMetaOut",
+        "type": "object"
+      },
+      "BatchCandidateDecisionOut": {
+        "additionalProperties": false,
+        "properties": {
+          "meta": {
+            "$ref": "#/components/schemas/BatchCandidateDecisionMetaOut"
+          },
+          "results": {
+            "items": {
+              "$ref": "#/components/schemas/BatchCandidateDecisionItemOut"
+            },
+            "title": "Results",
+            "type": "array"
+          }
+        },
+        "required": [
+          "results",
+          "meta"
+        ],
+        "title": "BatchCandidateDecisionOut",
+        "type": "object"
+      },
+      "BatchDecisionIn": {
+        "additionalProperties": false,
+        "description": "批量终审决策请求体（api/01 §5.4 ★ batch-decision；上限 200 条/批在端点侧断言 → 3001）。",
+        "properties": {
+          "decisions": {
+            "items": {
+              "$ref": "#/components/schemas/BatchCandidateDecisionIn"
+            },
+            "minItems": 1,
+            "title": "Decisions",
+            "type": "array"
+          }
+        },
+        "required": [
+          "decisions"
+        ],
+        "title": "BatchDecisionIn",
+        "type": "object"
+      },
       "BlockIn": {
         "properties": {
           "content": {
@@ -620,6 +769,140 @@
           "content"
         ],
         "title": "BlockIn",
+        "type": "object"
+      },
+      "CandidateDecisionIn": {
+        "additionalProperties": false,
+        "description": "单条终审决策请求（api/01 §5.4 ★ POST /kb/review/candidates/{cid}/decision）。\n\naction=accept|reject|edit_accept；edit_accept 必附编辑载荷（契约原文「修订后入审」），\naccept/reject 拒带编辑载荷（防呆：编辑语义只属 edit_accept）。DTO 校验失败 → 3001 统一错误体。",
+        "properties": {
+          "action": {
+            "enum": [
+              "accept",
+              "reject",
+              "edit_accept"
+            ],
+            "title": "Action",
+            "type": "string"
+          },
+          "edit": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CandidateEditIn"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "action"
+        ],
+        "title": "CandidateDecisionIn",
+        "type": "object"
+      },
+      "CandidateDecisionOut": {
+        "additionalProperties": false,
+        "description": "单条决策结果（202 受理；status=决策后事实状态）。",
+        "properties": {
+          "action": {
+            "title": "Action",
+            "type": "string"
+          },
+          "candidate_id": {
+            "format": "uuid",
+            "title": "Candidate Id",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "trail_recorded": {
+            "title": "Trail Recorded",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "candidate_id",
+          "action",
+          "status",
+          "trail_recorded"
+        ],
+        "title": "CandidateDecisionOut",
+        "type": "object"
+      },
+      "CandidateEditIn": {
+        "additionalProperties": false,
+        "description": "edit_accept 编辑载荷：None=不覆盖既有值（「可空字段不覆盖」——缺省字段保持原样）。",
+        "properties": {
+          "canonical_name": {
+            "anyOf": [
+              {
+                "maxLength": 256,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Canonical Name"
+          },
+          "object": {
+            "anyOf": [
+              {
+                "maxLength": 1024,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Object"
+          },
+          "object_type": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Object Type"
+          },
+          "predicate": {
+            "anyOf": [
+              {
+                "maxLength": 256,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Predicate"
+          },
+          "subject": {
+            "anyOf": [
+              {
+                "maxLength": 256,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Subject"
+          }
+        },
+        "title": "CandidateEditIn",
         "type": "object"
       },
       "ChangesetApproveIn": {
@@ -2142,6 +2425,18 @@
             "title": "Query",
             "type": "string"
           },
+          "source_context": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Context"
+          },
           "top_k": {
             "default": 8,
             "maximum": 50.0,
@@ -3570,6 +3865,223 @@
           "refresh_token"
         ],
         "title": "RefreshRequest",
+        "type": "object"
+      },
+      "ReviewCandidateEvidenceOut": {
+        "additionalProperties": false,
+        "description": "证据信封（B2 双层结构全量透出）：quote=LLM 自报引语、span=引语在 chunk 内 [start, end)、\nsource_ref=document/doc_version/chunk_id/span 四元组（终审逐字比对与出处回指依据）。",
+        "properties": {
+          "quote": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quote"
+          },
+          "source_ref": {
+            "additionalProperties": true,
+            "title": "Source Ref",
+            "type": "object"
+          },
+          "span": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "integer"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Span"
+          }
+        },
+        "title": "ReviewCandidateEvidenceOut",
+        "type": "object"
+      },
+      "ReviewCandidateOut": {
+        "additionalProperties": false,
+        "description": "候选实例列表项（工作台裁决依据全量透出：evidence.quote 与 violations 必在列）。",
+        "properties": {
+          "aliases": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Aliases",
+            "type": "array"
+          },
+          "align": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Align"
+          },
+          "canonical_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Canonical Name"
+          },
+          "confidence": {
+            "title": "Confidence",
+            "type": "number"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "evidence": {
+            "$ref": "#/components/schemas/ReviewCandidateEvidenceOut"
+          },
+          "fact_type": {
+            "title": "Fact Type",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "object": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Object"
+          },
+          "object_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Object Type"
+          },
+          "predicate": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Predicate"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "subject": {
+            "title": "Subject",
+            "type": "string"
+          },
+          "subject_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Subject Type"
+          },
+          "violations": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Violations",
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "fact_type",
+          "subject",
+          "subject_type",
+          "predicate",
+          "object",
+          "object_type",
+          "canonical_name",
+          "confidence",
+          "status",
+          "evidence",
+          "created_at"
+        ],
+        "title": "ReviewCandidateOut",
+        "type": "object"
+      },
+      "ReviewCandidatePageMetaOut": {
+        "additionalProperties": false,
+        "description": "分页 meta（api/01 §3.1 meta 惯例；offset 分页）。",
+        "properties": {
+          "limit": {
+            "title": "Limit",
+            "type": "integer"
+          },
+          "offset": {
+            "title": "Offset",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "offset",
+          "limit",
+          "total"
+        ],
+        "title": "ReviewCandidatePageMetaOut",
+        "type": "object"
+      },
+      "ReviewCandidatePageOut": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ReviewCandidateOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/ReviewCandidatePageMetaOut"
+          }
+        },
+        "required": [
+          "items",
+          "meta"
+        ],
+        "title": "ReviewCandidatePageOut",
         "type": "object"
       },
       "RunOut": {
@@ -5438,6 +5950,242 @@
           }
         },
         "summary": "启动/续跑流水线（后台执行，202 受理）",
+        "tags": [
+          "knowledge-base"
+        ]
+      }
+    },
+    "/api/v1/kb/documents/{document_id}/review/batch-decision": {
+      "post": {
+        "description": "逐条独立执行（单条失败仅记 error 不中断批次），响应 meta 汇总 accepted/rejected/edited/failed。",
+        "operationId": "batch_decide_candidates_api_v1_kb_documents__document_id__review_batch_decision_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "document_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Document Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BatchDecisionIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BatchCandidateDecisionOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "批量终审决策（≤200 条/批，超出 3001；逐条独立执行，不整批回滚）",
+        "tags": [
+          "knowledge-base"
+        ]
+      }
+    },
+    "/api/v1/kb/documents/{document_id}/review/candidates": {
+      "get": {
+        "description": "P4 终审队列（api/01 §5.4 ★）：按 document_id（租户过滤）列出 kb_facts 候选。",
+        "operationId": "list_review_candidates_api_v1_kb_documents__document_id__review_candidates_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "document_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Document Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "fact_type",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "entity",
+                    "relation",
+                    "attribute",
+                    "event"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Fact Type"
+            }
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "candidate",
+                    "rejected",
+                    "authoritative"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          {
+            "in": "query",
+            "name": "min_confidence",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 1,
+                  "minimum": 0,
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Min Confidence"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReviewCandidatePageOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "终审候选实例列表（分页；quote/violations/align 全量透出）",
+        "tags": [
+          "knowledge-base"
+        ]
+      }
+    },
+    "/api/v1/kb/review/candidates/{candidate_id}/decision": {
+      "post": {
+        "description": "宪法第 3 条（候选非成品）：LLM 产物一律人工终审才生效——本端点即该关口的工作台动作面。\n\naccept 翻转 authoritative（OntRAG §2.7）；决策留痕经 ReviewTicketService 落候选 open 单\n（无单容忍）；fact 不存在 404（kb 段）、非 candidate 态 409、单已终态迟到决策 4701。",
+        "operationId": "decide_candidate_api_v1_kb_review_candidates__candidate_id__decision_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "candidate_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Candidate Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CandidateDecisionIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CandidateDecisionOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "单条终审决策 accept|reject|edit_accept（唯一 authoritative 写路径，review:approve 背书）",
         "tags": [
           "knowledge-base"
         ]

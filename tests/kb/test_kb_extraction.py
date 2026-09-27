@@ -1,0 +1,306 @@
+"""M2.5 三步执行器用例（extract/align/validate）：候选双写幂等 + 种子对齐 + SHACL 门禁。
+
+- 纯函数用例（术语对齐规范化匹配）零外部依赖；
+- 执行器用例直连本地 PG（不可达即跳过，同 tests/kb/test_kb.py 夹具纪律），模型用
+  FakeModelPort 确定性桩（无网络；真实 LLM 不做 mock），审核票据用 ReviewTicketService 真表。
+psycopg 异步要求 Selector 事件循环（Windows 默认 Proactor 不可用）——导入期固定策略。
+"""
+
+from __future__ import annotations
+
+import asyncio
+import hashlib
+import sys
+import uuid
+from collections.abc import AsyncIterator
+
+import pytest
+from sqlalchemy import delete, func, select
+from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+
+from services.iam.data.orm import Tenant as TenantORM
+from services.kb.business.kb_extraction import (
+    SEED_TTL_PATH,
+    StepContext,
+    load_seed_catalog,
+    match_seed_class,
+    run_align,
+    run_extract,
+    run_validate,
+)
+from services.kb.business.kb_pipeline import run_pipeline
+from services.kb.data.orm import Document as DocumentORM
+from services.kb.data.orm import DocumentChunk as DocumentChunkORM
+from services.kb.data.orm import KbCollection as KbCollectionORM
+from services.kb.data.orm import KbFact as KbFactORM
+from services.kb.data.orm import KbPipelineStep as KbPipelineStepORM
+from services.platform.config import Settings
+from services.platform.db import registry as orm_registry  # noqa: F401  # 全模块 ORM 入 metadata（ontologies FK 解析）
+from services.platform.llm.gateway import FakeModelPort
+from services.platform.ports.model_port import ModelUnavailableError
+from services.review.business.candidates import ReviewTicketService
+from services.review.data.orm import ReviewTicket as ReviewTicketORM
+
+if sys.platform == "win32":
+    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+
+PW = "http://ontology-agent.local/o/t1/power#"
+CONTENT = "# 停电抽取联调\n馈线F001 由城东变电站供电。\n\n## 抢修工单\n工单OO-123456 已创建，工单状态为 created。\n"
+MODEL_KEYWORDS = {"馈线F001": f"{PW}Feeder", "工单OO-123456": f"{PW}OutageOrder"}
+MODEL_PROPERTIES = {"工单OO-123456": {"orderNo": "OO-123456", "hasStatus": "created"}}
+
+
+# ---------------------------------------------------------------- 纯函数：术语对齐规范化匹配
+
+
+def test_match_seed_class_exact_and_contains_and_miss():
+    catalog = load_seed_catalog()
+    assert SEED_TTL_PATH.exists()
+    assert match_seed_class("馈线", catalog) == (f"{PW}Feeder", "exact")  # 中文标签精确
+    assert match_seed_class("feeder", catalog) == (f"{PW}Feeder", "exact")  # 本地名小写精确
+    assert match_seed_class("馈线 F001", catalog) == (f"{PW}Feeder", "contains")  # 去空格小写包含
+    assert match_seed_class("恢复送电操作单", catalog) == (f"{PW}RestorePower", "contains")
+    assert match_seed_class("工单OO-123456", catalog) is None  # 未命中 → 保留待审（不引向量）
+    assert match_seed_class("   ", catalog) is None
+
+
+# ---------------------------------------------------------------- PG 夹具（同 test_kb.py 纪律）
+
+
+@pytest.fixture
+async def kb_pg() -> AsyncIterator[async_sessionmaker[AsyncSession]]:
+    settings = Settings()
+    probe = create_async_engine(settings.pg_dsn, pool_pre_ping=True)
+    try:
+        async with probe.connect():
+            pass
+    except (OSError, SQLAlchemyError):
+        await probe.dispose()
+        pytest.skip("本地 PG 不可达，跳过 kb 三步执行器用例")
+    await probe.dispose()
+    engine = create_async_engine(settings.pg_dsn)
+    yield async_sessionmaker(engine, expire_on_commit=False)
+    await engine.dispose()
+
+
+@pytest.fixture
+async def extract_env(
+    kb_pg: async_sessionmaker[AsyncSession],
+) -> AsyncIterator[dict]:
+    """独立租户/集合/文档 + 确定性模型与审核服务；结束按 FK 逆序清理。"""
+    async with kb_pg() as db, db.begin():
+        tenant = TenantORM(name="kb-ext-租户", slug=f"kb-ext-{uuid.uuid4().hex[:12]}")
+        db.add(tenant)
+        await db.flush()
+        collection = KbCollectionORM(tenant_id=tenant.id, name="kb-ext-库", embedding_model="bge-m3")
+        db.add(collection)
+        await db.flush()
+        doc = DocumentORM(
+            tenant_id=tenant.id,
+            kb_collection_id=collection.id,
+            title="停电抽取联调",
+            source_type="upload",
+            size_bytes=len(CONTENT.encode()),
+            minio_key=f"raw-docs/{tenant.id}/{collection.id}/{uuid.uuid4()}/source.md",
+            checksum_sha256=hashlib.sha256(CONTENT.encode()).hexdigest(),
+            meta={"content": CONTENT},
+            status="uploaded",
+        )
+        db.add(doc)
+    # extract 前置：preprocess + chunk 就绪（走真实编排器与分块器）
+    await run_pipeline(
+        kb_pg,
+        tenant_id=tenant.id,
+        document_id=doc.id,
+        steps=("preprocess", "chunk"),
+        backoff=_instant_backoff,
+    )
+    env = {
+        "tenant_id": tenant.id,
+        "collection_id": collection.id,
+        "document_id": doc.id,
+        "model": FakeModelPort(keyword_classes=MODEL_KEYWORDS, keyword_properties=MODEL_PROPERTIES),
+        "review": ReviewTicketService(kb_pg),
+    }
+    yield env
+    async with kb_pg() as db, db.begin():
+        for stmt in (
+            delete(ReviewTicketORM).where(ReviewTicketORM.tenant_id == env["tenant_id"]),
+            delete(KbFactORM).where(KbFactORM.tenant_id == env["tenant_id"]),
+            delete(DocumentChunkORM).where(DocumentChunkORM.tenant_id == env["tenant_id"]),
+            delete(KbPipelineStepORM).where(KbPipelineStepORM.tenant_id == env["tenant_id"]),
+            delete(DocumentORM).where(DocumentORM.id == env["document_id"]),
+            delete(KbCollectionORM).where(KbCollectionORM.id == env["collection_id"]),
+            delete(TenantORM).where(TenantORM.id == env["tenant_id"]),
+        ):
+            await db.execute(stmt)
+
+
+def _ctx(kb_pg: async_sessionmaker[AsyncSession], env: dict, *, model: object = "default") -> StepContext:
+    return StepContext(
+        session_factory=kb_pg,
+        tenant_id=env["tenant_id"],
+        document_id=env["document_id"],
+        embedder=None,
+        model=env["model"] if model == "default" else model,  # type: ignore[arg-type]
+        review=env["review"],
+    )
+
+
+async def _instant_backoff(attempt: int) -> None:
+    return None  # 测试不等待真实退避（30s 起）
+
+
+# ---------------------------------------------------------------- extract（§2.3）
+
+
+async def test_extract_writes_candidate_facts_and_tickets_idempotent(
+    kb_pg: async_sessionmaker[AsyncSession], extract_env: dict
+) -> None:
+    """候选双写：kb_facts(candidate)+evidence 信封 与 review_tickets(pending_review)+统一信封；
+    重放（断点续跑语义）不重不漏：fact_key 幂等 + uk_review_one_open 幂等。"""
+    ctx = _ctx(kb_pg, extract_env)
+    await run_extract(ctx)
+    model: FakeModelPort = extract_env["model"]
+
+    async with kb_pg() as db:
+        facts = (
+            (
+                await db.execute(
+                    select(KbFactORM)
+                    .where(KbFactORM.document_id == extract_env["document_id"])
+                    .order_by(KbFactORM.subject)
+                )
+            )
+            .scalars()
+            .all()
+        )
+        tickets = (
+            (
+                await db.execute(
+                    select(ReviewTicketORM)
+                    .where(ReviewTicketORM.tenant_id == extract_env["tenant_id"])
+                    .order_by(ReviewTicketORM.target_id)
+                )
+            )
+            .scalars()
+            .all()
+        )
+        chunk_rows = (await db.execute(select(DocumentChunkORM).order_by(DocumentChunkORM.seq))).scalars().all()
+    assert len(chunk_rows) >= 1
+    assert {f.subject for f in facts} == {"馈线F001", "工单OO-123456"}
+    assert all(f.status == "candidate" and f.fact_type == "entity" for f in facts)
+    assert all(f.violations == [] for f in facts)
+    for fact in facts:  # 候选非成品 + 出处信封（source_ref 四元组；候选间不得互为证据）
+        source_ref = fact.evidence["source_ref"]
+        assert source_ref["document_id"] == str(extract_env["document_id"])
+        assert source_ref["chunk_id"] in {str(c.id) for c in chunk_rows}
+        assert source_ref["doc_version"] == 1 and len(source_ref["span"]) == 2
+        assert fact.meta["fact_key"] and fact.meta["template_ref"] == "kb_extract@v1"
+        assert fact.meta["properties"] == MODEL_PROPERTIES.get(fact.subject, {})
+    assert len(tickets) == len(facts)  # 一候选一 open 单
+    assert all(t.target_type == "knowledge_instance" and t.status == "pending_review" for t in tickets)
+    for ticket in tickets:  # 统一信封（standards/01 §5.3）
+        assert ticket.payload["envelope_version"] == "v1"
+        assert ticket.payload["template_ref"] == "kb_extract@v1"
+        assert ticket.payload["payload"]["source_ref"]["chunk_id"]
+        assert ticket.payload["confidence"] == 0.9
+        assert ticket.payload["review"] == {"state": "pending_review"}
+    calls_after_first = model.calls
+
+    await run_extract(ctx)  # 重放：同输入恒同输出 → 不重不漏
+    async with kb_pg() as db:
+        facts_again = (
+            await db.execute(
+                select(func.count()).select_from(KbFactORM).where(KbFactORM.document_id == extract_env["document_id"])
+            )
+        ).scalar_one()
+        tickets_again = (
+            await db.execute(
+                select(func.count())
+                .select_from(ReviewTicketORM)
+                .where(ReviewTicketORM.tenant_id == extract_env["tenant_id"])
+            )
+        ).scalar_one()
+    assert (facts_again, tickets_again) == (len(facts), len(tickets))
+    assert model.calls > calls_after_first  # LLM 确实重新调用（幂等在落库侧）
+
+
+async def test_extract_fails_without_model_port(kb_pg: async_sessionmaker[AsyncSession], extract_env: dict) -> None:
+    """无模型端口 → 5002 ModelUnavailableError（步级重试耗尽冻结，配置后可重跑，不做 mock）。"""
+    with pytest.raises(ModelUnavailableError):
+        await run_extract(_ctx(kb_pg, extract_env, model=None))
+
+
+# ---------------------------------------------------------------- align（§2.4）+ validate（§2.6）
+
+
+async def test_align_matches_seed_classes_and_keeps_miss_pending(
+    kb_pg: async_sessionmaker[AsyncSession], extract_env: dict
+) -> None:
+    ctx = _ctx(kb_pg, extract_env)
+    await run_extract(ctx)
+    await run_align(ctx)
+    async with kb_pg() as db:
+        rows = (
+            (await db.execute(select(KbFactORM).where(KbFactORM.document_id == extract_env["document_id"])))
+            .scalars()
+            .all()
+        )
+        facts = {f.subject: f for f in rows}
+    feeder = facts["馈线F001"]
+    assert feeder.aliases == [f"{PW}Feeder"]  # 命中 → aliases 补类 IRI
+    assert feeder.subject_type == f"{PW}Feeder"  # subject_type 归一
+    assert feeder.meta["align"] == {"class": f"{PW}Feeder", "rule": "contains", "ref": "seeds/power_seed.ttl@v1"}
+    assert feeder.status == "candidate"
+    order = facts["工单OO-123456"]  # 未命中 → 保留待审
+    assert order.aliases == [] and "align" not in order.meta and order.status == "candidate"
+    # LLM 已给全量 IRI 的候选同样归一（subject_type 在种子类集内 → 不漂移）
+    assert order.subject_type == f"{PW}OutageOrder"
+
+
+async def test_validate_shacl_gate_rejects_violations_and_writes_gate_result(
+    kb_pg: async_sessionmaker[AsyncSession], extract_env: dict
+) -> None:
+    ctx = _ctx(kb_pg, extract_env)
+    await run_extract(ctx)
+    await run_align(ctx)
+    await run_validate(ctx)
+    doc_filter = KbFactORM.document_id == extract_env["document_id"]
+    async with kb_pg() as db:
+        facts = {f.subject: f for f in (await db.execute(select(KbFactORM).where(doc_filter))).scalars().all()}
+        tickets = {t.target_id: t for t in (await db.execute(select(ReviewTicketORM))).scalars().all()}
+    assert all(facts[name].status == "candidate" for name in facts)  # 合规候选：留待人工终审
+    assert all(facts[name].violations == [] for name in facts)
+    assert all(tickets[facts[name].id].payload["gate_result"]["conforms"] is True for name in facts)
+
+    # 注入明确违规（R002 状态枚举）后重跑 validate（候选态才参与门禁）
+    async with kb_pg() as db, db.begin():
+        order = (await db.execute(select(KbFactORM).where(KbFactORM.subject == "工单OO-123456"))).scalar_one()
+        meta = dict(order.meta or {})
+        meta["properties"] = {**meta["properties"], "hasStatus": "flying"}
+        order.meta = meta
+    await run_validate(ctx)
+    async with kb_pg() as db:
+        order = (
+            (
+                await db.execute(
+                    select(KbFactORM).where(
+                        KbFactORM.document_id == extract_env["document_id"],
+                        KbFactORM.subject == "工单OO-123456",
+                    )
+                )
+            )
+            .scalars()
+            .one()
+        )
+        ticket = (
+            (await db.execute(select(ReviewTicketORM).where(ReviewTicketORM.target_id == order.id))).scalars().one()
+        )
+    assert order.status == "rejected"  # kb_facts.status 枚举内取值；任何路径不写 authoritative
+    assert order.violations and any("InConstraintComponent" in (v.get("constraint") or "") for v in order.violations)
+    gate = ticket.payload["gate_result"]
+    assert gate["conforms"] is False and gate["violation_count"] == len(order.violations)
+    assert gate["shapes"] == "seeds/power_seed.ttl@v1" and gate["checked_at"]
+    assert ticket.status == "pending_review"  # 仍留人工终审队列

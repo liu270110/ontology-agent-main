@@ -133,6 +133,43 @@ class ReviewTicketService:
                 "payload": dict(ticket.payload or {}),
             }
 
+    async def get_latest_ticket(
+        self, *, tenant_id: uuid.UUID, target_type: str, target_id: uuid.UUID
+    ) -> dict[str, Any] | None:
+        """查同对象最近一张单（任意六态，返回结构同 get_ticket；无单返回 None）。
+
+        get_open_ticket 只看 open 单，无法区分「无单」与「单已终态」；kb 终审决策面
+        （api/01 §5.4，2026-09-26 评审补录）需后者——单已 approved/published 后候选仍收到
+        决策属迟到写，须显式 4701 拒绝而非静默吞掉（08 §4 单据终态不可再动）。
+        """
+        async with self._factory() as session:
+            ticket = (
+                (
+                    await session.execute(
+                        select(ReviewTicket)
+                        .where(
+                            ReviewTicket.tenant_id == tenant_id,
+                            ReviewTicket.target_type == target_type,
+                            ReviewTicket.target_id == target_id,
+                        )
+                        .order_by(ReviewTicket.created_at.desc(), ReviewTicket.id.desc())
+                        .limit(1)
+                    )
+                )
+                .scalars()
+                .first()
+            )
+            if ticket is None:
+                return None
+            return {
+                "id": ticket.id,
+                "status": ticket.status,
+                "target_type": ticket.target_type,
+                "target_id": ticket.target_id,
+                "submitter_id": ticket.submitter_id,
+                "payload": dict(ticket.payload or {}),
+            }
+
     async def mark_published(self, *, tenant_id: uuid.UUID, ticket_id: uuid.UUID, note: str = "") -> None:
         """approved → published（08 §4：approved 不等于生效，published 才生效——联动落库动作由调用方同事务编排）。"""
         async with self._factory() as session, session.begin():

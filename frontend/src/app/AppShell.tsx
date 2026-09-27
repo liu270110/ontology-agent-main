@@ -8,9 +8,11 @@ import { CommandMenu } from '@/components/command-menu/command-menu'
 import { RouteGlyph } from '@/components/command-menu/route-glyph'
 import { ROUTES } from './routes'
 
-/** 应用壳（16 篇 §5.2 / 03 篇 AppLayout）：玻璃侧边栏（菜单按当前用户 roles 过滤，事实源
- *  = routes.tsx meta.roles，08 篇 §2.2 角色矩阵映射；组内全部不可见时连组标题一起隐藏）
- *  + 顶栏（⌘K / 主题三态 / 通知占位 / 用户菜单「退出登录」）+ CommandMenu。
+/** 应用壳（16 篇 §5.2 / 03 篇 AppLayout）：液态玻璃壳层——根容器挂 .app-stage 静态双光斑底
+ *  （board.css .app 配方，玻璃折射的彩色来源），侧边栏 .glass-side（board.css .sb 配方）、
+ *  顶栏 .material-bar（board.css .bbar 配方）；菜单按当前用户 roles 过滤，事实源
+ *  = routes.tsx meta.roles，08 篇 §2.2 角色矩阵映射；组内全部不可见时连组标题一起隐藏。
+ *  顶栏（⌘K / 主题三态 / 通知占位 / 用户菜单「退出登录」）+ CommandMenu。
  *  用户名显示邮箱前缀——JWT claims 无显示名字段（R13 建议后端补 name claim / me 端点）。 */
 
 export function AppShell() {
@@ -34,8 +36,8 @@ export function AppShell() {
   }
 
   return (
-    <div className="flex h-screen bg-bg text-label">
-      <aside className={`glass flex flex-col py-4 transition-all ${collapsed ? 'w-16' : 'w-60'}`}>
+    <div className="app-stage flex h-screen bg-bg text-label">
+      <aside className={`glass-side flex flex-col py-4 transition-all ${collapsed ? 'w-16' : 'w-60'}`}>
         <div className="flex items-center gap-2 px-4 pb-4">
           <span className="flex h-7 w-7 flex-none items-center justify-center rounded-lg bg-accent-soft text-accent">◆</span>
           {!collapsed && <b className="truncate text-sm">ontology-agent</b>}
@@ -53,7 +55,7 @@ export function AppShell() {
                     to={r.path}
                     end={r.path === '/'}
                     className={({ isActive }) =>
-                      `flex items-center gap-2.5 px-4 py-2 text-[13px] hover:bg-surface-2 ${
+                      `flex items-center gap-2.5 px-4 py-2 text-[13px] hover:bg-black/5 dark:hover:bg-white/[.07] ${
                         isActive ? 'font-semibold text-accent' : 'text-label-2'
                       }`
                     }
@@ -82,7 +84,7 @@ export function AppShell() {
             aria-label="设置"
             title="设置"
             onClick={() => navigate('/settings')}
-            className="ml-auto flex h-7 w-7 flex-none items-center justify-center rounded-lg text-label-2 hover:bg-surface-2"
+            className="ml-auto flex h-7 w-7 flex-none items-center justify-center rounded-lg text-label-2 hover:bg-black/5 dark:hover:bg-white/[.07]"
           >
             <Settings size={15} aria-hidden />
           </button>
@@ -90,12 +92,12 @@ export function AppShell() {
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="flex h-12 flex-none items-center gap-3 border-b border-separator bg-surface px-5">
+        <header className="material-bar flex h-12 flex-none items-center gap-3 border-b border-separator px-5">
           <button
             type="button"
             onClick={toggleSidebar}
             aria-label={collapsed ? '展开侧边栏' : '收起侧边栏'}
-            className="flex h-8 w-8 items-center justify-center rounded-lg text-label-2 hover:bg-surface-2"
+            className="flex h-8 w-8 items-center justify-center rounded-lg text-label-2 hover:bg-black/5 dark:hover:bg-white/[.08]"
           >
             <PanelLeft size={15} aria-hidden />
           </button>
@@ -114,7 +116,7 @@ export function AppShell() {
           <button
             type="button"
             aria-label="通知"
-            className="relative flex h-8 w-8 items-center justify-center rounded-lg text-label-2 hover:bg-surface-2"
+            className="relative flex h-8 w-8 items-center justify-center rounded-lg text-label-2 hover:bg-black/5 dark:hover:bg-white/[.08]"
           >
             <Bell size={15} aria-hidden />
             <span className="absolute right-1.5 top-1.5 flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-red px-1 text-2xs font-semibold text-white">

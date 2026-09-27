@@ -20,6 +20,15 @@
   border:1px solid var(--glass-border);
   box-shadow:inset 0 1px 0 var(--glass-hi),inset 0 -1px 1px var(--glass-lo);
 }
+/* 侧边栏玻璃（board.css .sb 配方）：tint 渐变叠加 + blur24 saturate200，
+   只描右缘 + 顶部镜面高光（区别于 .glass 的四边框，贴边容器不画上/左/下缘） */
+.glass-side{
+  background:linear-gradient(135deg,var(--glass-tint),transparent 42%),var(--glass-regular);
+  -webkit-backdrop-filter:blur(24px) saturate(200%);
+  backdrop-filter:blur(24px) saturate(200%);
+  border-right:1px solid var(--glass-border);
+  box-shadow:inset 0 1px 0 var(--glass-hi);
+}
 /* hover 光扫（24 篇 §4.2，改造自 Magic UI shimmer）：仅悬浮层触发一次 */
 @media (hover:hover) and (prefers-reduced-motion:no-preference){
   .glass::after,.glass-clear::after{
@@ -54,10 +63,10 @@
 .btn-gl:active,.btn-gl-p:active{transform:translateY(0)}
 /* 降级：无透明偏好 / 不支持 backdrop-filter 时玻璃退实底（布局不变） */
 @supports not ((backdrop-filter:blur(1px)) or (-webkit-backdrop-filter:blur(1px))){
-  .glass,.glass-clear,.btn-gl{background:var(--surface);border-color:var(--separator);box-shadow:var(--sh-card)}
+  .glass,.glass-clear,.btn-gl,.glass-side{background:var(--surface);border-color:var(--separator);box-shadow:var(--sh-card)}
 }
 @media (prefers-reduced-transparency:reduce){
-  .glass,.glass-clear,.btn-gl{background:var(--surface);border-color:var(--separator)}
+  .glass,.glass-clear,.btn-gl,.glass-side{background:var(--surface);border-color:var(--separator)}
   .glass::after,.glass-clear::after{display:none}
 }
 

@@ -197,7 +197,7 @@ def _fake_request() -> Request:
     state = SimpleNamespace(
         settings=SimpleNamespace(ollama_base_url="http://localhost:9", kb_acl_filter_enabled=False)
     )  # kb_acl_filter_enabled=False：本用例不测 ACL，开关关闭=零行为变化（develop 端点融合后新增读取）
-    return Request({"type": "http", "app": SimpleNamespace(state=state)})
+    return Request({"type": "http", "app": SimpleNamespace(state=state), "headers": [], "query_string": b""})
 
 
 async def test_端点层_source_context透传冒烟_PMS排前(

@@ -130,6 +130,11 @@ async function apiFetchEnvelope<T>(path: string, init?: RequestInit): Promise<T>
   if (!res.ok || !body) {
     throw new ApiError(body?.code ?? -1, body?.message ?? `HTTP ${res.status}`, res.status)
   }
+  // 双形态兼容·续（live 联调 2026-09-28）：M1 网关部分列表端点（/sessions、/tasks、
+  // /ontologies、/agents 等）尚未包信封，200 直接回 {items,offset,limit} 裸分页体——
+  // 无 code 字段视为裸数据，包一层 {data} 原样放行（apiFetch 取 .data 的语义不变）；
+  // 信封端点（/admin/reviews 等）与错误信封（code≠0 抛 ApiError）行为不受影响。
+  if (typeof body.code === 'undefined') return { data: body } as T
   if (body.code !== 0) throw new ApiError(body.code, body.message, res.status)
   // 信封整体返回（data + 同级 meta，§6.2 检索等端点）；apiFetch 再剥 data
   return body as T

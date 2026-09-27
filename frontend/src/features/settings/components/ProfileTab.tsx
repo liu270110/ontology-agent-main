@@ -37,7 +37,7 @@ export function ProfileTab() {
 
   return (
     <div>
-      <b className="text-[14px]">资料</b>
+      <b className="text-sm">资料</b>
 
       {/* 头像（上传占位：选择本地文件圆形预览；裁剪上传服务端随 28 篇排期） */}
       <div className="mt-4 flex items-center gap-4">

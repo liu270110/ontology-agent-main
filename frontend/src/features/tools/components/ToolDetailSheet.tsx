@@ -18,7 +18,7 @@ function SchemaPreview({ title, badge, schema }: { title: string; badge: string;
   return (
     <div className="rounded-xl border border-separator" style={{ background: 'var(--surface)' }}>
       <button type="button" className="flex w-full items-center gap-2 px-3 py-2" onClick={() => setOpen(o => !o)}>
-        <b className="text-[12px]">{title}</b>
+        <b className="text-xs">{title}</b>
         <span className="badge b-gray">{badge}</span>
         <span className="ml-auto text-label-3">{open ? <ChevronDown size={13} aria-hidden /> : <ChevronRight size={13} aria-hidden />}</span>
       </button>
@@ -60,11 +60,11 @@ export function ToolDetailSheet({ tool, onClose }: { tool: ToolRow | null; onClo
           <span className={`badge ${tool.source === 'mcp' ? 'b-purple' : tool.source === 'plugin' ? 'b-blue' : tool.source === 'http' ? 'b-orange' : 'b-green'}`}>
             来源 · {TOOL_SOURCE_LABEL[tool.source]}
           </span>
-          <span className="mono text-[10.5px] text-label-3">{tool.provider}</span>
+          <span className="mono text-[11px] text-label-3">{tool.provider}</span>
           <span className={`badge ${tool.enabled ? 'b-green' : 'b-gray'} ml-auto`}>{tool.enabled ? '已启用' : '已停用'}</span>
         </div>
 
-        <div className="mt-3 space-y-1.5 text-[11.5px]">
+        <div className="mt-3 space-y-1.5 text-[11px]">
           <div className="flex justify-between gap-3"><span className="text-label-3">调用通道</span><span>平台网关（逐次审计 + trace_id）</span></div>
           <div className="flex justify-between gap-3"><span className="text-label-3">scope</span><span>{tool.scopes.length ? tool.scopes.join('、') : '—（无需特殊 scope）'}</span></div>
           {tool.danger && <div className="flex justify-between gap-3"><span className="text-label-3">风险</span><span className="badge b-red">高危 · 调用需高风险确认</span></div>}
@@ -77,12 +77,12 @@ export function ToolDetailSheet({ tool, onClose }: { tool: ToolRow | null; onClo
           {tool.input_example && (
             <div className="rounded-xl border border-separator" style={{ background: 'var(--surface)' }}>
               <button type="button" className="flex w-full items-center gap-2 px-3 py-2" onClick={() => setExampleOpen(o => !o)}>
-                <b className="text-[12px]">输入示例值</b>
+                <b className="text-xs">输入示例值</b>
                 <span className="badge b-gray">{exampleOpen ? '已展开' : '已折叠'}</span>
                 <span className="ml-auto text-label-3">{exampleOpen ? <ChevronDown size={13} aria-hidden /> : <ChevronRight size={13} aria-hidden />}</span>
               </button>
               {exampleOpen && (
-                <pre className="hairline-t overflow-x-auto px-3 py-2 text-[10.5px] leading-4" style={{ fontFamily: 'var(--mono)' }}>
+                <pre className="hairline-t overflow-x-auto px-3 py-2 text-[11px] leading-4" style={{ fontFamily: 'var(--mono)' }}>
                   {JSON.stringify(tool.input_example)}
                 </pre>
               )}
@@ -121,8 +121,8 @@ export function ToolDetailSheet({ tool, onClose }: { tool: ToolRow | null; onClo
             data-testid="tls-action-class-link"
           >
             <span className="badge b-purple">本体行动类 {tool.action_class.id}</span>
-            <span className="text-[11.5px] text-label-2">{tool.action_class.label}</span>
-            <span className="mono ml-auto text-[10px] text-label-3">
+            <span className="text-[11px] text-label-2">{tool.action_class.label}</span>
+            <span className="mono ml-auto text-2xs text-label-3">
               /ontology/{tool.action_class.onto_id}?focus={tool.action_class.id}
             </span>
           </Link>

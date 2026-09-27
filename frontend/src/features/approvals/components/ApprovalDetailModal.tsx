@@ -68,7 +68,7 @@ function TypedSummary({ approval }: { approval: Approval }) {
             <span className="badge b-purple">共 {p.candidate_count} 条</span>
             <span className="mono ml-auto text-[11px] text-label-3">{p.source} · JOB {p.job}</span>
           </div>
-          <table className="mt-2 w-full text-[11.5px]">
+          <table className="mt-2 w-full text-[11px]">
             <tbody>
               {(p.samples ?? []).map((t, i) => (
                 <tr key={i} className="hairline-t">
@@ -80,7 +80,7 @@ function TypedSummary({ approval }: { approval: Approval }) {
             </tbody>
           </table>
           {p.review_ref && (
-            <Link className="mt-2 inline-block text-[11.5px] text-accent hover:underline" to={p.review_ref}>
+            <Link className="mt-2 inline-block text-[11px] text-accent hover:underline" to={p.review_ref}>
               → 去抽取审核台逐条处理
             </Link>
           )}
@@ -105,7 +105,7 @@ function TypedSummary({ approval }: { approval: Approval }) {
           <div className="mono mt-1 text-[11px] text-label-2">{p.server} · {p.endpoint}</div>
           <div className="mt-2 space-y-1.5">
             {(p.tools ?? []).map(t => (
-              <div key={t.name} className="flex items-center gap-2 text-[12px]">
+              <div key={t.name} className="flex items-center gap-2 text-xs">
                 <span className="mono">{t.name}</span>
                 <span className={`badge ${t.risk === '高' ? 'b-red' : 'b-gray'}`}>{t.risk}风险</span>
               </div>
@@ -118,7 +118,7 @@ function TypedSummary({ approval }: { approval: Approval }) {
         <div className="card !p-4" data-testid="apr-sum-memory">
           <b className="text-[13px]">记忆对照（{p.layer_from} → {p.layer_to}）</b>
           <div className="al-info alert mt-2">{p.content}</div>
-          <div className="mt-2 text-[11.5px] text-label-2">
+          <div className="mt-2 text-[11px] text-label-2">
             复用 {p.reuse} 次 · 证据 {p.evidence} 处
           </div>
           {(p.conflicts ?? []).length > 0 && (
@@ -137,9 +137,9 @@ function TypedSummary({ approval }: { approval: Approval }) {
           <b className="text-[13px]">申请理由与目标资源</b>
           <div className="mt-2 flex items-center gap-2">
             <span className="mono badge b-red">{p.scope}</span>
-            <span className="text-[12px] text-label-2">{p.resource}</span>
+            <span className="text-xs text-label-2">{p.resource}</span>
           </div>
-          <p className="mt-2 text-[12px] leading-5 text-label-2">{p.reason}</p>
+          <p className="mt-2 text-xs leading-5 text-label-2">{p.reason}</p>
           <div className="fhint mt-2">通过后自动授权并审计（权威落点 11 篇 §6）。</div>
         </div>
       )
@@ -183,12 +183,12 @@ export function ApprovalDetailModal({
         <span className={`badge ${APPROVAL_TYPE_BADGE[approval.type]}`} data-testid="apr-detail-type">
           {APPROVAL_TYPE_LABEL[approval.type]}
         </span>
-        <b className="text-[14px]">{approval.title}</b>
+        <b className="text-sm">{approval.title}</b>
         <span className={`badge ${approval.status === 'pending' ? 'b-orange' : approval.status === 'approved' ? 'b-green' : 'b-red'} ml-auto`}>
           {approval.status === 'pending' ? '待终审' : approval.status === 'approved' ? '已通过' : '已驳回'}
         </span>
       </div>
-      <p className="mt-1 text-[12px] text-label-2">{approval.summary}</p>
+      <p className="mt-1 text-xs text-label-2">{approval.summary}</p>
 
       {/* 类型化摘要区（六类分别渲染对应域只读视图） */}
       <div className="mt-3"><TypedSummary approval={approval} /></div>
@@ -197,7 +197,7 @@ export function ApprovalDetailModal({
       <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-[1fr_1.2fr]">
         <div>
           <div className="field-label">审批信息</div>
-          <dl className="space-y-2 text-[12px]">
+          <dl className="space-y-2 text-xs">
             <div className="flex gap-2"><dt className="w-16 flex-none text-label-3">提交人</dt><dd>{approval.applicant} · {approval.department}</dd></div>
             <div className="flex gap-2"><dt className="w-16 flex-none text-label-3">提交时间</dt><dd>{relativeTime(approval.submitted_at)}</dd></div>
             <div className="flex gap-2"><dt className="w-16 flex-none text-label-3">关联工单</dt><dd className="mono">{approval.id}</dd></div>
@@ -211,8 +211,8 @@ export function ApprovalDetailModal({
               <li key={i} className={`tl-item ${s.state === 'rejected' ? '' : ''}`}>
                 <span className="tl-dot" style={{ background: CHAIN_DOT[s.state] }} />
                 <div className="tl-c" style={s.state === 'current' ? { outline: '1.5px solid var(--accent)' } : undefined}>
-                  <b className="text-[12.5px]">{s.label}：{s.actor}</b>
-                  {s.note && <div className="mt-0.5 text-[11.5px] text-label-2">{s.note}</div>}
+                  <b className="text-xs">{s.label}：{s.actor}</b>
+                  {s.note && <div className="mt-0.5 text-[11px] text-label-2">{s.note}</div>}
                   <div className="tl-meta">
                     <span>{s.at}</span>
                     {s.state === 'done' && <span className="badge b-green">通过</span>}

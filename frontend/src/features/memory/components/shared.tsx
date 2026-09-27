@@ -41,13 +41,13 @@ export function FactTimeline({ events, variant = 'full' }: { events: TimelineEve
           className={`rounded-xl border px-3 py-2 ${ev.danger ? 'border-[color:var(--red)]/40' : 'border-separator'}`}
           style={ev.danger ? { background: 'var(--red-soft)' } : { background: 'var(--surface)' }}
         >
-          <div className={`text-[12px] leading-5 ${ev.danger ? 'text-red' : ''}`}>
+          <div className={`text-xs leading-5 ${ev.danger ? 'text-red' : ''}`}>
             {ev.invalid_edge && <span className="badge b-red mr-1.5">失效边</span>}
             {ev.type === 'current' && <span className="badge b-green mr-1.5">当前</span>}
             {ev.type === 'promoted' && <span className="badge b-blue mr-1.5">升级</span>}
             {ev.label}
           </div>
-          <div className="mt-0.5 text-[10.5px] text-label-3">
+          <div className="mt-0.5 text-[11px] text-label-3">
             {ev.detail ? `${ev.detail} · ` : ''}
             {new Date(ev.at).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}
           </div>
@@ -71,7 +71,7 @@ export function TtlBar({ remaining, total }: { remaining: number; total: number 
           style={{ width: `${pct}%`, background: expiring ? 'var(--orange)' : 'var(--accent)' }}
         />
       </div>
-      <div className={`mt-1 flex text-[10.5px] ${expiring ? 'text-orange' : 'text-label-3'}`}>
+      <div className={`mt-1 flex text-[11px] ${expiring ? 'text-orange' : 'text-label-3'}`}>
         <span>TTL 剩余 {mm}:{ss} / {Math.round(total / 60)}:00</span>
         {expiring && <span className="ml-auto font-semibold">· 即将到期</span>}
       </div>

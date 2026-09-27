@@ -109,7 +109,7 @@ export function GroupStream({ members }: { members: GroupMember[] }) {
             <div key={node.id} data-testid={`grp-rg-${node.id}`}>
               <div className="mb-2.5 flex items-center gap-2">
                 <Zap size={14} style={{ color: 'var(--accent)' }} aria-hidden />
-                <b className="text-[12.5px]">ResponseGroup · 多答对比</b>
+                <b className="text-xs">ResponseGroup · 多答对比</b>
                 <span className="badge b-blue">{node.items.filter(m => m.finish_reason !== 'timeout').length} 张答案卡</span>
                 <span className="badge b-orange">预算 ×{node.items.filter(m => m.finish_reason !== 'timeout').length}</span>
                 <span className="fhint ml-auto">观察者不参与发言 · 答案差异进入证据对照</span>
@@ -133,12 +133,12 @@ export function GroupStream({ members }: { members: GroupMember[] }) {
                     >
                       <div className="flex items-center gap-2">
                         <AgentAvatar name={mem?.name ?? 'A'} color={mem?.color ?? 'gray'} size={26} />
-                        <b className="text-[12.5px]">{mem?.name ?? 'Agent'}</b>
+                        <b className="text-xs">{mem?.name ?? 'Agent'}</b>
                         <ModelChip model={mem?.model ?? ''} />
                         {m.cost_ms != null && <span className="ml-auto text-[11px] text-label-3">{(m.cost_ms / 1000).toFixed(1)}s</span>}
                         {picked && <span className="badge b-green">已选优</span>}
                       </div>
-                      <p className="mt-2 text-[12.5px] leading-relaxed text-label">{renderContent(m.content)}</p>
+                      <p className="mt-2 text-xs leading-relaxed text-label">{renderContent(m.content)}</p>
                       <div className="mt-2.5 flex items-center gap-1.5">
                         <button type="button" className={`btn btn-sm ${picked ? 'btn-p' : 'btn-s'}`} data-testid={`grp-pick-${m.id}`} onClick={() => resolveAction(m.id, `cft_pick_${m.id}`)}>
                           <Check size={12} aria-hidden />
@@ -183,7 +183,7 @@ export function GroupStream({ members }: { members: GroupMember[] }) {
             <AgentAvatar name={mem?.name ?? 'A'} color={mem?.color ?? 'gray'} />
             <div className="max-w-[74%]">
               <div className="mb-1 flex items-center gap-1.5">
-                <b className="text-[12px]">{mem?.name ?? 'Agent'}</b>
+                <b className="text-xs">{mem?.name ?? 'Agent'}</b>
                 <ModelChip model={mem?.model ?? ''} />
                 {mem?.routing_role === 'coordinator' && <span className="badge b-purple">协调者</span>}
               </div>
@@ -214,7 +214,7 @@ export function GroupStream({ members }: { members: GroupMember[] }) {
                       <AlertTriangle size={14} aria-hidden />
                       高风险动作确认 · {m.pending_action.scope}
                     </h5>
-                    <p className="mt-1.5 text-[12px] leading-relaxed text-label-2">{m.pending_action.label}</p>
+                    <p className="mt-1.5 text-xs leading-relaxed text-label-2">{m.pending_action.label}</p>
                     <div className="mt-2.5 flex items-center gap-2">
                       {m.confirmed_token ? (
                         <span className="badge b-green" data-testid="grp-action-token">confirm_token 已回执 · {m.confirmed_token}</span>
@@ -230,7 +230,7 @@ export function GroupStream({ members }: { members: GroupMember[] }) {
                         </button>
                       )}
                       <span className="badge b-purple">enterprise 档转审批</span>
-                      <span className="text-[10.5px] text-label-3">IX-G-04 语义复用 · 确认写审计</span>
+                      <span className="text-[11px] text-label-3">IX-G-04 语义复用 · 确认写审计</span>
                     </div>
                   </div>
                 )}

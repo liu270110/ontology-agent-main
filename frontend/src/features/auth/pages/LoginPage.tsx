@@ -124,7 +124,7 @@ export function LoginPage() {
           <br />
           登录即代表同意平台使用条款与审计策略
         </p>
-        <p className="mt-3 text-center font-mono text-[10px] text-label-3">{VERSION_FOOTER}</p>
+        <p className="mt-3 text-center font-mono text-2xs text-label-3">{VERSION_FOOTER}</p>
       </form>
     </div>
   )

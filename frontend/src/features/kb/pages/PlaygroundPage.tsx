@@ -158,11 +158,11 @@ export function PlaygroundPage() {
               ))}
             </div>
           )}
-          {!loading && !result && <p className="py-6 text-center text-[12.5px] text-label-3">输入问题并检索，答案将在此展示（引用角标可悬浮预览）。</p>}
+          {!loading && !result && <p className="py-6 text-center text-xs text-label-3">输入问题并检索，答案将在此展示（引用角标可悬浮预览）。</p>}
           {!loading && result && (
             <>
               {result.degraded && (
-                <p className="mb-2 rounded-lg bg-[var(--orange-soft)] px-3 py-2 text-[11.5px] text-orange">⚠ 图库或向量库单侧降级，证据链暂缺。</p>
+                <p className="mb-2 rounded-lg bg-[var(--orange-soft)] px-3 py-2 text-[11px] text-orange">⚠ 图库或向量库单侧降级，证据链暂缺。</p>
               )}
               {/* 引用交互容器：sup 悬停 → FloatingCard 预览；点击 → 分片原文抽屉（IX-CHT-03 同款） */}
               <div
@@ -186,7 +186,7 @@ export function PlaygroundPage() {
               >
                 <Markdown remarkPlugins={[remarkGfm]}>{result.answers}</Markdown>
               </div>
-              <div className="hairline-t mt-3 flex flex-wrap gap-3 pt-2.5 text-[11.5px] text-label-2">
+              <div className="hairline-t mt-3 flex flex-wrap gap-3 pt-2.5 text-[11px] text-label-2">
                 <span>
                   <span className="dot d-green mr-1 inline-block" aria-hidden />
                   置信度 {result.confidence.toFixed(2)}
@@ -212,7 +212,7 @@ export function PlaygroundPage() {
             {result && <span className="badge b-gray ml-auto">{result.hits.length} 证据</span>}
           </div>
           {loading && <div className="space-y-2">{[0, 1, 2].map(i => <div key={i} className="skel w-full" />)}</div>}
-          {!loading && !result && <p className="py-6 text-center text-[12.5px] text-label-3">证据分片与得分将在此展示。</p>}
+          {!loading && !result && <p className="py-6 text-center text-xs text-label-3">证据分片与得分将在此展示。</p>}
           {!loading && result && (
             <ul className="max-h-[340px] min-h-0 flex-1 space-y-1.5 overflow-y-auto pr-1">
               {result.hits.map((h, i) => (
@@ -224,12 +224,12 @@ export function PlaygroundPage() {
                 >
                   <span className="flex items-center gap-1.5">
                     <span className={`dot ${i % 3 === 0 ? 'd-blue' : i % 3 === 1 ? 'd-orange' : 'd-green'} mt-0.5`} aria-hidden />
-                    <b className="text-[12.5px]">
+                    <b className="text-xs">
                       {h.doc_name} · {h.chunk_id.split('-').pop()}
                     </b>
                   </span>
-                  <span className="mt-0.5 block truncate text-[11.5px] text-label-2">{h.quote}</span>
-                  <span className="mono dim mt-0.5 block text-[10.5px]">得分 {h.score.toFixed(2)} · 实体 {h.entities}</span>
+                  <span className="mt-0.5 block truncate text-[11px] text-label-2">{h.quote}</span>
+                  <span className="mono dim mt-0.5 block text-[11px]">得分 {h.score.toFixed(2)} · 实体 {h.entities}</span>
                 </li>
               ))}
             </ul>
@@ -246,7 +246,7 @@ export function PlaygroundPage() {
         {result ? (
           <EvidenceGraph graph={result.graph} highlightIds={highlightIds} />
         ) : (
-          <div className="flex h-[260px] items-center justify-center text-[12px] text-label-3">执行检索后展示证据链（实体节点 + 关系边）。</div>
+          <div className="flex h-[260px] items-center justify-center text-xs text-label-3">执行检索后展示证据链（实体节点 + 关系边）。</div>
         )}
       </div>
 
@@ -259,16 +259,16 @@ export function PlaygroundPage() {
               <span className="badge b-gray">{mode === 'local' ? 'Local' : mode === 'global' ? 'Global' : 'Drift'}</span>
               <span className="mono dim ml-auto text-[11px]">得分 {hoverCitation.score.toFixed(2)}</span>
             </div>
-            <p className="text-[12px] font-semibold">
+            <p className="text-xs font-semibold">
               {hoverCitation.doc} · {hoverCitation.chunk_id.split('-').pop()}
             </p>
-            <p className="mt-1.5 rounded-lg px-2.5 py-2 text-[12px] leading-5" style={{ background: 'var(--accent-soft)' }}>
+            <p className="mt-1.5 rounded-lg px-2.5 py-2 text-xs leading-5" style={{ background: 'var(--accent-soft)' }}>
               {hoverCitation.quote}
             </p>
-            <p className="mt-1.5 text-[10.5px] text-label-3">点击角标查看分片原文抽屉</p>
+            <p className="mt-1.5 text-[11px] text-label-3">点击角标查看分片原文抽屉</p>
           </>
         ) : (
-          <p className="text-[12px] text-label-3">引用详情缺失。</p>
+          <p className="text-xs text-label-3">引用详情缺失。</p>
         )}
       </FloatingCard>
 

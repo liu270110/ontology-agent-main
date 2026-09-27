@@ -142,13 +142,13 @@ export function UploadDialog({ open, onClose, onUploaded }: { open: boolean; onC
           type="button"
           aria-expanded={optionsOpen}
           onClick={() => setOptionsOpen(v => !v)}
-          className="flex w-full items-center gap-1.5 px-3 py-2.5 text-[12.5px] font-semibold text-label-2 hover:text-label"
+          className="flex w-full items-center gap-1.5 px-3 py-2.5 text-xs font-semibold text-label-2 hover:text-label"
         >
           <ChevronDown size={13} className={`transition-transform ${optionsOpen ? '' : '-rotate-90'}`} aria-hidden />
           解析选项
         </button>
         {optionsOpen && (
-          <div className="hairline-t space-y-3 px-3 py-3 text-[12.5px]">
+          <div className="hairline-t space-y-3 px-3 py-3 text-xs">
             <div className="flex items-center gap-2">
               <span className="text-label-2">切片策略</span>
               <span className="seg" role="radiogroup" aria-label="切片策略">
@@ -172,7 +172,7 @@ export function UploadDialog({ open, onClose, onUploaded }: { open: boolean; onC
             </label>
             <label className="flex items-center gap-2">
               <span className="text-label-2">目标知识库</span>
-              <select className="input h-8 w-52 text-[12.5px]" value={kbTarget} onChange={e => setKbTarget(e.target.value)}>
+              <select className="input h-8 w-52 text-xs" value={kbTarget} onChange={e => setKbTarget(e.target.value)}>
                 {KB_TARGETS.map(k => (
                   <option key={k} value={k}>
                     {k}

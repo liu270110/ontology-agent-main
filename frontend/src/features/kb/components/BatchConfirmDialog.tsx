@@ -69,7 +69,7 @@ export function BatchConfirmDialog({
       footer={
         <>
           <span className="mr-auto text-[11px] text-label-3">
-            确认快捷键 <kbd className="rounded border border-separator px-1 font-mono text-[10px]">↵</kbd>
+            确认快捷键 <kbd className="rounded border border-separator px-1 font-mono text-2xs">↵</kbd>
           </span>
           <button type="button" className="btn btn-g btn-sm" onClick={onClose}>
             取消
@@ -82,7 +82,7 @@ export function BatchConfirmDialog({
     >
       <ul className="max-h-52 space-y-1.5 overflow-y-auto scroll-thin" aria-label="已选候选摘要">
         {expanded.map(c => (
-          <li key={c.id} className="flex items-center gap-2 rounded-lg bg-surface-2 px-2.5 py-1.5 text-[12px]">
+          <li key={c.id} className="flex items-center gap-2 rounded-lg bg-surface-2 px-2.5 py-1.5 text-xs">
             <span className="badge b-gray">{CANDIDATE_TYPE_LABEL[c.type as CandidateType]}</span>
             <span className="min-w-0 flex-1 truncate">
               {c.subject}
@@ -92,10 +92,10 @@ export function BatchConfirmDialog({
           </li>
         ))}
         {collapsedCount > 0 && (
-          <li className="px-2.5 py-1 text-[11.5px] text-label-3">其余 {collapsedCount} 条已折叠（同样入库）</li>
+          <li className="px-2.5 py-1 text-[11px] text-label-3">其余 {collapsedCount} 条已折叠（同样入库）</li>
         )}
       </ul>
-      <div className="mt-3 space-y-1 rounded-xl bg-surface-2 px-3 py-2.5 text-[12px] leading-6">
+      <div className="mt-3 space-y-1 rounded-xl bg-surface-2 px-3 py-2.5 text-xs leading-6">
         <div className="flex items-center justify-between">
           <span className="text-label-2">按类型小计</span>
           <span className="mono">{Object.entries(byType).map(([t, n]) => `${CANDIDATE_TYPE_LABEL[t as CandidateType]} ×${n}`).join(' · ')}</span>

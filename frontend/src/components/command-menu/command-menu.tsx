@@ -57,7 +57,7 @@ export function CommandMenu() {
         <Command.Group
           heading="页面导航"
           className={cn(
-            '[&_[cmdk-group-heading]]:px-2.5 [&_[cmdk-group-heading]]:py-1.5 [&_[cmdk-group-heading]]:text-[10px]',
+            '[&_[cmdk-group-heading]]:px-2.5 [&_[cmdk-group-heading]]:py-1.5 [&_[cmdk-group-heading]]:text-2xs',
             '[&_[cmdk-group-heading]]:font-bold [&_[cmdk-group-heading]]:uppercase [&_[cmdk-group-heading]]:tracking-wide',
             '[&_[cmdk-group-heading]]:text-label-3',
           )}

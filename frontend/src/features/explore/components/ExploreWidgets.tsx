@@ -37,7 +37,7 @@ export function EntityDrawer({
         </div>
         <button
           type="button"
-          className="mono mt-2 flex w-full items-center gap-2 rounded-lg border border-separator px-3 py-2 text-left text-[10.5px] text-label-3 hover:border-accent"
+          className="mono mt-2 flex w-full items-center gap-2 rounded-lg border border-separator px-3 py-2 text-left text-[11px] text-label-3 hover:border-accent"
           data-testid="entity-iri"
           onClick={() => {
             void navigator.clipboard?.writeText(entity.iri).catch(() => undefined)
@@ -53,7 +53,7 @@ export function EntityDrawer({
         {/* 属性表 */}
         <div className="mt-4">
           <div className="field-label">属性</div>
-          <table className="tbl w-full text-[12px]">
+          <table className="tbl w-full text-xs">
             <tbody>
               {entity.props.map(p => (
                 <tr key={p.k}>
@@ -70,11 +70,11 @@ export function EntityDrawer({
           <div className="field-label">来源文档 · {entity.source_docs.length}</div>
           <ul className="space-y-1.5">
             {entity.source_docs.map(d => (
-              <li key={d.doc} className="group flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 text-[12px] hover:bg-surface-2">
-                <span className="flex h-6 w-6 flex-none items-center justify-center rounded-md bg-accent-soft text-[10px] text-accent">PDF</span>
+              <li key={d.doc} className="group flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 text-xs hover:bg-surface-2">
+                <span className="flex h-6 w-6 flex-none items-center justify-center rounded-md bg-accent-soft text-2xs text-accent">PDF</span>
                 <span className="min-w-0">
-                  <b className="block truncate text-[12px]">{d.doc}</b>
-                  <span className="text-[10.5px] text-label-3">{d.loc} · 点击打开原文抽屉</span>
+                  <b className="block truncate text-xs">{d.doc}</b>
+                  <span className="text-[11px] text-label-3">{d.loc} · 点击打开原文抽屉</span>
                 </span>
                 <span className="ml-auto flex-none text-label-3 transition-transform group-hover:translate-x-0.5">→</span>
               </li>
@@ -194,7 +194,7 @@ export function PathQueryDialog({
               <div className="field-label">{side === 'source' ? '起点实体' : '终点实体'}</div>
               <button
                 type="button"
-                className={`input flex h-8 items-center gap-1.5 text-left text-[12.5px] ${editing === side ? 'border-accent' : ''}`}
+                className={`input flex h-8 items-center gap-1.5 text-left text-xs ${editing === side ? 'border-accent' : ''}`}
                 data-testid={`path-${side}`}
                 onClick={() => {
                   setEditing(side)
@@ -205,7 +205,7 @@ export function PathQueryDialog({
                   <>
                     <span className="dot" style={{ width: 6, height: 6, background: 'var(--accent)' }} aria-hidden />
                     <b className="truncate">{ent.label}</b>
-                    <span className="mono ml-auto truncate text-[10px] text-label-3">{ent.iri.split('#')[1] ?? ent.iri}</span>
+                    <span className="mono ml-auto truncate text-2xs text-label-3">{ent.iri.split('#')[1] ?? ent.iri}</span>
                   </>
                 ) : (
                   <span className="text-label-3">点击选择{side === 'source' ? '起点' : '终点'}…</span>
@@ -220,7 +220,7 @@ export function PathQueryDialog({
       <div className="relative mt-2">
         <input
           ref={inputRef}
-          className="input h-8 text-[12.5px]"
+          className="input h-8 text-xs"
           placeholder="搜索实体联想（关键词 / IRI 片段）…"
           aria-label="实体搜索选择器"
           value={q}
@@ -232,11 +232,11 @@ export function PathQueryDialog({
               <button
                 key={e.id}
                 type="button"
-                className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-[12px] hover:bg-surface-2"
+                className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-xs hover:bg-surface-2"
                 onClick={() => pick(e)}
               >
                 <span className="truncate">{e.label}</span>
-                <span className="mono truncate text-[10px] text-label-3">{e.iri}</span>
+                <span className="mono truncate text-2xs text-label-3">{e.iri}</span>
                 <span className="badge b-gray ml-auto flex-none">{e.kind_label}</span>
                 {((editing === 'source' && source?.id === e.id) || (editing === 'target' && target?.id === e.id)) && (
                   <Check size={12} className="flex-none text-accent" aria-hidden />
@@ -263,7 +263,7 @@ export function PathQueryDialog({
           onChange={e => setMaxHops(Number(e.target.value))}
           className="w-full accent-[var(--accent)]"
         />
-        <div className="mono flex justify-between text-[9px] text-label-3">
+        <div className="mono flex justify-between text-2xs text-label-3">
           {[1, 2, 3, 4].map(n => (
             <span key={n}>{n}</span>
           ))}
@@ -303,10 +303,10 @@ export function PathQueryDialog({
           <div className="text-[11px] text-label-3">查询结果 · {paths.length} 条路径（按跳数排序）</div>
           {paths.length === 0 && <div className="empty !py-5"><div className="t text-xs">未找到 ≤ {maxHops} 跳的路径</div></div>}
           {paths.map((p, i) => (
-            <div key={p.id} className="rounded-xl border border-separator px-3.5 py-2.5 text-[12px]">
+            <div key={p.id} className="rounded-xl border border-separator px-3.5 py-2.5 text-xs">
               <div className="flex items-center gap-1.5">
                 <span className="badge b-blue">路径 {i + 1}</span>
-                <span className="text-[10.5px] text-label-3">{p.hops} 跳 · {p.node_count} 节点</span>
+                <span className="text-[11px] text-label-3">{p.hops} 跳 · {p.node_count} 节点</span>
                 <button type="button" className="btn btn-g btn-sm ml-auto" onClick={() => onHighlightPath(p)}>
                   高亮到画布
                 </button>
@@ -371,7 +371,7 @@ export function NeighborhoodFilter({
         <legend className="field-label">关系类型（按当前邻域动态列出 + 计数）</legend>
         <div className="max-h-36 space-y-1 overflow-y-auto">
           {counts.map(c => (
-            <label key={c.rel} className="flex cursor-pointer items-center gap-2 rounded-lg px-1.5 py-1 text-[12px] hover:bg-surface-2">
+            <label key={c.rel} className="flex cursor-pointer items-center gap-2 rounded-lg px-1.5 py-1 text-xs hover:bg-surface-2">
               <input
                 type="checkbox"
                 checked={selected.includes(c.rel)}

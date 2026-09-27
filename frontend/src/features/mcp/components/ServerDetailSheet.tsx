@@ -60,13 +60,13 @@ export function ServerDetailSheet({
           <span className={`badge ${server.status === 'healthy' ? 'b-green' : server.status === 'failing' ? 'b-red' : 'b-gray'}`}>
             {MCP_STATUS_LABEL[server.status]}
           </span>
-          <span className="mono text-[10.5px] text-label-3">{server.url_masked}</span>
+          <span className="mono text-[11px] text-label-3">{server.url_masked}</span>
         </div>
 
         {/* 连接信息 */}
         <div className="mt-3">
           <div className="text-[11px] font-semibold text-label-3">连接信息</div>
-          <div className="mt-1.5 space-y-1.5 text-[11.5px]">
+          <div className="mt-1.5 space-y-1.5 text-[11px]">
             <div className="flex justify-between gap-3"><span className="text-label-3">传输</span><span>{server.transport}</span></div>
             <div className="flex justify-between gap-3"><span className="text-label-3">URL</span><span className="mono">{server.url_masked}</span></div>
             <div className="flex justify-between gap-3">
@@ -87,12 +87,12 @@ export function ServerDetailSheet({
           data-testid="mcp-health-card"
         >
           <div className="flex items-center gap-2">
-            <b className={`text-[12px] ${server.status === 'failing' ? 'text-red' : 'text-green'}`}>
+            <b className={`text-xs ${server.status === 'failing' ? 'text-red' : 'text-green'}`}>
               {server.status === 'healthy' ? '健康 · 捂断路径闭合' : server.status === 'failing' ? `连续失败 ${server.consecutive_failures} 次` : '健康 · 未知（待首次探活）'}
             </b>
             <span className="badge b-gray ml-auto">连续失败 {server.consecutive_failures}</span>
           </div>
-          <div className="mt-1 text-[10.5px] text-label-2">
+          <div className="mt-1 text-[11px] text-label-2">
             最近探活 {server.last_probe.slice(11, 16)} · 延迟 {server.latency_ms || '—'}ms · 探活周期 60s
           </div>
           {server.probes_24h.length > 0 && (
@@ -107,7 +107,7 @@ export function ServerDetailSheet({
                   />
                 ))}
               </div>
-              <div className="mt-1 text-[10px] text-label-3">
+              <div className="mt-1 text-2xs text-label-3">
                 近 24h 探活：{okProbes} 成功 / {server.probes_24h.length - okProbes} 超时（自动恢复）
               </div>
             </>
@@ -134,12 +134,12 @@ export function ServerDetailSheet({
             </button>
           </div>
           {notAdopted.length > 0 && (
-            <div className="mt-1 text-[10.5px] text-label-3">{notAdopted.length} 项写入类未纳管（需单独申请）；外部工具默认未启用，逐项审核开启。</div>
+            <div className="mt-1 text-[11px] text-label-3">{notAdopted.length} 项写入类未纳管（需单独申请）；外部工具默认未启用，逐项审核开启。</div>
           )}
           <div className="mt-2 space-y-1.5">
             {adopted.map(t => (
               <div key={t.tool_id} className="flex items-center gap-2 rounded-xl border border-separator px-3 py-2" data-testid={`mcp-tool-${t.name}`}>
-                <span className="mono text-[12px] font-semibold">{t.name}</span>
+                <span className="mono text-xs font-semibold">{t.name}</span>
                 {t.read_only && <span className="badge b-gray">只读</span>}
                 {t.write && <span className="badge b-orange">写入 · 需审批</span>}
                 <span className="ml-auto flex items-center gap-2">

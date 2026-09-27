@@ -70,7 +70,7 @@ export function BatchApprovalModal({
     >
       <div className="space-y-1.5" data-testid="apr-batch-summary">
         {selected.map(a => (
-          <div key={a.id} className="flex items-center gap-2 rounded-lg bg-surface-2 px-3 py-2 text-[12px]">
+          <div key={a.id} className="flex items-center gap-2 rounded-lg bg-surface-2 px-3 py-2 text-xs">
             <b className="mono">{a.id}</b>
             <span className="truncate text-label-2">{a.title}</span>
             {a.high_risk && <span className="badge b-red ml-auto">高危</span>}

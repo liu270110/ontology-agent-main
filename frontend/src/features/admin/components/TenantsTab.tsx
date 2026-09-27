@@ -19,7 +19,7 @@ export function TenantsTab() {
   return (
     <div>
       <div className="flex items-center gap-2">
-        <span className="text-[12.5px] text-label-2">平台级租户管理（super_admin）；当前默认租户 t-10000000-0001</span>
+        <span className="text-xs text-label-2">平台级租户管理（super_admin）；当前默认租户 t-10000000-0001</span>
         <button type="button" className="btn btn-p btn-sm ml-auto" data-testid="adm-tenant-open" onClick={() => setCreateOpen(true)}>
           新建租户
         </button>
@@ -30,7 +30,7 @@ export function TenantsTab() {
           <span className="mono text-[11px] text-label-3">t-10000000-0000-0000-0000-000000000001</span>
           <span className="badge b-blue ml-auto">team 档</span>
         </div>
-        <p className="mt-1 text-[12px] text-label-2">电力 wedge 演示租户：6 名成员 · 3 个本体项目 · 治理三档中 team 档生效。</p>
+        <p className="mt-1 text-xs text-label-2">电力 wedge 演示租户：6 名成员 · 3 个本体项目 · 治理三档中 team 档生效。</p>
       </div>
       {createOpen && <CreateTenantModal onClose={() => setCreateOpen(false)} />}
     </div>
@@ -63,7 +63,7 @@ function CreateTenantModal({ onClose }: { onClose: () => void }) {
             关闭本弹窗后平台不再保存该密码，请立即复制并交给租户管理员。
           </div>
         </div>
-        <dl className="mt-3 space-y-2 text-[12.5px]">
+        <dl className="mt-3 space-y-2 text-xs">
           <div className="flex gap-2"><dt className="w-24 flex-none text-label-3">租户</dt><dd>{created.name}（{created.tier} 档）</dd></div>
           <div className="flex gap-2"><dt className="w-24 flex-none text-label-3">命名空间</dt><dd className="mono">{created.namespace}</dd></div>
           <div className="flex gap-2"><dt className="w-24 flex-none text-label-3">管理员账号</dt><dd className="mono">{created.admin_account}</dd></div>
@@ -118,9 +118,9 @@ function CreateTenantModal({ onClose }: { onClose: () => void }) {
               onClick={() => setTier(t.key)}
               className={`rounded-xl border p-3 text-left transition-colors ${tier === t.key ? 'border-accent bg-accent-soft' : 'border-separator hover:border-label-3'}`}
             >
-              <b className="text-[12.5px] uppercase">{t.label}</b>
-              <div className="mt-1 text-[10.5px] leading-4 text-label-2">{t.desc}</div>
-              <div className="mt-1 text-[10px] text-label-3">{t.infer}</div>
+              <b className="text-xs uppercase">{t.label}</b>
+              <div className="mt-1 text-[11px] leading-4 text-label-2">{t.desc}</div>
+              <div className="mt-1 text-2xs text-label-3">{t.infer}</div>
             </button>
           ))}
         </div>

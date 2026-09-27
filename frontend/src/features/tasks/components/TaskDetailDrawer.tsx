@@ -35,7 +35,7 @@ function PipelineSteps({ currentStep, finished }: { currentStep: number; finishe
             >
               {done ? <CheckCircle2 size={14} aria-hidden /> : active ? <PlayCircle size={14} aria-hidden className="animate-pulse" /> : <Circle size={8} aria-hidden />}
             </span>
-            <span className={`truncate text-[10px] ${active ? 'font-semibold text-accent' : done ? 'text-label-2' : 'text-label-3'}`}>{s}</span>
+            <span className={`truncate text-2xs ${active ? 'font-semibold text-accent' : done ? 'text-label-2' : 'text-label-3'}`}>{s}</span>
           </div>
         )
       })}
@@ -89,7 +89,7 @@ export function TaskDetailDrawer({ task, onClose, onChanged }: {
                   <span className="tl-dot" style={{ background: LEVEL_DOT[e.level ?? 'info'] }} />
                   <div className="tl-c !py-2">
                     <span className="mono badge b-gray">seq {String(e.seq).padStart(3, '0')}</span>{' '}
-                    <span className="text-[12px]">{e.label}</span>
+                    <span className="text-xs">{e.label}</span>
                     <div className="tl-meta">
                       <span>{e.at}</span>
                       {e.level && e.level !== 'info' && (
@@ -99,14 +99,14 @@ export function TaskDetailDrawer({ task, onClose, onChanged }: {
                   </div>
                 </li>
               ))}
-              {timeline.length === 0 && <div className="px-2 py-3 text-[11.5px] text-label-3">等待事件推送…</div>}
+              {timeline.length === 0 && <div className="px-2 py-3 text-[11px] text-label-3">等待事件推送…</div>}
             </ol>
           </div>
 
           {/* 元数据 kv */}
           <div className="mt-4">
             <div className="field-label">元数据</div>
-            <dl className="text-[12px]">
+            <dl className="text-xs">
               <div className="hairline-b flex gap-2 py-1.5"><dt className="w-20 flex-none text-label-3">发起人</dt><dd>{task.created_by}</dd></div>
               <div className="hairline-b flex gap-2 py-1.5"><dt className="w-20 flex-none text-label-3">目标</dt><dd>{task.target}</dd></div>
               <div className="hairline-b flex gap-2 py-1.5"><dt className="w-20 flex-none text-label-3">创建时间</dt><dd>{task.created_at}</dd></div>
@@ -114,7 +114,7 @@ export function TaskDetailDrawer({ task, onClose, onChanged }: {
               {task.trace_id && (
                 <div className="flex gap-2 py-1.5">
                   <dt className="w-20 flex-none text-label-3">trace_id</dt>
-                  <dd className="mono">{task.trace_id} <span className="text-[10.5px] text-label-3">→ /admin?tab=audit 可查全链路</span></dd>
+                  <dd className="mono">{task.trace_id} <span className="text-[11px] text-label-3">→ /admin?tab=audit 可查全链路</span></dd>
                 </div>
               )}
             </dl>
@@ -142,7 +142,7 @@ export function TaskDetailDrawer({ task, onClose, onChanged }: {
               </a>
             )}
           </div>
-          <p className="mt-2 text-[10.5px] text-label-3">
+          <p className="mt-2 text-[11px] text-label-3">
             操作区按状态 contextual：失败 → 重试 / 运行中 → 取消 · 查看日志 / 完成 → 去审核（/kb/review?job=）。
           </p>
         </div>

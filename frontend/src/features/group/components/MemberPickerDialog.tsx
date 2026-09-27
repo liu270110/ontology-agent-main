@@ -140,11 +140,11 @@ export function MemberPickerDialog({
                 >
                   <AgentAvatar name={s.name} color={s.color} size={28} />
                   <div className="min-w-0 flex-1">
-                    <b className="text-[12.5px]">
+                    <b className="text-xs">
                       {s.name}
-                      {s.cross_tenant && <span className="ml-1 text-[10.5px] font-normal text-label-3">{s.tenant}</span>}
+                      {s.cross_tenant && <span className="ml-1 text-[11px] font-normal text-label-3">{s.tenant}</span>}
                     </b>
-                    <div className="mono truncate text-[10px] text-label-3">{s.id} · {s.model}</div>
+                    <div className="mono truncate text-2xs text-label-3">{s.id} · {s.model}</div>
                   </div>
                   {!s.acl_use ? (
                     <span className="badge b-gray"><Lock size={10} aria-hidden />无 use 权限</span>
@@ -194,9 +194,9 @@ export function MemberPickerDialog({
               }}
             >
               <AgentAvatar name={p.slot.name} color={p.slot.color} size={26} />
-              <b className="whitespace-nowrap text-[12px]">{p.slot.name}</b>
+              <b className="whitespace-nowrap text-xs">{p.slot.name}</b>
               <select
-                className="input ml-auto h-[30px] w-[92px] px-2 text-[12px]"
+                className="input ml-auto h-[30px] w-[92px] px-2 text-xs"
                 data-testid={`grp-role-${p.slot.id}`}
                 value={p.role}
                 onChange={e => setRole(p.slot.id, e.target.value as MemberRole)}

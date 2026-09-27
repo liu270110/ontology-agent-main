@@ -38,7 +38,7 @@ export function EvidenceSheet({ focus, onClose }: { focus: EvidenceFocus | null;
             {chunk.page != null && <span className="badge b-gray">第 {chunk.page} 页</span>}
           </div>
 
-          <dl className="mt-3 text-[12px]">
+          <dl className="mt-3 text-xs">
             {[
               ['来源文档', <span key="doc">{chunk.doc_id}</span>],
               [
@@ -69,13 +69,13 @@ export function EvidenceSheet({ focus, onClose }: { focus: EvidenceFocus | null;
           </dl>
 
           {/* 原文片段（命中句高亮） */}
-          <div className="mt-4 text-[12px] font-semibold text-label-2">原文片段（命中句高亮）</div>
+          <div className="mt-4 text-xs font-semibold text-label-2">原文片段（命中句高亮）</div>
           <p className="mt-1.5 rounded-xl border border-separator bg-surface-2 px-3.5 py-3 text-[13px] leading-7">
             <HighlightedQuote quote={chunk.quote} highlight={chunk.highlight} />
           </p>
 
           {/* 出处三元组（mono） */}
-          <div className="mt-4 text-[12px] font-semibold text-label-2">出处三元组</div>
+          <div className="mt-4 text-xs font-semibold text-label-2">出处三元组</div>
           <div className="mt-1.5 flex flex-col gap-1.5">
             {graph_paths.map((p, i) => (
               <div key={i} className="mono flex flex-wrap items-center gap-1.5 rounded-lg border border-separator px-2.5 py-1.5 text-[11px]">
@@ -86,7 +86,7 @@ export function EvidenceSheet({ focus, onClose }: { focus: EvidenceFocus | null;
                 <span className="text-label">{p.nodes[1]}</span>
               </div>
             ))}
-            {graph_paths.length === 0 && <div className="text-[11.5px] text-label-3">（该证据无图谱路径）</div>}
+            {graph_paths.length === 0 && <div className="text-[11px] text-label-3">（该证据无图谱路径）</div>}
           </div>
 
           {/* 底部动作：在图谱中查看（占位链接）+ 关闭 */}
@@ -102,11 +102,11 @@ export function EvidenceSheet({ focus, onClose }: { focus: EvidenceFocus | null;
             <button type="button" className="btn btn-g btn-sm" onClick={onClose}>
               关闭
             </button>
-            <span className="ml-auto flex items-center gap-1 text-[10.5px] text-label-3">
+            <span className="ml-auto flex items-center gap-1 text-[11px] text-label-3">
               <FileText size={11} aria-hidden /> source_ref · api/01 §5.4
             </span>
           </div>
-          <div className="mt-2 flex items-center gap-1 text-[10.5px] text-label-3">
+          <div className="mt-2 flex items-center gap-1 text-[11px] text-label-3">
             <ArrowRight size={11} aria-hidden /> 图谱浏览（F-08）就绪前为占位链接
           </div>
         </div>

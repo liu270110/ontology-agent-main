@@ -68,7 +68,7 @@ export function GroupInput({
   return (
     <div className="input-bar border-t border-separator bg-surface px-4 py-3">
       {needConfirm && (
-        <div className="mb-2 flex items-center gap-2 rounded-lg px-3 py-2 text-[11.5px]" style={{ background: 'var(--orange-soft)', color: 'var(--orange)' }} data-testid="grp-budget-confirm">
+        <div className="mb-2 flex items-center gap-2 rounded-lg px-3 py-2 text-[11px]" style={{ background: 'var(--orange-soft)', color: 'var(--orange)' }} data-testid="grp-budget-confirm">
           多答对比模式将对 {speakers} 名发言成员并行作答（预算 ×{speakers}）。再次发送即确认；<button type="button" className="underline" onClick={() => setArmed(true)}>确认发送</button>
         </div>
       )}
@@ -106,12 +106,12 @@ export function GroupInput({
 
         {/* MentionMenu 简版（GRP 画板：@ 提及对象=群内成员） */}
         <FloatingCard open={mentionOpen} anchor={taRef.current?.getBoundingClientRect() ?? null} onClose={() => setMentionOpen(false)} width={260}>
-          <div className="mb-1.5 text-[10px] font-bold tracking-wide text-label-3">提及群成员</div>
+          <div className="mb-1.5 text-2xs font-bold tracking-wide text-label-3">提及群成员</div>
           {agents.map(m => (
             <button key={m.id} type="button" className="rov-item w-full" data-testid={`grp-mention-${m.id}`} onClick={() => pickMention(m)}>
               <AgentAvatar name={m.name} color={m.color} size={24} />
-              <span className="text-[12.5px]">{m.name}</span>
-              <span className="mono ml-auto text-[10px] text-label-3">{m.routing_role}</span>
+              <span className="text-xs">{m.name}</span>
+              <span className="mono ml-auto text-2xs text-label-3">{m.routing_role}</span>
             </button>
           ))}
         </FloatingCard>

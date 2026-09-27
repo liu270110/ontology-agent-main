@@ -78,11 +78,11 @@ export function EditAcceptDialog({ candidate, onClose, onDecided }: { candidate:
           <div className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-label-3">三元组修订</div>
           <label className="block">
             <span className="mb-1 block text-xs text-label-2">主语（只读）</span>
-            <input className="input h-8 text-[12.5px]" value={candidate.subject} readOnly aria-label="主语（只读）" />
+            <input className="input h-8 text-xs" value={candidate.subject} readOnly aria-label="主语（只读）" />
           </label>
           <label className="block">
             <span className="mb-1 block text-xs text-label-2">谓词（按本体类约束过滤）</span>
-            <select className="input h-8 text-[12.5px]" value={pred} onChange={e => setPredicate(e.target.value)} aria-label="谓词">
+            <select className="input h-8 text-xs" value={pred} onChange={e => setPredicate(e.target.value)} aria-label="谓词">
               {[...new Set([candidate.predicate, ...PREDICATES].filter(Boolean))].map(p => (
                 <option key={p} value={p}>
                   {p}
@@ -93,7 +93,7 @@ export function EditAcceptDialog({ candidate, onClose, onDecided }: { candidate:
           <label className="block">
             <span className="mb-1 block text-xs text-label-2">宾语（输入，类联想）</span>
             <input
-              className="input h-8 text-[12.5px]"
+              className="input h-8 text-xs"
               list="kb-object-suggestions"
               placeholder={candidate.object || '输入对象实例…'}
               value={object}
@@ -109,7 +109,7 @@ export function EditAcceptDialog({ candidate, onClose, onDecided }: { candidate:
           <label className="block">
             <span className="mb-1 block text-xs text-label-2">修订说明（可选）</span>
             <textarea
-              className="input py-2 text-[12.5px]"
+              className="input py-2 text-xs"
               rows={2}
               value={note}
               onChange={e => setNote(e.target.value)}

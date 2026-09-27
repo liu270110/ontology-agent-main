@@ -244,7 +244,7 @@ export function WorkbenchPage() {
         <TierBadge tier={p.tier} />
         <select
           aria-label="版本选择"
-          className="input h-7 w-40 text-[12px]"
+          className="input h-7 w-40 text-xs"
           value={version}
           onChange={e => setVersion(e.target.value)}
         >

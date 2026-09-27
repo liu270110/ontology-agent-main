@@ -16,7 +16,7 @@ export function WorkflowListPage() {
     <div className="min-h-0 flex-1 overflow-y-auto p-6" data-testid="wf-list-page">
       <div className="mb-4 flex items-center gap-3">
         <div>
-          <h1 className="text-[17px] font-bold">工作流编排</h1>
+          <h1 className="text-lg font-bold">工作流编排</h1>
           <p className="mt-0.5 text-xs text-label-3">把 Agent 插槽、工具、知识检索、审批编排为可版本化、可试运行的有向图（27 篇 P15）。</p>
         </div>
         <button type="button" className="btn btn-p ml-auto" data-testid="wf-new-open" onClick={() => setNewOpen(true)}>
@@ -38,14 +38,14 @@ export function WorkflowListPage() {
               <span className="flex h-8 w-8 flex-none items-center justify-center rounded-lg bg-accent-soft text-accent">
                 <GitBranch size={15} aria-hidden />
               </span>
-              <b className="truncate text-[13.5px]">{w.name}</b>
+              <b className="truncate text-[13px]">{w.name}</b>
               {w.acl === 'publish' ? (
                 <span className="badge b-green ml-auto">ACL · 可发布</span>
               ) : (
                 <span className="badge b-gray ml-auto"><Lock size={9} aria-hidden />ACL · 可编辑</span>
               )}
             </div>
-            <p className="mt-2 line-clamp-2 min-h-[32px] text-[12px] leading-relaxed text-label-2">{w.description}</p>
+            <p className="mt-2 line-clamp-2 min-h-[32px] text-xs leading-relaxed text-label-2">{w.description}</p>
             <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
               {w.head_version && w.head_version === w.draft_version ? (
                 <span className="badge b-blue">已发布 {w.head_version}</span>

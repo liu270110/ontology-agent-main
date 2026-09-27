@@ -203,7 +203,7 @@ export function RegisterWizard({ open, onClose }: { open: boolean; onClose: () =
           {/* 已选适配器条 */}
           <div className="flex items-center gap-2 rounded-xl border border-separator bg-surface-2 px-3 py-2">
             <Bot size={14} aria-hidden />
-            <b className="text-[12.5px]">{adapter.name}</b>
+            <b className="text-xs">{adapter.name}</b>
             <span className="badge b-blue">已选</span>
             <span className="truncate text-[11px] text-label-3">{adapter.vendor} · {adapter.capability}</span>
           </div>
@@ -248,24 +248,24 @@ export function RegisterWizard({ open, onClose }: { open: boolean; onClose: () =
 
           <div className="mt-2 grid grid-cols-3 gap-2" aria-label="连接测试三态">
             <div className="rounded-xl border px-3 py-2.5" style={{ background: testState === 'testing' ? 'var(--accent-soft)' : 'var(--surface)', borderColor: testState === 'testing' ? 'var(--accent)' : 'var(--separator)' }}>
-              <div className={`flex items-center gap-1.5 text-[11.5px] font-semibold ${testState === 'testing' ? 'text-accent' : 'text-label-2'}`}>
+              <div className={`flex items-center gap-1.5 text-[11px] font-semibold ${testState === 'testing' ? 'text-accent' : 'text-label-2'}`}>
                 {testPulse ? <Loader2 size={12} className="animate-spin" aria-hidden /> : null} 态 1 · 测试中
               </div>
-              <div className="mt-1 text-[10.5px] text-label-3">RPC 握手中，限时上限 10s</div>
+              <div className="mt-1 text-[11px] text-label-3">RPC 握手中，限时上限 10s</div>
             </div>
             <div className="rounded-xl border px-3 py-2.5" data-testid="agt-conn-success" style={{ background: testState === 'success' ? 'var(--green-soft)' : 'var(--surface)', borderColor: testState === 'success' ? 'var(--green)' : 'var(--separator)' }}>
-              <div className={`flex items-center gap-1.5 text-[11.5px] font-semibold ${testState === 'success' ? 'text-green' : 'text-label-2'}`}>
+              <div className={`flex items-center gap-1.5 text-[11px] font-semibold ${testState === 'success' ? 'text-green' : 'text-label-2'}`}>
                 <CircleCheck size={12} aria-hidden /> 态 2 · 测试通过
               </div>
-              <div className="mt-1 text-[10.5px] text-label-3">
+              <div className="mt-1 text-[11px] text-label-3">
                 {testState === 'success' && testResult ? `RTT ${testResult.rtt_ms}ms · 协议 ${testResult.protocol} · ${testResult.message}` : 'RTT 与能力清单回显'}
               </div>
             </div>
             <div className="rounded-xl border px-3 py-2.5" data-testid="agt-conn-fail" style={{ background: testState === 'fail' ? 'var(--red-soft)' : 'var(--surface)', borderColor: testState === 'fail' ? 'var(--red)' : 'var(--separator)' }}>
-              <div className={`flex items-center gap-1.5 text-[11.5px] font-semibold ${testState === 'fail' ? 'text-red' : 'text-label-2'}`}>
+              <div className={`flex items-center gap-1.5 text-[11px] font-semibold ${testState === 'fail' ? 'text-red' : 'text-label-2'}`}>
                 <CircleX size={12} aria-hidden /> 态 3 · 测试失败
               </div>
-              <div className="mt-1 text-[10.5px] text-label-3">
+              <div className="mt-1 text-[11px] text-label-3">
                 {testState === 'fail' && testResult ? `${testResult.code} ${testResult.message}` : 'E-5003 · 检查 endpoint 与白名单'}
               </div>
             </div>
@@ -275,7 +275,7 @@ export function RegisterWizard({ open, onClose }: { open: boolean; onClose: () =
 
       {step === 2 && adapter && (
         <div className="mt-4">
-          <div className="mb-3 rounded-xl border border-separator bg-surface-2 px-3 py-2.5 text-[11.5px] leading-5">
+          <div className="mb-3 rounded-xl border border-separator bg-surface-2 px-3 py-2.5 text-[11px] leading-5">
             <b>汇总确认</b> · 适配器「{adapter.name}」· endpoint <span className="mono">{String(form.endpoint ?? '—')}</span>
             {form.token ? (
               <>

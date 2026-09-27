@@ -66,13 +66,13 @@ export function MemberPanel({
           className="flex items-center gap-2 border-b border-separator py-2 last:border-b-0"
         >
           {m.human ? (
-            <span className="flex h-[26px] w-[26px] flex-none items-center justify-center rounded-full bg-accent-soft text-[10px] font-semibold text-accent">刘</span>
+            <span className="flex h-[26px] w-[26px] flex-none items-center justify-center rounded-full bg-accent-soft text-2xs font-semibold text-accent">刘</span>
           ) : (
             <AgentAvatar name={m.name} color={m.color} size={26} />
           )}
           <div className="min-w-0 flex-1">
-            <b className="block truncate text-[12px]">{m.name}</b>
-            <div className="truncate text-[10px] text-label-3">{m.human ? '创建者' : m.model}</div>
+            <b className="block truncate text-xs">{m.name}</b>
+            <div className="truncate text-2xs text-label-3">{m.human ? '创建者' : m.model}</div>
           </div>
           {!m.human && <RoleBadge role={m.routing_role} />}
           {m.paused && <span className="badge b-orange">已暂停</span>}
@@ -120,8 +120,8 @@ export function MemberPanel({
             <div className="flex items-center gap-2.5 border-b border-separator px-2 pb-2">
               <AgentAvatar name={target.name} color={target.color} size={30} />
               <div>
-                <b className="text-[12.5px]">{target.name}</b>
-                <div className="text-[10.5px] text-label-2">{target.model} · {ROLE_LABEL[target.routing_role]}</div>
+                <b className="text-xs">{target.name}</b>
+                <div className="text-[11px] text-label-2">{target.model} · {ROLE_LABEL[target.routing_role]}</div>
               </div>
             </div>
             <button type="button" className="menu-i w-full" data-testid="grp-menu-pause" onClick={() => void act(() => patchMember(sessionId, target.id, { paused: !target.paused }))}>
@@ -139,7 +139,7 @@ export function MemberPanel({
                 </button>
               ))}
             {target.routing_role !== 'coordinator' && (
-              <div className="px-2.5 pb-2 text-[10.5px] leading-relaxed text-label-3">
+              <div className="px-2.5 pb-2 text-[11px] leading-relaxed text-label-3">
                 全群仅 1 名协调者——设为协调者需先卸下当前协调者，调整将通知全群并写审计（唯一性由后端 409 校验）。
               </div>
             )}
@@ -149,7 +149,7 @@ export function MemberPanel({
               移除出群
               <span className="menu-k">需确认</span>
             </button>
-            <div className="px-2.5 pb-1.5 text-[10.5px] leading-relaxed text-label-3">
+            <div className="px-2.5 pb-1.5 text-[11px] leading-relaxed text-label-3">
               移除为危险确认：历史消息保留归属（按 agent_id 署名不删除），成员 ACL 即时回收。
             </div>
           </>
@@ -158,7 +158,7 @@ export function MemberPanel({
 
       {/* 移除危险确认（IX-G-04 语义：历史保留归属） */}
       <Modal open={!!removeTarget} onClose={() => setRemoveTarget(null)} title={`移除「${removeTarget?.name ?? ''}」`} danger width={440}>
-        <p className="text-[12.5px] leading-relaxed text-label-2">
+        <p className="text-xs leading-relaxed text-label-2">
           移除后该 Agent 停止接收新轮并即时回收成员 ACL；<b className="text-label">历史消息保留归属</b>（按 agent_id 署名不删除），可追溯性不受影响（宪法 5）。
         </p>
         <div className="mt-3 flex justify-end gap-2">

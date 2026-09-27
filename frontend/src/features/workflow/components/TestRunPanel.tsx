@@ -65,8 +65,8 @@ export function TestRunPanel({
       aria-label="试运行面板"
     >
       <div className="flex flex-wrap items-center gap-2 px-4 pt-3">
-        <b className="text-[13.5px]">试运行面板</b>
-        <span className="mono rounded-[7px] border border-separator px-2 py-0.5 text-[10.5px] text-label-3" style={{ background: 'var(--surface-2)' }}>
+        <b className="text-[13px]">试运行面板</b>
+        <span className="mono rounded-[7px] border border-separator px-2 py-0.5 text-[11px] text-label-3" style={{ background: 'var(--surface-2)' }}>
           {run.id} · type=workflow_test
         </span>
         {run.status === 'paused' && <span className="badge b-orange"><Flag size={10} aria-hidden />断点命中 · 已暂停</span>}
@@ -114,7 +114,7 @@ export function TestRunPanel({
         {steps.map(s => (
           <div
             key={`${s.node}-${s.state}`}
-            className="flex items-center gap-2 border-b border-dashed border-separator py-1.5 text-[12px] last:border-b-0"
+            className="flex items-center gap-2 border-b border-dashed border-separator py-1.5 text-xs last:border-b-0"
             style={s.state === 'paused' ? { background: 'var(--orange-soft)', borderRadius: 8, paddingLeft: 6, paddingRight: 6 } : undefined}
             data-testid={`wf-step-${s.node}-${s.state}`}
           >
@@ -124,11 +124,11 @@ export function TestRunPanel({
             >
               {STEP_ICON[s.state]}
             </span>
-            <b className="w-[148px] flex-none truncate text-[12px]" style={s.state === 'paused' ? { color: 'var(--orange)' } : undefined}>{s.label}</b>
-            <span className="mono w-[120px] flex-none truncate text-[10.5px] text-label-3">
+            <b className="w-[148px] flex-none truncate text-xs" style={s.state === 'paused' ? { color: 'var(--orange)' } : undefined}>{s.label}</b>
+            <span className="mono w-[120px] flex-none truncate text-[11px] text-label-3">
               {s.breakpoint ? '确定性表达式 / 断点' : s.node.startsWith('agent') ? 'glm-4.7' : '—'}
             </span>
-            <span className="flex-1 truncate text-[11.5px] text-label-2">
+            <span className="flex-1 truncate text-[11px] text-label-2">
               {s.detail}
               {s.state === 'paused' && (
                 <button type="button" style={{ color: 'var(--accent)' }} className="ml-1 underline" data-testid="wf-run-snapshot-link" onClick={onResume}>
@@ -138,7 +138,7 @@ export function TestRunPanel({
             </span>
             {s.breakpoint && s.state === 'paused' && <span className="badge b-orange"><Flag size={9} aria-hidden />断点 BP-1</span>}
             <span className={`badge ${STEP_BADGE[s.state]?.cls}`}>{STEP_BADGE[s.state]?.txt}</span>
-            <span className="mono w-[96px] flex-none text-right text-[10.5px] text-label-3">{s.dur}</span>
+            <span className="mono w-[96px] flex-none text-right text-[11px] text-label-3">{s.dur}</span>
           </div>
         ))}
       </div>

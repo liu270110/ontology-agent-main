@@ -60,12 +60,12 @@ export function DeleteDocDialog({ doc, onClose, onDeleted }: { doc: KbDocument |
       <p className="text-[13px] leading-6">
         将删除文档 <b>{doc.name}</b>，其级联影响：
       </p>
-      <ul className="mt-2 space-y-1 rounded-xl bg-[var(--red-soft)] p-3 text-[12.5px] leading-6 text-red">
+      <ul className="mt-2 space-y-1 rounded-xl bg-[var(--red-soft)] p-3 text-xs leading-6 text-red">
         <li>· {doc.chunk_count} 个分片及向量（Milvus）</li>
         <li>· {pendingCount} 条待审候选（审核队列同步移除）</li>
         <li>· 图谱实体 / 关系引用约 {graphRefs} 处（预估）</li>
       </ul>
-      <p className="mt-3 text-[12.5px] text-label-2">
+      <p className="mt-3 text-xs text-label-2">
         此操作不可恢复。输入文档名 <b className="mono">{doc.name}</b> 以解锁删除：
       </p>
       <input

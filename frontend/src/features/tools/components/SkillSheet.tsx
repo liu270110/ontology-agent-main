@@ -40,7 +40,7 @@ export function SkillSheet({ skill, onClose }: { skill: SkillRow | null; onClose
           </span>
           <div>
             <div className="flex flex-wrap items-center gap-1.5">
-              <b className="text-[14.5px]">{skill.name}</b>
+              <b className="text-sm">{skill.name}</b>
               <span className="badge b-gray">SKILL.md · {skill.version}</span>
               {skill.status === '未分发' && <span className="badge b-orange">未分发</span>}
             </div>
@@ -55,11 +55,11 @@ export function SkillSheet({ skill, onClose }: { skill: SkillRow | null; onClose
         <div className="mt-4 rounded-xl border border-separator p-3.5" style={{ background: 'var(--surface)' }} data-testid="tls-frontmatter">
           <div className="flex items-center gap-2">
             <span className="badge b-gray">frontmatter</span>
-            <span className="text-[10.5px] text-label-3">YAML 元数据</span>
+            <span className="text-[11px] text-label-3">YAML 元数据</span>
           </div>
           <div className="mt-2 divide-y" style={{ borderColor: 'var(--separator)' }}>
             {(d?.frontmatter ?? []).map(f => (
-              <div key={f.key} className="flex items-center gap-2 py-1.5 text-[11.5px]">
+              <div key={f.key} className="flex items-center gap-2 py-1.5 text-[11px]">
                 <span className="mono badge b-blue">{f.key}</span>
                 <span className="mono text-label-2">{f.value}</span>
               </div>
@@ -68,7 +68,7 @@ export function SkillSheet({ skill, onClose }: { skill: SkillRow | null; onClose
         </div>
 
         {/* 正文 Markdown */}
-        <div className="markdown mt-4 text-[12px] leading-6" data-testid="tls-skill-body">
+        <div className="markdown mt-4 text-xs leading-6" data-testid="tls-skill-body">
           <ReactMarkdown remarkPlugins={[remarkGfm]}>{d?.body ?? ''}</ReactMarkdown>
         </div>
 

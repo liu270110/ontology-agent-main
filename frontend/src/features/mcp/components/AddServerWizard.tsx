@@ -254,7 +254,7 @@ export function AddServerWizard({ open, onClose }: { open: boolean; onClose: () 
       {step === 1 && (
         <div className="mt-4">
           {/* 连接配置回显 */}
-          <div className="grid grid-cols-2 gap-x-6 gap-y-1 rounded-xl border border-separator bg-surface-2 px-4 py-3 text-[11.5px]">
+          <div className="grid grid-cols-2 gap-x-6 gap-y-1 rounded-xl border border-separator bg-surface-2 px-4 py-3 text-[11px]">
             <div><span className="text-label-3">名称　</span><b>{name || '—'}</b></div>
             <div><span className="text-label-3">传输　</span>{transport}</div>
             <div><span className="text-label-3">URL　　</span><span className="mono">{transport === 'streamable http' ? url || '—' : command || '—'}</span></div>
@@ -271,20 +271,20 @@ export function AddServerWizard({ open, onClose }: { open: boolean; onClose: () 
           </div>
 
           {testing && (
-            <div className="mt-2 rounded-xl px-3 py-2.5 text-[11.5px]" style={{ background: 'var(--accent-soft)' }}>
+            <div className="mt-2 rounded-xl px-3 py-2.5 text-[11px]" style={{ background: 'var(--accent-soft)' }}>
               <Loader2 size={12} className="mr-1 inline animate-spin" aria-hidden /> tools/list 握手中，限时上限 10s…
             </div>
           )}
 
           {tested && !testing && !tested.ok && (
-            <div className="mt-2 rounded-xl px-3 py-2.5 text-[11.5px]" style={{ background: 'var(--red-soft)' }} data-testid="mcp-discover-fail">
+            <div className="mt-2 rounded-xl px-3 py-2.5 text-[11px]" style={{ background: 'var(--red-soft)' }} data-testid="mcp-discover-fail">
               <b className="text-red">测试失败</b> · E-5003 未收到 tools/list 响应 · 建议：检查网络连通、凭据与协议版本匹配
             </div>
           )}
 
           {tested?.ok && (
             <div className="mt-2 rounded-xl px-3.5 py-3" style={{ background: 'var(--green-soft)' }} data-testid="mcp-discover-ok">
-              <div className="flex items-center gap-1.5 text-[12.5px] font-semibold text-green">
+              <div className="flex items-center gap-1.5 text-xs font-semibold text-green">
                 <CircleCheck size={13} aria-hidden /> 连接测试成功
                 <button type="button" className="btn btn-g btn-sm ml-auto" onClick={() => void runTest()}>
                   重新测试
@@ -307,13 +307,13 @@ export function AddServerWizard({ open, onClose }: { open: boolean; onClose: () 
                   checked={allAdopted}
                   onChange={e => setAdopted(e.target.checked ? new Set(tested.tools.map(t => t.tool_id)) : new Set())}
                 />
-                <b className="text-[12px]">全选</b>
+                <b className="text-xs">全选</b>
                 <span className="badge b-blue">已选 {adopted.size} / {tested.tools.length}</span>
-                <span className="mono ml-auto text-[10px] text-label-3">tools/list · {tested.latency_ms}ms 返回</span>
+                <span className="mono ml-auto text-2xs text-label-3">tools/list · {tested.latency_ms}ms 返回</span>
               </div>
               <div className="mt-1.5 divide-y" style={{ borderColor: 'var(--separator)' }}>
                 {tested.tools.map(t => (
-                  <div key={t.tool_id} className="flex items-center gap-2 py-1.5 text-[11.5px]">
+                  <div key={t.tool_id} className="flex items-center gap-2 py-1.5 text-[11px]">
                     <input
                       type="checkbox"
                       aria-label={`纳管 ${t.name}`}
@@ -338,8 +338,8 @@ export function AddServerWizard({ open, onClose }: { open: boolean; onClose: () 
           )}
 
           <div className="mt-3 rounded-xl px-3.5 py-2.5" style={{ background: 'var(--orange-soft)' }}>
-            <b className="text-[11.5px] text-orange">外部工具默认不可信</b>
-            <p className="mt-0.5 text-[10.5px] leading-4 text-label-2">
+            <b className="text-[11px] text-orange">外部工具默认不可信</b>
+            <p className="mt-0.5 text-[11px] leading-4 text-label-2">
               纳管后以「未启用」进注册中心，写入类需逐项审核开启（POST /mcp/tools/&#123;tool_id&#125;/enable）；annotations 仅作提示，不作授权依据。
             </p>
           </div>
@@ -347,7 +347,7 @@ export function AddServerWizard({ open, onClose }: { open: boolean; onClose: () 
       )}
 
       {step === 2 && tested?.ok && (
-        <div className="mt-4 rounded-xl border border-separator bg-surface-2 px-4 py-3 text-[12px] leading-6">
+        <div className="mt-4 rounded-xl border border-separator bg-surface-2 px-4 py-3 text-xs leading-6">
           <div><b>Server：</b>{name}（{transport}）· {transport === 'streamable http' ? url : command}</div>
           <div><b>鉴权：</b>{auth}{token ? ' · 凭据已脱敏存管' : ''}</div>
           <div><b>协议 / 版本：</b>{tested.protocol} · {tested.server_version} · 发现延迟 {tested.latency_ms}ms</div>
@@ -356,7 +356,7 @@ export function AddServerWizard({ open, onClose }: { open: boolean; onClose: () 
         </div>
       )}
       {step === 2 && (
-        <div className="mt-2 flex items-center gap-1.5 text-[10.5px] text-label-3">
+        <div className="mt-2 flex items-center gap-1.5 text-[11px] text-label-3">
           <Check size={11} aria-hidden /> 注册动作写入审计（trace_id 落 admin 审计日志）
         </div>
       )}

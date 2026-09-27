@@ -101,7 +101,7 @@ export function GroupChatPage() {
         <div className="px-3 pb-2">
           <div className="flex items-center gap-1.5 rounded-lg border border-separator bg-surface-2 px-2 py-1.5 text-label-3">
             <Search size={12} aria-hidden />
-            <input className="w-full bg-transparent text-[12px] outline-none" placeholder="过滤群聊" aria-label="过滤群聊" />
+            <input className="w-full bg-transparent text-xs outline-none" placeholder="过滤群聊" aria-label="过滤群聊" />
           </div>
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto">

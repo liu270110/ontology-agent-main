@@ -37,7 +37,7 @@ export function AuditTab() {
   return (
     <div>
       <div className="flex flex-wrap items-center gap-2">
-        <select aria-label="操作者筛选" className="input h-8 w-36 text-[12px]" value={operator} onChange={e => setOperator(e.target.value)}>
+        <select aria-label="操作者筛选" className="input h-8 w-36 text-xs" value={operator} onChange={e => setOperator(e.target.value)}>
           <option value="all">全部操作者</option>
           <option value="刘以在">刘以在</option>
           <option value="王工">王工</option>
@@ -45,7 +45,7 @@ export function AuditTab() {
           <option value="Agent · 原生">Agent · 原生</option>
           <option value="系统">系统</option>
         </select>
-        <select aria-label="动作筛选" className="input h-8 w-44 text-[12px]" value={action} onChange={e => setAction(e.target.value)}>
+        <select aria-label="动作筛选" className="input h-8 w-44 text-xs" value={action} onChange={e => setAction(e.target.value)}>
           <option value="all">全部动作</option>
           <option value="review">review.*</option>
           <option value="action.invoke">action.invoke</option>
@@ -53,11 +53,11 @@ export function AuditTab() {
           <option value="memory">memory.*</option>
           <option value="auth">auth.*</option>
         </select>
-        <select aria-label="时间范围" className="input h-8 w-28 text-[12px]" value={range} onChange={e => setRange(e.target.value)}>
+        <select aria-label="时间范围" className="input h-8 w-28 text-xs" value={range} onChange={e => setRange(e.target.value)}>
           <option value="7d">近 7 天</option>
           <option value="30d">近 30 天</option>
         </select>
-        <input aria-label="搜索资源或 trace_id" className="input h-8 w-52 text-[12px]" placeholder="搜索资源 / trace_id" value={q} onChange={e => setQ(e.target.value)} />
+        <input aria-label="搜索资源或 trace_id" className="input h-8 w-52 text-xs" placeholder="搜索资源 / trace_id" value={q} onChange={e => setQ(e.target.value)} />
         <span className="text-[11px] text-label-3">共 {data?.total?.toLocaleString() ?? '—'} 条 · 点击 trace_id 展开</span>
         <button type="button" className="btn btn-g btn-sm ml-auto" data-testid="adm-audit-export" onClick={() => setExportOpen(true)}>
           <Download size={13} aria-hidden /> 导出
@@ -65,7 +65,7 @@ export function AuditTab() {
       </div>
 
       <div className="card mt-3 overflow-x-auto !p-0">
-        <table className="w-full min-w-[860px] text-[12.5px]">
+        <table className="w-full min-w-[860px] text-xs">
           <thead>
             <tr className="hairline-b text-left text-[11px] text-label-3">
               <th className="px-4 py-2.5 font-semibold">时间</th>
@@ -144,7 +144,7 @@ function TracePanel({ traceId, onViewChat }: { traceId: string; onViewChat: (sid
     queryFn: () => getTrace(traceId),
   })
 
-  if (isLoading || !t) return <div className="py-2 text-[12px] text-label-3">加载 trace 全链路…</div>
+  if (isLoading || !t) return <div className="py-2 text-xs text-label-3">加载 trace 全链路…</div>
   const copyTrace = () => {
     void navigator.clipboard?.writeText(t.trace_id).catch(() => {})
     toast.success(`已复制 trace_id：${t.trace_id}`)
@@ -155,16 +155,16 @@ function TracePanel({ traceId, onViewChat }: { traceId: string; onViewChat: (sid
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-[1.3fr_1fr]">
         {/* 请求瀑布 */}
         <div>
-          <div className="flex items-center gap-2 text-[12.5px] font-semibold">
+          <div className="flex items-center gap-2 text-xs font-semibold">
             请求瀑布 · 总耗时 {(t.total_ms / 1000).toFixed(2)}s
-            <span className="mono text-[10.5px] font-normal text-label-3">{t.started_at}</span>
+            <span className="mono text-[11px] font-normal text-label-3">{t.started_at}</span>
           </div>
           <div className="mt-2 space-y-1.5">
             {t.steps.map((s, i) => {
               const width = Math.max(2.5, (s.ms / t.total_ms) * 100)
               const offset = t.steps.slice(0, i).reduce((sum, x) => sum + x.ms, 0) / t.total_ms * 100
               return (
-                <div key={s.name} className="grid grid-cols-[72px_1fr_64px] items-center gap-2 text-[11.5px]" data-testid={`adm-trace-step-${s.name}`}>
+                <div key={s.name} className="grid grid-cols-[72px_1fr_64px] items-center gap-2 text-[11px]" data-testid={`adm-trace-step-${s.name}`}>
                   <span className="text-label-2">{s.name}</span>
                   <span className="relative h-3.5" title={s.detail}>
                     <i
@@ -183,24 +183,24 @@ function TracePanel({ traceId, onViewChat }: { traceId: string; onViewChat: (sid
 
         {/* 成本 + writeback 台账关联行 */}
         <div>
-          <div className="text-[12.5px] font-semibold">关联成本</div>
-          <div className="mono mt-1.5 text-[11.5px] text-label-2">
+          <div className="text-xs font-semibold">关联成本</div>
+          <div className="mono mt-1.5 text-[11px] text-label-2">
             Token　输入 {t.cost.tokens_in.toLocaleString()} · 输出 {t.cost.tokens_out.toLocaleString()}
           </div>
-          <div className="mono text-[11.5px] text-label-2">
+          <div className="mono text-[11px] text-label-2">
             费用　¥{t.cost.cost_yuan.toFixed(2)}{t.cost.note ? `（${t.cost.note}）` : ''}
           </div>
 
           {t.writeback && (
             <div className="mt-3 rounded-xl border border-separator bg-surface p-3" data-testid="adm-trace-writeback">
-              <div className="flex items-center gap-2 text-[12px]">
+              <div className="flex items-center gap-2 text-xs">
                 <b className="mono">{t.writeback.id}</b>
                 <span className="mono text-[11px]">{t.writeback.action}</span>
                 <span className={`badge ${t.writeback.needs_human ? 'b-orange' : 'b-gray'} ml-auto`}>
                   {t.writeback.needs_human ? 'needs_human' : t.writeback.status}
                 </span>
               </div>
-              <div className="mono mt-1 text-[10.5px] text-label-3">
+              <div className="mono mt-1 text-[11px] text-label-3">
                 confirm_token 已签发 · attempts /{t.writeback.attempts} · 幂等键 {t.writeback.idempotency_key}
               </div>
               <div className="mt-1 text-[11px] text-accent">
@@ -257,7 +257,7 @@ function ExportModal({ filters, onClose }: { filters: { operator: string; action
     >
       <div className="field">
         <span className="field-label">导出范围（继承当前过滤态）</span>
-        <div className="mono rounded-lg bg-surface-2 px-3 py-2 text-[11.5px] text-label-2" data-testid="adm-export-filters">
+        <div className="mono rounded-lg bg-surface-2 px-3 py-2 text-[11px] text-label-2" data-testid="adm-export-filters">
           操作者：{filters.operator === 'all' ? '全部' : filters.operator} · 动作：{filters.action === 'all' ? '全部' : filters.action} · 范围：{filters.range === '7d' ? '近 7 天' : '近 30 天'}
         </div>
       </div>

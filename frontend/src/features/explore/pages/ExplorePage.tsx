@@ -130,14 +130,14 @@ export function ExplorePage() {
     <div className="flex h-[calc(100vh-96px)] flex-col overflow-hidden rounded-xl border border-separator bg-surface" data-testid="explore-page">
       {/* 顶栏：标题 + 实体搜索选择器 + 分段过滤 + 路径查询 */}
       <div className="flex flex-none flex-wrap items-center gap-2 border-b border-separator px-4 py-2.5">
-        <b className="text-[14px]">图谱浏览</b>
+        <b className="text-sm">图谱浏览</b>
         <span className="text-[11px] text-label-3">
           {(nb.data?.nodes.length ?? 0)} 实体 · {(nb.data?.edges.length ?? 0)} 关系
         </span>
         <div className="relative ml-2">
           <Search size={12} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-label-3" aria-hidden />
           <input
-            className="input h-8 w-60 pl-8 text-[12.5px]"
+            className="input h-8 w-60 pl-8 text-xs"
             placeholder="搜索实体（联想）…"
             aria-label="实体搜索选择器"
             value={q}
@@ -153,7 +153,7 @@ export function ExplorePage() {
                 <button
                   key={e.id}
                   type="button"
-                  className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-[12px] hover:bg-surface-2"
+                  className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-xs hover:bg-surface-2"
                   onClick={() => {
                     setCenterId(e.id)
                     setDrawerEntity(e)
@@ -183,7 +183,7 @@ export function ExplorePage() {
 
       {/* IX-EX-04 深链定位提示条 */}
       {focusTip && (
-        <div className="flex flex-none items-center gap-2 px-4 py-1.5 text-[12px]" style={{ background: 'var(--accent-soft)', color: 'var(--accent)' }} data-testid="focus-tip">
+        <div className="flex flex-none items-center gap-2 px-4 py-1.5 text-xs" style={{ background: 'var(--accent-soft)', color: 'var(--accent)' }} data-testid="focus-tip">
           <CircleAlert size={12} aria-hidden />
           已定位：{focusTip}
           <button
@@ -238,7 +238,7 @@ export function ExplorePage() {
             <Maximize2 size={12} aria-hidden />
           </button>
         </div>
-        <p className="pointer-events-none absolute bottom-2 left-3 text-[10.5px] text-label-3">
+        <p className="pointer-events-none absolute bottom-2 left-3 text-[11px] text-label-3">
           单击开实体抽屉 · 双击展开邻域 · ⚙ 过滤关系类型与深度
         </p>
       </div>

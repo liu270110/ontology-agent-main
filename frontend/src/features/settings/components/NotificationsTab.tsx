@@ -45,9 +45,9 @@ export function NotificationsTab() {
 
   return (
     <div>
-      <b className="text-[14px]">通知偏好</b>
+      <b className="text-sm">通知偏好</b>
       <div className="card mt-3 overflow-x-auto !p-0">
-        <table className="w-full min-w-[560px] text-[12.5px]">
+        <table className="w-full min-w-[560px] text-xs">
           <thead>
             <tr className="hairline-b text-left text-[11px] text-label-3">
               <th className="px-4 py-2.5 font-semibold">事件</th>
@@ -59,11 +59,11 @@ export function NotificationsTab() {
             {rows.map(r => (
               <tr key={r.key} className="hairline-b" data-testid={`set-notify-${r.key}`}>
                 <td className="px-4 py-2.5">
-                  <b className="flex items-center gap-1.5 text-[12.5px]">
+                  <b className="flex items-center gap-1.5 text-xs">
                     {r.label}
                     {r.locked && <Lock size={11} aria-label="平台强制锁定" style={{ color: 'var(--orange)' }} />}
                   </b>
-                  <span className="text-[10.5px] text-label-3">{r.desc}</span>
+                  <span className="text-[11px] text-label-3">{r.desc}</span>
                 </td>
                 <td className="perm px-4 py-2.5 text-center">
                   <input

@@ -128,13 +128,13 @@ export function AgentDetailPage() {
             {t.label}
           </button>
         ))}
-        <span className="mono ml-auto self-center text-[10.5px] text-label-3">?tab=history 深链可达</span>
+        <span className="mono ml-auto self-center text-[11px] text-label-3">?tab=history 深链可达</span>
       </div>
 
       {/* 基本信息 */}
       {tab === 'info' && (
         <div className="card mt-4 !p-5" data-testid="agt-panel-info">
-          <div className="grid grid-cols-1 gap-x-6 gap-y-2 text-[12.5px] md:grid-cols-2">
+          <div className="grid grid-cols-1 gap-x-6 gap-y-2 text-xs md:grid-cols-2">
             <div className="flex justify-between gap-3"><span className="text-label-3">实例 ID</span><span className="mono">{agent.id}</span></div>
             <div className="flex justify-between gap-3"><span className="text-label-3">状态 / 版本</span><span>{AGENT_STATUS_LABEL[agent.status]} · {agent.version}</span></div>
             <div className="flex justify-between gap-3"><span className="text-label-3">适配器</span><span>{agent.adapter} · {agent.adapter_version}</span></div>
@@ -150,12 +150,12 @@ export function AgentDetailPage() {
         <div className="card mt-4 !p-5" data-testid="agt-panel-tools">
           <div className="text-[11px] font-semibold text-label-3">已注入工具（ToolPicker 只读视图）</div>
           <div className="mt-2 space-y-1.5">
-            {boundNames.length === 0 && <div className="text-[11.5px] text-label-3">未注入任何工具。</div>}
+            {boundNames.length === 0 && <div className="text-[11px] text-label-3">未注入任何工具。</div>}
             {boundNames.map(n => (
-              <div key={n} className="flex items-center gap-2 rounded-lg border border-separator px-3 py-2 text-[12px]">
+              <div key={n} className="flex items-center gap-2 rounded-lg border border-separator px-3 py-2 text-xs">
                 <span className="badge b-blue">已启用</span>
                 <span className="mono font-semibold">{n}</span>
-                <span className="ml-auto text-[10.5px] text-label-3">来源见工具注册中心</span>
+                <span className="ml-auto text-[11px] text-label-3">来源见工具注册中心</span>
               </div>
             ))}
           </div>
@@ -164,7 +164,7 @@ export function AgentDetailPage() {
               <button type="button" className="btn btn-p btn-sm" data-testid="agt-tools-adjust" onClick={() => setPickerOpen(true)}>
                 调整（打开 ToolPicker）
               </button>
-              <span className="text-[10.5px] text-label-3">保存经 PUT /agents/{agentId}/tools 生效</span>
+              <span className="text-[11px] text-label-3">保存经 PUT /agents/{agentId}/tools 生效</span>
             </div>
           )}
         </div>
@@ -173,7 +173,7 @@ export function AgentDetailPage() {
       {/* 适配器 */}
       {tab === 'adapter' && (
         <div className="card mt-4 !p-5" data-testid="agt-panel-adapter">
-          <div className="grid grid-cols-1 gap-x-6 gap-y-2 text-[12.5px] md:grid-cols-2">
+          <div className="grid grid-cols-1 gap-x-6 gap-y-2 text-xs md:grid-cols-2">
             <div className="flex justify-between gap-3"><span className="text-label-3">适配器</span><span>{agent.adapter} · RPC 模式 · {agent.adapter_version}</span></div>
             <div className="flex justify-between gap-3"><span className="text-label-3">endpoint（脱敏）</span><span className="mono">{agent.endpoint_masked}</span></div>
             <div className="flex justify-between gap-3">
@@ -212,15 +212,15 @@ export function AgentDetailPage() {
           <div className="card !p-4">
             <div className="flex items-center gap-2">
               <MessageSquare size={13} aria-hidden />
-              <b className="text-[12.5px]">会话列表</b>
+              <b className="text-xs">会话列表</b>
               <span className="badge b-gray ml-auto">近 7 天 {sessions.data?.items.length ?? 0} 条</span>
             </div>
-            <div className="mt-1 text-[10.5px] text-label-3">列表口径 GET /sessions?agent={agentId}</div>
+            <div className="mt-1 text-[11px] text-label-3">列表口径 GET /sessions?agent={agentId}</div>
             <div className="mt-2 space-y-2">
               {(sessions.data?.items ?? []).map(s => (
                 <div key={s.id} className="rounded-xl border border-separator px-3 py-2">
-                  <div className="text-[12px] font-semibold">{s.title}</div>
-                  <div className="mt-0.5 text-[10.5px] text-label-3">
+                  <div className="text-xs font-semibold">{s.title}</div>
+                  <div className="mt-0.5 text-[11px] text-label-3">
                     {s.status} · 消息 {s.message_count}
                   </div>
                   <Link className="btn btn-p btn-sm mt-1.5" to={`/chat/${s.id}`}>
@@ -236,13 +236,13 @@ export function AgentDetailPage() {
           <div className="card !p-4">
             <div className="flex items-center gap-2">
               <ListChecks size={13} aria-hidden />
-              <b className="text-[12.5px]">任务列表</b>
+              <b className="text-xs">任务列表</b>
               <span className="badge b-gray ml-auto">{tasks.data?.items.length ?? 0} 条</span>
             </div>
-            <div className="mt-1 text-[10.5px] text-label-3">跳转 /tasks?agent={agentId}</div>
+            <div className="mt-1 text-[11px] text-label-3">跳转 /tasks?agent={agentId}</div>
             <div className="mt-2 space-y-2">
               {(tasks.data?.items ?? []).map(t => (
-                <div key={t.id} className="rounded-xl border border-separator px-3 py-2 text-[11.5px]">
+                <div key={t.id} className="rounded-xl border border-separator px-3 py-2 text-[11px]">
                   <div className="mono font-semibold">{t.id}</div>
                   <div className="mt-0.5 text-label-2">{t.title}</div>
                   <div className="mt-1 flex items-center gap-2">
@@ -264,7 +264,7 @@ export function AgentDetailPage() {
           {/* 调试对话窗 */}
           <div className="card !p-4">
             <div className="flex items-center gap-2">
-              <b className="text-[12.5px]">调试对话</b>
+              <b className="text-xs">调试对话</b>
               <span className="badge b-purple">debug trace</span>
             </div>
             <div className="mt-2 min-h-[160px] space-y-2" data-testid="agt-debug-log">
@@ -274,7 +274,7 @@ export function AgentDetailPage() {
               {debugLog.map((m, i) => (
                 <div
                   key={i}
-                  className="max-w-[95%] rounded-xl px-3 py-2 text-[11.5px] leading-5"
+                  className="max-w-[95%] rounded-xl px-3 py-2 text-[11px] leading-5"
                   style={
                     m.role === 'user'
                       ? { background: 'var(--accent)', color: 'var(--on-accent)', marginLeft: 'auto' }
@@ -282,7 +282,7 @@ export function AgentDetailPage() {
                   }
                 >
                   {m.text}
-                  {m.trace && <span className="mono mt-1 block text-[9.5px] opacity-70">trace {m.trace} · debug</span>}
+                  {m.trace && <span className="mono mt-1 block text-2xs opacity-70">trace {m.trace} · debug</span>}
                 </div>
               ))}
             </div>

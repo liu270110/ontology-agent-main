@@ -99,7 +99,7 @@ export function NewElementDialog({
             <label className="field-label" htmlFor="ne-name">Name（唯一名）</label>
             <input
               id="ne-name"
-              className={`input h-8 text-[12.5px] ${errors.name ? 'err' : ''}`}
+              className={`input h-8 text-xs ${errors.name ? 'err' : ''}`}
               placeholder="示例：OutageEvent"
               value={name}
               onChange={e => {
@@ -111,16 +111,16 @@ export function NewElementDialog({
           </div>
           <div className="field">
             <label className="field-label" htmlFor="ne-iri">IRI（自动生成，可改）</label>
-            <input id="ne-iri" className="input mono h-8 text-[12px]" value={iri} onChange={e => setIri(e.target.value)} />
+            <input id="ne-iri" className="input mono h-8 text-xs" value={iri} onChange={e => setIri(e.target.value)} />
           </div>
           <div className="field">
             <label className="field-label" htmlFor="ne-label">中文标签</label>
-            <input id="ne-label" className={`input h-8 text-[12.5px] ${errors.label ? 'err' : ''}`} value={label} onChange={e => setLabel(e.target.value)} />
+            <input id="ne-label" className={`input h-8 text-xs ${errors.label ? 'err' : ''}`} value={label} onChange={e => setLabel(e.target.value)} />
             {errors.label && <div className="field-err">{errors.label}</div>}
           </div>
           <div className="field">
             <label className="field-label" htmlFor="ne-parent">父类（多选树取其一）</label>
-            <select id="ne-parent" className="input h-8 text-[12.5px]" value={parentId} onChange={e => setParentId(e.target.value)}>
+            <select id="ne-parent" className="input h-8 text-xs" value={parentId} onChange={e => setParentId(e.target.value)}>
               <option value="">— 无（顶层类）—</option>
               {classes.map(c => (
                 <option key={c.id} value={c.id}>{c.label} {c.name}</option>
@@ -140,7 +140,7 @@ export function NewElementDialog({
             <label className="field-label" htmlFor="ne-pname">属性名（小驼峰）</label>
             <input
               id="ne-pname"
-              className={`input h-8 text-[12.5px] ${errors.name ? 'err' : ''}`}
+              className={`input h-8 text-xs ${errors.name ? 'err' : ''}`}
               placeholder="示例：hasStatus"
               value={name}
               onChange={e => setName(e.target.value)}
@@ -149,14 +149,14 @@ export function NewElementDialog({
           </div>
           <div className="field">
             <label className="field-label" htmlFor="ne-ptype">类型</label>
-            <select id="ne-ptype" className="input h-8 text-[12.5px]" value={propType} onChange={e => setPropType(e.target.value as 'data' | 'object')}>
+            <select id="ne-ptype" className="input h-8 text-xs" value={propType} onChange={e => setPropType(e.target.value as 'data' | 'object')}>
               <option value="data">数据属性（xsd）</option>
               <option value="object">对象属性（→ 类）</option>
             </select>
           </div>
           <div className="field">
             <label className="field-label" htmlFor="ne-domain">定义域</label>
-            <select id="ne-domain" className={`input h-8 text-[12.5px] ${errors.domain ? 'err' : ''}`} value={domain} onChange={e => setDomain(e.target.value)}>
+            <select id="ne-domain" className={`input h-8 text-xs ${errors.domain ? 'err' : ''}`} value={domain} onChange={e => setDomain(e.target.value)}>
               <option value="">— 选择类 —</option>
               {classes.map(c => (
                 <option key={c.id} value={c.iri}>{c.label} {c.name}</option>
@@ -166,7 +166,7 @@ export function NewElementDialog({
           </div>
           <div className="field">
             <label className="field-label" htmlFor="ne-range">值域</label>
-            <select id="ne-range" className={`input h-8 text-[12.5px] ${errors.range ? 'err' : ''}`} value={range} onChange={e => setRange(e.target.value)}>
+            <select id="ne-range" className={`input h-8 text-xs ${errors.range ? 'err' : ''}`} value={range} onChange={e => setRange(e.target.value)}>
               <option value="">— 选择 —</option>
               {propType === 'data' ? (
                 ['xsd:string', 'xsd:decimal', 'xsd:dateTime', 'xsd:boolean'].map(x => (
@@ -183,11 +183,11 @@ export function NewElementDialog({
           <div className="flex gap-3">
             <div className="field flex-1">
               <label className="field-label" htmlFor="ne-min">基数 min</label>
-              <input id="ne-min" type="number" min={0} className="input h-8 text-[12.5px]" value={min} onChange={e => setMin(Number(e.target.value))} />
+              <input id="ne-min" type="number" min={0} className="input h-8 text-xs" value={min} onChange={e => setMin(Number(e.target.value))} />
             </div>
             <div className="field flex-1">
               <label className="field-label" htmlFor="ne-max">基数 max</label>
-              <input id="ne-max" type="number" min={0} className="input h-8 text-[12.5px]" value={max} onChange={e => setMax(Number(e.target.value))} />
+              <input id="ne-max" type="number" min={0} className="input h-8 text-xs" value={max} onChange={e => setMax(Number(e.target.value))} />
             </div>
           </div>
         </>
@@ -197,14 +197,14 @@ export function NewElementDialog({
         <>
           <div className="field">
             <label className="field-label" htmlFor="ne-rname">规则编号</label>
-            <input id="ne-rname" className={`input mono h-8 text-[12.5px] ${errors.name ? 'err' : ''}`} placeholder="示例：R-021" value={ruleName} onChange={e => setRuleName(e.target.value)} />
+            <input id="ne-rname" className={`input mono h-8 text-xs ${errors.name ? 'err' : ''}`} placeholder="示例：R-021" value={ruleName} onChange={e => setRuleName(e.target.value)} />
             {errors.name && <div className="field-err">{errors.name}</div>}
           </div>
           <div className="field">
             <label className="field-label" htmlFor="ne-tpl">模板下拉</label>
             <select
               id="ne-tpl"
-              className="input h-8 text-[12.5px]"
+              className="input h-8 text-xs"
               value={template}
               onChange={e => {
                 setTemplate(e.target.value)
@@ -222,7 +222,7 @@ export function NewElementDialog({
             <textarea
               id="ne-construct"
               rows={5}
-              className={`input mono h-auto py-2 text-[11.5px] leading-5 ${errors.construct ? 'err' : ''}`}
+              className={`input mono h-auto py-2 text-[11px] leading-5 ${errors.construct ? 'err' : ''}`}
               value={construct}
               onChange={e => setConstruct(e.target.value)}
             />
@@ -299,7 +299,7 @@ export function ConnectDialog({
       </div>
       <div className="field">
         <label className="field-label" htmlFor="conn-pred">谓词（按两端类兼容性过滤 + 搜索）</label>
-        <select id="conn-pred" className="input h-8 text-[12.5px]" value={predicate} onChange={e => setPredicate(e.target.value)}>
+        <select id="conn-pred" className="input h-8 text-xs" value={predicate} onChange={e => setPredicate(e.target.value)}>
           <option value="">— 选择谓词 —</option>
           {candidates.map(p => (
             <option key={p.id} value={p.iri}>
@@ -311,11 +311,11 @@ export function ConnectDialog({
       <div className="flex gap-3">
         <div className="field flex-1">
           <label className="field-label" htmlFor="conn-min">基数 min</label>
-          <input id="conn-min" type="number" min={0} className="input h-8 text-[12.5px]" value={min} onChange={e => setMin(Number(e.target.value))} />
+          <input id="conn-min" type="number" min={0} className="input h-8 text-xs" value={min} onChange={e => setMin(Number(e.target.value))} />
         </div>
         <div className="field flex-1">
           <label className="field-label" htmlFor="conn-max">基数 max</label>
-          <input id="conn-max" type="number" min={0} className="input h-8 text-[12.5px]" value={max} onChange={e => setMax(Number(e.target.value))} />
+          <input id="conn-max" type="number" min={0} className="input h-8 text-xs" value={max} onChange={e => setMax(Number(e.target.value))} />
         </div>
       </div>
       <label className="flex cursor-pointer items-center gap-2 text-xs">
@@ -427,7 +427,7 @@ export function SubmitReviewDialog({
         <textarea
           id="sr-note"
           rows={3}
-          className={`input h-auto py-2 text-[12.5px] ${err ? 'err' : ''}`}
+          className={`input h-auto py-2 text-xs ${err ? 'err' : ''}`}
           placeholder="示例：新增停电工单行动类，故障父类对齐设备事件"
           value={note}
           onChange={e => {
@@ -439,7 +439,7 @@ export function SubmitReviewDialog({
       </div>
       <div className="field mb-0">
         <label className="field-label" htmlFor="sr-reviewer">目标评审人（curator）</label>
-        <select id="sr-reviewer" className="input h-8 text-[12.5px]" value={reviewer} onChange={e => setReviewer(e.target.value)}>
+        <select id="sr-reviewer" className="input h-8 text-xs" value={reviewer} onChange={e => setReviewer(e.target.value)}>
           {CURATORS.map(c => (
             <option key={c} value={c}>{c}</option>
           ))}

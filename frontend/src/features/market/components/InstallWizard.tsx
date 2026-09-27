@@ -125,7 +125,7 @@ export function InstallWizard({
         </>
       }
     >
-      <div className="text-[11.5px] text-label-3">
+      <div className="text-[11px] text-label-3">
         <span className="mono">{plugin.slug}</span> · 开发者 {plugin.developer}
       </div>
 
@@ -158,10 +158,10 @@ export function InstallWizard({
                 onChange={() => setVersion(v.version)}
               />
               <span>
-                <span className="text-[12.5px] font-semibold">
+                <span className="text-xs font-semibold">
                   {v.version} {v.latest && <span className="badge b-green">最新 · 推荐</span>}
                 </span>
-                <span className="ml-2 text-[10.5px] text-label-3">{v.released_at} 发布</span>
+                <span className="ml-2 text-[11px] text-label-3">{v.released_at} 发布</span>
                 <div className="mt-0.5 text-[11px] text-label-2">{v.note}</div>
               </span>
             </label>
@@ -178,7 +178,7 @@ export function InstallWizard({
               <span className="text-[11px] text-label-3">已选 {chosen}（最新 · 推荐）· 历史版本可回退选择</span>
             </div>
           )}
-          <b className="text-[12.5px]">逐项确认权限 scope（{plugin.scopes.length} 项，逐项授权后能提交安装）</b>
+          <b className="text-xs">逐项确认权限 scope（{plugin.scopes.length} 项，逐项授权后能提交安装）</b>
           <div className="mt-2 space-y-2">
             {plugin.scopes.map(s => (
               <div
@@ -199,12 +199,12 @@ export function InstallWizard({
                     checked={grants.has(s.scope)}
                     onChange={e => toggleGrant(s.scope, e.target.checked)}
                   />
-                  <span className="mono text-[12px] font-semibold">{s.scope}</span>
+                  <span className="mono text-xs font-semibold">{s.scope}</span>
                   <span className={`badge ${s.access === '只读' ? 'b-gray' : s.danger ? 'b-red' : 'b-orange'}`}>{s.access}</span>
                   <span className="truncate text-[11px] text-label-2">{s.desc}</span>
                 </div>
                 {s.danger && (
-                  <label className="mt-1.5 flex cursor-pointer items-center gap-2 text-[11.5px] text-red">
+                  <label className="mt-1.5 flex cursor-pointer items-center gap-2 text-[11px] text-red">
                     <input
                       type="checkbox"
                       aria-label={`我已了解 ${s.scope} 的高危影响`}
@@ -224,7 +224,7 @@ export function InstallWizard({
 
       {step === 2 && (
         <div className="mt-4 space-y-2">
-          <div className="rounded-xl border border-separator bg-surface-2 px-4 py-3 text-[12px] leading-6">
+          <div className="rounded-xl border border-separator bg-surface-2 px-4 py-3 text-xs leading-6">
             <div><b>插件：</b>{plugin.name}（{plugin.slug}）· 版本 {chosen}</div>
             <div><b>scope 授权：</b>{[...grants].join('、') || '（未授予任何 scope）'}</div>
             <div className="text-label-3">

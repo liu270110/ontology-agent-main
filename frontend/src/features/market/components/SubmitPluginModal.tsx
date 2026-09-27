@@ -68,7 +68,7 @@ export function SubmitPluginModal({ open, onClose }: { open: boolean; onClose: (
         </>
       }
     >
-      <p className="text-[11.5px] text-label-3">
+      <p className="text-[11px] text-label-3">
         提交 server.json（MCP 扩展格式）、OpenAPI 3.x 文档或 .opk 插件包；登记与上架审核分离。
       </p>
 
@@ -81,11 +81,11 @@ export function SubmitPluginModal({ open, onClose }: { open: boolean; onClose: (
       >
         <input {...getInputProps()} aria-label="插件包上传" />
         <Upload size={20} className="mx-auto text-label-3" aria-hidden />
-        <div className="mt-1.5 text-[12px]">
+        <div className="mt-1.5 text-xs">
           拖拽插件包到此处，或
           <span className="text-accent"> 点击选择文件</span>
         </div>
-        <div className="mt-0.5 text-[10.5px] text-label-3">
+        <div className="mt-0.5 text-[11px] text-label-3">
           支持 .opk / server.json / OpenAPI 3.x · 单包不超过 20MB · 上传后自动验签
         </div>
       </div>
@@ -93,8 +93,8 @@ export function SubmitPluginModal({ open, onClose }: { open: boolean; onClose: (
       {file && (
         <div className="mt-2 flex items-center gap-2 rounded-xl border border-separator bg-surface-2 px-3 py-2">
           <FileCheck2 size={14} className="text-green" aria-hidden />
-          <span className="mono text-[12px]">{file.name}</span>
-          <span className="text-[10.5px] text-label-3">{(file.size / 1024 / 1024).toFixed(1)} MB</span>
+          <span className="mono text-xs">{file.name}</span>
+          <span className="text-[11px] text-label-3">{(file.size / 1024 / 1024).toFixed(1)} MB</span>
           <span className="badge b-green ml-auto">验签通过</span>
           <button type="button" aria-label="移除已选文件" className="text-label-3 hover:text-red" onClick={() => setFile(null)}>
             <X size={13} aria-hidden />
@@ -146,10 +146,10 @@ export function SubmitPluginModal({ open, onClose }: { open: boolean; onClose: (
       </div>
 
       <div className="mt-3 rounded-xl px-3.5 py-3" style={{ background: 'var(--accent-soft)' }}>
-        <div className="flex items-center gap-1.5 text-[12px] font-semibold text-accent">
+        <div className="flex items-center gap-1.5 text-xs font-semibold text-accent">
           <ShieldCheck size={13} aria-hidden /> 上架需走 review_workflow 审核
         </div>
-        <p className="mt-1 text-[10.5px] leading-4 text-label-2">
+        <p className="mt-1 text-[11px] leading-4 text-label-2">
           五关自动门禁前置：验签 · scope 声明完整性 · annotations 合规 · 依赖扫描 · 许可证检查；
           通过后进入人工终审，审批进度在审批中心跟踪。
         </p>

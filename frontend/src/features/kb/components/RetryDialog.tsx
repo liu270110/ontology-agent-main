@@ -59,12 +59,12 @@ export function RetryDialog({ doc, onClose, onQueued }: { doc: KbDocument | null
             <input type="radio" name="retry-scope" checked={scope === o.v} onChange={() => setScope(o.v)} className="mt-1" />
             <span>
               <b className="block text-[13px]">{o.label}</b>
-              <span className="text-[11.5px] text-label-3">{o.desc}</span>
+              <span className="text-[11px] text-label-3">{o.desc}</span>
             </span>
           </label>
         ))}
       </div>
-      <p className="mt-3 text-[11.5px] text-label-3">将生成新的抽取任务，进度可在任务中心查看；原任务作废并留审计。</p>
+      <p className="mt-3 text-[11px] text-label-3">将生成新的抽取任务，进度可在任务中心查看；原任务作废并留审计。</p>
     </Modal>
   )
 }

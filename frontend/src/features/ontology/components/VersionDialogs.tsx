@@ -61,23 +61,23 @@ export function CompareSelectorDialog({
       <div className="grid grid-cols-2 gap-3">
         <div>
           <div className="field-label">基线版本（左）</div>
-          <select aria-label="基线版本" className="input h-8 text-[12.5px]" value={left} onChange={e => { setLeft(e.target.value); setStats(null) }}>
+          <select aria-label="基线版本" className="input h-8 text-xs" value={left} onChange={e => { setLeft(e.target.value); setStats(null) }}>
             {published.map(v => (
               <option key={v.version} value={v.version}>{v.version} · 已发布</option>
             ))}
           </select>
-          <div className="mt-1 text-[10.5px] text-label-3">时间线式：仅已发布可选</div>
+          <div className="mt-1 text-[11px] text-label-3">时间线式：仅已发布可选</div>
         </div>
         <div>
           <div className="field-label">目标版本（右）</div>
-          <select aria-label="目标版本" className="input h-8 text-[12.5px]" value={right} onChange={e => { setRight(e.target.value); setStats(null) }}>
+          <select aria-label="目标版本" className="input h-8 text-xs" value={right} onChange={e => { setRight(e.target.value); setStats(null) }}>
             {[...draft, ...published].map(v => (
               <option key={v.version} value={v.version}>
                 {v.version} · {v.status === 'draft' ? '草稿' : '已发布'}
               </option>
             ))}
           </select>
-          <div className="mt-1 text-[10.5px] text-label-3">当前草稿默认在右</div>
+          <div className="mt-1 text-[11px] text-label-3">当前草稿默认在右</div>
         </div>
       </div>
 
@@ -224,7 +224,7 @@ export function PublishDialog({
             <textarea
               id="pub-note"
               rows={2}
-              className={`input h-auto py-2 text-[12.5px] ${err ? 'err' : ''}`}
+              className={`input h-auto py-2 text-xs ${err ? 'err' : ''}`}
               placeholder="示例：停电工单行动类扩展；故障父类对齐设备事件"
               value={note}
               onChange={e => {
@@ -256,8 +256,8 @@ export function PublishDialog({
       ) : (
         <div className="rounded-xl border px-4 py-4 text-center" style={{ borderColor: 'var(--green)', background: 'var(--green-soft)' }} data-testid="publish-done">
           <CheckCircle2 size={22} className="mx-auto text-green" aria-hidden />
-          <div className="mt-1.5 text-[14px] font-bold">已发布 {doneVersion} · 全站生效</div>
-          <div className="mt-1 text-[11.5px] text-label-2">版本 +1 已通知订阅人；检索与对话即时切新版本。</div>
+          <div className="mt-1.5 text-sm font-bold">已发布 {doneVersion} · 全站生效</div>
+          <div className="mt-1 text-[11px] text-label-2">版本 +1 已通知订阅人；检索与对话即时切新版本。</div>
         </div>
       )}
     </Modal>
@@ -320,7 +320,7 @@ export function RejectDialog({
         <textarea
           id="rj-reason"
           rows={3}
-          className={`input h-auto py-2 text-[12.5px] ${err ? 'err' : ''}`}
+          className={`input h-auto py-2 text-xs ${err ? 'err' : ''}`}
           placeholder="示例：越层 partOf 断言需先在故障域内对齐父类"
           value={reason}
           onChange={e => {
@@ -406,18 +406,18 @@ export function RollbackDialog({
       {/* 当前版 → 目标版对照摘要 */}
       <div className="mb-3 grid grid-cols-[1fr_auto_1fr] items-center gap-2 rounded-xl bg-surface-2 px-4 py-3 text-xs">
         <div>
-          <div className="text-[10px] text-label-3">当前版本</div>
+          <div className="text-2xs text-label-3">当前版本</div>
           <b>{currentVersion}</b>
         </div>
         <span className="text-label-3">→</span>
         <div>
-          <div className="text-[10px] text-label-3">目标版本</div>
+          <div className="text-2xs text-label-3">目标版本</div>
           <b style={{ color: 'var(--red)' }}>{targetVersion}</b>
         </div>
       </div>
       <div className="alert mb-3" style={{ background: 'var(--red-soft)', borderColor: 'transparent', color: 'var(--red)' }}>
         <XCircle size={15} aria-hidden />
-        <div className="text-[11.5px] leading-5">
+        <div className="text-[11px] leading-5">
           <b>数据不丢失</b>：回滚生成逆向变更单重新走评审（候选非成品）；操作全程审计留痕，任何治理档不可跳过。
         </div>
       </div>
@@ -426,7 +426,7 @@ export function RollbackDialog({
         <textarea
           id="rb-reason"
           rows={2}
-          className={`input h-auto py-2 text-[12.5px] ${err ? 'err' : ''}`}
+          className={`input h-auto py-2 text-xs ${err ? 'err' : ''}`}
           placeholder="示例：v2.2 引入的越层断言造成推理冲突，需回退至 v2.1"
           value={reason}
           onChange={e => {
@@ -440,7 +440,7 @@ export function RollbackDialog({
         <label className="field-label" htmlFor="rb-confirm">二次确认：输入 ROLLBACK 解锁</label>
         <input
           id="rb-confirm"
-          className="input mono h-8 text-[12.5px]"
+          className="input mono h-8 text-xs"
           placeholder="ROLLBACK"
           value={confirmText}
           onChange={e => setConfirmText(e.target.value)}

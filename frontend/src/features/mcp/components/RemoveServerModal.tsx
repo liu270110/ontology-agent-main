@@ -61,13 +61,13 @@ export function RemoveServerModal({ server, onClose }: { server: McpServerRow | 
         </>
       }
     >
-      <div className="text-[11.5px] text-label-2">
+      <div className="text-[11px] text-label-2">
         移除后连接与纳管关系即刻解除；动作写入审计日志（含操作者与 trace_id），历史调用记录保留可回放。
       </div>
 
       {/* 级联影响：工具注册中心 */}
       <div className="mt-3 rounded-xl border px-3.5 py-3" style={{ background: 'var(--red-soft)', borderColor: 'var(--red)' }}>
-        <b className="text-[12px] text-red">工具注册中心 · {server.adopted_count} 项将移除</b>
+        <b className="text-xs text-red">工具注册中心 · {server.adopted_count} 项将移除</b>
         <div className="mt-1.5 flex flex-wrap gap-1.5">
           {server.tools.filter(t => t.adopted).map(t => (
             <span key={t.tool_id} className="badge b-gray mono">{t.name}</span>
@@ -79,15 +79,15 @@ export function RemoveServerModal({ server, onClose }: { server: McpServerRow | 
       {/* 级联影响：在用 Agent */}
       {affectedAgents.length > 0 && (
         <div className="mt-2 rounded-xl border border-separator px-3.5 py-3" style={{ background: 'var(--surface)' }}>
-          <b className="text-[12px]">
+          <b className="text-xs">
             <TriangleAlert size={12} className="mr-1 inline text-orange" aria-hidden />
             Agent 在用清单 · {affectedAgents.length} 个
           </b>
           <div className="mt-1.5 space-y-1.5">
             {affectedAgents.map(a => (
-              <div key={a.agent_id} className="flex items-center gap-2 text-[11.5px]">
+              <div key={a.agent_id} className="flex items-center gap-2 text-[11px]">
                 <b>{a.name}</b>
-                <span className="mono text-[10px] text-label-3">{a.agent_id}</span>
+                <span className="mono text-2xs text-label-3">{a.agent_id}</span>
                 <span className="text-label-3">· 注入 {a.count} 项工具</span>
                 <span className="badge b-red ml-auto">移除后调用失败 2001</span>
               </div>

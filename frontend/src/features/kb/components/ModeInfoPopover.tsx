@@ -58,8 +58,8 @@ export function ModeInfoPopover() {
                 )}
               </svg>
               <span>
-                <b className="block text-[12px]">{m.title}</b>
-                <span className="block text-[11.5px] leading-5 text-label-2">{m.desc}</span>
+                <b className="block text-xs">{m.title}</b>
+                <span className="block text-[11px] leading-5 text-label-2">{m.desc}</span>
                 <span className="block text-[11px] text-label-3">{m.scene}</span>
               </span>
             </li>

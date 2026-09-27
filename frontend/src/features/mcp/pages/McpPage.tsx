@@ -47,17 +47,17 @@ export function McpPage() {
               <tr key={s.id} className="cursor-pointer" data-testid={`mcp-tr-${s.name}`} onClick={() => setDetailId(s.id)}>
                 <td>
                   <span className="mono font-semibold">{s.name}</span>
-                  <div className="text-[10.5px] text-label-3">{s.desc}</div>
+                  <div className="text-[11px] text-label-3">{s.desc}</div>
                 </td>
-                <td className="mono text-[11.5px]">{s.transport}</td>
-                <td className="text-[11.5px]">{s.auth}</td>
+                <td className="mono text-[11px]">{s.transport}</td>
+                <td className="text-[11px]">{s.auth}</td>
                 <td>
                   <span className={`badge ${s.status === 'healthy' ? 'b-green' : s.status === 'failing' ? 'b-red' : 'b-gray'}`}>
                     {MCP_STATUS_LABEL[s.status]}
                   </span>
                 </td>
-                <td className="text-[11.5px]">{s.latency_ms ? `${s.latency_ms}ms` : '—'}</td>
-                <td className="text-[11.5px]">
+                <td className="text-[11px]">{s.latency_ms ? `${s.latency_ms}ms` : '—'}</td>
+                <td className="text-[11px]">
                   纳管 {s.adopted_count} / 发现 {s.discovered_count}
                 </td>
               </tr>

@@ -78,18 +78,18 @@ export function MarketPage() {
             onClick={() => setDetailId(p.id)}
           >
             <div className="flex items-center gap-2">
-              <span className="flex h-9 w-9 flex-none items-center justify-center rounded-xl text-[16px]" style={{ background: 'var(--accent-soft)' }}>
+              <span className="flex h-9 w-9 flex-none items-center justify-center rounded-xl text-base" style={{ background: 'var(--accent-soft)' }}>
                 🧩
               </span>
               <div className="min-w-0">
                 <div className="flex items-center gap-1.5">
-                  <b className="truncate text-[13.5px]">{p.name}</b>
+                  <b className="truncate text-[13px]">{p.name}</b>
                   {p.certified && <span className="badge b-blue">官方认证</span>}
                 </div>
-                <div className="truncate text-[10.5px] text-label-3">{p.developer}</div>
+                <div className="truncate text-[11px] text-label-3">{p.developer}</div>
               </div>
             </div>
-            <p className="mt-2 line-clamp-2 min-h-8 text-[11.5px] leading-4 text-label-2">{p.summary}</p>
+            <p className="mt-2 line-clamp-2 min-h-8 text-[11px] leading-4 text-label-2">{p.summary}</p>
             <div className="hairline-t mt-3 flex items-center gap-2 pt-2.5 text-[11px] text-label-3">
               <span className="flex items-center gap-1">
                 <Star size={11} className="text-orange" aria-hidden />

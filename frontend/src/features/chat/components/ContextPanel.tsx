@@ -127,10 +127,10 @@ function TracePopover({
         <span className={`badge ${item.badgeCls}`} style={item.badgeCls === 'badge-teal' ? { background: 'var(--teal-soft)', color: 'var(--teal)' } : undefined}>
           {item.badge}
         </span>
-        <span className="mono ml-auto text-[10px] text-label-3">{item.id}</span>
+        <span className="mono ml-auto text-2xs text-label-3">{item.id}</span>
       </div>
-      <p className="p-body mt-1 text-[12px] leading-6 text-label-2">{item.summary}</p>
-      <dl className="mt-2.5 text-[11.5px]">
+      <p className="p-body mt-1 text-xs leading-6 text-label-2">{item.summary}</p>
+      <dl className="mt-2.5 text-[11px]">
         <div className="flex justify-between border-b border-separator py-1">
           <dt className="text-label-3">命中得分</dt>
           <dd className="mono">{item.score.toFixed(2)}</dd>
@@ -144,7 +144,7 @@ function TracePopover({
       </dl>
       <div className="mt-2.5 flex flex-wrap gap-1 border-t border-separator pt-2.5">
         {BADGE_LEGEND.map(b => (
-          <span key={b.t} className={`badge text-[10px] ${b.cls ?? ''}`} style={b.style}>{b.t}</span>
+          <span key={b.t} className={`badge text-2xs ${b.cls ?? ''}`} style={b.style}>{b.t}</span>
         ))}
       </div>
       <div className="p-acts mt-2.5 flex justify-end gap-1.5">
@@ -178,7 +178,7 @@ export function ContextPanel({ onOpenEvidence }: { onOpenEvidence: (f: EvidenceF
     <aside data-testid="ctx-panel" className="flex w-60 flex-none flex-col border-l border-separator bg-surface">
       <div className="flex items-center gap-1.5 px-3.5 pb-1 pt-3">
         <Sparkles size={13} className="text-accent" aria-hidden />
-        <b className="text-[12.5px]">本次回答的上下文</b>
+        <b className="text-xs">本次回答的上下文</b>
       </div>
       <div className="scroll-thin min-h-0 flex-1 overflow-y-auto px-3.5 pb-3">
         {CTX_GROUPS.map(g => (
@@ -191,7 +191,7 @@ export function ContextPanel({ onOpenEvidence }: { onOpenEvidence: (f: EvidenceF
                   type="button"
                   data-testid={`ctx-item-${it.id}`}
                   onClick={e => setTrace({ item: it, anchor: (e.currentTarget as HTMLElement).getBoundingClientRect() })}
-                  className={`flex items-start gap-1.5 rounded-lg px-2 py-1.5 text-left text-[11.5px] leading-5 hover:bg-surface-2 ${
+                  className={`flex items-start gap-1.5 rounded-lg px-2 py-1.5 text-left text-[11px] leading-5 hover:bg-surface-2 ${
                     trace?.item.id === it.id ? 'bg-accent-soft' : ''
                   }`}
                 >

@@ -1,4 +1,4 @@
-import { api } from '@/api/client'
+import { ApiError, api } from '@/api/client'
 
 /** 系统管理域 API（契约=api/01 §5.8 admin + §6.5 writeback 台账 + §5.2 tasks 事件；
  *  groups/roles-matrix/models-写入/trace 展开/导出为预登记，见 mocks/admin-handlers.ts 头注）。
@@ -14,6 +14,9 @@ export interface AdminUser {
   department: string
   status: 'active' | 'invited' | 'disabled'
   last_login_at: string | null
+  /** 链接邀请加入（2026-09-28 ★ invite-links 切片）：invited 行携带来源标记 */
+  invited_via?: 'email' | 'link'
+  invite_link_id?: string
 }
 
 export const ROLE_LABEL: Record<string, string> = {
@@ -137,4 +140,56 @@ export interface TenantCreated {
 }
 export function createTenant(body: { name: string; namespace: string; tier: string }) {
   return api.post<TenantCreated>('/admin/tenants', body)
+}
+
+// ---- 邀请链接（§5.8 ★ invite-links 五端点；2026-09-28 链接邀请切片：Dify 式链接自助加入，与邮箱邀请并列双模式） ----
+export interface InviteLink {
+  id: string
+  /** 完整站内路径 /login?join={token}，复制即分享 */
+  url: string
+  token: string
+  role: string
+  expires_at: string
+  created_by: string
+  /** 列表返回为派生态（未撤销但过 expires_at → expired）；创建返回恒 active */
+  status: 'active' | 'revoked' | 'expired'
+}
+
+export interface InviteLinkPreview {
+  tenant_name: string
+  role: string
+  valid: boolean
+}
+
+/** 生成邀请链接（角色 + 有效期 24h/7d/30d） */
+export function createInviteLink(body: { role: string; expires_in_hours: 24 | 168 | 720 }) {
+  return api.post<InviteLink>('/admin/invite-links', body)
+}
+export const listInviteLinks = () =>
+  api.get<{ items: InviteLink[]; next_cursor: null }>('/admin/invite-links')
+/** 撤销（终态不可逆；200+信封体 {id,status:'revoked'}，同 api-keys revoke 非空体口径；重复撤销 409） */
+export const revokeInviteLink = (id: string) =>
+  api.delete<{ id: string; status: 'revoked' }>(`/admin/invite-links/${id}`)
+
+const API_BASE = import.meta.env.VITE_API_BASE ?? '/api/v1'
+
+/** 受邀预览（匿名 GET；client 无匿名 GET 手段且不可改——此处裸 fetch 自行解信封，
+ *  未命中/已失效 → 410 {code:3410} → ApiError，调用方以 retry:false 查询承接红条） */
+export async function previewInviteLink(token: string): Promise<InviteLinkPreview> {
+  const res = await fetch(`${API_BASE}/admin/invite-links/${encodeURIComponent(token)}/preview`)
+  const body = (await res.json().catch(() => null)) as
+    | { code?: number; message?: string; data?: InviteLinkPreview }
+    | null
+  if (!res.ok || !body || body.code !== 0) {
+    throw new ApiError(body?.code ?? -1, body?.message ?? `HTTP ${res.status}`, res.status)
+  }
+  return body.data as InviteLinkPreview
+}
+
+/** 受邀加入（匿名 POST；登录/注册成功后 fire-and-forget 调用，幂等——既有账号不重复建） */
+export function joinInviteLink(token: string, body: { email: string; display_name: string }) {
+  return api.postAnonymous<{ joined: boolean; tenant_name: string }>(
+    `/admin/invite-links/${encodeURIComponent(token)}/join`,
+    body,
+  )
 }

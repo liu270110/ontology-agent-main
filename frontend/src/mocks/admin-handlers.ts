@@ -212,6 +212,9 @@ export interface AdminUser {
   department: string
   status: 'active' | 'invited' | 'disabled'
   last_login_at: string | null
+  /** 链接邀请加入（2026-09-28 ★ invite-links 切片）：join 落库行携带来源标记 */
+  invited_via?: 'email' | 'link'
+  invite_link_id?: string
 }
 
 const USERS: AdminUser[] = [
@@ -846,4 +849,96 @@ export const adminHandlers = [
       initial_password: 'Xk7-mQ2-vRt9',
     }, 201)
   }),
+
+  // ---- ★ 邀请链接（§5.8 invite-links 五端点，2026-09-28 链接邀请切片：Dify 式链接自助加入） ----
+  // 内存数组存链接；status 派生：未撤销但过 expires_at → expired；撤销终态不可逆（重复撤销 409）
+  http.post('*/api/v1/admin/invite-links', async ({ request }) => {
+    const body = (await request.json()) as { role?: string; expires_in_hours?: number }
+    if (!body.role?.trim()) return err(3001, '角色必填', 422)
+    const hours = body.expires_in_hours ?? 24
+    if (![24, 168, 720].includes(hours)) return err(3001, '有效期仅支持 24 / 168 / 720 小时', 422)
+    const token = `inv-${Math.random().toString(36).slice(2, 12)}${Math.random().toString(36).slice(2, 6)}`
+    const link: InviteLink = {
+      id: `il-${String(++inviteLinkSeq).padStart(2, '0')}`,
+      url: `/login?join=${token}`,
+      token,
+      role: body.role,
+      expires_at: new Date(Date.now() + hours * 3_600_000).toISOString(),
+      created_by: '刘以在（管理员）',
+      status: 'active',
+    }
+    INVITE_LINKS.unshift(link)
+    return ok(link, 201)
+  }),
+
+  http.get('*/api/v1/admin/invite-links', () =>
+    ok({ items: INVITE_LINKS.map(l => ({ ...l, status: derivedLinkStatus(l) })), next_cursor: null })),
+
+  // 契约钉死 200+信封体 {id,status:'revoked'}（禁 204 空体：apiFetchEnvelope 对 null body 抛错）
+  http.delete('*/api/v1/admin/invite-links/:id', ({ params }) => {
+    const link = INVITE_LINKS.find(x => x.id === String(params.id))
+    if (!link) return err(4041, '邀请链接不存在', 404)
+    if (link.status === 'revoked') return err(3409, '邀请链接已撤销，不可重复撤销', 409)
+    link.status = 'revoked'
+    return ok({ id: link.id, status: 'revoked' })
+  }),
+
+  // 匿名预览：未命中 / 已撤销 / 已过期 → 410 {code:3410}
+  http.get('*/api/v1/admin/invite-links/:token/preview', ({ params }) => {
+    const link = INVITE_LINKS.find(x => x.token === String(params.token))
+    if (!link || link.status !== 'active' || Date.now() > new Date(link.expires_at).getTime()) {
+      return err(3410, '邀请链接已失效或已过期', 410)
+    }
+    return ok({ tenant_name: INVITE_TENANT_NAME, role: link.role, valid: true })
+  }),
+
+  // 匿名加入：幂等（既有账号不重复建）；落 USERS 行（invited_via:'link'、角色=链接角色）
+  http.post('*/api/v1/admin/invite-links/:token/join', async ({ request, params }) => {
+    const link = INVITE_LINKS.find(x => x.token === String(params.token))
+    if (!link || link.status !== 'active' || Date.now() > new Date(link.expires_at).getTime()) {
+      return err(3410, '邀请链接已失效或已过期', 410)
+    }
+    const body = (await request.json()) as { email?: string; display_name?: string }
+    const email = (body.email ?? '').trim().toLowerCase()
+    if (!email.includes('@')) return err(3001, '邮箱格式不正确', 422)
+    if (!USERS.some(u => u.email === email)) {
+      const u: AdminUser = {
+        id: `u-${String(++userSeq).padStart(2, '0')}`,
+        username: email.split('@')[0] ?? email,
+        email,
+        display_name: body.display_name?.trim() || email.split('@')[0] || email,
+        roles: [link.role], department: '—',
+        status: 'invited', last_login_at: null,
+        invited_via: 'link', invite_link_id: link.id,
+      }
+      USERS.unshift(u)
+    }
+    return ok({ joined: true, tenant_name: INVITE_TENANT_NAME })
+  }),
 ]
+
+// ============================================================
+// §5.8 ★ invite-links —— 链接邀请（内存态与派生工具）
+// ============================================================
+
+/** 受邀方展示用租户名（电力语境，与画板 ix-08 口径一致） */
+const INVITE_TENANT_NAME = '配网停电分析工作区'
+
+export interface InviteLink {
+  id: string
+  url: string
+  token: string
+  role: string
+  expires_at: string
+  created_by: string
+  status: 'active' | 'revoked'
+}
+
+const INVITE_LINKS: InviteLink[] = []
+let inviteLinkSeq = 0
+
+/** status 派生：未撤销但过 expires_at → expired（契约 §5.8 GET 列表行） */
+function derivedLinkStatus(l: InviteLink): 'active' | 'revoked' | 'expired' {
+  if (l.status === 'revoked') return 'revoked'
+  return Date.now() > new Date(l.expires_at).getTime() ? 'expired' : 'active'
+}

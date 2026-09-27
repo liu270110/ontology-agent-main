@@ -43,3 +43,6 @@ credentials*
 
 # 文档本地化（2026-09-27 用户指令：docs/ 仅本地保留，不上传）
 docs/
+.backup_module_axis/
+
+.qa_*

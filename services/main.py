@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import uvicorn
 
-from services.infra.config import get_settings
+from services.platform.config import get_settings
 
 
 def main() -> None:

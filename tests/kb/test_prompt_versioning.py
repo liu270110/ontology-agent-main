@@ -36,6 +36,7 @@ from services.kb.business.prompts import (
     SYSTEM_PROMPTS,
     UnknownTemplateRefError,
     extract_v1,
+    extract_v2,
     get_prompt,
     get_system_prompt,
 )
@@ -64,7 +65,7 @@ _SNAPSHOT_CLASSES: tuple[tuple[str, str, str], ...] = (
 _SNAPSHOT_PROPERTIES: tuple[tuple[str, str, str], ...] = ((f"{_PW}hasStatus", "工单状态", "hasStatus"),)
 _SNAPSHOT_CHUNK = "馈线F001 由城东变电站供电。"
 
-_EXPECTED_SYSTEM_PROMPT = """你是电力配电网领域的知识抽取引擎。从「抽取文本」中抽取实体/属性/关系/事件候选。
+_EXPECTED_SYSTEM_PROMPT_V1 = """你是电力配电网领域的知识抽取引擎。从「抽取文本」中抽取实体/属性/关系/事件候选。
 规则（违反即无效）：
 1. 禁止凭空创造：只抽取文本明确提及的内容，每条候选必须能在原文中找到依据；
 2. ontology_class 只能取自「本体引导清单」中的类 IRI；清单没有合适类时省略该字段；
@@ -73,6 +74,19 @@ _EXPECTED_SYSTEM_PROMPT = """你是电力配电网领域的知识抽取引擎。
 5. 证据（source_ref）由系统自动附加，禁止生成，候选之间不得互为证据；
 6. 只输出 JSON 对象：{"candidates": [{"kind", "name", "ontology_class", "predicate",
    "object", "confidence", "detail", "properties"}]}，kind ∈ entity|relation|attribute|event，
+   relation/attribute 必须附 predicate 与 object，properties 为「属性本地名 → 字符串值」；
+7. 文本没有任何可抽取内容时返回 {"candidates": []}。"""
+
+_EXPECTED_SYSTEM_PROMPT_V2 = """你是电力配电网领域的知识抽取引擎。从「抽取文本」中抽取实体/属性/关系/事件候选。
+规则（违反即无效）：
+1. 禁止凭空创造：只抽取文本明确提及的内容，每条候选必须能在原文中找到依据；
+2. ontology_class 只能取自「本体引导清单」中的类 IRI；清单没有合适类时省略该字段；
+3. predicate（如有）优先取清单中的属性本地名（如 hasStatus/orderNo）；
+4. confidence ∈ [0,1]，反映该候选的确定性；
+5. evidence 必须是「抽取文本」中的原文逐字片段（禁止改写、概括、拼接，每条候选附一条）；
+   出处四元组（source_ref）由系统自动附加，禁止生成，候选之间不得互为证据；
+6. 只输出 JSON 对象：{"candidates": [{"kind", "name", "ontology_class", "predicate",
+   "object", "evidence", "confidence", "detail", "properties"}]}，kind ∈ entity|relation|attribute|event，
    relation/attribute 必须附 predicate 与 object，properties 为「属性本地名 → 字符串值」；
 7. 文本没有任何可抽取内容时返回 {"candidates": []}。"""
 
@@ -91,14 +105,20 @@ _EXPECTED_USER_PROMPT = (
 )
 
 
-def test_snapshot_template_ref_is_v1() -> None:
-    """template_ref 版本钉死（18 篇 §1.1 version pin）：active ref = kb_extract@v1（与现网一致）。"""
-    assert extract_v1.TEMPLATE_REF == "kb_extract@v1"
+def test_snapshot_template_ref_版本钉死() -> None:
+    """version pin（18 篇 §1.1）：v1 冻结为历史，active ref = kb_extract@v2。"""
+    assert extract_v1.TEMPLATE_REF == "kb_extract@v1"  # 历史版本不可变
+    assert extract_v2.TEMPLATE_REF == "kb_extract@v2"  # 现役
 
 
-def test_snapshot_system_prompt_byte_exact() -> None:
-    """系统提示词正文与现网字面量逐字节一致（含换行与标点）。"""
-    assert extract_v1.SYSTEM_PROMPT == _EXPECTED_SYSTEM_PROMPT
+def test_snapshot_system_prompt_v1_历史冻结_byte_exact() -> None:
+    """v1 历史正文不可变（治理约束：active 版本一经发布即冻结）。"""
+    assert extract_v1.SYSTEM_PROMPT == _EXPECTED_SYSTEM_PROMPT_V1
+
+
+def test_snapshot_system_prompt_v2_byte_exact() -> None:
+    """v2 系统提示词正文与深化批次字面量逐字节一致（新增 evidence 逐字引语要求）。"""
+    assert extract_v2.SYSTEM_PROMPT == _EXPECTED_SYSTEM_PROMPT_V2
 
 
 def test_snapshot_catalog_text_byte_exact() -> None:
@@ -110,11 +130,13 @@ def test_snapshot_catalog_text_byte_exact() -> None:
         Graph(),
     )
     assert extract_v1.render_catalog(catalog) == _EXPECTED_CATALOG_TEXT
+    assert extract_v2.render_catalog(catalog) == _EXPECTED_CATALOG_TEXT
 
 
 def test_snapshot_user_prompt_byte_exact() -> None:
     """用户提示词组装与现网 f-string 逐字节一致（清单区 + 空行 + 抽取文本区）。"""
     assert extract_v1.render(_EXPECTED_CATALOG_TEXT, _SNAPSHOT_CHUNK) == _EXPECTED_USER_PROMPT
+    assert extract_v2.render(_EXPECTED_CATALOG_TEXT, _SNAPSHOT_CHUNK) == _EXPECTED_USER_PROMPT
 
 
 # ---------------------------------------------------------------- 注册表治理（version pin）
@@ -122,11 +144,11 @@ def test_snapshot_user_prompt_byte_exact() -> None:
 
 def test_registry_binds_active_template() -> None:
     """注册表按 ref 登记渲染函数与系统提示词正文（两表同键集；取用函数同源）。"""
-    ref = extract_v1.TEMPLATE_REF
-    assert PROMPTS[ref] is extract_v1.render
-    assert SYSTEM_PROMPTS[ref] is extract_v1.SYSTEM_PROMPT
-    assert get_prompt(ref) is extract_v1.render
-    assert get_system_prompt(ref) is extract_v1.SYSTEM_PROMPT
+    assert PROMPTS[extract_v1.TEMPLATE_REF] is extract_v1.render
+    assert PROMPTS[extract_v2.TEMPLATE_REF] is extract_v2.render
+    assert SYSTEM_PROMPTS[extract_v2.TEMPLATE_REF] is extract_v2.SYSTEM_PROMPT
+    assert get_prompt(extract_v2.TEMPLATE_REF) is extract_v2.render
+    assert get_system_prompt(extract_v2.TEMPLATE_REF) is extract_v2.SYSTEM_PROMPT
     assert set(PROMPTS) == set(SYSTEM_PROMPTS)
 
 
@@ -153,11 +175,11 @@ def test_candidate_envelopes_carry_active_template_ref() -> None:
     )
     chunk = _ChunkRef(id=uuid.uuid4(), seq=0, content=_SNAPSHOT_CHUNK, meta={"span": [0, 12]})
     cand = {"kind": "entity", "name": "馈线F001", "ontology_class": f"{_PW}Feeder", "confidence": 0.9}
-    fact = _candidate_fact(ctx, chunk, cand, "kb-extract:trace", extract_v1.TEMPLATE_REF)
-    assert fact["meta"]["template_ref"] == "kb_extract@v1"
+    fact = _candidate_fact(ctx, chunk, cand, "kb-extract:trace", extract_v2.TEMPLATE_REF)
+    assert fact["meta"]["template_ref"] == "kb_extract@v2"
     assert fact["meta"]["template_ref"] in PROMPTS  # 落库 ref 必须是注册表在册版本
-    ticket = _ticket_envelope(fact, "kb-extract:trace", extract_v1.TEMPLATE_REF)
-    assert ticket["template_ref"] == "kb_extract@v1"
+    ticket = _ticket_envelope(fact, "kb-extract:trace", extract_v2.TEMPLATE_REF)
+    assert ticket["template_ref"] == "kb_extract@v2"
 
 
 # ---------------------------------------------------------------- 集成：template_ref 落库（PG 夹具风格同存量用例）
@@ -261,5 +283,5 @@ async def test_extract_persists_template_ref_into_envelopes(
             .all()
         )
     assert facts and tickets  # FakeModelPort 确定性产出 ≥1 候选
-    assert all(fact.meta["template_ref"] == extract_v1.TEMPLATE_REF for fact in facts)
-    assert all(ticket.payload["template_ref"] == extract_v1.TEMPLATE_REF for ticket in tickets)
+    assert all(fact.meta["template_ref"] == extract_v2.TEMPLATE_REF for fact in facts)
+    assert all(ticket.payload["template_ref"] == extract_v2.TEMPLATE_REF for ticket in tickets)

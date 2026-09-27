@@ -934,7 +934,11 @@ export interface InviteLink {
   status: 'active' | 'revoked'
 }
 
-const INVITE_LINKS: InviteLink[] = []
+const INVITE_LINKS: InviteLink[] = [
+  // 种子：一条生效（join 提示条绿态演示/截图基线）+ 一条已过期（列表过期态演示）
+  { id: 'il-seed-01', url: '/login?join=inv-seed-01', token: 'inv-seed-01', role: 'member', expires_at: new Date(Date.now() + 6 * 86_400_000).toISOString(), created_by: '刘以在（管理员）', status: 'active' },
+  { id: 'il-seed-02', url: '/login?join=inv-seed-02', token: 'inv-seed-02', role: 'curator', expires_at: new Date(Date.now() - 86_400_000).toISOString(), created_by: '刘以在（管理员）', status: 'active' },
+]
 let inviteLinkSeq = 0
 
 /** status 派生：未撤销但过 expires_at → expired（契约 §5.8 GET 列表行） */

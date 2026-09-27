@@ -46,9 +46,11 @@ export default {
         card: 'var(--sh-card)',
         float: 'var(--sh-float)',
       },
-      /* 字阶只增不改：补齐画板六阶中 Tailwind 缺失的三档（10/13/15px），既有刻度不动避免全站字号漂移 */
+      /* 字阶只增不改：补齐画板六阶中 Tailwind 缺失的四档（10/11/13/15px），既有刻度不动避免全站字号漂移。
+         2026-09-28 字号归一治理：text-[Npx] 任意值全部归档到六阶键（2xs/xs/sm/13px/15px/base/lg），零视觉跳变。 */
       fontSize: {
         '2xs': '10px',
+        '11px': '11px',
         '13px': '13px',
         '15px': '15px',
       },

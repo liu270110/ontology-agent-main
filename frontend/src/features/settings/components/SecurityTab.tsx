@@ -23,7 +23,7 @@ export function SecurityTab() {
 
   return (
     <div>
-      <b className="text-[14px]">安全</b>
+      <b className="text-sm">安全</b>
 
       <div className="mt-3 flex items-center gap-3 rounded-xl border border-separator p-4" data-testid="set-2fa-card">
         <span className={`flex h-10 w-10 flex-none items-center justify-center rounded-xl ${enabled ? 'bg-[var(--green-soft)]' : 'bg-surface-2'}`} style={{ color: enabled ? 'var(--green)' : 'var(--label-3)' }}>
@@ -31,7 +31,7 @@ export function SecurityTab() {
         </span>
         <div className="min-w-0 flex-1">
           <b className="text-[13px]">两步验证（TOTP）</b>
-          <p className="mt-0.5 text-[11.5px] text-label-2">
+          <p className="mt-0.5 text-[11px] text-label-2">
             {enabled ? '已启用：登录密码校验通过后需输入 6 位动态码；备份码可离线应急。' : '未启用：启用后登录需两步验证，防止口令泄露导致的越权。'}
           </p>
         </div>
@@ -137,13 +137,13 @@ function EnableWizard({ onClose, onDone }: { onClose: () => void; onDone: () => 
         <div>
           <div className="flex gap-4">
             {/* 二维码占位（qr 渲染随 28 篇接入；otpauth URI 已可手抄/扫码枪） */}
-            <div className="flex h-32 w-32 flex-none items-center justify-center rounded-xl border border-dashed border-separator bg-surface-2 text-[10px] text-label-3" aria-label="二维码占位">
+            <div className="flex h-32 w-32 flex-none items-center justify-center rounded-xl border border-dashed border-separator bg-surface-2 text-2xs text-label-3" aria-label="二维码占位">
               二维码占位
             </div>
             <div className="min-w-0">
               <div className="field-label">无法扫码？手动输入密钥</div>
               <div className="keymask break-all" data-testid="set-2fa-secret">{setup.secret}</div>
-              <div className="mt-2 break-all text-[10.5px] text-label-3">otpauth://totp/…secret={setup.secret}</div>
+              <div className="mt-2 break-all text-[11px] text-label-3">otpauth://totp/…secret={setup.secret}</div>
             </div>
           </div>
           <div className="fhint mt-2">请使用认证器 App（如 Microsoft Authenticator）添加后进入下一步。</div>

@@ -16,7 +16,7 @@ export function GroupsTab() {
   return (
     <div>
       <div className="flex items-center gap-2">
-        <span className="text-[12.5px] text-label-2">共 {groups.length} 个组</span>
+        <span className="text-xs text-label-2">共 {groups.length} 个组</span>
         <button type="button" className="btn btn-p btn-sm ml-auto" data-testid="adm-group-open" onClick={() => setCreateOpen(true)}>
           <Users size={13} aria-hidden /> 新建组
         </button>
@@ -30,11 +30,11 @@ export function GroupsTab() {
         {groups.map(g => (
           <div key={g.id} className="card !p-4" data-testid={`adm-group-${g.id}`}>
             <div className="flex items-center gap-2">
-              <b className="text-[13.5px]">{g.name}</b>
+              <b className="text-[13px]">{g.name}</b>
               <span className="badge b-blue">模板 · {ROLE_LABEL[g.role_template] ?? g.role_template}</span>
               <span className="badge b-gray ml-auto">{g.members.length} 人</span>
             </div>
-            <p className="mt-1.5 text-[12px] leading-5 text-label-2">{g.description}</p>
+            <p className="mt-1.5 text-xs leading-5 text-label-2">{g.description}</p>
             <div className="mt-2 flex flex-wrap gap-1.5">
               {g.members.map(m => <span key={m} className="badge b-gray">{m}</span>)}
             </div>
@@ -119,7 +119,7 @@ function GroupModal({ onClose }: { onClose: () => void }) {
           <div className="hairline-b px-3 py-2">
             <div className="field-label !mb-1">选择成员</div>
             <input
-              className="input h-8 text-[12px]"
+              className="input h-8 text-xs"
               placeholder="搜索姓名 / 邮箱…"
               value={keyword}
               onChange={e => setKeyword(e.target.value)}
@@ -132,17 +132,17 @@ function GroupModal({ onClose }: { onClose: () => void }) {
                 key={u.id}
                 type="button"
                 data-testid={`adm-group-cand-${u.id}`}
-                className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-[12.5px] hover:bg-surface-2"
+                className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-xs hover:bg-surface-2"
                 onClick={() => setPicked(prev => [...prev, u])}
               >
-                <span className="flex h-6 w-6 items-center justify-center rounded-full bg-accent-soft text-[10px] text-accent">
+                <span className="flex h-6 w-6 items-center justify-center rounded-full bg-accent-soft text-2xs text-accent">
                   {u.display_name[0]}
                 </span>
                 <span className="truncate">{u.display_name}</span>
-                <span className="ml-auto truncate text-[10.5px] text-label-3">{u.department}</span>
+                <span className="ml-auto truncate text-[11px] text-label-3">{u.department}</span>
               </button>
             ))}
-            {candidates.length === 0 && <div className="px-2 py-3 text-[11.5px] text-label-3">没有更多待选成员</div>}
+            {candidates.length === 0 && <div className="px-2 py-3 text-[11px] text-label-3">没有更多待选成员</div>}
           </div>
           <div className="hairline-t px-3 py-2">
             <div className="field-label !mb-1.5">已选成员（{picked.length}）</div>

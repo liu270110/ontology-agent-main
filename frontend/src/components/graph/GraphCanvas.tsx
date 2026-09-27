@@ -146,10 +146,10 @@ function OntoNodeCard({ data, selected }: NodeProps) {
       <Handle type="target" position={Position.Left} style={{ opacity: 0 }} isConnectableStart={false} />
       <div className="flex items-center gap-1.5">
         <span className="dot flex-none" style={{ background: color, width: 7, height: 7 }} aria-hidden />
-        <b className="truncate text-[12px] leading-4">{d.label}</b>
+        <b className="truncate text-xs leading-4">{d.label}</b>
         {d.badge && <span className="badge b-gray ml-auto flex-none">{d.badge}</span>}
       </div>
-      {d.sub && <div className="mono mt-0.5 truncate text-[10px] leading-3.5 text-label-3">{d.sub}</div>}
+      {d.sub && <div className="mono mt-0.5 truncate text-2xs leading-3.5 text-label-3">{d.sub}</div>}
       <Handle type="source" position={Position.Right} style={{ opacity: 0 }} isConnectableEnd={false} />
     </div>
   )
@@ -173,7 +173,7 @@ function ConstraintNode({ data, selected }: NodeProps) {
         }}
         aria-hidden
       />
-      <b className="relative z-10 max-w-11 truncate text-center text-[10px] leading-3 text-label">{d.label}</b>
+      <b className="relative z-10 max-w-11 truncate text-center text-2xs leading-3 text-label">{d.label}</b>
       <Handle type="target" position={Position.Left} style={{ opacity: 0 }} isConnectableStart={false} />
       <Handle type="source" position={Position.Right} style={{ opacity: 0 }} isConnectableEnd={false} />
     </div>

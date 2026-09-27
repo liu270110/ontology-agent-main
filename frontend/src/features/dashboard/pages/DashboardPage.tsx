@@ -51,7 +51,7 @@ export function DashboardPage() {
                 <div className="truncate text-[13px]">{r.title}</div>
                 <div className="text-[11px] text-label-3">{r.sub}</div>
               </div>
-              {'badge' in r && r.badge && <span className="badge rounded-full border border-orange px-2 py-0.5 text-[10px] text-orange">{r.badge}</span>}
+              {'badge' in r && r.badge && <span className="badge rounded-full border border-orange px-2 py-0.5 text-2xs text-orange">{r.badge}</span>}
               {'action' in r && r.action && <button className="btn btn-s rounded-lg border border-separator px-2.5 py-1 text-[11px]">{r.action}</button>}
             </div>
           ))}
@@ -59,12 +59,12 @@ export function DashboardPage() {
         <div className="card rounded-xl border border-separator bg-surface p-4">
           <div className="mb-2 flex items-center justify-between">
             <h3 className="text-sm font-semibold">抽取流水线</h3>
-            <span className="font-mono text-[10px] text-label-3">JOB #218</span>
+            <span className="font-mono text-2xs text-label-3">JOB #218</span>
           </div>
           <ol className="my-3 space-y-2 text-xs">
             {['预处理', '批量抽取', '术语对齐', '一致性', 'SHACL'].map(s => (
               <li key={s} className="flex items-center gap-2 text-label-2">
-                <span className="flex h-4 w-4 items-center justify-center rounded-full bg-green/15 text-[9px] text-green">✓</span>
+                <span className="flex h-4 w-4 items-center justify-center rounded-full bg-green/15 text-2xs text-green">✓</span>
                 {s}
               </li>
             ))}

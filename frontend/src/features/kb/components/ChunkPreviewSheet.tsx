@@ -46,8 +46,8 @@ export function ChunkPreviewSheet({ doc, onClose }: { doc: KbDocument | null; on
                 }`}
               >
                 <span className={`mono text-[11px] ${i === current ? 'text-accent' : 'text-label-3'}`}>#{String(c.index + 1).padStart(3, '0')}</span>
-                <span className="mt-0.5 block truncate text-[12px] font-medium">{c.text.slice(0, 16)}…</span>
-                <span className="mt-0.5 block text-[10.5px] text-label-3">{c.tokens} tokens</span>
+                <span className="mt-0.5 block truncate text-xs font-medium">{c.text.slice(0, 16)}…</span>
+                <span className="mt-0.5 block text-[11px] text-label-3">{c.tokens} tokens</span>
               </button>
             ))}
           </div>
@@ -62,7 +62,7 @@ export function ChunkPreviewSheet({ doc, onClose }: { doc: KbDocument | null; on
               <p className="scroll-thin min-h-0 flex-1 overflow-y-auto whitespace-pre-wrap rounded-xl bg-surface-2 p-3 text-[13px] leading-6">
                 {chunk.text}
               </p>
-              <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-1.5 text-[11.5px]">
+              <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-1.5 text-[11px]">
                 <div className="flex justify-between border-b border-separator py-1">
                   <dt className="text-label-3">页码</dt>
                   <dd className="mono">p.{chunk.page}</dd>

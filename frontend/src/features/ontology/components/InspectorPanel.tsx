@@ -96,14 +96,14 @@ export function InspectorPanel({ projectId, cls }: { projectId: string; cls: Ont
       {/* 头：选中节点 + 脏态徽标 */}
       <div className="flex-none px-4 pt-4">
         <div className="flex items-center gap-1.5">
-          <b className="truncate text-[14px]">{cls.label} {cls.name}</b>
+          <b className="truncate text-sm">{cls.label} {cls.name}</b>
           {applied ? (
             <span className="badge b-green ml-auto">已应用 · 待保存</span>
           ) : (
             <span className="badge b-orange ml-auto">脏态 · 未应用</span>
           )}
         </div>
-        <div className="mono mt-1 flex items-center gap-1 truncate text-[10.5px] text-label-3" title={cls.iri}>
+        <div className="mono mt-1 flex items-center gap-1 truncate text-[11px] text-label-3" title={cls.iri}>
           {cls.iri}
           <Link2 size={10} className="flex-none" aria-hidden />
         </div>
@@ -124,12 +124,12 @@ export function InspectorPanel({ projectId, cls }: { projectId: string; cls: Ont
       <div className="flex-1 px-4 py-3">
         <div className="field">
           <label className="field-label" htmlFor="insp-name">Name（唯一名）</label>
-          <input id="insp-name" className={`input h-8 text-[12.5px] ${fieldErr.name ? 'err' : ''}`} {...register('name')} />
+          <input id="insp-name" className={`input h-8 text-xs ${fieldErr.name ? 'err' : ''}`} {...register('name')} />
           {err('name')}
         </div>
         <div className="field">
           <label className="field-label" htmlFor="insp-label">Label（中文标签）</label>
-          <input id="insp-label" className={`input h-8 text-[12.5px] ${fieldErr.label ? 'err' : ''}`} {...register('label')} />
+          <input id="insp-label" className={`input h-8 text-xs ${fieldErr.label ? 'err' : ''}`} {...register('label')} />
           {err('label')}
         </div>
         <div className="field">
@@ -137,14 +137,14 @@ export function InspectorPanel({ projectId, cls }: { projectId: string; cls: Ont
           <textarea
             id="insp-def"
             rows={3}
-            className={`input h-auto py-2 text-[12.5px] ${fieldErr.definition ? 'err' : ''}`}
+            className={`input h-auto py-2 text-xs ${fieldErr.definition ? 'err' : ''}`}
             {...register('definition')}
           />
           {err('definition')}
         </div>
         <div className="field">
           <label className="field-label" htmlFor="insp-parent">SubclassOf（父类）</label>
-          <select id="insp-parent" className="input h-8 text-[12.5px]" {...register('subclassOf')}>
+          <select id="insp-parent" className="input h-8 text-xs" {...register('subclassOf')}>
             <option value="">— 无（顶层类）—</option>
             {classList
               .filter(c => c.id !== cls.id)
@@ -158,7 +158,7 @@ export function InspectorPanel({ projectId, cls }: { projectId: string; cls: Ont
         </div>
         <div className="field">
           <label className="field-label" htmlFor="insp-disjoint">DisjointWith（互斥类）</label>
-          <input id="insp-disjoint" className="input h-8 text-[12.5px]" placeholder="变压器 Transformer、开关 Switch" {...register('disjointWith')} />
+          <input id="insp-disjoint" className="input h-8 text-xs" placeholder="变压器 Transformer、开关 Switch" {...register('disjointWith')} />
         </div>
         <div className="flex items-center justify-between py-1">
           <span className="field-label !mb-0">抽象类 abstract</span>
@@ -168,7 +168,7 @@ export function InspectorPanel({ projectId, cls }: { projectId: string; cls: Ont
         </div>
         <div className="field mt-2">
           <label className="field-label" htmlFor="insp-syn">同义标签（≤3）</label>
-          <input id="insp-syn" className="input h-8 text-[12.5px]" placeholder="配电线路 / 馈电线" {...register('synonyms')} />
+          <input id="insp-syn" className="input h-8 text-xs" placeholder="配电线路 / 馈电线" {...register('synonyms')} />
         </div>
         <div className="field">
           <span className="field-label">状态</span>
@@ -178,7 +178,7 @@ export function InspectorPanel({ projectId, cls }: { projectId: string; cls: Ont
         {/* 出处 + 修订历史迷你时间线 */}
         <div className="field">
           <span className="field-label">出处</span>
-          <a className="flex items-center gap-1 text-[11.5px] text-accent hover:underline" href="#source-doc" onClick={e => e.preventDefault()}>
+          <a className="flex items-center gap-1 text-[11px] text-accent hover:underline" href="#source-doc" onClick={e => e.preventDefault()}>
             <ExternalLink size={11} aria-hidden /> 设备手册.pdf · §6.1
           </a>
         </div>
@@ -191,14 +191,14 @@ export function InspectorPanel({ projectId, cls }: { projectId: string; cls: Ont
             <li className="tl-item">
               <span className="tl-dot" aria-hidden />
               <div>
-                <div className="text-[11.5px]">同义标签 +「馈电线」</div>
+                <div className="text-[11px]">同义标签 +「馈电线」</div>
                 <div className="tl-meta">王工 · v2.1 · 09-05</div>
               </div>
             </li>
             <li className="tl-item">
               <span className="tl-dot" aria-hidden />
               <div>
-                <div className="text-[11.5px]">定义修订：补充负荷分区限定</div>
+                <div className="text-[11px]">定义修订：补充负荷分区限定</div>
                 <div className="tl-meta">王工 · v2.0 · 08-12</div>
               </div>
             </li>

@@ -93,23 +93,23 @@ export function StartStopModal({
         </>
       }
     >
-      <div className="text-[11.5px] text-label-3">
+      <div className="text-[11px] text-label-3">
         {agent.name} · <span className="mono">{agent.id}</span> · 本操作写入审计日志（操作人：刘以在）
       </div>
 
       {stopping ? (
         <div className="mt-3 space-y-2">
-          <p className="text-[12px] leading-5">
+          <p className="text-xs leading-5">
             停止后框架立即下线，不再接收新消息与会话请求；本操作写入审计日志。
           </p>
-          <div className="rounded-xl px-3 py-2.5 text-[11.5px] leading-5" style={{ background: 'var(--orange-soft)' }}>
+          <div className="rounded-xl px-3 py-2.5 text-[11px] leading-5" style={{ background: 'var(--orange-soft)' }}>
             <b className="text-orange">影响说明</b>
             <div>
               {agent.active_sessions} 个进行中会话将被终止：会话已生成部分保留，可随时从历史继续；
               不再接收新消息与会话请求。
             </div>
           </div>
-          <div className="rounded-xl px-3 py-2.5 text-[11.5px] leading-5" style={{ background: 'var(--red-soft)' }}>
+          <div className="rounded-xl px-3 py-2.5 text-[11px] leading-5" style={{ background: 'var(--red-soft)' }}>
             <b className="text-red">任务连锁</b>
             <div>
               排队中任务 {agent.queued_tasks} 个（TASK 队列）将标记失败，可在任务中心重试（IX-TSK-03）。

@@ -85,8 +85,8 @@ export function NewWorkflowDialog({ open, onClose }: { open: boolean; onClose: (
               >
                 {t.id === 'blank' ? <Plus size={15} /> : t.id === 'approval_flow' ? <Shield size={15} /> : <Search size={15} />}
               </span>
-              <b className="mt-2 block text-[12.5px]" style={active ? { color: 'var(--accent)' } : undefined}>{t.name}</b>
-              <div className="mt-0.5 text-[10.5px] leading-relaxed text-label-2">{t.desc}</div>
+              <b className="mt-2 block text-xs" style={active ? { color: 'var(--accent)' } : undefined}>{t.name}</b>
+              <div className="mt-0.5 text-[11px] leading-relaxed text-label-2">{t.desc}</div>
             </button>
           )
         })}
@@ -171,7 +171,7 @@ export function ResumeDialog({
             ['上游输入', 'nodes.fault.count=5 · feeder=FL-10kV-CX-07'],
             ['已耗预算', 'Token 2.1k · 耗时 12.4s · 失败重试 1 次'],
           ].map(([k, v]) => (
-            <div key={k} className="flex items-center gap-2 border-b border-separator py-1.5 text-[11.5px] last:border-b-0">
+            <div key={k} className="flex items-center gap-2 border-b border-separator py-1.5 text-[11px] last:border-b-0">
               <span className="w-[118px] flex-none text-label-3">{k}</span>
               <span className="mono truncate text-label">{v}</span>
             </div>
@@ -285,7 +285,7 @@ export function PublishDialog({
       <div className="mb-2.5 text-xs text-label-2">候选非成品：发布即版本化归档；草稿 {v} 仍可继续修改，不受发布影响。</div>
       <div className="rounded-xl border border-separator p-3">
         <div className="flex flex-wrap items-center gap-2">
-          <b className="text-[12.5px]">版本摘要</b>
+          <b className="text-xs">版本摘要</b>
           <span className="mono text-[11px] text-label-3">草稿 {v} → 新版本 {nextV}（预览）</span>
           <span className="ml-auto flex gap-1.5">
             <span className="badge b-green">+{counts.nodes} 节点</span>
@@ -293,7 +293,7 @@ export function PublishDialog({
             <span className="badge b-orange">~{counts.params} 参数调整</span>
           </span>
         </div>
-        <div className="mt-2.5 grid grid-cols-2 gap-1.5 text-[11.5px]">
+        <div className="mt-2.5 grid grid-cols-2 gap-1.5 text-[11px]">
           {([
             ['DAG 无环校验', detail?.validation.dag],
             ['节点 ACL 校验（编排不提权）', detail?.validation.acl],
@@ -320,11 +320,11 @@ export function PublishDialog({
       </div>
       <div className="mt-3 flex gap-2.5">
         <div className="flex-1 rounded-xl border border-separator p-2.5 opacity-70">
-          <div className="flex items-center gap-1.5 text-[12px] font-bold text-label-2"><AlertTriangle size={12} aria-hidden />solo 档</div>
+          <div className="flex items-center gap-1.5 text-xs font-bold text-label-2"><AlertTriangle size={12} aria-hidden />solo 档</div>
           <div className="mt-1 text-[11px] leading-relaxed text-label-3">直发：校验通过即版本 +1 并通知协作者。</div>
         </div>
         <div className="flex-[1.25] rounded-xl p-2.5" style={{ border: '1.5px solid var(--accent)', background: 'var(--accent-soft)' }}>
-          <div className="flex items-center gap-1.5 text-[12px] font-bold" style={{ color: 'var(--accent)' }}>
+          <div className="flex items-center gap-1.5 text-xs font-bold" style={{ color: 'var(--accent)' }}>
             <Shield size={12} aria-hidden />
             team · enterprise 档
             <span className="badge b-blue ml-auto">当前 · team</span>
@@ -399,7 +399,7 @@ export function VersionDialog({
             {(detail?.versions ?? []).map(v => (
               <label
                 key={v.version}
-                className="flex cursor-pointer items-center gap-2 border-b border-separator px-2.5 py-2 text-[12px] last:border-b-0"
+                className="flex cursor-pointer items-center gap-2 border-b border-separator px-2.5 py-2 text-xs last:border-b-0"
                 style={baseline === v.version ? { background: 'var(--accent-soft)' } : undefined}
               >
                 <input
@@ -425,7 +425,7 @@ export function VersionDialog({
         <div className="min-w-0 flex-1">
           <div className="field-label">对比目标</div>
           <div className="rounded-[11px] border p-3" style={{ border: '1.5px dashed var(--accent)', background: 'var(--accent-soft)' }}>
-            <div className="flex items-center gap-2 text-[12px]">
+            <div className="flex items-center gap-2 text-xs">
               <span className="mono font-bold" style={{ color: 'var(--accent)' }}>草稿 {detail?.draft_version}</span>
               <span className="badge b-orange">当前编辑中</span>
             </div>

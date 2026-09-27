@@ -122,7 +122,7 @@ function InspectorBody({
         {node.kind === 'condition' && <GitBranch size={14} style={{ color: 'var(--accent)' }} aria-hidden />}
         {KIND_LABEL[node.kind]}节点
       </h4>
-      <div className="mono mt-0.5 text-[10.5px] text-label-3">node:{node.id} · 选中态</div>
+      <div className="mono mt-0.5 text-[11px] text-label-3">node:{node.id} · 选中态</div>
 
       <div className="field mt-3">
         <label className="field-label">节点名称</label>
@@ -183,12 +183,12 @@ function InspectorBody({
             {evalResult?.ok && <span className="badge b-green ml-auto">校验通过</span>}
           </label>
           <div className="overflow-hidden rounded-[10px] border border-separator" style={{ background: 'var(--surface-2)' }}>
-            <div className="flex items-center gap-2 border-b border-separator px-2.5 py-1.5 text-[10px] text-label-3">
+            <div className="flex items-center gap-2 border-b border-separator px-2.5 py-1.5 text-2xs text-label-3">
               <span className="mono">expr.editor · 仅确定性</span>
               <span className="mono ml-auto">草稿</span>
             </div>
             <textarea
-              className="mono w-full resize-none bg-transparent px-3 py-2 text-[12px] leading-relaxed outline-none"
+              className="mono w-full resize-none bg-transparent px-3 py-2 text-xs leading-relaxed outline-none"
               style={{ minHeight: 56 }}
               rows={2}
               data-testid="wf-expr-input"
@@ -199,7 +199,7 @@ function InspectorBody({
           </div>
           <div className="mt-2 flex items-center gap-1.5">
             <select
-              className="input h-[30px] flex-1 text-[12px]"
+              className="input h-[30px] flex-1 text-xs"
               aria-label="表达式模板"
               data-testid="wf-expr-template"
               value=""

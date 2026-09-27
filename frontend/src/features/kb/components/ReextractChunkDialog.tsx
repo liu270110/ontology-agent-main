@@ -44,7 +44,7 @@ export function ReextractChunkDialog({ candidate, onClose }: { candidate: KbCand
       <p className="text-[13px] leading-6">
         范围：<b className="mono">{candidate.chunk_id}</b>（候选 #{candidate.id.replace('c-', '')} 来源分片）
       </p>
-      <p className="mt-2 rounded-lg bg-[var(--orange-soft)] px-3 py-2 text-[11.5px] leading-5 text-orange">
+      <p className="mt-2 rounded-lg bg-[var(--orange-soft)] px-3 py-2 text-[11px] leading-5 text-orange">
         将生成单分片重抽任务；该候选的拒绝样本同步进入负样本池标记。
       </p>
     </Modal>

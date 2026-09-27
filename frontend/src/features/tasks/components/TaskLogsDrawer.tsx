@@ -42,13 +42,13 @@ export function TaskLogsDrawer({ task, onClose }: { task: Task; onClose: () => v
                 aria-selected={level === l}
                 data-testid={`tsk-log-lv-${l}`}
                 onClick={() => setLevel(l)}
-                className={`rounded-lg px-2.5 py-1 text-[11.5px] ${level === l ? 'bg-accent-soft font-semibold text-accent' : 'text-label-2 hover:bg-surface-2'}`}
+                className={`rounded-lg px-2.5 py-1 text-[11px] ${level === l ? 'bg-accent-soft font-semibold text-accent' : 'text-label-2 hover:bg-surface-2'}`}
               >
                 {l === 'all' ? '全部' : l}
               </button>
             ))}
           </div>
-          <label className="ml-auto flex cursor-pointer items-center gap-1.5 text-[11.5px] text-label-2">
+          <label className="ml-auto flex cursor-pointer items-center gap-1.5 text-[11px] text-label-2">
             <input type="checkbox" data-testid="tsk-log-follow" checked={follow} onChange={e => setFollow(e.target.checked)} />
             跟随滚底
           </label>
@@ -73,11 +73,11 @@ export function TaskLogsDrawer({ task, onClose }: { task: Task; onClose: () => v
           {logs.map((l, i) => (
             <div key={i} className="mono flex gap-2 py-0.5 text-[11px] leading-5">
               <span className="flex-none text-label-3">{l.ts}</span>
-              <span className={`badge ${LEVEL_BADGE[l.level]} h-4 flex-none !px-1 !text-[9px]`}>{l.level.toUpperCase()}</span>
+              <span className={`badge ${LEVEL_BADGE[l.level]} h-4 flex-none !px-1 !text-2xs`}>{l.level.toUpperCase()}</span>
               <span className="whitespace-pre-wrap break-all text-label-2">{l.line}</span>
             </div>
           ))}
-          {logs.length === 0 && <div className="py-6 text-center text-[11.5px] text-label-3">暂无匹配日志</div>}
+          {logs.length === 0 && <div className="py-6 text-center text-[11px] text-label-3">暂无匹配日志</div>}
           <div ref={bottomRef} />
         </div>
       </div>

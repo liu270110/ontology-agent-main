@@ -39,13 +39,13 @@ export function ProjectListPage() {
         {projects.map(p => (
           <div key={p.id} className="card flex flex-col !p-4" data-testid={`project-card-${p.id}`}>
             <div className="flex items-center gap-2">
-              <b className="truncate text-[14px]">{p.name}</b>
+              <b className="truncate text-sm">{p.name}</b>
               <TierBadge tier={p.tier} />
             </div>
             <div className="mono mt-1.5 truncate text-[11px] text-label-3" title={p.namespace}>
               {p.namespace}
             </div>
-            <p className="mt-2 line-clamp-2 min-h-8 text-[11.5px] leading-4 text-label-2">{p.description}</p>
+            <p className="mt-2 line-clamp-2 min-h-8 text-[11px] leading-4 text-label-2">{p.description}</p>
             <div className="mt-2 flex items-center gap-2 text-[11px] text-label-3">
               <span className="badge b-green">v{p.head_version.replace(/^v/, '')} 已发布</span>
               {p.draft_version && <span className="badge b-orange">草稿 {p.draft_version}</span>}
@@ -79,7 +79,7 @@ export function ProjectListPage() {
       )}
 
       {/* 跳转 chips（26 篇矩阵联动） */}
-      <div className="mt-3 flex gap-2 text-[11.5px]">
+      <div className="mt-3 flex gap-2 text-[11px]">
         <Link
           to="/ontology/versions"
           className="rounded-full border border-separator px-3 py-1 text-label-2 hover:border-accent hover:text-accent"

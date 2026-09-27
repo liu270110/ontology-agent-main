@@ -200,7 +200,7 @@ export function ReviewPage() {
                 />
                 <span className={`mono mt-0.5 text-[11px] ${isCurrent ? 'text-accent' : 'text-label-3'}`}>#{c.id.replace('c-', '')}</span>
                 <span className="min-w-0 flex-1">
-                  <span className="flex items-center gap-1 text-[12.5px] font-semibold">
+                  <span className="flex items-center gap-1 text-xs font-semibold">
                     {CANDIDATE_TYPE_LABEL[c.type]}：{c.subject}
                     {c.conflict && <AlertTriangle size={11} className="flex-none text-orange" aria-label={c.conflict} />}
                     {c.status === 'revised' && <span className="badge b-purple">已修订</span>}
@@ -229,7 +229,7 @@ export function ReviewPage() {
                     {current.doc_name} · {current.chunk_id.split('-').pop()}
                   </span>
                 </div>
-                <p className="rounded-xl bg-surface-2 p-3.5 text-[13.5px] leading-7">
+                <p className="rounded-xl bg-surface-2 p-3.5 text-[13px] leading-7">
                   <HighlightedQuote text={current.source_quote} span={current.span} />
                 </p>
               </div>
@@ -242,24 +242,24 @@ export function ReviewPage() {
                     </span>
                   </div>
                   {current.type === 'entity' || current.type === 'axiom' ? (
-                    <div className="mono text-[12.5px] leading-7">
+                    <div className="mono text-xs leading-7">
                       <span className="text-accent">{current.subject}</span>
                       <span className="text-label-3"> · {CANDIDATE_TYPE_LABEL[current.type]}候选</span>
                     </div>
                   ) : (
-                    <div className="mono text-[12.5px] leading-7">
+                    <div className="mono text-xs leading-7">
                       <span className="text-accent">{current.subject}</span>
                       <span className="text-label-2"> —{current.predicate}→ </span>
                       <span>{current.object}</span>
                     </div>
                   )}
                   {current.conflict && (
-                    <p className="mt-2 rounded-lg bg-[var(--orange-soft)] px-3 py-2 text-[11.5px] leading-5 text-orange">
+                    <p className="mt-2 rounded-lg bg-[var(--orange-soft)] px-3 py-2 text-[11px] leading-5 text-orange">
                       ⚠ {current.conflict}
                     </p>
                   )}
                   {current.status === 'revised' && current.revised_note && (
-                    <p className="mt-2 rounded-lg bg-[var(--purple-soft)] px-3 py-2 text-[11.5px] leading-5 text-purple">
+                    <p className="mt-2 rounded-lg bg-[var(--purple-soft)] px-3 py-2 text-[11px] leading-5 text-purple">
                       已修订：{current.revised_note}
                     </p>
                   )}
@@ -268,7 +268,7 @@ export function ReviewPage() {
                   <div className="card-h !mb-2">
                     <h3>终审操作</h3>
                   </div>
-                  <p className="mb-3 text-[12px] leading-6 text-label-2">
+                  <p className="mb-3 text-xs leading-6 text-label-2">
                     通过后该候选写入 ABox（Neo4j）并建立向量索引；驳回可附意见并重抽分片。
                   </p>
                   <div className="flex flex-wrap gap-2">
@@ -305,7 +305,7 @@ export function ReviewPage() {
       {/* 批量操作条（勾选后浮出） */}
       {checked.size > 0 && (
         <div className="batchbar mt-3 flex-wrap" style={{ position: 'sticky', borderRadius: 'var(--r-panel)' }}>
-          <span className="text-[12.5px] font-semibold">已选 {checked.size} 条</span>
+          <span className="text-xs font-semibold">已选 {checked.size} 条</span>
           <button type="button" className="btn btn-p btn-sm" data-testid="batch-open" onClick={openBatch}>
             <Check size={13} aria-hidden /> 批量通过
           </button>
@@ -316,13 +316,13 @@ export function ReviewPage() {
             清除选择
           </button>
           <span className="text-[11px] text-label-3">
-            <kbd className="rounded border border-separator px-1 font-mono text-[10px]">↵</kbd> 批量确认
+            <kbd className="rounded border border-separator px-1 font-mono text-2xs">↵</kbd> 批量确认
           </span>
         </div>
       )}
 
       {/* IX-REV-04 快捷键提示条（常驻底部；输入框聚焦自动屏蔽由 keydown 守卫承担） */}
-      <div className="hairline-t mt-3 flex flex-wrap items-center gap-3 pb-1 pt-2.5 text-[11.5px] text-label-2">
+      <div className="hairline-t mt-3 flex flex-wrap items-center gap-3 pb-1 pt-2.5 text-[11px] text-label-2">
         <HotKey k="J" label="通过" />
         <HotKey k="K" label="拒绝" />
         <HotKey k="N" label="跳过" />
@@ -374,7 +374,7 @@ export function ReviewPage() {
 function HotKey({ k, label }: { k: string; label: string }) {
   return (
     <span className="flex items-center gap-1">
-      <kbd className="rounded border border-separator bg-surface-2 px-1.5 py-0.5 font-mono text-[10px] font-semibold">{k}</kbd>
+      <kbd className="rounded border border-separator bg-surface-2 px-1.5 py-0.5 font-mono text-2xs font-semibold">{k}</kbd>
       {label}
     </span>
   )

@@ -77,7 +77,7 @@ export function TasksPage() {
             aria-selected={status === f.key}
             data-testid={`tsk-filter-${f.key}`}
             onClick={() => setStatus(f.key)}
-            className={`rounded-lg px-3 py-1.5 text-[12.5px] ${status === f.key ? 'bg-accent-soft font-semibold text-accent' : 'text-label-2 hover:bg-surface-2'}`}
+            className={`rounded-lg px-3 py-1.5 text-xs ${status === f.key ? 'bg-accent-soft font-semibold text-accent' : 'text-label-2 hover:bg-surface-2'}`}
           >
             {f.label}
           </button>
@@ -86,7 +86,7 @@ export function TasksPage() {
 
       {/* 任务表 */}
       <div className="card mt-3 overflow-x-auto !p-0">
-        <table className="w-full min-w-[720px] text-[12.5px]">
+        <table className="w-full min-w-[720px] text-xs">
           <thead>
             <tr className="hairline-b text-left text-[11px] text-label-3">
               <th className="px-4 py-2.5 font-semibold">任务</th>

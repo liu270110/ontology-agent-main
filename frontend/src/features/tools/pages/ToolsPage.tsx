@@ -72,14 +72,14 @@ export function ToolsPage() {
                   <td>
                     <span className="mono font-semibold">{t.name}</span>
                     {t.danger && <span className="badge b-red ml-1.5">高危</span>}
-                    <div className="text-[10.5px] text-label-3">{t.desc}</div>
+                    <div className="text-[11px] text-label-3">{t.desc}</div>
                   </td>
                   <td>
                     <span className={`badge ${t.source === 'mcp' ? 'b-purple' : t.source === 'plugin' ? 'b-blue' : t.source === 'http' ? 'b-orange' : 'b-green'}`}>
                       {TOOL_SOURCE_LABEL[t.source]}
                     </span>
                   </td>
-                  <td className="text-[11.5px] text-label-2">{t.provider}</td>
+                  <td className="text-[11px] text-label-2">{t.provider}</td>
                   <td className="text-[11px]">{t.scopes.length ? t.scopes.join('、') : '—'}</td>
                   <td>
                     <span className={`badge ${t.enabled ? 'b-green' : 'b-gray'}`}>{t.enabled ? '已启用' : '已停用'}</span>
@@ -124,11 +124,11 @@ export function ToolsPage() {
               onClick={() => setSkill(s)}
             >
               <div className="flex items-center gap-2">
-                <b className="truncate text-[13.5px]">{s.name}</b>
+                <b className="truncate text-[13px]">{s.name}</b>
                 <span className="badge b-gray ml-auto">SKILL.md · {s.version}</span>
               </div>
-              <p className="mt-2 line-clamp-3 min-h-12 text-[11.5px] leading-4 text-label-2">{s.summary}</p>
-              <div className="hairline-t mt-3 flex items-center gap-2 pt-2.5 text-[10.5px] text-label-3">
+              <p className="mt-2 line-clamp-3 min-h-12 text-[11px] leading-4 text-label-2">{s.summary}</p>
+              <div className="hairline-t mt-3 flex items-center gap-2 pt-2.5 text-[11px] text-label-3">
                 <span className={`badge ${s.status === '已启用' ? 'b-green' : 'b-orange'}`}>{s.status}</span>
                 <span className="ml-auto flex items-center gap-0.5 text-accent">
                   查看详情 <ArrowUpRight size={11} aria-hidden />

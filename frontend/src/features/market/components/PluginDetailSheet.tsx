@@ -41,7 +41,7 @@ export function PluginDetailSheet({
     <Sheet open onClose={onClose} title={`${plugin.name}`} width={520}>
       <div className="px-5 py-4">
         <div className="flex items-start gap-3">
-          <span className="flex h-11 w-11 flex-none items-center justify-center rounded-xl text-[18px]" style={{ background: 'var(--accent-soft)' }}>
+          <span className="flex h-11 w-11 flex-none items-center justify-center rounded-xl text-lg" style={{ background: 'var(--accent-soft)' }}>
             🧩
           </span>
           <div className="min-w-0">
@@ -50,7 +50,7 @@ export function PluginDetailSheet({
               {plugin.certified && <span className="badge b-blue">官方认证</span>}
             </div>
             <div className="mt-0.5 text-[11px] text-label-3">开发者：{plugin.developer} · 分类：{plugin.category}</div>
-            <div className="mt-1 flex items-center gap-1 text-[11.5px]">
+            <div className="mt-1 flex items-center gap-1 text-[11px]">
               <Star size={12} className="text-orange" aria-hidden />
               <b>{plugin.rating.toFixed(1)}</b>
               <span className="text-label-3">· {plugin.ratings_count} 评价 · {plugin.installs} 安装</span>
@@ -66,7 +66,7 @@ export function PluginDetailSheet({
               type="button"
               role="tab"
               aria-selected={tab === t}
-              className={`-mb-px border-b-2 pb-2 text-[12.5px] ${tab === t ? 'border-accent font-semibold text-accent' : 'border-transparent text-label-2'}`}
+              className={`-mb-px border-b-2 pb-2 text-xs ${tab === t ? 'border-accent font-semibold text-accent' : 'border-transparent text-label-2'}`}
               data-testid={`mkt-detail-tab-${t}`}
               onClick={() => setTab(t)}
             >
@@ -79,7 +79,7 @@ export function PluginDetailSheet({
 
         <div className="mt-3 min-h-[180px]">
           {tab === 'README' && (
-            <div className="markdown text-[12px] leading-6" data-testid="mkt-readme">
+            <div className="markdown text-xs leading-6" data-testid="mkt-readme">
               <ReactMarkdown remarkPlugins={[remarkGfm]}>{plugin.readme}</ReactMarkdown>
             </div>
           )}
@@ -89,9 +89,9 @@ export function PluginDetailSheet({
               {plugin.versions.map(v => (
                 <div key={v.version} className="rounded-xl border border-separator px-3 py-2.5">
                   <div className="flex items-center gap-2">
-                    <b className="mono text-[12.5px]">{v.version}</b>
+                    <b className="mono text-xs">{v.version}</b>
                     {v.latest && <span className="badge b-green">最新</span>}
-                    <span className="ml-auto text-[10.5px] text-label-3">{v.released_at}</span>
+                    <span className="ml-auto text-[11px] text-label-3">{v.released_at}</span>
                   </div>
                   <div className="mt-1 text-[11px] text-label-2">{v.note}</div>
                 </div>
@@ -112,13 +112,13 @@ export function PluginDetailSheet({
                         style={s.danger ? { background: 'var(--red-soft)', borderColor: 'var(--red)' } : { borderColor: 'var(--separator)' }}
                       >
                         <div className="flex items-center gap-2">
-                          <span className="mono text-[12px] font-semibold">{s.scope}</span>
+                          <span className="mono text-xs font-semibold">{s.scope}</span>
                           <span className={`badge ${s.access === '只读' ? 'b-gray' : s.danger ? 'b-red' : 'b-orange'}`}>
                             {s.access}
                           </span>
                           {s.danger && <span className="badge b-red">高危</span>}
                         </div>
-                        <div className="mt-0.5 text-[10.5px] text-label-2">{s.desc}</div>
+                        <div className="mt-0.5 text-[11px] text-label-2">{s.desc}</div>
                       </div>
                     ))}
                   </div>
@@ -141,7 +141,7 @@ export function PluginDetailSheet({
             <Download size={13} aria-hidden /> 安装 {latest ? latest.version : ''}
           </button>
         ) : (
-          <div className="rounded-xl border border-separator bg-surface-2 px-3 py-2.5 text-center text-[11.5px] text-label-2">
+          <div className="rounded-xl border border-separator bg-surface-2 px-3 py-2.5 text-center text-[11px] text-label-2">
             <b>member 视角：</b>按钮替换为「联系管理员」——向租户管理员发送安装申请（附带插件与所选版本），安装动作仍由管理员在 IX-MKT-02 向导中完成。
             <button type="button" className="btn btn-g btn-sm ml-2" onClick={() => onClose()}>
               联系管理员

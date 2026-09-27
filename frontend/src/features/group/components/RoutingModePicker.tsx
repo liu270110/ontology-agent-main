@@ -64,7 +64,7 @@ export function RoutingModePicker({
       <button
         type="button"
         data-testid="grp-routing-open"
-        className="flex items-center gap-1.5 rounded-full px-3 py-1 text-[12px] font-semibold"
+        className="flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold"
         style={{
           color: isOrchestrator ? 'var(--accent)' : 'var(--label-2)',
           background: isOrchestrator ? 'var(--accent-soft)' : 'var(--surface-2)',
@@ -81,9 +81,9 @@ export function RoutingModePicker({
       </button>
       <FloatingCard open={open} anchor={anchor} onClose={() => setOpen(false)} width={352}>
         <div className="mb-2 flex items-center gap-2">
-          <b className="text-[13.5px]">发言路由</b>
+          <b className="text-[13px]">发言路由</b>
           <span className="badge b-purple">当前 · {ROUTING_LABEL[routing]}</span>
-          <span className="ml-auto text-[10.5px] text-label-3">随会话记忆</span>
+          <span className="ml-auto text-[11px] text-label-3">随会话记忆</span>
         </div>
         {MODE_META.map(m => {
           const Icon = m.icon
@@ -105,17 +105,17 @@ export function RoutingModePicker({
                 <span className="flex h-[27px] w-[27px] flex-none items-center justify-center rounded-lg" style={{ background: `color-mix(in srgb, ${m.cls} 14%, transparent)`, color: m.cls }}>
                   <Icon size={14} aria-hidden />
                 </span>
-                <b className="text-[12.5px]">{ROUTING_LABEL[m.mode]}</b>
-                <span className="mono text-[10px] text-label-3">{m.mono}</span>
+                <b className="text-xs">{ROUTING_LABEL[m.mode]}</b>
+                <span className="mono text-2xs text-label-3">{m.mono}</span>
                 <span className={`badge ${m.mode === 'orchestrator' ? 'b-purple' : 'b-green'} ml-auto`}>{m.badge}</span>
                 {active && <Check size={13} style={{ color: 'var(--accent)' }} aria-hidden />}
               </div>
-              <div className="mt-1.5 text-[11.5px] leading-relaxed text-label-2">{m.desc}</div>
+              <div className="mt-1.5 text-[11px] leading-relaxed text-label-2">{m.desc}</div>
             </button>
           )
         })}
         {errMsg && <div className="field-err">{errMsg}</div>}
-        <div className="mt-2 flex items-start gap-1.5 border-t border-separator pt-2 text-[10.5px] leading-relaxed text-label-3">
+        <div className="mt-2 flex items-start gap-1.5 border-t border-separator pt-2 text-[11px] leading-relaxed text-label-3">
           <Shield size={12} className="mt-0.5 flex-none" style={{ color: 'var(--green)' }} aria-hidden />
           <span>宪法 2 落法：仅协调者模式消耗路由 LLM 判定，其余三种确定性路由零 Token；切换即写入会话记忆并即时生效（api/01 §5.2 PATCH routing）。</span>
         </div>

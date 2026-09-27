@@ -41,7 +41,7 @@ export function AdminPage() {
             aria-selected={tab === t.key}
             data-testid={`adm-tab-${t.key}`}
             onClick={() => setParams({ tab: t.key })}
-            className={`rounded-lg px-3 py-1.5 text-[12.5px] ${tab === t.key ? 'bg-accent-soft font-semibold text-accent' : 'text-label-2 hover:bg-surface-2'}`}
+            className={`rounded-lg px-3 py-1.5 text-xs ${tab === t.key ? 'bg-accent-soft font-semibold text-accent' : 'text-label-2 hover:bg-surface-2'}`}
           >
             {t.label}
           </button>

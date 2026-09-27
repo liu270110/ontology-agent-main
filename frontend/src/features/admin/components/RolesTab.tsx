@@ -62,7 +62,7 @@ export function RolesTab() {
   return (
     <div>
       <div className="flex flex-wrap items-center gap-2">
-        <b className="text-[14px]">RBAC 权限矩阵</b>
+        <b className="text-sm">RBAC 权限矩阵</b>
         <span className="badge b-gray">{roles.length} 角色 × {permissions.length} 权限点</span>
         <span className="ml-auto flex items-center gap-3 text-[11px] text-label-3">
           <span className="flex items-center gap-1"><i className="inline-block h-2.5 w-2.5 rounded-sm" style={{ background: 'var(--green)' }} />本次新增</span>
@@ -71,14 +71,14 @@ export function RolesTab() {
       </div>
 
       <div className="card mt-3 overflow-x-auto !p-0">
-        <table className="w-full min-w-[760px] text-[12.5px]" data-testid="adm-matrix">
+        <table className="w-full min-w-[760px] text-xs" data-testid="adm-matrix">
           <thead>
             <tr className="hairline-b text-left text-[11px] text-label-3">
               <th className="px-4 py-2.5 font-semibold">权限点 \ 角色</th>
               {roles.map(r => (
                 <th key={r.key} className="px-3 py-2.5 text-center font-semibold">
                   {r.label}
-                  <span className="mono block text-[10px] font-normal text-label-3">{r.key} · {r.affected} 人</span>
+                  <span className="mono block text-2xs font-normal text-label-3">{r.key} · {r.affected} 人</span>
                 </th>
               ))}
             </tr>
@@ -88,7 +88,7 @@ export function RolesTab() {
               <tr key={p.key} className="hairline-b">
                 <td className="px-4 py-2">
                   {p.label}
-                  <span className="mono block text-[10px] text-label-3">{p.key}</span>
+                  <span className="mono block text-2xs text-label-3">{p.key}</span>
                 </td>
                 {roles.map(r => {
                   const changed = isChanged(r.key, p.key)

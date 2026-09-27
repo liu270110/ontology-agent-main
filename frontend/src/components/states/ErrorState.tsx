@@ -26,7 +26,7 @@ export function ErrorState({
       <div className="t">{title}</div>
       {message && <div className="d">{message}</div>}
       {code != null && code !== '' && (
-        <div className="mono text-[10.5px] text-label-3" data-testid="error-code">
+        <div className="mono text-[11px] text-label-3" data-testid="error-code">
           错误码 {code}
         </div>
       )}

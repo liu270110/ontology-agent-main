@@ -109,7 +109,7 @@ export function AxiomEditor({
       {/* 编辑区 */}
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-separator bg-surface">
         <div className="hairline-b flex flex-none items-center gap-2 px-4 py-2.5">
-          <span className="mono text-[12px] font-semibold">{shapeName}.ttl</span>
+          <span className="mono text-xs font-semibold">{shapeName}.ttl</span>
           {conforms === null ? (
             <span className="badge b-gray">未校验</span>
           ) : conforms ? (
@@ -120,7 +120,7 @@ export function AxiomEditor({
           <span className="ml-auto flex gap-2">
             <select
               aria-label="shape 模板下拉"
-              className="input h-7 w-56 text-[11.5px]"
+              className="input h-7 w-56 text-[11px]"
               value=""
               onChange={e => {
                 const t = TEMPLATES.find(x => x.name === e.target.value)
@@ -153,7 +153,7 @@ export function AxiomEditor({
           </span>
         </div>
         <div ref={host} className="scroll-thin min-h-0 flex-1 overflow-auto px-3 py-2" />
-        <div className="hairline-t flex flex-none items-center gap-3 px-4 py-1.5 text-[10.5px] text-label-3">
+        <div className="hairline-t flex flex-none items-center gap-3 px-4 py-1.5 text-[11px] text-label-3">
           <span className="mono">行 {code.split('\n').length} · 列 5</span>
           <span>UTF-8</span>
           <span>SHACL 1.1</span>
@@ -175,7 +175,7 @@ export function AxiomEditor({
             {conforms === true && <span className="badge b-green ml-auto">通过</span>}
             {conforms === false && <span className="badge b-red ml-auto">未通过 · {violations.length} 违例</span>}
           </div>
-          <p className="mono mt-1 text-[10px] text-label-3">POST /ontologies/(id)/validate · conforms={conforms === null ? '—' : String(conforms)}</p>
+          <p className="mono mt-1 text-2xs text-label-3">POST /ontologies/(id)/validate · conforms={conforms === null ? '—' : String(conforms)}</p>
           {conforms === false && (
             <ul className="mt-2 space-y-2">
               {violations.map((v, i) => (
@@ -193,11 +193,11 @@ export function AxiomEditor({
             </ul>
           )}
           {conforms === true && (
-            <div className="mt-2 flex items-center gap-1.5 text-[11.5px] text-green">
+            <div className="mt-2 flex items-center gap-1.5 text-[11px] text-green">
               <CheckCircle2 size={13} aria-hidden /> 全部约束满足，可保存为草稿。
             </div>
           )}
-          <p className="mt-2 text-[10.5px] text-label-3">点「定位」回画布闪烁对应节点；修复后跑到绿。</p>
+          <p className="mt-2 text-[11px] text-label-3">点「定位」回画布闪烁对应节点；修复后跑到绿。</p>
         </div>
 
         <div className="rounded-xl border border-separator bg-surface px-4 py-3">
@@ -209,7 +209,7 @@ export function AxiomEditor({
               <li key={t.name}>
                 <button
                   type="button"
-                  className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-[11.5px] hover:bg-surface-2"
+                  className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-[11px] hover:bg-surface-2"
                   onClick={() => setCode(t.turtle)}
                 >
                   <FilePlus2 size={12} className="flex-none text-label-3" aria-hidden />
@@ -222,7 +222,7 @@ export function AxiomEditor({
         </div>
 
         <div className="alert rounded-xl" style={{ background: 'var(--accent-soft)', borderColor: 'transparent', color: 'var(--accent)' }}>
-          <div className="text-[11.5px] leading-5">
+          <div className="text-[11px] leading-5">
             <b>编辑不直写 TBox</b>
             <br />
             保存为草稿写入变更单；发布仍走 submit → approve → publish 五动词，与设计宪法「候选非成品」一致。

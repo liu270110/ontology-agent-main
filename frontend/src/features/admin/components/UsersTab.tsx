@@ -34,14 +34,14 @@ export function UsersTab() {
   return (
     <div>
       <div className="flex items-center gap-2">
-        <span className="text-[12.5px] text-label-2">共 {users.length} 名成员 · 角色调整即时生效并写审计</span>
+        <span className="text-xs text-label-2">共 {users.length} 名成员 · 角色调整即时生效并写审计</span>
         <button type="button" className="btn btn-p btn-sm ml-auto" data-testid="adm-invite-open" onClick={() => setInviteOpen(true)}>
           <UserPlus size={13} aria-hidden /> 邀请成员
         </button>
       </div>
 
       <div className="card mt-3 overflow-x-auto !p-0">
-        <table className="w-full min-w-[720px] text-[12.5px]">
+        <table className="w-full min-w-[720px] text-xs">
           <thead>
             <tr className="hairline-b text-left text-[11px] text-label-3">
               <th className="px-4 py-2.5 font-semibold">账号</th>
@@ -56,7 +56,7 @@ export function UsersTab() {
             {users.map(u => (
               <tr key={u.id} className="hairline-b" data-testid={`adm-user-${u.id}`}>
                 <td className="mono px-4 py-2.5">{u.email}</td>
-                <td className="px-4 py-2.5">{u.display_name}<span className="block text-[10.5px] text-label-3">{u.department}</span></td>
+                <td className="px-4 py-2.5">{u.display_name}<span className="block text-[11px] text-label-3">{u.department}</span></td>
                 <td className="px-4 py-2.5">
                   <span className="flex flex-wrap gap-1">
                     {u.roles.map(r => <span key={r} className={`badge ${ROLE_BADGE[r] ?? 'b-gray'}`}>{ROLE_LABEL[r] ?? r}</span>)}
@@ -234,13 +234,13 @@ function EditUserModal({ user, onClose }: { user: AdminUser; onClose: () => void
     >
       <div className="field">
         <span className="field-label">账号（只读）</span>
-        <div className="mono text-[12.5px] text-label-2">{user.email}</div>
+        <div className="mono text-xs text-label-2">{user.email}</div>
       </div>
       <div className="field">
         <span className="field-label">角色（可多选调整）</span>
         <div className="flex flex-wrap gap-2">
           {Object.entries(ROLE_LABEL).filter(([k]) => k !== 'super_admin').map(([k, v]) => (
-            <label key={k} className="flex cursor-pointer items-center gap-1.5 text-[12.5px]">
+            <label key={k} className="flex cursor-pointer items-center gap-1.5 text-xs">
               <input
                 type="checkbox"
                 data-testid={`adm-edit-role-${k}`}

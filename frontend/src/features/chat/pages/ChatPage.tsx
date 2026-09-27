@@ -75,7 +75,7 @@ export function ChatPage() {
         <header className="flex h-12 flex-none items-center gap-3 border-b border-separator bg-surface px-5">
           <span className="text-sm font-semibold">对话</span>
           {sessionId ? (
-            <span data-testid="conn-status" className="badge flex items-center gap-1.5 rounded-full border border-separator px-2 py-0.5 text-[10px] text-label-2">
+            <span data-testid="conn-status" className="badge flex items-center gap-1.5 rounded-full border border-separator px-2 py-0.5 text-2xs text-label-2">
               <span className={`h-1.5 w-1.5 rounded-full ${statusDot}`} />
               {statusText}
             </span>

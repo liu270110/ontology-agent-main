@@ -17,13 +17,13 @@ export function ContextMeter({ used, limit }: { used: number; limit: number }) {
           style={{ width: `${pct}%` }}
         />
       </div>
-      <span className="whitespace-nowrap font-mono text-[10px] text-label-3">
+      <span className="whitespace-nowrap font-mono text-2xs text-label-3">
         {fmt(used)} / {fmt(limit)} · {pct}%
       </span>
       {pct > 80 && (
         <button
           type="button"
-          className="rounded-full border border-separator px-2 py-0.5 text-[10px] text-label-2 hover:text-accent"
+          className="rounded-full border border-separator px-2 py-0.5 text-2xs text-label-2 hover:text-accent"
           onClick={() => {/* TODO: POST /sessions/{id}/compact */}}
         >
           压缩

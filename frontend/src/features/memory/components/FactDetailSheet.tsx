@@ -47,11 +47,11 @@ export function FactDetailSheet({ fact, onClose }: { fact: MemoryFact | null; on
           <span className="badge b-gray">{fact.category}</span>
         </div>
 
-        <div className="mt-3 rounded-xl border border-separator bg-surface-2 p-3 text-[12.5px] leading-6">
+        <div className="mt-3 rounded-xl border border-separator bg-surface-2 p-3 text-xs leading-6">
           {fact.content}
         </div>
 
-        <div className="mt-3 space-y-1.5 text-[11.5px]">
+        <div className="mt-3 space-y-1.5 text-[11px]">
           <div className="flex justify-between gap-3">
             <span className="text-label-3">置信度</span>
             <span>{fact.confidence.toFixed(2)}</span>
@@ -100,7 +100,7 @@ export function FactDetailSheet({ fact, onClose }: { fact: MemoryFact | null; on
             <Download size={12} aria-hidden /> 导出
           </button>
         </div>
-        <div className="mt-1.5 flex flex-wrap gap-1.5 text-[10.5px] text-label-3">
+        <div className="mt-1.5 flex flex-wrap gap-1.5 text-[11px] text-label-3">
           <span className="badge b-blue">⌘F：全文检索走检索端点 · 范围 = 本人记忆</span>
           <span className="badge b-blue">导出：走 IX-ACC-08 数据导出任务流</span>
         </div>
@@ -112,7 +112,7 @@ export function FactDetailSheet({ fact, onClose }: { fact: MemoryFact | null; on
           </div>
           <div className="mt-2">
             {events.length === 0 ? (
-              <div className="text-[11.5px] text-label-3">加载中…</div>
+              <div className="text-[11px] text-label-3">加载中…</div>
             ) : (
               <FactTimeline events={events} />
             )}
@@ -139,7 +139,7 @@ export function FactDetailSheet({ fact, onClose }: { fact: MemoryFact | null; on
         <div className="mt-4 rounded-xl border border-[color:var(--red)]/30 px-3 py-3" style={{ background: 'var(--red-soft)' }}>
           {!invalidateMode ? (
             <div className="flex items-center gap-2">
-              <span className="text-[11.5px] text-red">遗忘 = 失效标记（不物理删除，平台底线）。</span>
+              <span className="text-[11px] text-red">遗忘 = 失效标记（不物理删除，平台底线）。</span>
               <button
                 type="button"
                 className="btn btn-d btn-sm ml-auto"

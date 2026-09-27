@@ -29,14 +29,14 @@ export function ModelsTab() {
   return (
     <div>
       <div className="flex items-center gap-2">
-        <span className="text-[12.5px] text-label-2">路由顺序：本地默认 → 云溢出按优先级 → 降级备用；密钥只写哈希与长度</span>
+        <span className="text-xs text-label-2">路由顺序：本地默认 → 云溢出按优先级 → 降级备用；密钥只写哈希与长度</span>
         <button type="button" className="btn btn-p btn-sm ml-auto" data-testid="adm-model-open" onClick={() => setAddOpen(true)}>
           <Plus size={13} aria-hidden /> 接入渠道
         </button>
       </div>
 
       <div className="card mt-3 overflow-x-auto !p-0">
-        <table className="w-full min-w-[760px] text-[12.5px]">
+        <table className="w-full min-w-[760px] text-xs">
           <thead>
             <tr className="hairline-b text-left text-[11px] text-label-3">
               <th className="px-4 py-2.5 font-semibold">渠道</th>
@@ -51,7 +51,7 @@ export function ModelsTab() {
           <tbody>
             {channels.map(c => (
               <tr key={c.id} className="hairline-b" data-testid={`adm-model-${c.id}`}>
-                <td className="px-4 py-2.5"><b>{c.name}</b><span className="mono block text-[10px] text-label-3">{c.api_key_masked}</span></td>
+                <td className="px-4 py-2.5"><b>{c.name}</b><span className="mono block text-2xs text-label-3">{c.api_key_masked}</span></td>
                 <td className="px-4 py-2.5">{c.provider_label}</td>
                 <td className="px-4 py-2.5">{c.models.map(m => <span key={m} className="mono badge b-gray mr-1">{m}</span>)}</td>
                 <td className="px-4 py-2.5">P{c.priority}</td>
@@ -146,8 +146,8 @@ function AddChannelModal({ onClose }: { onClose: () => void }) {
               onClick={() => { setProvider(p.key); setTest({ phase: 'idle' }) }}
               className={`rounded-xl border p-3 text-left transition-colors ${provider === p.key ? 'border-accent bg-accent-soft' : 'border-separator hover:border-label-3'}`}
             >
-              <b className="text-[12.5px]">{p.label}</b>
-              <div className="mt-1 text-[10.5px] leading-4 text-label-2">{p.desc}</div>
+              <b className="text-xs">{p.label}</b>
+              <div className="mt-1 text-[11px] leading-4 text-label-2">{p.desc}</div>
             </button>
           ))}
         </div>
@@ -208,7 +208,7 @@ function AddChannelModal({ onClose }: { onClose: () => void }) {
       {/* 连通性测试区：三态 */}
       <div className="rounded-xl border border-separator p-3" data-testid="adm-model-test">
         {test.phase === 'idle' && (
-          <div className="flex items-center gap-2 text-[12px] text-label-2">
+          <div className="flex items-center gap-2 text-xs text-label-2">
             <span className="h-2 w-2 rounded-full bg-[var(--label-3)]" aria-hidden />
             未测试：填写后点击「测试连通性」，成功才可保存。
             <button type="button" className="btn btn-s btn-sm ml-auto" data-testid="adm-model-test-btn" onClick={() => { setTest({ phase: 'testing' }); testMutation.mutate() }}>
@@ -217,14 +217,14 @@ function AddChannelModal({ onClose }: { onClose: () => void }) {
           </div>
         )}
         {test.phase === 'testing' && (
-          <div className="flex items-center gap-2 text-[12px] text-accent" data-testid="adm-model-test-running">
+          <div className="flex items-center gap-2 text-xs text-accent" data-testid="adm-model-test-running">
             <span className="h-2 w-2 animate-pulse rounded-full bg-accent" aria-hidden />
             正在测试连通性…
           </div>
         )}
         {test.phase === 'ok' && (
           <div data-testid="adm-model-test-ok">
-            <div className="flex items-center gap-2 text-[12px] font-semibold" style={{ color: 'var(--green)' }}>
+            <div className="flex items-center gap-2 text-xs font-semibold" style={{ color: 'var(--green)' }}>
               <span className="h-2 w-2 rounded-full" style={{ background: 'var(--green)' }} aria-hidden />
               连通性测试 · 成功（{test.result.latency_ms}ms）
               <button type="button" className="btn btn-g btn-sm ml-auto" onClick={() => { setTest({ phase: 'testing' }); testMutation.mutate() }}>重测</button>
@@ -297,9 +297,9 @@ function DeleteChannelModal({ channel, onClose }: { channel: ModelChannel; onClo
         <div>
           <b>级联影响</b>
           引用该渠道的 Agent 插槽：
-          {(impact?.agents ?? []).length === 0 && <div className="text-[11.5px]">（无引用插槽）</div>}
+          {(impact?.agents ?? []).length === 0 && <div className="text-[11px]">（无引用插槽）</div>}
           {(impact?.agents ?? []).map(a => <div key={a} className="mono text-[11px]">{a}</div>)}
-          <div className="mt-1 text-[11.5px]">
+          <div className="mt-1 text-[11px]">
             近 30 天：{impact?.sessions_30d ?? '—'} 会话 · {impact?.tokens_30d ?? '—'} tokens · {impact?.cost_30d ?? '—'}
           </div>
         </div>

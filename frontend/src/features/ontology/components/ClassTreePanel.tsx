@@ -64,7 +64,7 @@ function ClassRow({ node, style, isSelected, onFocus }: NodeRendererProps<ArborC
   return (
     <div
       style={{ ...style, top: (style.top as number) + 2 }}
-      className={`group flex cursor-pointer items-center gap-1 rounded-lg px-1.5 py-1 text-[12px] ${
+      className={`group flex cursor-pointer items-center gap-1 rounded-lg px-1.5 py-1 text-xs ${
         isSelected ? 'bg-accent-soft font-semibold text-accent' : 'text-label-2 hover:bg-surface-2'
       }`}
       onClick={() => node.select()}
@@ -93,7 +93,7 @@ function ClassRow({ node, style, isSelected, onFocus }: NodeRendererProps<ArborC
         {data.label}
         {data.abstract && <span className="badge b-gray ml-1 flex-none">抽象</span>}
       </span>
-      <span className="mono ml-auto flex-none text-[10px] text-label-3">{data.count}</span>
+      <span className="mono ml-auto flex-none text-2xs text-label-3">{data.count}</span>
       <button
         type="button"
         aria-label={`定位 ${data.label} 到画布`}
@@ -151,11 +151,11 @@ export function ClassTreePanel({
             type="button"
             aria-pressed={tab === t.key}
             onClick={() => onTabChange(t.key)}
-            className={`flex items-center gap-1 whitespace-nowrap rounded-lg px-2 py-1 text-[11.5px] ${
+            className={`flex items-center gap-1 whitespace-nowrap rounded-lg px-2 py-1 text-[11px] ${
               tab === t.key ? 'bg-accent-soft font-semibold text-accent' : 'text-label-2 hover:bg-surface-2'
             }`}
           >
-            {t.label} <span className="mono text-[10px] text-label-3">{counts[t.key]}</span>
+            {t.label} <span className="mono text-2xs text-label-3">{counts[t.key]}</span>
           </button>
         ))}
         <button
@@ -174,7 +174,7 @@ export function ClassTreePanel({
           <div className="relative mx-2 mt-2 flex-none">
             <Search size={12} className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-label-3" aria-hidden />
             <input
-              className="input h-7 pl-7 text-[12px]"
+              className="input h-7 pl-7 text-xs"
               placeholder="搜索类…"
               aria-label="搜索类"
               value={search}
@@ -206,7 +206,7 @@ export function ClassTreePanel({
               )}
             </Tree>
           </div>
-          <p className="hairline-t flex-none px-3 py-2 text-[10.5px] leading-4 text-label-3">
+          <p className="hairline-t flex-none px-3 py-2 text-[11px] leading-4 text-label-3">
             拖拽把手：悬停行首出现（行首六点）；拖入画布即新建节点并自动挂父类。
           </p>
         </>
@@ -216,13 +216,13 @@ export function ClassTreePanel({
         <div className="scroll-thin min-h-0 flex-1 overflow-y-auto px-3 py-2">
           {domains.map(d => (
             <div key={d} className="mb-2">
-              <div className="mono text-[10px] uppercase text-label-3">定义域：{d}</div>
+              <div className="mono text-2xs uppercase text-label-3">定义域：{d}</div>
               {props
                 .filter(p => p.domain_label === d)
                 .map(p => (
-                  <div key={p.id} className="group flex items-center gap-1.5 rounded-lg px-1 py-1.5 text-[12px] hover:bg-surface-2">
+                  <div key={p.id} className="group flex items-center gap-1.5 rounded-lg px-1 py-1.5 text-xs hover:bg-surface-2">
                     <span className="mono truncate text-accent">{p.name}</span>
-                    <span className="flex-none text-[10px] text-label-3">{p.prop_type === 'data' ? `数据属性 · ${p.range}` : `对象属性 → ${p.range}`}</span>
+                    <span className="flex-none text-2xs text-label-3">{p.prop_type === 'data' ? `数据属性 · ${p.range}` : `对象属性 → ${p.range}`}</span>
                     <button
                       type="button"
                       aria-label={`定位 ${p.label} 到画布`}
@@ -245,7 +245,7 @@ export function ClassTreePanel({
             <button
               key={a.id}
               type="button"
-              className="group flex w-full items-center gap-1.5 rounded-lg px-1 py-1.5 text-left text-[12px] hover:bg-surface-2"
+              className="group flex w-full items-center gap-1.5 rounded-lg px-1 py-1.5 text-left text-xs hover:bg-surface-2"
               onClick={() => onLocate(`shape:${a.name}`)}
             >
               <span className="mono truncate" style={{ color: 'var(--purple)' }}>{a.name}</span>
@@ -253,14 +253,14 @@ export function ClassTreePanel({
               <Crosshair size={12} className="ml-auto flex-none text-label-3 opacity-0 transition-opacity group-hover:opacity-100" aria-hidden />
             </button>
           ))}
-          <p className="mt-1 text-[10.5px] text-label-3">点击 shape 行进入公理编辑器（IX-ON-08）。</p>
+          <p className="mt-1 text-[11px] text-label-3">点击 shape 行进入公理编辑器（IX-ON-08）。</p>
         </div>
       )}
 
       {tab === 'rules' && (
         <div className="scroll-thin min-h-0 flex-1 overflow-y-auto px-3 py-2">
           {(rulesQ.data?.items ?? []).map(r => (
-            <div key={r.id} className="group flex items-center gap-2 rounded-lg px-1 py-1.5 text-[12px] hover:bg-surface-2">
+            <div key={r.id} className="group flex items-center gap-2 rounded-lg px-1 py-1.5 text-xs hover:bg-surface-2">
               <span className="mono flex-none" style={{ color: 'var(--indigo)' }}>{r.name}</span>
               <span className="truncate text-label-2" title={r.label}>
                 {r.label}
@@ -282,7 +282,7 @@ export function ClassTreePanel({
               </button>
             </div>
           ))}
-          <p className="mt-1 text-[10.5px] text-label-3">开关切换 = 向变更单追加启用/停用修改。</p>
+          <p className="mt-1 text-[11px] text-label-3">开关切换 = 向变更单追加启用/停用修改。</p>
         </div>
       )}
     </aside>

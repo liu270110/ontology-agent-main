@@ -75,12 +75,12 @@ function WorkflowNodeCard({ id, data, selected }: NodeProps) {
       <Handle type="target" position={Position.Left} style={{ opacity: 0 }} isConnectableStart={false} />
       <div className="flex items-center gap-1.5">
         <span className="dot flex-none" style={{ background: color, width: 7, height: 7 }} aria-hidden />
-        <b className="truncate text-[12px] leading-4">{d.label}</b>
+        <b className="truncate text-xs leading-4">{d.label}</b>
         <span className="badge b-gray ml-auto flex-none" style={{ fontSize: 9, padding: '0 6px' }}>
           {KIND_LABEL[d.kind]}
         </span>
       </div>
-      {d.sub && <div className="mono mt-0.5 truncate text-[10px] leading-3.5 text-label-3">{d.sub}</div>}
+      {d.sub && <div className="mono mt-0.5 truncate text-2xs leading-3.5 text-label-3">{d.sub}</div>}
       {(d.breakpoint || run) && (
         <div className="mt-1 flex items-center gap-1">
           {d.breakpoint && (

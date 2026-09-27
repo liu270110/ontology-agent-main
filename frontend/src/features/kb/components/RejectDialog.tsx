@@ -74,14 +74,14 @@ export function RejectDialog({
         ))}
       </div>
       <textarea
-        className="input mt-3 py-2 text-[12.5px]"
+        className="input mt-3 py-2 text-xs"
         rows={2}
         placeholder="备注（可选）——补充上下文便于负样本归因"
         value={note}
         onChange={e => setNote(e.target.value)}
         aria-label="拒绝备注"
       />
-      <p className="mt-2.5 rounded-lg bg-[var(--orange-soft)] px-3 py-2 text-[11.5px] leading-5 text-orange">
+      <p className="mt-2.5 rounded-lg bg-[var(--orange-soft)] px-3 py-2 text-[11px] leading-5 text-orange">
         拒绝样本进入负样本池，反哺下一轮抽取模型。
       </p>
     </Modal>

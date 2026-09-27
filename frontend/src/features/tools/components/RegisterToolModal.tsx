@@ -162,7 +162,7 @@ export function RegisterToolModal({ open, onClose }: { open: boolean; onClose: (
         </>
       }
     >
-      <p className="text-[11.5px] text-label-3">
+      <p className="text-[11px] text-label-3">
         将业务 HTTP 接口封装为受治理工具：调用经平台网关，带审计与 trace_id（设计宪法 5）。
       </p>
 
@@ -236,8 +236,8 @@ export function RegisterToolModal({ open, onClose }: { open: boolean; onClose: (
       {/* 试运行面板 */}
       <div className="rounded-xl border border-separator p-3" style={{ background: 'var(--surface)' }} data-testid="tls-dryrun">
         <div className="flex items-center gap-2">
-          <b className="text-[12px]">试运行</b>
-          <span className="text-[10.5px] text-label-3">示例参数 → 实际调用 → 结果</span>
+          <b className="text-xs">试运行</b>
+          <span className="text-[11px] text-label-3">示例参数 → 实际调用 → 结果</span>
           <button type="button" className="btn btn-s btn-sm ml-auto" data-testid="tls-dryrun-go" onClick={tryRun}>
             <Play size={11} aria-hidden /> 试运行
           </button>
@@ -263,7 +263,7 @@ export function RegisterToolModal({ open, onClose }: { open: boolean; onClose: (
         </div>
         {run && run !== 'error' && (
           <pre
-            className="mono mt-2 overflow-x-auto rounded-lg px-2.5 py-2 text-[10.5px] leading-4"
+            className="mono mt-2 overflow-x-auto rounded-lg px-2.5 py-2 text-[11px] leading-4"
             style={{ background: 'var(--surface-2)' }}
             data-testid="tls-dryrun-result"
           >

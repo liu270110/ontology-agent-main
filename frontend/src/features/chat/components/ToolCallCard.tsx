@@ -22,7 +22,7 @@ export function ToolCallCard({ id, call }: { id: string; call: ToolCall }) {
         <span className="font-mono font-semibold">{call.tool}</span>
         <span className="text-label-3">{STATE_TEXT[call.state]}</span>
         {call.costMs != null && <span className="font-mono text-label-3">{call.costMs}ms</span>}
-        <span className="ml-auto font-mono text-[10px] text-label-3">{id.slice(0, 8)}</span>
+        <span className="ml-auto font-mono text-2xs text-label-3">{id.slice(0, 8)}</span>
       </div>
       {call.state !== 'args' && argsPreview && (
         <div className="mt-1 truncate font-mono text-[11px] text-label-2" title={argsPreview}>{argsPreview}</div>

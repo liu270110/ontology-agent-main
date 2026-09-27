@@ -143,7 +143,7 @@ export function ToolPickerPanel({
       {/* 左：工具树三组 */}
       <div className="rounded-xl border border-separator p-3" style={{ background: 'var(--surface)' }} data-testid="toolpicker-tree">
         <div className="mb-2 flex items-center gap-2">
-          <b className="text-[12.5px]">工具树 · 三组</b>
+          <b className="text-xs">工具树 · 三组</b>
           <span className="badge b-blue ml-auto">已选 {selectedTools.length}</span>
         </div>
         <div className="space-y-0.5">
@@ -169,10 +169,10 @@ export function ToolPickerPanel({
                     }}
                     onChange={() => toggleGroup(id)}
                   />
-                  <b className="text-[12.5px]">{g.label}</b>
+                  <b className="text-xs">{g.label}</b>
                   <button
                     type="button"
-                    className="text-[10.5px] text-label-3 hover:text-accent"
+                    className="text-[11px] text-label-3 hover:text-accent"
                     aria-label={`展开或折叠 ${g.label}`}
                     onClick={() => (item.isExpanded() ? item.collapse() : item.expand())}
                   >
@@ -198,8 +198,8 @@ export function ToolPickerPanel({
                   checked={isChecked}
                   onChange={() => toggleTool(tool)}
                 />
-                <span className="mono text-[12px] font-semibold">{tool.name}</span>
-                <span className="truncate text-[10.5px] text-label-3">{tool.desc}</span>
+                <span className="mono text-xs font-semibold">{tool.name}</span>
+                <span className="truncate text-[11px] text-label-3">{tool.desc}</span>
                 {isAuto && <span className="badge b-blue">依赖自动勾选</span>}
                 {tool.scopes.includes('kb.read') && <span className="badge b-gray">只读</span>}
                 {tool.danger && <span className="badge b-red">高危</span>}
@@ -212,12 +212,12 @@ export function ToolPickerPanel({
       {/* 右：选中摘要 + 依赖提示 + 高危提示 */}
       <div className="min-w-0 space-y-3">
         <div className="rounded-xl border border-separator p-3" style={{ background: 'var(--surface)' }} data-testid="toolpicker-summary">
-          <b className="text-[12px]">选中摘要</b>
+          <b className="text-xs">选中摘要</b>
           <div className="mt-1.5 flex flex-wrap gap-1">
             {selectedTools.map(t => (
               <span key={t.id} className="badge b-blue">{t.name}</span>
             ))}
-            {selectedTools.length === 0 && <span className="text-[10.5px] text-label-3">未选择工具</span>}
+            {selectedTools.length === 0 && <span className="text-[11px] text-label-3">未选择工具</span>}
           </div>
           <div className="hairline-t mt-2 space-y-1 pt-2 text-[11px] text-label-2">
             {GROUPS.map(g => (
@@ -230,8 +230,8 @@ export function ToolPickerPanel({
         </div>
 
         <div className="rounded-xl px-3 py-2.5" style={{ background: 'var(--accent-soft)' }}>
-          <b className="text-[11.5px] text-accent">依赖已处理</b>
-          <p className="mt-1 break-words text-[10.5px] leading-4 text-label-2">
+          <b className="text-[11px] text-accent">依赖已处理</b>
+          <p className="mt-1 break-words text-[11px] leading-4 text-label-2">
             {autoCheckedNow.length > 0
               ? `${autoCheckedNow.map(t => t.name).join('、')} 因依赖自动勾选；取消其依赖将同步取消该插件。`
               : '勾选带依赖的工具时将自动勾选其依赖（如 cli-anything.exec 依赖 kb.search）。'}
@@ -239,8 +239,8 @@ export function ToolPickerPanel({
         </div>
 
         <div className="rounded-xl px-3 py-2.5" style={{ background: 'var(--orange-soft)' }}>
-          <b className="text-[11.5px] text-orange">高危 scope 提示</b>
-          <p className="mt-1 break-words text-[10.5px] leading-4 text-label-2">
+          <b className="text-[11px] text-orange">高危 scope 提示</b>
+          <p className="mt-1 break-words text-[11px] leading-4 text-label-2">
             {dangerSelected.length > 0
               ? `${dangerSelected.map(t => t.name).join(' / ')} 标注高危：即使注入，调用时仍需高风险确认（IX-G-04）并写审计；MCP annotations 仅作 UI 提示。`
               : 'writeback.invoke / crm.write 标注高危：即使注入，调用时仍需高风险确认并写审计。'}
@@ -298,7 +298,7 @@ export function ToolPickerModal({
         </>
       }
     >
-      <p className="mb-3 text-[11.5px] text-label-3">
+      <p className="mb-3 text-[11px] text-label-3">
         勾选该 Agent 可指令调用的工具：组头全选，保存经 PUT /agents/{agentId}/tools 生效、变更写入审计。
       </p>
       <ToolPickerPanel selected={selected} onChange={setSelected} />

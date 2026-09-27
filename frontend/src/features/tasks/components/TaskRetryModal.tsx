@@ -51,11 +51,11 @@ export function TaskRetryModal({ task, onClose, onDone }: {
       <div className="field mt-3">
         <span className="field-label">重试范围</span>
         <div className="space-y-1.5">
-          <label className="flex items-center gap-2 text-[12.5px]">
+          <label className="flex items-center gap-2 text-xs">
             <input type="radio" name="tsk-retry-scope" data-testid="tsk-retry-scope-failed" checked={scope === 'failed_steps'} onChange={() => setScope('failed_steps')} />
             仅失败步骤（保留已完成产物，推荐）
           </label>
-          <label className="flex items-center gap-2 text-[12.5px]">
+          <label className="flex items-center gap-2 text-xs">
             <input type="radio" name="tsk-retry-scope" data-testid="tsk-retry-scope-all" checked={scope === 'all'} onChange={() => setScope('all')} />
             从头执行（重新计费，已有暂存被覆盖）
           </label>

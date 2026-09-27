@@ -87,16 +87,16 @@ export function MemoryPage() {
       {/* ---- IX-MEM-03：L1 只读视图 ---- */}
       {layer === 'L1' && (
         <div className="mt-4">
-          <div className="flex flex-wrap items-center gap-2 rounded-xl border border-separator bg-surface-2 px-4 py-2.5 text-[11.5px] text-label-2">
+          <div className="flex flex-wrap items-center gap-2 rounded-xl border border-separator bg-surface-2 px-4 py-2.5 text-[11px] text-label-2">
             <Lock size={13} aria-hidden />
             <b>L1 为会话内临时记忆，脱敏展示，不可编辑</b> · 只读视图，TTL 到期自动清除；敏感字段以掩码显示
-            <span className="mono ml-auto text-[10.5px] text-label-3">GET /memory/l1/&#123;session_id&#125;</span>
+            <span className="mono ml-auto text-[11px] text-label-3">GET /memory/l1/&#123;session_id&#125;</span>
           </div>
           <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
             {l1Items.map(s => (
               <div key={s.session_id} className="card !p-4" data-testid={`l1-card-${s.session_id}`}>
                 <div className="flex items-center gap-2">
-                  <span className="mono text-[12px] font-bold">{s.session_id}</span>
+                  <span className="mono text-xs font-bold">{s.session_id}</span>
                   <span className="badge b-blue">会话内</span>
                   <span className="ml-auto text-label-3" title="只读"><Lock size={12} aria-hidden /></span>
                 </div>
@@ -124,7 +124,7 @@ export function MemoryPage() {
               <div className="d">L1 随会话创建，会话关闭时触发归档与 L2 沉淀。</div>
             </div>
           )}
-          <div className="mt-3 text-[10.5px] text-label-3">
+          <div className="mt-3 text-[11px] text-label-3">
             L1 写入仅限系统沉淀与用户自编辑记忆块（PUT /memory/l1/&#123;session_id&#125;）；平台管理页对本层只读。脱敏规则待权限矩阵评审定稿（25 篇 §14）。
           </div>
         </div>
@@ -133,14 +133,14 @@ export function MemoryPage() {
       {/* ---- L2 / L3 / L4 条目列表 ---- */}
       {layer !== 'L1' && (
         <div className="mt-4">
-          <div className="text-[11.5px] text-label-3">{LAYER_META[layer].desc}</div>
+          <div className="text-[11px] text-label-3">{LAYER_META[layer].desc}</div>
 
           {/* L2 审核队列入口（IX-MEM-01） */}
           {layer === 'L2' && pendingPromotions.length > 0 && (
             <div className="mt-3 rounded-xl border border-[color:var(--orange)]/40 px-4 py-3" style={{ background: 'var(--orange-soft)' }}>
               <div className="flex flex-wrap items-center gap-2">
                 <Gavel size={14} className="text-orange" aria-hidden />
-                <b className="text-[12.5px]">升级审核队列 · {pendingPromotions.length} 单待终审（L2 → L3）</b>
+                <b className="text-xs">升级审核队列 · {pendingPromotions.length} 单待终审（L2 → L3）</b>
                 <span className="ml-auto flex flex-wrap gap-1.5">
                   {pendingPromotions.map(p => (
                     <button
@@ -168,14 +168,14 @@ export function MemoryPage() {
                 onClick={() => setDetail(f)}
               >
                 <div className="flex flex-wrap items-center gap-2">
-                  <b className="text-[13.5px]">{f.title}</b>
-                  <span className="mono text-[10.5px] text-label-3">{f.id}</span>
+                  <b className="text-[13px]">{f.title}</b>
+                  <span className="mono text-[11px] text-label-3">{f.id}</span>
                   <FactStatusBadge status={f.status} />
                   <span className="badge b-gray">{f.category}</span>
-                  <span className="ml-auto text-[10.5px] text-label-3">置信度 {f.confidence.toFixed(2)} · 复用 {f.reuse_count} 次</span>
+                  <span className="ml-auto text-[11px] text-label-3">置信度 {f.confidence.toFixed(2)} · 复用 {f.reuse_count} 次</span>
                 </div>
-                <p className="mt-1.5 text-[11.5px] leading-5 text-label-2">{f.content}</p>
-                <div className="mt-2 flex flex-wrap items-center gap-2 text-[10.5px] text-label-3">
+                <p className="mt-1.5 text-[11px] leading-5 text-label-2">{f.content}</p>
+                <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-label-3">
                   <LayerBadge layer={f.layer} />
                   <span>来源会话 {f.source_session.id}「{f.source_session.title}」</span>
                   <span>· 提出 {f.proposed_by}</span>

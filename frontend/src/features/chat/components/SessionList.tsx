@@ -102,7 +102,7 @@ export function SessionList({ onPicked }: { onPicked?: (id: string) => void }) {
             value={kw}
             onChange={e => setKw(e.target.value)}
             placeholder="搜索会话…"
-            className="w-full bg-transparent text-[12px] outline-none placeholder:text-label-3"
+            className="w-full bg-transparent text-xs outline-none placeholder:text-label-3"
           />
         </label>
       </div>
@@ -114,7 +114,7 @@ export function SessionList({ onPicked }: { onPicked?: (id: string) => void }) {
               <div className="flex items-center gap-1">
                 <input
                   aria-label="重命名会话"
-                  className="input h-7 flex-1 px-2 text-[12px]"
+                  className="input h-7 flex-1 px-2 text-xs"
                   value={renameText}
                   autoFocus
                   onChange={e => setRenameText(e.target.value)}
@@ -148,7 +148,7 @@ export function SessionList({ onPicked }: { onPicked?: (id: string) => void }) {
                   <X size={13} aria-hidden />
                 </button>
               </div>
-              <div className="px-0.5 pt-0.5 text-[10px] text-label-3">重命名中 · ↵ 确认 · Esc 取消</div>
+              <div className="px-0.5 pt-0.5 text-2xs text-label-3">重命名中 · ↵ 确认 · Esc 取消</div>
             </div>
           ) : (
             <div key={s.id} className="relative">
@@ -206,7 +206,7 @@ export function SessionList({ onPicked }: { onPicked?: (id: string) => void }) {
                       <div className="p-2.5">
                         <div className="menu-i danger pointer-events-none h-auto items-start gap-1.5">
                           <Trash2 size={14} className="mt-0.5 flex-none" aria-hidden />
-                          <span className="text-[12px] leading-5">
+                          <span className="text-xs leading-5">
                             删除「{s.title}」？将同时清除其消息与证据引用，不可恢复。
                           </span>
                         </div>
@@ -262,7 +262,7 @@ export function SessionList({ onPicked }: { onPicked?: (id: string) => void }) {
             </div>
           ),
         )}
-        {items.length === 0 && <div className="px-4 py-6 text-center text-[11.5px] text-label-3">无匹配会话</div>}
+        {items.length === 0 && <div className="px-4 py-6 text-center text-[11px] text-label-3">无匹配会话</div>}
       </div>
     </div>
   )

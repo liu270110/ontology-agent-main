@@ -28,7 +28,7 @@ export function DevicesTab() {
 
   return (
     <div>
-      <b className="text-[14px]">会话设备</b>
+      <b className="text-sm">会话设备</b>
       <div className="card mt-3 !p-0">
         {devices.map(d => (
           <div key={d.id} className="devrow px-4" data-testid={`set-device-${d.id}`}>
@@ -36,7 +36,7 @@ export function DevicesTab() {
               {/iphone|android|phone|mobile/i.test(d.name) ? <Smartphone size={16} aria-hidden /> : <Laptop size={16} aria-hidden />}
             </span>
             <div className="min-w-0">
-              <b className="block truncate text-[12.5px]">{d.name}</b>
+              <b className="block truncate text-xs">{d.name}</b>
               <span className="text-[11px] text-label-3">{d.location} · 最近活跃 {d.last_active}</span>
             </div>
             {d.current

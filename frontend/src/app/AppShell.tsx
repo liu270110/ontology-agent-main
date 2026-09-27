@@ -46,7 +46,7 @@ export function AppShell() {
             if (items.length === 0) return null
             return (
               <div key={g}>
-                <div className="px-4 py-1.5 text-[10px] uppercase tracking-wide text-label-3">{g}</div>
+                <div className="px-4 py-1.5 text-2xs uppercase tracking-wide text-label-3">{g}</div>
                 {items.map(r => (
                   <NavLink
                     key={r.path}
@@ -108,7 +108,7 @@ export function AppShell() {
           >
             <Search size={12} aria-hidden />
             搜索本体、文档、会话…
-            <kbd className="rounded border border-separator px-1 font-mono text-[10px]">⌘K</kbd>
+            <kbd className="rounded border border-separator px-1 font-mono text-2xs">⌘K</kbd>
           </button>
           <ThemeToggle />
           <button
@@ -117,7 +117,7 @@ export function AppShell() {
             className="relative flex h-8 w-8 items-center justify-center rounded-lg text-label-2 hover:bg-surface-2"
           >
             <Bell size={15} aria-hidden />
-            <span className="absolute right-1.5 top-1.5 flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-red px-1 text-[9px] font-semibold text-white">
+            <span className="absolute right-1.5 top-1.5 flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-red px-1 text-2xs font-semibold text-white">
               4
             </span>
           </button>

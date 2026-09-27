@@ -138,14 +138,14 @@ export function VersionsPage() {
               <tr key={cs.id} className={cs.id === activeCs ? 'sel' : undefined}>
                 <td className="mono font-semibold">{cs.id}</td>
                 <td>{cs.title}</td>
-                <td className="text-dim text-[12px]">{cs.submitter}</td>
+                <td className="text-dim text-xs">{cs.submitter}</td>
                 <td><CsStatusBadge status={cs.status} /></td>
                 <td className="text-[11px]">
                   <span className="text-green">+{cs.stats.add}</span>{' '}
                   <span className="text-red">−{cs.stats.del}</span>{' '}
                   <span className="text-orange">~{cs.stats.mod}</span>
                 </td>
-                <td className="text-dim text-[12px]">{relativeTime(cs.updated_at)}</td>
+                <td className="text-dim text-xs">{relativeTime(cs.updated_at)}</td>
                 <td className="text-right">
                   <button type="button" className="btn btn-g btn-sm" data-testid={`review-${cs.id}`} onClick={() => setSearchParams({ cs: cs.id })}>
                     {cs.status === 'in_review' ? '进入评审' : '查看 Diff'}
@@ -161,11 +161,11 @@ export function VersionsPage() {
       {activeCs && currentCs && (
         <div className="card mt-4" data-testid="diff-view">
           <div className="card-h !mb-2">
-            <h3 className="!text-[14px]">
+            <h3 className="!text-sm">
               {currentCs.id} · {currentCs.title}
             </h3>
             <CsStatusBadge status={currentCs.status} />
-            <span className="text-[11.5px] text-label-3">
+            <span className="text-[11px] text-label-3">
               提交人 {currentCs.submitter} · {relativeTime(currentCs.updated_at)}
             </span>
             <span className="badge b-green ml-auto">SHACL 校验通过</span>
@@ -198,7 +198,7 @@ export function VersionsPage() {
               return (
                 <div
                   key={r.id}
-                  className="flex items-center gap-2 rounded-lg px-3 py-2 text-[12px] transition-opacity"
+                  className="flex items-center gap-2 rounded-lg px-3 py-2 text-xs transition-opacity"
                   style={{ background: st.bg, opacity: d ? 0.55 : 1 }}
                   data-testid={`diff-row-${r.id}`}
                 >
@@ -237,7 +237,7 @@ export function VersionsPage() {
           {/* 决策操作条 */}
           <div className="mt-3 flex flex-wrap items-center gap-2">
             <input
-              className="input h-8 max-w-[380px] flex-1 text-[12px]"
+              className="input h-8 max-w-[380px] flex-1 text-xs"
               placeholder="评审意见（驳回时必填，随决策留审计）"
               aria-label="评审意见"
               defaultValue=""

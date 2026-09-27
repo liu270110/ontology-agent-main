@@ -172,7 +172,7 @@ export function WorkflowEditorPage() {
 
       {/* 八类节点 Tab（过滤节点库） */}
       <div className="flex flex-none flex-wrap items-center gap-1.5 border-b border-separator bg-surface-2 px-3.5 py-1.5">
-        <span className="mr-1 text-[10px] font-bold tracking-wide text-label-3">八类节点</span>
+        <span className="mr-1 text-2xs font-bold tracking-wide text-label-3">八类节点</span>
         {NODE_KINDS.map(k => (
           <button
             key={k.kind}
@@ -189,18 +189,18 @@ export function WorkflowEditorPage() {
             {k.label}
           </button>
         ))}
-        <span className="ml-auto text-[10.5px] text-label-3">点击 Tab 过滤节点库 · 循环子图 v2 另议</span>
+        <span className="ml-auto text-[11px] text-label-3">点击 Tab 过滤节点库 · 循环子图 v2 另议</span>
       </div>
 
       {/* 三栏 */}
       <div className="relative flex min-h-0 flex-1">
         <aside className="w-[240px] flex-none overflow-y-auto border-r border-separator p-2.5" style={{ background: 'var(--surface-2)' }} data-testid="wf-library">
-          <div className="px-1.5 pb-2 text-[10px] font-bold tracking-wide text-label-3">节点库（点击加入画布）</div>
+          <div className="px-1.5 pb-2 text-2xs font-bold tracking-wide text-label-3">节点库（点击加入画布）</div>
           {NODE_KINDS.filter(k => !kindFilter || k.kind === kindFilter).map(k => (
             <button
               key={k.kind}
               type="button"
-              className="flex h-[30px] w-full items-center gap-2 rounded-lg px-2 text-left text-[12px] text-label-2 hover:bg-surface"
+              className="flex h-[30px] w-full items-center gap-2 rounded-lg px-2 text-left text-xs text-label-2 hover:bg-surface"
               data-testid={`wf-add-${k.kind}`}
               onClick={() => addNode(k.kind)}
             >

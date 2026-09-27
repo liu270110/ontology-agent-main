@@ -7,7 +7,7 @@ export default defineConfig({
   resolve: { alias: { '@': path.resolve(__dirname, 'src') } },
   server: { port: 5173 },
   build: {
-    // S8 性能预算（22 篇 §4/30 篇 §10）：重库拆 chunk 懒加载，主包只留框架+业务首屏
+    // S8 性能预算（22 篇 §4/30 篇 §10）：重库拆 chunk 懒加载；react 系留主包（拆分致 default export 互操作断裂，实测 useState undefined）
     rollupOptions: {
       output: {
         manualChunks(id: string) {
@@ -18,7 +18,6 @@ export default defineConfig({
             if (id.includes('@rjsf') || id.includes('ajv')) return 'vendor-rjsf'
             if (id.includes('@headless-tree')) return 'vendor-tree'
             if (id.includes('react-markdown') || id.includes('remark') || id.includes('rehype') || id.includes('unified') || id.includes('shiki') || id.includes('highlight.js')) return 'vendor-markdown'
-            if (id.includes('react') || id.includes('scheduler')) return 'vendor-react'
           }
         },
       },

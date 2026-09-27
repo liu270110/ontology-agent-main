@@ -90,7 +90,7 @@ export function ReviewModal({
         </>
       }
     >
-      <div className="text-[11.5px] text-label-3">
+      <div className="text-[11px] text-label-3">
         候选事实申请并入组织共享层（L3 · 写入组织图谱）。共享记忆对全组可见，按治理规则必须人工终审。
       </div>
 
@@ -99,9 +99,9 @@ export function ReviewModal({
         {fact && (
           <div className="rounded-xl border border-separator bg-surface-2 p-4" data-testid="mem-candidate-card">
             <div className="text-[11px] font-semibold text-label-3">候选记忆卡</div>
-            <b className="mt-1.5 block text-[13.5px] leading-5">「{fact.title}」</b>
-            <p className="mt-1.5 text-[11.5px] leading-5 text-label-2">{fact.content}</p>
-            <div className="mt-2 space-y-1.5 text-[11.5px]">
+            <b className="mt-1.5 block text-[13px] leading-5">「{fact.title}」</b>
+            <p className="mt-1.5 text-[11px] leading-5 text-label-2">{fact.content}</p>
+            <div className="mt-2 space-y-1.5 text-[11px]">
               <div className="flex justify-between gap-2">
                 <span className="text-label-3">来源会话</span>
                 <span className="text-right">
@@ -124,7 +124,7 @@ export function ReviewModal({
                 </span>
               </div>
             </div>
-            <div className="mt-2 text-[10.5px] leading-4 text-label-3">
+            <div className="mt-2 text-[11px] leading-4 text-label-3">
               通过后：写入组织图谱（L3）· 生成 invalidation 边能力 · 全组可见
             </div>
           </div>
@@ -135,7 +135,7 @@ export function ReviewModal({
           <div className="text-[11px] font-semibold text-label-3">原文对照 · 会话消息片段</div>
           <div className="mt-2 space-y-2">
             {promotion.source_dialog.map((m, i) => (
-              <div key={i} className="text-[11.5px] leading-5" data-testid={`mem-quote-${i}`}>
+              <div key={i} className="text-[11px] leading-5" data-testid={`mem-quote-${i}`}>
                 <b>{m.speaker}：</b>
                 {m.highlight ? (
                   <>

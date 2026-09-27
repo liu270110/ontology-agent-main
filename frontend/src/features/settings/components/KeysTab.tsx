@@ -25,8 +25,8 @@ export function KeysTab() {
   return (
     <div>
       <div className="flex items-center gap-2">
-        <b className="text-[14px]">API Key</b>
-        <span className="text-[11.5px] text-label-3">库中只存哈希与前缀；明文仅签发响应返回一次（08 篇 §2.6 状态机）</span>
+        <b className="text-sm">API Key</b>
+        <span className="text-[11px] text-label-3">库中只存哈希与前缀；明文仅签发响应返回一次（08 篇 §2.6 状态机）</span>
         <button type="button" className="btn btn-p btn-sm ml-auto" data-testid="set-key-open" onClick={() => setCreateOpen(true)}>
           <Plus size={13} aria-hidden /> 新建 Key
         </button>
@@ -35,7 +35,7 @@ export function KeysTab() {
       <div className="card mt-3 !p-0">
         {keys.map(k => (
           <div key={k.id} className="keyrow px-4" data-testid={`set-key-${k.id}`}>
-            <b className="text-[12.5px]">{k.name}</b>
+            <b className="text-xs">{k.name}</b>
             <span className="keymask">{k.prefix}</span>
             {k.scopes.map(s => <span key={s} className="mono badge b-gray">{s}</span>)}
             <span className="text-[11px] text-label-3">创建 {k.created_at}</span>
@@ -103,15 +103,15 @@ function CreateKeyModal({ onClose, onDone }: { onClose: () => void; onDone: () =
             <Copy size={16} aria-hidden />
           </span>
           <div>
-            <b className="text-[14px]">Key 创建成功</b>
-            <div className="text-[11.5px] text-label-2">{created.name} · {created.scopes.join(', ')} · 已记审计</div>
+            <b className="text-sm">Key 创建成功</b>
+            <div className="text-[11px] text-label-2">{created.name} · {created.scopes.join(', ')} · 已记审计</div>
           </div>
         </div>
         <div className="al-warn alert mt-3">
           <div><b>完整 Key 仅此一次展示</b>关闭本弹窗后平台只保留哈希与前缀，任何人都无法再次查看，请立即复制并保存到密码管理器。</div>
         </div>
         <div className="mt-3 flex items-center gap-2 rounded-xl border border-separator p-2.5" data-testid="set-key-plain">
-          <code className="mono min-w-0 flex-1 break-all text-[12px]">{created.key}</code>
+          <code className="mono min-w-0 flex-1 break-all text-xs">{created.key}</code>
           <button
             type="button"
             className="btn btn-s btn-sm"
@@ -121,7 +121,7 @@ function CreateKeyModal({ onClose, onDone }: { onClose: () => void; onDone: () =
             <Copy size={12} aria-hidden /> {copied ? '已复制' : '复制'}
           </button>
         </div>
-        <label className="mt-3 flex cursor-pointer items-start gap-2 text-[12px] text-label-2">
+        <label className="mt-3 flex cursor-pointer items-start gap-2 text-xs text-label-2">
           <input type="checkbox" data-testid="set-key-saved" checked={saved} onChange={e => setSaved(e.target.checked)} className="mt-0.5" />
           我已将完整 Key 保存到安全位置，并知晓该 Key 泄露等同账号权限泄露（scope ⊆ 本人权限）。
         </label>
@@ -152,7 +152,7 @@ function CreateKeyModal({ onClose, onDone }: { onClose: () => void; onDone: () =
         <span className="field-label">权限范围（scope ⊆ 本人权限）</span>
         <div className="space-y-1.5">
           {SCOPE_OPTIONS.map(s => (
-            <label key={s.key} className="flex cursor-pointer items-center gap-2 text-[12.5px]">
+            <label key={s.key} className="flex cursor-pointer items-center gap-2 text-xs">
               <input
                 type="checkbox"
                 data-testid={`set-key-scope-${s.key}`}

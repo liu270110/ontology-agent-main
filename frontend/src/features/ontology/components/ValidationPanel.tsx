@@ -76,7 +76,7 @@ export function ValidationPanel({
             type="button"
             aria-pressed={tab === t.k}
             onClick={() => setTab(t.k)}
-            className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-[12px] ${
+            className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs ${
               tab === t.k ? 'bg-accent-soft font-semibold text-accent' : 'text-label-2 hover:bg-surface-2'
             }`}
           >
@@ -85,7 +85,7 @@ export function ValidationPanel({
             {t.k === 'preview' && <ChangeCountChips stats={draftOps} />}
           </button>
         ))}
-        <span className="mono ml-3 hidden text-[10.5px] text-label-3 lg:inline">
+        <span className="mono ml-3 hidden text-[11px] text-label-3 lg:inline">
           {report
             ? `conforms=${String(report.conforms)} · ${report.stats.triples.toLocaleString()} 三元组 · ${report.stats.elapsed_ms} ms · shapes=current`
             : '尚未校验 · 保存草稿后自动运行'}
@@ -104,7 +104,7 @@ export function ValidationPanel({
         {tab === 'shacl' && (
           <>
             {violations.map((v, i) => (
-              <div key={`${v.focus}-${i}`} className="flex items-center gap-2 rounded-lg px-1 py-1.5 text-[12px] hover:bg-surface-2">
+              <div key={`${v.focus}-${i}`} className="flex items-center gap-2 rounded-lg px-1 py-1.5 text-xs hover:bg-surface-2">
                 <AlertTriangle size={13} className="flex-none text-red" aria-hidden />
                 <span className="badge b-red flex-none">{v.severity}</span>
                 <span className="mono flex-none text-label-3">{v.focus}</span>
@@ -131,7 +131,7 @@ export function ValidationPanel({
         {tab === 'inference' && (
           <>
             {(report?.inferences.samples ?? []).map(s => (
-              <div key={s} className="flex items-center gap-2 rounded-lg px-1 py-1.5 text-[12px] hover:bg-surface-2">
+              <div key={s} className="flex items-center gap-2 rounded-lg px-1 py-1.5 text-xs hover:bg-surface-2">
                 <Sparkles size={13} className="flex-none" style={{ color: 'var(--indigo)' }} aria-hidden />
                 <span className="badge b-blue flex-none">新隐含</span>
                 <span className="mono truncate text-label-2">{s}</span>

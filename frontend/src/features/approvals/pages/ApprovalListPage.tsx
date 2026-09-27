@@ -63,7 +63,7 @@ export function ApprovalListPage() {
             aria-selected={tab === t.key}
             data-testid={`apr-tab-${t.key}`}
             onClick={() => toggleTab(t.key)}
-            className={`rounded-lg px-3 py-1.5 text-[12.5px] ${tab === t.key ? 'bg-accent-soft font-semibold text-accent' : 'text-label-2 hover:bg-surface-2'}`}
+            className={`rounded-lg px-3 py-1.5 text-xs ${tab === t.key ? 'bg-accent-soft font-semibold text-accent' : 'text-label-2 hover:bg-surface-2'}`}
           >
             {t.label}
           </button>
@@ -96,7 +96,7 @@ export function ApprovalListPage() {
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-2">
                 <ApprovalTypeBadge type={a.type} />
-                <b className="truncate text-[13.5px]">{a.title}</b>
+                <b className="truncate text-[13px]">{a.title}</b>
                 {a.high_risk && <span className="badge b-red">高危</span>}
                 {a.status !== 'pending' && (
                   <span className={`badge ml-auto ${a.status === 'approved' ? 'b-green' : 'b-red'}`}>
@@ -109,7 +109,7 @@ export function ApprovalListPage() {
                 <span>{relativeTime(a.submitted_at)}</span>
                 <span className="mono">{a.id}</span>
               </div>
-              <p className="mt-1 truncate text-[12px] text-label-2">{a.summary}</p>
+              <p className="mt-1 truncate text-xs text-label-2">{a.summary}</p>
             </div>
           </div>
         ))}

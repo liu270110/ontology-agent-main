@@ -15,6 +15,7 @@ from services.agent.business.kernel.dispatcher import ExtensionDispatcher
 from services.agent.business.kernel.errors import KernelContractError
 from services.agent.business.kernel.gate_baseline import canonical_param_hash
 from services.agent.business.kernel.run_context import Emit, RunContext
+from services.agent.business.kernel.spill import SpillStore, spill_if_oversized
 from services.agent.domain.model.kernel_actions import (
     ApprovalTicket,
     CodeAction,
@@ -34,6 +35,7 @@ logger = logging.getLogger(__name__)
 
 _TOOL_TIMEOUT_S = 30.0
 _APPROVAL_REQUIRED_MODES = frozenset({ExecutionMode.EXTERNAL_WRITE, ExecutionMode.CODE})
+_TOOL_ERROR_MAX_CHARS = 2048  # 工具错误正文硬截断（hermes 勘察细节 2，02 §11.2-2：「错误即反馈」回流防灌爆）
 
 
 def _err(code: ErrorCode, message: str) -> str:
@@ -43,10 +45,18 @@ def _err(code: ErrorCode, message: str) -> str:
 class ExecutionStage:
     """执行阶段：B5 审批路由 → tools.bindings / execution.backends 分发。"""
 
-    def __init__(self, dispatcher: ExtensionDispatcher, emit: Emit, *, tool_timeout_s: float = _TOOL_TIMEOUT_S) -> None:
+    def __init__(
+        self,
+        dispatcher: ExtensionDispatcher,
+        emit: Emit,
+        *,
+        tool_timeout_s: float = _TOOL_TIMEOUT_S,
+        spill_store: SpillStore | None = None,
+    ) -> None:
         self._dispatcher = dispatcher
         self._emit = emit
         self._tool_timeout_s = tool_timeout_s
+        self._spill_store = spill_store  # C1 spill（02 §11.2-11）：超大结果→有界预览+locator
 
     async def run(self, rc: RunContext, step: PlanStep) -> None:
         state, ctx, ledger = rc.states[step.seq], rc.ctx, rc.ledger
@@ -109,6 +119,13 @@ class ExecutionStage:
             )
         result = self.mark_untrusted(result)  # B3：自称 externally_verified 一律降权
         result = self.reject_cross_tenant(result, ctx)  # C3：产出声明租户≠注入租户 → 拒收
+        result = self.truncate_error(result)  # 错误正文 2048 硬截断（§11.2-2）
+        if self._spill_store is not None and result.ok:  # spill（§11.2-11）：超大成功结果→预览+locator
+            result = await spill_if_oversized(
+                result,
+                self._spill_store,
+                key=f"spill/{ctx.tenant_id}/{state.run_id}/{call.call_id}.json",
+            )
         usage_tokens = result.usage.get("total_tokens")
         if isinstance(usage_tokens, int) and usage_tokens > 0:
             rc.tracker.add_tokens(usage_tokens)  # A4 token 记账（工具回传口径）
@@ -174,6 +191,14 @@ class ExecutionStage:
         )
 
     # ── 标界与规格（静态契约，测试直断言）─────────────────────────────────
+    @staticmethod
+    def truncate_error(result: ToolResult) -> ToolResult:
+        """错误正文硬截断（2048 字符）：结构化错误回喂 LLM 前防爆量（02 §11.2-2）。"""
+        message = result.error_message
+        if result.ok or not message or len(message) <= _TOOL_ERROR_MAX_CHARS:
+            return result
+        return result.model_copy(update={"error_message": message[:_TOOL_ERROR_MAX_CHARS]})
+
     @staticmethod
     def mark_untrusted(result: ToolResult) -> ToolResult:
         """B3 信任级标界：实现自称 externally_verified 只留痕（claimed_*），实际恒 agent_attested。"""

@@ -54,11 +54,15 @@ class Session(Base, PkMixin, TenantMixin, TimestampMixin):
     title: Mapped[str | None] = mapped_column(String(256))
     channel: Mapped[str] = mapped_column(String(32), default="web", nullable=False)
     status: Mapped[str] = mapped_column(String(16), default="created", nullable=False)  # 五态=04 §3
+    type: Mapped[str] = mapped_column(String(16), default="single", nullable=False)  # single|group（27 篇 X15）
+    routing: Mapped[str] = mapped_column(String(16), default="round_robin", nullable=False)  # 发言编排四模式
     last_message_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     token_usage: Mapped[dict] = mapped_column(JSONB, default=dict, nullable=False)
     __table_args__ = (
         CheckConstraint("channel IN ('web','api','cli')", name="ck_sessions_channel"),
         CheckConstraint("status IN ('created','active','idle','closed','archived')", name="ck_sessions_status"),
+        CheckConstraint("type IN ('single','group')", name="ck_sessions_type"),
+        CheckConstraint("routing IN ('mention','round_robin','all','orchestrator')", name="ck_sessions_routing"),
         # 2026-09-26 缺口核查修复：recent 索引补 DESC（会话列表按最近消息倒序）
         Index("ix_sessions_tenant_user_recent", "tenant_id", "user_id", text("last_message_at DESC")),
     )
@@ -73,6 +77,8 @@ class Message(Base, PkMixin, TenantMixin):  # 只追加；先落库后推送（0
     content_type: Mapped[str] = mapped_column(String(32), default="text", nullable=False)
     ag_ui_events: Mapped[dict | None] = mapped_column(JSONB)
     model: Mapped[str | None] = mapped_column(String(64))
+    # 群聊发言归属（27 篇 X15；无 FK 防 agent 删除受阻）
+    agent_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
     token_in: Mapped[int | None] = mapped_column(Integer)
     token_out: Mapped[int | None] = mapped_column(Integer)
     latency_ms: Mapped[int | None] = mapped_column(Integer)
@@ -146,3 +152,19 @@ class TaskEvent(Base, PkMixin, TenantMixin):  # 只追加；SSE 转发源（02 �
     data: Mapped[dict] = mapped_column(JSONB, default=dict, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     __table_args__ = (UniqueConstraint("task_id", "seq", name="uk_task_events_task_id_seq"),)
+
+
+class SessionMember(Base, PkMixin, TenantMixin):  # 群聊成员（27 篇 X15；成员=Agent 插槽实例）
+    __tablename__ = "session_members"
+    session_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("sessions.id"), nullable=False, index=True)
+    agent_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("agents.id"), nullable=False)
+    display_name: Mapped[str] = mapped_column(String(128), nullable=False)
+    system_prompt: Mapped[str | None] = mapped_column(Text)
+    model: Mapped[str | None] = mapped_column(String(64))
+    routing_role: Mapped[str] = mapped_column(String(16), default="speaker", nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    __table_args__ = (
+        UniqueConstraint("session_id", "display_name", name="uk_session_members_session_display"),
+        UniqueConstraint("session_id", "agent_id", name="uk_session_members_session_agent"),
+        CheckConstraint("routing_role IN ('coordinator','speaker','observer')", name="ck_session_members_role"),
+    )

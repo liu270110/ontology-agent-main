@@ -12,7 +12,10 @@ M3 简化语义（02 §2.3 C1 注）：无 ABox 写透时，外部回执落账�
 
 from __future__ import annotations
 
+import asyncio
+import logging
 import uuid
+from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
 from typing import Any
 
@@ -22,6 +25,11 @@ from services.agent.business.kernel.errors import KernelContractError
 from services.agent.domain.model.kernel_actions import ToolCall
 from services.agent.domain.model.kernel_context import KernelEvent, TrustLevel
 from services.agent.domain.model.step_state import StepState
+
+logger = logging.getLogger(__name__)
+
+# 落账汇签名（C1 PG 台账组合点）：组合根注入（内存账本为事实源，sink 只做持久化投影）
+LedgerSink = Callable[[KernelEvent], Awaitable[None]]
 
 
 class ExternalReceipt(BaseModel):
@@ -53,9 +61,11 @@ class ToolCallRecord(BaseModel):
 class KernelLedger:
     """单运行账本（非线程安全，归属一次 KernelKernel.run）：审计、步记录、回执、调用登记。"""
 
-    def __init__(self, *, tenant_id: uuid.UUID, trace_id: str) -> None:
+    def __init__(self, *, tenant_id: uuid.UUID, trace_id: str, sink: LedgerSink | None = None) -> None:
         self._tenant_id = tenant_id
         self._trace_id = trace_id
+        self._sink = sink
+        self._sink_tasks: set[asyncio.Task[None]] = set()  # 强持有防 GC（终止前 drain）
         self._events: list[KernelEvent] = []
         self._steps: list[StepState] = []
         self._receipts: list[ExternalReceipt] = []
@@ -72,12 +82,39 @@ class KernelLedger:
         return self._tenant_id
 
     def append_event(self, event: KernelEvent) -> None:
-        """事件入账（C2）：trace_id/tenant_id 不一致即拒绝（防跨运行/无 trace 混账）。"""
+        """事件入账（C2）：trace_id/tenant_id 不一致即拒绝（防跨运行/无 trace 混账）。
+
+        配置了落账汇（C1 PG 台账投影）时异步派发：内存入账是同步事实源，投影失败
+        结构化转义留痕、不阻断运行（审计不阻塞主流程，02 §3 ⑥）；终态前由
+        :meth:`drain_sink` 排水，保证「落库后再终态」的先落库后可追溯口径。
+        """
         if event.trace_id != self._trace_id:
             raise KernelContractError(f"事件 trace_id 不属于本运行: {event.trace_id!r}")
         if event.tenant_id != self._tenant_id:
             raise KernelContractError("事件 tenant_id 与本运行租户不一致（C3 scoping）")
         self._events.append(event)
+        if self._sink is not None:
+            task = asyncio.ensure_future(self._dispatch(event))
+            self._sink_tasks.add(task)
+            task.add_done_callback(self._sink_tasks.discard)
+
+    async def _dispatch(self, event: KernelEvent) -> None:
+        try:
+            await self._sink(event)  # type: ignore[misc]
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:  # 投影失败转义留痕（standards/01 §2.6）
+            logger.warning("内核账本投影失败（event=%s）: %s", event.event_type, exc)
+
+    async def drain_sink(self, *, timeout_s: float = 5.0) -> None:
+        """终态前排水：等待全部投影完成（超时即放弃，残留交审计补扫口径）。"""
+        if not self._sink_tasks:
+            return
+        pending = set(self._sink_tasks)
+        try:
+            await asyncio.wait_for(asyncio.gather(*pending, return_exceptions=True), timeout=timeout_s)
+        except TimeoutError:
+            logger.warning("内核账本投影排水超时（%d 项在途，事件留痕于内存账本）", len(pending))
 
     @property
     def events(self) -> tuple[KernelEvent, ...]:

@@ -22,7 +22,9 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
 )
 
+from services.agent.data.repo_impl.agent_repo import PgAgentRepository
 from services.agent.data.repo_impl.session_repo import PgSessionRepository, PgTaskRepository
+from services.agent.domain.repo.agent_repo import AgentRepository
 from services.agent.domain.repo.session_repo import SessionRepository, TaskRepository
 from services.writeback.data.orm import OutboxEventORM
 
@@ -42,12 +44,14 @@ class TenantTransaction:
         self._tx: AsyncSessionTransaction | None = None
         self.sessions: SessionRepository  # __aenter__ 时绑定
         self.tasks: TaskRepository
+        self.agents: AgentRepository
 
     async def __aenter__(self) -> TenantTransaction:
         self._session = self._session_factory()
         self._tx = await self._session.begin()
         self.sessions = PgSessionRepository(self._session, self._tenant_id)
         self.tasks = PgTaskRepository(self._session, self._tenant_id)
+        self.agents = PgAgentRepository(self._session, self._tenant_id)
         return self
 
     async def __aexit__(self, exc_type: object, exc: object, tb: object) -> None:

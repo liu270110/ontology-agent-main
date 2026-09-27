@@ -1,5 +1,6 @@
-"""agent 领域模型：Session/Task 聚合 + 内核步状态机与扩展点值对象（docs/Agent/02）。"""
+"""agent 领域模型：Agent/Session/Task 聚合 + 内核步状态机与扩展点值对象（docs/Agent/02）。"""
 
+from services.agent.domain.model.agent import ALLOWED_AGENT_TOOLS, Agent, AgentAdapterInfo, AgentError, AgentStatus
 from services.agent.domain.model.kernel_actions import (
     ActionDecision,
     ApprovalTicket,
@@ -52,7 +53,12 @@ from services.agent.domain.model.step_state import (
 from services.agent.domain.model.task import Run, RunStatus, Task, TaskError, TaskEvent, TaskStatus
 
 __all__ = [
+    "ALLOWED_AGENT_TOOLS",
     "ActionDecision",
+    "Agent",
+    "AgentAdapterInfo",
+    "AgentError",
+    "AgentStatus",
     "ApprovalTicket",
     "BudgetWatermark",
     "CodeAction",

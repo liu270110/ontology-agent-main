@@ -8,7 +8,7 @@ from uuid import UUID
 
 from services.agent.business.kernel.budget import Budget, BudgetTracker
 from services.agent.business.kernel.cancellation import CancellationCoordinator
-from services.agent.business.kernel.ledger import KernelLedger
+from services.agent.business.kernel.ledger import KernelLedger, LedgerSink
 from services.agent.domain.model.kernel_actions import ApprovalTicket, StepResult
 from services.agent.domain.model.kernel_context import TaskRef, TenantContext
 from services.agent.domain.model.step_state import StepState
@@ -28,10 +28,11 @@ class RunContext:
         *,
         clock: Callable[[], float],
         approvals: tuple[ApprovalTicket, ...],
+        ledger_sink: LedgerSink | None = None,
     ) -> None:
         self.task = task
         self.ctx = ctx
-        self.ledger = KernelLedger(tenant_id=ctx.tenant_id, trace_id=ctx.trace_id)
+        self.ledger = KernelLedger(tenant_id=ctx.tenant_id, trace_id=ctx.trace_id, sink=ledger_sink)
         self.tracker = BudgetTracker(budget, clock=clock)
         self.coordinator = CancellationCoordinator(self.ledger)
         self.approvals = approvals

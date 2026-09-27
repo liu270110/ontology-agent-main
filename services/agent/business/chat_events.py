@@ -38,6 +38,7 @@ class ChatEventName(StrEnum):
     TOOL_CALL_RESULT = "TOOL_CALL_RESULT"
     RUN_FINISHED = "RUN_FINISHED"
     RUN_ERROR = "RUN_ERROR"
+    ROUTING_DECISION = "ROUTING_DECISION"  # 群聊路由决策系统事件（27 篇 X15；who/why 审计）
 
 
 class ChatEvent(BaseModel):
@@ -69,6 +70,7 @@ class ChatCommand(BaseModel):
     trace_id: str  # C2 贯穿（内核拒收空 trace_id）
     scopes: tuple[str, ...] = ("session:chat",)  # 主体授权面（B1 R3 唯一依据）
     adapter: str = "builtin"  # 适配器路由键（builtin | claude，Agent 服务设计 §3.2）
+    member_system_prompt: str | None = None  # 群聊成员人格（27 篇；单 agent 会话 None）
     retrieval_top_k: int | None = None  # 覆盖 ChatPolicy.retrieval_top_k（缺省用策略值）
 
 
@@ -93,6 +95,7 @@ class ChatOutcome(BaseModel):
     error_message: str | None = None
     retryable: bool = False  # 仅适配器错误/超时可重试（Agent 服务设计 §2 重试范围）
     cost_ms: int = 0
+    agent_id: UUID | None = None  # 群聊发言归属（27 篇 X15；单 agent 会话=主 agent）
 
 
 @dataclass(frozen=True)

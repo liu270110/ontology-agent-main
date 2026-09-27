@@ -64,6 +64,10 @@ class CancellationCoordinator:
     def register_child_run(self, name: str, cancel_hook: Callable[[], Awaitable[None]]) -> None:
         self._child_run_hooks.append((name, cancel_hook))
 
+    def unregister_child_run(self, name: str) -> None:
+        """正常终态子 Run 摘除钩子（取消清单只兜底仍在途的子 Run）。"""
+        self._child_run_hooks = [(n, h) for n, h in self._child_run_hooks if n != name]
+
     def track_tool_task(self, call_id: UUID, task: asyncio.Task[ToolResult]) -> None:
         self._tool_tasks[call_id] = task
 

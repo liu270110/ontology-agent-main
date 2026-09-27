@@ -50,6 +50,23 @@ class TaskListOut(BaseModel):
     limit: int
 
 
+class TaskEventOut(BaseModel):
+    """任务事件（只追加；api/01 §5.2 GET /tasks/{id}/events 行，seq=Last-Event-ID 口径）。"""
+
+    model_config = ConfigDict(extra="forbid")
+    seq: int
+    event_type: str
+    data: dict
+    created_at: datetime | None = None
+
+
+class TaskEventPageOut(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    items: list[TaskEventOut]
+    next_after_seq: int | None = None
+    limit: int
+
+
 def run_from_domain(r: Run) -> RunOut:
     return RunOut(
         id=r.id,

@@ -70,6 +70,7 @@ class KnowledgeSearchFn(Protocol):
         mode: str = "local",
         entity_type_filter: Sequence[str] | None = None,
         with_evidence: bool = True,
+        acl_tags: Sequence[str] | None = None,
     ) -> (
         Any
     ): ...  # pragma: no cover — Protocol 方法无实现（返回 duck-typed：degraded/citations/graph_paths/latency_ms）
@@ -504,8 +505,26 @@ class KnowledgeCapabilityProvider:
             mode=str(params.get("mode") or "auto"),
             entity_type_filter=params.get("entity_type_filter") or None,
             with_evidence=bool(params.get("with_evidence", True)),
+            acl_tags=_acl_tags_from_ctx(ctx),
         )
         return CapabilityResult.success(_project_search(result))
+
+
+def _acl_tags_from_ctx(ctx: CallContext) -> Sequence[str] | None:
+    """调用方 acl 标签面（OntRAG §4.3）：ctx.extra["acl_tags"]（通道/principal 扩展字段）。
+
+    - 缺失/None → None：调用方未接入标签面，kb 侧谓词不激活（no-op，兼容红线）；
+    - str → 逗号分隔解析（空串=显式空标签面，deny-by-default）；
+    - 序列 → 逐项 str 化。
+    标签面属授权上下文，只从 CallContext（网关侧信令断言）采集，禁从工具 params 采集
+    （不可信输入不作授权依据，capability_provider 红线同源）。
+    """
+    raw = ctx.extra.get("acl_tags")
+    if raw is None:
+        return None
+    if isinstance(raw, str):
+        return [tag.strip() for tag in raw.split(",") if tag.strip()]
+    return [str(tag) for tag in raw]
 
 
 def _project_search(result: Any) -> dict[str, Any]:

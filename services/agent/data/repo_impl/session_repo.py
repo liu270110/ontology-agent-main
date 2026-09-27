@@ -12,15 +12,24 @@ from __future__ import annotations
 import uuid
 from datetime import UTC, datetime
 
-from sqlalchemy import func, select, update
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from services.agent.data.orm import Message as MessageORM
 from services.agent.data.orm import Run as RunORM
 from services.agent.data.orm import Session as SessionORM
+from services.agent.data.orm import SessionMember as SessionMemberORM
 from services.agent.data.orm import Task as TaskORM
 from services.agent.data.orm import TaskEvent as TaskEventORM
-from services.agent.domain.model.session import Message, Session, SessionStatus
+from services.agent.domain.model.session import (
+    GroupMember,
+    MemberRole,
+    Message,
+    RoutingMode,
+    Session,
+    SessionStatus,
+    SessionType,
+)
 from services.agent.domain.model.task import Run, RunStatus, Task, TaskEvent, TaskStatus
 
 # 活跃 Run 状态集：与 PG 部分唯一索引 uk_runs_one_active WHERE 子句同口径（database/01 §3.2）
@@ -32,7 +41,7 @@ def _now() -> datetime:
     return datetime.now(UTC)
 
 
-def _session_to_domain(row: SessionORM, *, next_seq: int) -> Session:
+def _session_to_domain(row: SessionORM, *, next_seq: int, members: list[GroupMember] | None = None) -> Session:
     return Session(
         id=row.id,
         tenant_id=row.tenant_id,
@@ -40,7 +49,22 @@ def _session_to_domain(row: SessionORM, *, next_seq: int) -> Session:
         user_id=row.user_id,
         status=SessionStatus(row.status),
         title=row.title,
+        type=SessionType(row.type),
+        routing=RoutingMode(row.routing),
+        members=members or [],
         next_seq=next_seq,
+    )
+
+
+def _member_to_domain(row: SessionMemberORM) -> GroupMember:
+    return GroupMember(
+        id=row.id,
+        agent_id=row.agent_id,
+        display_name=row.display_name,
+        system_prompt=row.system_prompt,
+        model=row.model,
+        routing_role=MemberRole(row.routing_role),
+        created_at=row.created_at,
     )
 
 
@@ -50,6 +74,7 @@ def _message_to_domain(row: MessageORM) -> Message:
         session_id=row.session_id,
         seq=row.seq,
         role=row.role,
+        agent_id=row.agent_id,
         content=row.content,
         content_type=row.content_type,
         created_at=row.created_at,
@@ -106,7 +131,9 @@ class PgSessionRepository:
         row = (await self._db.execute(stmt)).scalar_one_or_none()
         if row is None:
             return None
-        return _session_to_domain(row, next_seq=await self._next_seq(session_id))
+        return _session_to_domain(
+            row, next_seq=await self._next_seq(session_id), members=await self._load_members(session_id)
+        )
 
     async def add(self, session: Session, *, channel: str = "web") -> None:
         self._db.add(
@@ -118,17 +145,52 @@ class PgSessionRepository:
                 title=session.title,
                 channel=channel,
                 status=session.status.value,
+                type=session.type.value,
+                routing=session.routing.value,
             )
         )
+        for m in session.members:
+            self._db.add(
+                SessionMemberORM(
+                    id=m.id,
+                    tenant_id=session.tenant_id,
+                    session_id=session.id,
+                    agent_id=m.agent_id,
+                    display_name=m.display_name,
+                    system_prompt=m.system_prompt,
+                    model=m.model,
+                    routing_role=m.routing_role.value,
+                )
+            )
         await self._db.flush()
 
     async def save_meta(self, session: Session) -> None:
         stmt = (
             update(SessionORM)
             .where(SessionORM.id == session.id, SessionORM.tenant_id == self._tenant_id)
-            .values(status=session.status.value, title=session.title)
+            .values(
+                status=session.status.value,
+                title=session.title,
+                type=session.type.value,
+                routing=session.routing.value,
+            )
         )
         await self._db.execute(stmt)
+        await self._db.execute(delete(SessionMemberORM).where(SessionMemberORM.session_id == session.id))
+        for m in session.members:
+            self._db.add(
+                SessionMemberORM(
+                    id=m.id,
+                    tenant_id=self._tenant_id,
+                    session_id=session.id,
+                    agent_id=m.agent_id,
+                    display_name=m.display_name,
+                    system_prompt=m.system_prompt,
+                    model=m.model,
+                    routing_role=m.routing_role.value,
+                )
+            )
+        await self._db.flush()
 
     async def append_message(self, session_id: uuid.UUID, message: Message) -> int:
         now = _now()
@@ -141,6 +203,7 @@ class PgSessionRepository:
                 role=message.role,
                 content=message.content,
                 content_type=message.content_type,
+                agent_id=message.agent_id,
                 created_at=now,
             )
         )
@@ -152,10 +215,15 @@ class PgSessionRepository:
         )
         return message.seq
 
-    async def list_for_user(self, user_id: uuid.UUID, *, offset: int = 0, limit: int = 20) -> list[Session]:
+    async def list_for_user(
+        self, user_id: uuid.UUID, *, offset: int = 0, limit: int = 20, session_type: str | None = None
+    ) -> list[Session]:
+        filters = [SessionORM.tenant_id == self._tenant_id, SessionORM.user_id == user_id]
+        if session_type is not None:
+            filters.append(SessionORM.type == session_type)
         stmt = (
             select(SessionORM)
-            .where(SessionORM.tenant_id == self._tenant_id, SessionORM.user_id == user_id)
+            .where(*filters)
             .order_by(
                 SessionORM.last_message_at.desc().nulls_last(),
                 SessionORM.created_at.desc(),
@@ -190,6 +258,38 @@ class PgSessionRepository:
             stmt = stmt.where(MessageORM.seq < cursor_seq)
         rows = (await self._db.execute(stmt.order_by(MessageORM.seq.desc()).limit(limit))).scalars().all()
         return [_message_to_domain(r) for r in rows]
+
+    async def count_messages_by_role(self, session_id: uuid.UUID, role: str) -> int:
+        stmt = select(func.count()).select_from(MessageORM).where(
+            MessageORM.session_id == session_id,
+            MessageORM.tenant_id == self._tenant_id,
+            MessageORM.role == role,
+        )
+        return int((await self._db.execute(stmt)).scalar_one())
+
+    async def count_by_agent(self, agent_id: uuid.UUID) -> int:
+        stmt = (
+            select(func.count())
+            .select_from(SessionORM)
+            .where(SessionORM.tenant_id == self._tenant_id, SessionORM.agent_id == agent_id)
+        )
+        return int((await self._db.execute(stmt)).scalar_one())
+
+    async def get_message_by_seq(self, session_id: uuid.UUID, seq: int) -> Message | None:
+        stmt = select(MessageORM).where(
+            MessageORM.session_id == session_id, MessageORM.tenant_id == self._tenant_id, MessageORM.seq == seq
+        )
+        row = (await self._db.execute(stmt)).scalar_one_or_none()
+        return _message_to_domain(row) if row is not None else None
+
+    async def _load_members(self, session_id: uuid.UUID) -> list[GroupMember]:
+        stmt = (
+            select(SessionMemberORM)
+            .where(SessionMemberORM.session_id == session_id)
+            .order_by(SessionMemberORM.created_at, SessionMemberORM.id)
+        )
+        rows = (await self._db.execute(stmt)).scalars().all()
+        return [_member_to_domain(r) for r in rows]
 
     async def _next_seq(self, session_id: uuid.UUID) -> int:
         stmt = select(func.max(MessageORM.seq)).where(
@@ -266,6 +366,26 @@ class PgTaskRepository:
         await self._db.flush()
         return seq
 
+    async def list_events(
+        self, task_id: uuid.UUID, *, after_seq: int | None = None, limit: int = 100
+    ) -> list[TaskEvent]:
+        """任务事件按 seq 回放（api/01 §5.2 GET /tasks/{id}/events 的取数口）。"""
+        stmt = select(TaskEventORM).where(TaskEventORM.task_id == task_id, TaskEventORM.tenant_id == self._tenant_id)
+        if after_seq is not None:
+            stmt = stmt.where(TaskEventORM.seq > after_seq)
+        rows = (await self._db.execute(stmt.order_by(TaskEventORM.seq).limit(limit))).scalars().all()
+        return [
+            TaskEvent(
+                id=row.id,
+                task_id=row.task_id,
+                seq=row.seq,
+                event_type=row.event_type,
+                data=row.data or {},
+                created_at=row.created_at,
+            )
+            for row in rows
+        ]
+
     async def find_active_run(self, task_id: uuid.UUID) -> Run | None:
         stmt = (
             select(RunORM)
@@ -284,6 +404,15 @@ class PgTaskRepository:
         stmt = (
             select(TaskORM)
             .where(TaskORM.tenant_id == self._tenant_id, TaskORM.session_id == session_id, TaskORM.status == "running")
+            .limit(1)
+        )
+        row = (await self._db.execute(stmt)).scalar_one_or_none()
+        return _task_to_domain(row, runs=[]) if row is not None else None
+
+    async def find_running_by_agent(self, agent_id: uuid.UUID) -> Task | None:
+        stmt = (
+            select(TaskORM)
+            .where(TaskORM.tenant_id == self._tenant_id, TaskORM.agent_id == agent_id, TaskORM.status == "running")
             .limit(1)
         )
         row = (await self._db.execute(stmt)).scalar_one_or_none()

@@ -9,6 +9,7 @@ TaskEvent 只追加（经 TaskRepository.append_event 持久化，不走全量 s
 from __future__ import annotations
 
 import uuid
+from collections.abc import Callable
 from datetime import datetime
 from enum import StrEnum
 from typing import Any
@@ -65,6 +66,30 @@ _VALID_RUN_TRANSITIONS: dict[RunStatus, set[RunStatus]] = {
 
 _ACTIVE_RUN_STATES = frozenset({RunStatus.QUEUED, RunStatus.RUNNING, RunStatus.WAITING_TOOL})
 
+_MAX_TASK_ATTEMPTS = 3  # attempt_count ≤3 含首次（至多 2 次重试；Agent 服务设计 §2 补全表）
+
+
+class RunRetryPolicy(BaseModel):
+    """Run 级重试策略（Agent 服务设计 §2 补全表定稿）：退避四元组缺一即评审打回。
+
+    重试是**编排器主权动作**（模型无权宣布重试，对齐 02 §2 A4 同构约束）；仅
+    ``run_error.retryable=true`` 的失败可触发（cancelled/判据已满足 completed/预算耗尽
+    类失败不重试）；``retry_budget_total`` 为任务重建 Run 的全局预算，每次扣 1，余额
+    不足快速失败（不建新 Run，task 直接 failed 并下发 RUN_ERROR 5005）。
+    """
+
+    base_seconds: float = 5.0  # Run 级基数 5s（高于平台默认 1s：Run 重建含上下文重组成本）
+    multiplier: float = 2.0  # 5s × 2ⁿ
+    cap_seconds: float = 60.0  # 上限 60s
+    jitter_ratio: float = 0.2  # jitter ±20%
+    retry_budget_total: int = 10  # 任务级重试预算（03 §1 默认 N=10）
+
+    def backoff_seconds(self, retry_index: int, *, rng: Callable[[], float]) -> float:
+        """第 retry_index 次重试（0 起）的退避秒数；rng 注入保证测试确定性（standards 纪律）。"""
+        delay = min(self.base_seconds * (self.multiplier**retry_index), self.cap_seconds)
+        jitter = 1.0 + (rng() * 2 - 1) * self.jitter_ratio
+        return round(delay * jitter, 3)
+
 
 class Run(BaseModel):
     """Run 实体（task 聚合内，04 §2「一次执行尝试」）：按 id 判等。
@@ -95,6 +120,26 @@ class Run(BaseModel):
     def is_active(self) -> bool:
         """活跃态（queued/running/waiting_tool）=PG 部分唯一索引 uk_runs_one_active 同一口径。"""
         return self.status in _ACTIVE_RUN_STATES
+
+    def start(self) -> None:
+        """认领执行（queued→running，04 §3「适配器 spawn 成功」）：worker 认领/内联受理共用。"""
+        self._transition(RunStatus.RUNNING)
+
+    def complete(self, usage: dict[str, Any] | None = None) -> None:
+        """正常完成（running→completed），用量随终态落账。"""
+        self._transition(RunStatus.COMPLETED)
+        if usage:
+            self.usage = usage
+
+    def fail(self, error: dict[str, Any] | None = None) -> None:
+        """失败终态（running→failed），error={code,message,retryable} 结构化留痕。"""
+        self._transition(RunStatus.FAILED)
+        if error is not None:
+            self.error = error
+
+    def timeout(self) -> None:
+        """超时终态（running→timeout，04 §3 run 七态之一）。"""
+        self._transition(RunStatus.TIMEOUT)
 
     def cancel(self) -> None:
         """取消（04 §3 run 状态机：queued/running/waiting_tool → cancelled）。
@@ -157,7 +202,10 @@ class Task(BaseModel):
     created_at: datetime | None = None
 
     def start_run(self) -> Run:
-        """受理 → 执行：pending→running 由首个 Run 承载（04 §3 task 状态机）。返回新建 Run（queued）。"""
+        """受理 → 执行：pending→running 由首个 Run 承载（04 §3 task 状态机）。返回新建 Run（queued）。
+
+        attempt_count=已受理 Run 数（含首次，§2 补全表「≤3 含首次」的计数口径）。
+        """
         if self.status is not TaskStatus.PENDING:
             raise TaskError(f"非法状态迁移 {self.status} → running（04 篇 §3 状态机）")
         if self._active_run() is not None:
@@ -165,6 +213,30 @@ class Task(BaseModel):
         run = Run(tenant_id=self.tenant_id, task_id=self.id)
         self.runs.append(run)
         self.active_run_id = run.id
+        self.attempt_count += 1
+        self.status = TaskStatus.RUNNING
+        return run
+
+    def start_retry_run(self) -> Run:
+        """失败重试（编排器主权动作，§2 补全表；04 §3 权威图：重试期间 task 保持 RUNNING，
+        `running→failed` 仅在「Run failed 且重试耗尽」时发生）。
+
+        前置：task 处于 RUNNING（活跃 Run 已终态）或 FAILED（耗尽后的恢复路径）；
+        attempt≤3 含首次；新 Run 重新消费触发消息（重放），消息 seq 不变（messages 只追加
+        不变式不破）；失败 Run 的部分输出仅留 task_events 审计流。调用方（编排器/监督者）
+        须先核验 ``run_error.retryable`` 与 RunRetryPolicy 预算余额，本方法只断言聚合内不变式。
+        """
+        if self.status not in (TaskStatus.RUNNING, TaskStatus.FAILED):
+            raise TaskError(f"非法状态迁移 {self.status} → running（重试仅限 running/failed 任务，04 §3）")
+        active = self._active_run()
+        if active is not None and active.is_active:
+            raise TaskError("4102 TASK_ALREADY_RUNNING: 活跃 Run 未终态，禁止重建")
+        if self.attempt_count >= _MAX_TASK_ATTEMPTS:
+            raise TaskError(f"重试预算耗尽：attempt_count={self.attempt_count} 已达上限 {_MAX_TASK_ATTEMPTS}（含首次）")
+        run = Run(tenant_id=self.tenant_id, task_id=self.id)
+        self.runs.append(run)
+        self.active_run_id = run.id
+        self.attempt_count += 1
         self.status = TaskStatus.RUNNING
         return run
 
@@ -185,6 +257,14 @@ class Task(BaseModel):
         if self.active_run_id is None:
             return None
         return next((r for r in self.runs if r.id == self.active_run_id), None)
+
+    def succeed(self) -> None:
+        """成功终态（running→succeeded，04 §3：Run completed 承载）。"""
+        self._transition(TaskStatus.SUCCEEDED)
+
+    def fail(self) -> None:
+        """失败终态（running→failed，04 §3：Run failed 且重试耗尽；调用方=编排器/监督者）。"""
+        self._transition(TaskStatus.FAILED)
 
     def _transition(self, to: TaskStatus) -> None:
         if to not in _VALID_TASK_TRANSITIONS[self.status]:

@@ -14,9 +14,11 @@ tasks/cancel——受理即凭证、状态回查询、取消）。
   platform.security.authorize）；Card ``authentication`` 字段如实声明 ``api_key``；
 - 审计（api/04 §5）：每次委托/状态查询/取消留痕（调用方、task_id、trace_id），
   复用 services.mcp.audit 审计协议与 bootstrap PG 汇；
+- 委托执行（M5 登记缓议项接线）：executor.py 的 A2aTaskExecutor 接通 chat 编排链
+  （api/04 §6 与 REST 同一条链路）——受理后台执行，tasks/get 轮询见 working→
+  completed(artifacts)/failed；会话构造/复用与租户级委托主体见 executor 模块 docstring；
 - 边界（本批明确不做，见模块报告）：message/stream、tasks/resubscribe 未启用
-  （capabilities.streaming=false）；委托执行通路未接线（executor 注入缝，受理后任务保持
-  working 直至编排链路对接）；签名卡（v1.0 头号特性）与 pushNotifications 随 M5+。
+  （capabilities.streaming=false）；签名卡（v1.0 头号特性）与 pushNotifications 随 M5+。
 """
 
 from __future__ import annotations
@@ -24,6 +26,7 @@ from __future__ import annotations
 from services.mcp.a2a.auth import ApiKeyAuthorizer
 from services.mcp.a2a.card import PROTOCOL_VERSION, AgentCard, AgentSkill, build_agent_card
 from services.mcp.a2a.errors import A2aAppError
+from services.mcp.a2a.executor import A2aResultStore, A2aTaskExecutor, InMemoryA2aResultStore
 from services.mcp.a2a.jsonrpc import (
     JSONRPC_APP_ERROR,
     dispatch_jsonrpc,
@@ -35,10 +38,13 @@ from services.mcp.a2a.service import A2aService
 __all__ = [
     "PROTOCOL_VERSION",
     "A2aAppError",
+    "A2aResultStore",
+    "A2aTaskExecutor",
     "A2aService",
     "AgentCard",
     "AgentSkill",
     "ApiKeyAuthorizer",
+    "InMemoryA2aResultStore",
     "JSONRPC_APP_ERROR",
     "build_agent_card",
     "dispatch_jsonrpc",

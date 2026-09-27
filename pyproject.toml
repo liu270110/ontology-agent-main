@@ -103,6 +103,7 @@ ignore_imports = [
     "services.gateway.app -> services.kb.api.kb",
     "services.gateway.app -> services.ontology.api.ontology",
     "services.gateway.app -> services.memory.api.memory",  # 计划 3.3：memory 六端点挂载边（同上逐边豁免）
+    "services.gateway.app -> services.memory.business.memory_service",  # M4P2：memory_service 装配链（TODO(M6) 收口）
     # UoW 仓储装配组合点（契约一同款豁免；TODO(M4) 收口）
     "services.platform.db.uow -> services.agent.data.repo_impl.session_repo",
     "services.platform.db.uow -> services.agent.domain.repo.session_repo",
@@ -140,6 +141,9 @@ type = "forbidden"
 source_modules = ["services.gateway", "services.iam", "services.ontology", "services.kb", "services.review", "services.memory", "services.plugin", "services.mcp", "services.writeback", "services.rsi", "services.sandbox"]
 forbidden_modules = ["services.agent.data"]
 ignore_imports = [
+    # 2026-09-27 舰队 memory M4P2 批次集成边（TODO(M6)：record 域仓储应改经端口/公开面）
+    "services.memory.business.memory_service -> services.agent.data.orm",
+    "services.memory.data.repositories.records_repo -> services.agent.data.orm",
     "services.gateway.app -> services.agent.api.sessions",
     "services.gateway.app -> services.agent.api.agents",  # 2026-09-27 agents CRUD 批
     "services.gateway.app -> services.agent.api.tasks",

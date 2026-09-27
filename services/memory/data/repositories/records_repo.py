@@ -1,0 +1,293 @@
+"""记忆仓储（06 篇 §4；L5 数据层——唯一允许 import ORM 的地方）。"""
+
+from __future__ import annotations
+
+import uuid
+from datetime import datetime
+from typing import Protocol
+
+from sqlalchemy import func, select, update
+from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+
+from services.agent.data.orm import Task
+from services.memory.data.orm_records import MemoryPromotionORM, MemoryRecordORM, MemoryReviewItemORM
+from services.memory.domain.model.memory import MemoryLayer, MemoryRecord
+
+_INGEST_COLUMNS = (
+    "id",
+    "tenant_id",
+    "layer",
+    "record_type",
+    "subject_iri",
+    "content",
+    "structured",
+    "scope",
+    "confidence",
+    "source_ref",
+    "proof_count",
+    "valid_from",
+    "valid_to",
+    "superseded_by",
+    "state",
+    "decay_at",
+    "created_at",
+    "updated_at",
+)
+
+
+def to_domain(row: MemoryRecordORM) -> MemoryRecord:
+    """ORM 行 → 领域对象（白名单与 ORM 列精确相等；ORM 漂移应即时 AttributeError 而非静默丢列）。"""
+    data = {c: getattr(row, c) for c in _INGEST_COLUMNS}
+    data["layer"] = int(data["layer"])
+    return MemoryRecord.model_validate(data)
+
+
+class MemoryRepository(Protocol):
+    async def insert(self, rec: MemoryRecord) -> None: ...
+    async def get(self, tenant_id: uuid.UUID, record_id: uuid.UUID) -> MemoryRecord | None: ...
+    async def supersede(
+        self, tenant_id: uuid.UUID, record_id: uuid.UUID, *, by_id: uuid.UUID, now: datetime
+    ) -> bool: ...
+    async def search_keyword(
+        self, tenant_id: uuid.UUID, *, text_q: str, limit: int, layer: int | None = None
+    ) -> list[MemoryRecord]: ...
+    async def list_recent(self, tenant_id: uuid.UUID, *, subject_user_layer: int, limit: int) -> list[MemoryRecord]: ...
+    async def list_by_subject(
+        self, tenant_id: uuid.UUID, subject_iri: str, *, states: tuple[str, ...] = ("active",)
+    ) -> list[MemoryRecord]: ...
+    async def add_review_item(
+        self, tenant_id: uuid.UUID, *, record_id: uuid.UUID, reason: str, detail: dict
+    ) -> None: ...
+    async def add_promotion(self, tenant_id: uuid.UUID, *, record_id: uuid.UUID, to_layer: int) -> uuid.UUID: ...
+    async def list_pending_reviews(self, tenant_id: uuid.UUID, *, limit: int) -> list[dict]: ...
+    async def list_records_since(self, tenant_id: uuid.UUID, *, since: datetime, limit: int) -> list[MemoryRecord]: ...
+    async def list_stale_for_decay(
+        self, tenant_id: uuid.UUID | None, *, before: datetime, limit: int
+    ) -> list[MemoryRecord]: ...
+    async def idempotent_hit(self, tenant_id: uuid.UUID, idempotency_key: str) -> bool: ...
+    async def register_task(self, tenant_id: uuid.UUID, idempotency_key: str, *, payload: dict | None = None) -> bool:
+        """登记记忆任务（幂等）：INSERT tasks(type='memory_settle', status='pending', idempotency_key)
+        ON CONFLICT (tenant_id, idempotency_key) DO NOTHING → 返回是否新插入（06 篇 §5.5）。"""
+        ...
+
+    async def update_state(self, rec: MemoryRecord) -> None:
+        """按领域对象写回 state/updated_at（UPDATE ... WHERE id AND tenant_id）。"""
+        ...
+
+    async def list_deadlined_memory_tasks(self, *, before: datetime, limit: int) -> list[dict]:
+        """超期沉淀任务（type='memory_settle' AND status IN ('pending','running') AND created_at < before，
+        created_at 升序）——返回轻量 dict（id/tenant_id/idempotency_key/payload），跨租户扫描；
+        含超期 running 僵尸行（worker 中途崩溃残留，回收重跑，内容级 DUPLICATE 判定天然去重）。"""
+        ...
+
+    async def mark_task(self, task_id: uuid.UUID, *, status: str) -> None:
+        """UPDATE tasks SET status WHERE id（deadline 升级状态机 pending→running→succeeded/failed）。"""
+        ...
+
+
+class PgMemoryRepository(MemoryRepository):
+    def __init__(self, sessionmaker: async_sessionmaker[AsyncSession]) -> None:
+        self._sm = sessionmaker
+
+    async def insert(self, rec: MemoryRecord) -> None:
+        async with self._sm() as s, s.begin():
+            s.add(MemoryRecordORM(**rec.model_dump()))
+
+    async def get(self, tenant_id: uuid.UUID, record_id: uuid.UUID) -> MemoryRecord | None:
+        async with self._sm() as s:
+            row = await s.get(MemoryRecordORM, record_id)
+            if row is None or row.tenant_id != tenant_id:
+                return None
+            return to_domain(row)
+
+    async def supersede(self, tenant_id: uuid.UUID, record_id: uuid.UUID, *, by_id: uuid.UUID, now: datetime) -> bool:
+        async with self._sm() as s, s.begin():
+            res = await s.execute(
+                update(MemoryRecordORM)
+                .where(
+                    MemoryRecordORM.id == record_id,
+                    MemoryRecordORM.tenant_id == tenant_id,
+                    MemoryRecordORM.state == "active",
+                )
+                .values(state="superseded", superseded_by=by_id, updated_at=now)
+            )
+            return bool(res.rowcount)
+
+    async def search_keyword(
+        self, tenant_id: uuid.UUID, *, text_q: str, limit: int, layer: int | None = None
+    ) -> list[MemoryRecord]:
+        escaped = text_q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        stmt = (
+            select(MemoryRecordORM)
+            .where(
+                MemoryRecordORM.tenant_id == tenant_id,
+                MemoryRecordORM.state == "active",
+                MemoryRecordORM.content.ilike(f"%{escaped}%", escape="\\"),
+            )
+            .order_by(MemoryRecordORM.created_at.desc())
+            .limit(limit)
+        )
+        if layer is not None:
+            stmt = stmt.where(MemoryRecordORM.layer == layer)
+        async with self._sm() as s:
+            rows = (await s.scalars(stmt)).all()
+            return [to_domain(r) for r in rows]
+
+    async def list_recent(self, tenant_id: uuid.UUID, *, subject_user_layer: int, limit: int) -> list[MemoryRecord]:
+        stmt = (
+            select(MemoryRecordORM)
+            .where(
+                MemoryRecordORM.tenant_id == tenant_id,
+                MemoryRecordORM.state == "active",
+                MemoryRecordORM.layer == subject_user_layer,
+            )
+            .order_by(MemoryRecordORM.confidence.desc(), MemoryRecordORM.created_at.desc())
+            .limit(limit)
+        )
+        async with self._sm() as s:
+            rows = (await s.scalars(stmt)).all()
+            return [to_domain(r) for r in rows]
+
+    async def list_by_subject(
+        self, tenant_id: uuid.UUID, subject_iri: str, *, states: tuple[str, ...] = ("active",)
+    ) -> list[MemoryRecord]:
+        stmt = select(MemoryRecordORM).where(
+            MemoryRecordORM.tenant_id == tenant_id,
+            MemoryRecordORM.subject_iri == subject_iri,
+            MemoryRecordORM.state.in_(states),
+        )
+        async with self._sm() as s:
+            rows = (await s.scalars(stmt)).all()
+            return [to_domain(r) for r in rows]
+
+    async def add_review_item(self, tenant_id: uuid.UUID, *, record_id: uuid.UUID, reason: str, detail: dict) -> None:
+        async with self._sm() as s, s.begin():
+            s.add(MemoryReviewItemORM(tenant_id=tenant_id, record_id=record_id, reason=reason, detail=detail))
+
+    async def list_pending_reviews(self, tenant_id: uuid.UUID, *, limit: int) -> list[dict]:
+        stmt = (
+            select(MemoryReviewItemORM)
+            .where(MemoryReviewItemORM.tenant_id == tenant_id, MemoryReviewItemORM.state == "pending")
+            .order_by(MemoryReviewItemORM.created_at.desc())
+            .limit(limit)
+        )
+        async with self._sm() as s:
+            rows = (await s.scalars(stmt)).all()
+            return [
+                {
+                    "id": r.id,
+                    "record_id": r.record_id,
+                    "reason": r.reason,
+                    "state": r.state,
+                    "detail": r.detail,
+                    "created_at": r.created_at,
+                }
+                for r in rows
+            ]
+
+    async def add_promotion(self, tenant_id: uuid.UUID, *, record_id: uuid.UUID, to_layer: int) -> uuid.UUID:
+        async with self._sm() as s, s.begin():
+            row = MemoryPromotionORM(
+                tenant_id=tenant_id,
+                record_id=record_id,
+                from_layer=2,  # L2→L3 升级 v1 固定起点（06 篇 §5.4）
+                to_layer=to_layer,
+                state="submitted",
+                payload={"source": "api"},
+            )
+            s.add(row)
+            await s.flush()
+            return row.id
+
+    async def list_records_since(self, tenant_id: uuid.UUID, *, since: datetime, limit: int) -> list[MemoryRecord]:
+        stmt = (
+            select(MemoryRecordORM)
+            .where(
+                MemoryRecordORM.tenant_id == tenant_id,
+                MemoryRecordORM.layer == MemoryLayer.USER,
+                MemoryRecordORM.state == "active",
+                MemoryRecordORM.created_at >= since,
+            )
+            .order_by(MemoryRecordORM.created_at.desc())
+            .limit(limit)
+        )
+        async with self._sm() as s:
+            rows = (await s.scalars(stmt)).all()
+            return [to_domain(r) for r in rows]
+
+    async def list_stale_for_decay(
+        self, tenant_id: uuid.UUID | None, *, before: datetime, limit: int
+    ) -> list[MemoryRecord]:
+        stmt = (
+            select(MemoryRecordORM)
+            .where(
+                MemoryRecordORM.state == "active",
+                MemoryRecordORM.decay_at.is_not(None),
+                MemoryRecordORM.decay_at <= before,
+            )
+            .order_by(MemoryRecordORM.decay_at)
+            .limit(limit)
+        )
+        if tenant_id is not None:
+            stmt = stmt.where(MemoryRecordORM.tenant_id == tenant_id)
+        async with self._sm() as s:
+            rows = (await s.scalars(stmt)).all()
+            return [to_domain(r) for r in rows]
+
+    async def idempotent_hit(self, tenant_id: uuid.UUID, idempotency_key: str) -> bool:
+        stmt = (
+            select(func.count())
+            .select_from(Task)
+            .where(Task.tenant_id == tenant_id, Task.idempotency_key == idempotency_key)
+        )
+        async with self._sm() as s:
+            count = await s.scalar(stmt)
+            return bool(count)
+
+    async def register_task(self, tenant_id: uuid.UUID, idempotency_key: str, *, payload: dict | None = None) -> bool:
+        stmt = (
+            pg_insert(Task)
+            .values(
+                tenant_id=tenant_id,
+                type="memory_settle",
+                status="pending",
+                idempotency_key=idempotency_key,
+                payload=payload or {},
+            )
+            .on_conflict_do_nothing(index_elements=[Task.tenant_id, Task.idempotency_key])
+        )
+        async with self._sm() as s, s.begin():
+            res = await s.execute(stmt)
+            return res.rowcount == 1
+
+    async def update_state(self, rec: MemoryRecord) -> None:
+        stmt = (
+            update(MemoryRecordORM)
+            .where(MemoryRecordORM.id == rec.id, MemoryRecordORM.tenant_id == rec.tenant_id)
+            .values(state=rec.state.value, updated_at=rec.updated_at)
+        )
+        async with self._sm() as s, s.begin():
+            await s.execute(stmt)
+
+    async def list_deadlined_memory_tasks(self, *, before: datetime, limit: int) -> list[dict]:
+        stmt = (
+            select(Task.id, Task.tenant_id, Task.idempotency_key, Task.payload)
+            .where(
+                Task.type == "memory_settle",
+                Task.status.in_(("pending", "running")),
+                Task.created_at < before,
+            )
+            .order_by(Task.created_at.asc())
+            .limit(limit)
+        )
+        async with self._sm() as s:
+            rows = (await s.execute(stmt)).all()
+            return [
+                {"id": r.id, "tenant_id": r.tenant_id, "idempotency_key": r.idempotency_key, "payload": r.payload}
+                for r in rows
+            ]
+
+    async def mark_task(self, task_id: uuid.UUID, *, status: str) -> None:
+        async with self._sm() as s, s.begin():
+            await s.execute(update(Task).where(Task.id == task_id).values(status=status))

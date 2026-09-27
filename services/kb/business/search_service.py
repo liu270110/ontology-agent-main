@@ -225,9 +225,7 @@ def apply_source_context_weights(
     return sorted(adjusted, key=lambda hit: -hit.score)
 
 
-async def _fetch_document_source_systems(
-    db: AsyncSession, doc_ids: Sequence[uuid.UUID]
-) -> dict[uuid.UUID, str | None]:
+async def _fetch_document_source_systems(db: AsyncSession, doc_ids: Sequence[uuid.UUID]) -> dict[uuid.UUID, str | None]:
     """批量取文档 meta.source_system（documents.meta JSONB 键，上传方写入；本切片只读）。
 
     raw SQL 直查 documents 表：retrieval/ 层不改（本切片边界）→ 召回行 dict 不携带文档 meta；

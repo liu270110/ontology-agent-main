@@ -161,7 +161,7 @@ class DocumentListData(BaseModel):
     total: int = 0
     next_cursor: str | None = None  # 前端 listDocuments DTO 契约字段（offset/limit 分页恒 None）
     offset: int = 0
-    limit: int = 100
+    limit: int = 50
 
 
 class DocumentListEnvelope(BaseModel):
@@ -172,6 +172,55 @@ class DocumentListEnvelope(BaseModel):
     code: int = 0
     message: str = "ok"
     data: DocumentListData
+
+
+# ---------------------------------------------------------------- 单文档详情/删除（R17-a/R17-b live 对账增量）
+
+
+class DocumentDetailData(DocumentListItem):
+    """单文档详情 data 面（R17-a）：复用列表行全字段（chunk_count/error 在列）+ 定位字段。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    collection_id: uuid.UUID  # = documents.kb_collection_id（详情页回跳/流水线再触发定位用）
+    mime_type: str | None = None
+
+
+class DocumentDetailEnvelope(BaseModel):
+    """详情成功信封（R17-a：同列表信封口径，前端 apiFetchEnvelope 强信封解包）。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    code: int = 0
+    message: str = "ok"
+    data: DocumentDetailData
+
+
+class DocumentDeleteCascade(BaseModel):
+    """级联删除计数（R17-b；DB FK 无 ON DELETE CASCADE → 应用层手动级联后按表计数）。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    chunks: int = 0
+
+
+class DocumentDeleteData(BaseModel):
+    """删除结果 data 面（R17-b：幂等——文档不存在亦 200 deleted=false，cascade 归零）。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    deleted: bool
+    cascade: DocumentDeleteCascade = Field(default_factory=DocumentDeleteCascade)
+
+
+class DocumentDeleteEnvelope(BaseModel):
+    """删除成功信封（R17-b：恒 200，deleted 区分命中/幂等未命中）。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    code: int = 0
+    message: str = "ok"
+    data: DocumentDeleteData
 
 
 class PipelineStartOut(BaseModel):

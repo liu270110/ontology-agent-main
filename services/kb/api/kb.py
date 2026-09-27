@@ -3,7 +3,13 @@
 端点（api/01 登记册 kb 行；OntRAG §5 检索契约 REST 子集）：
     POST /kb/collections                      建库
     GET  /kb/documents                        文档列表（R51 联调补齐：信封 + 前端
-                                              KbDocument DTO；status/type 可选过滤）
+                                              KbDocument DTO；status/type/q 可选过滤 +
+                                              offset/limit 分页，limit 缺省 50 上限 200）
+    GET  /kb/documents/{id}                   文档详情（R17-a live 对账补齐：列表 DTO 全字段
+                                              + chunk 计数/error；404=文档域 404* 同款错误体）
+    DELETE /kb/documents/{id}                 删除文档（R17-b live 对账补齐：硬删 + 应用层级联
+                                              facts/steps/chunks——DB FK 无 ON DELETE CASCADE；
+                                              幂等，不存在亦 200 deleted=false）
     POST /kb/documents                        JSON 内容直传（MinIO 随 M3；checksum 幂等）
     POST /kb/documents/{id}/pipeline/start    后台流水线（202 受理；M2 lite 四步 / M2 full
                                               七步中段 extract/align/validate 已插回）
@@ -36,7 +42,7 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Annotated, Any
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Query, Request, status
-from sqlalchemy import func, or_, select
+from sqlalchemy import delete, func, or_, select
 from sqlalchemy.exc import IntegrityError
 
 from services.kb.api.schemas.kb import (
@@ -51,6 +57,11 @@ from services.kb.api.schemas.kb import (
     CollectionCreateIn,
     CollectionOut,
     DocumentCreateIn,
+    DocumentDeleteCascade,
+    DocumentDeleteData,
+    DocumentDeleteEnvelope,
+    DocumentDetailData,
+    DocumentDetailEnvelope,
     DocumentListData,
     DocumentListEnvelope,
     DocumentListItem,
@@ -257,14 +268,15 @@ def _document_out(doc: Document, *, created: bool) -> DocumentOut:
     )
 
 
-@router.get("/documents", summary="文档列表（管理页；status/type 可选过滤 + 流水线进度投影）")
+@router.get("/documents", summary="文档列表（管理页；status/type/q 可选过滤 + offset/limit 分页）")
 async def list_documents(
     principal: KbReadDep,
     session: SessionDep,
     status_filter: Annotated[DocumentStatusQuery | None, Query(alias="status")] = None,
     type_filter: Annotated[KbDocType | None, Query(alias="type")] = None,
+    q: Annotated[str | None, Query(max_length=128)] = None,
     offset: Annotated[int, Query(ge=0)] = 0,
-    limit: Annotated[int, Query(ge=1, le=200)] = 100,
+    limit: Annotated[int, Query(ge=1, le=200)] = 50,
 ) -> DocumentListEnvelope:
     """当前有效文档分页（bi-temporal：valid_to IS NULL，最新优先），R51 联调补齐。
 
@@ -272,7 +284,8 @@ async def list_documents(
     {code,message,data:{items,total,next_cursor}}；② items=前端 KbDocument 全字段
     （name/doc_type/size_bytes/chunk_count/status 四态/progress/job_id/error/updated_at/
     indexed_today）+ pipeline{step,total}/size/created_at/tier；③ ?status=（前端四态别名
-    或后端八态原值）与 ?type=（五类文档类型）均为可选过滤。空列表合法。
+    或后端八态原值）与 ?type=（五类文档类型）均为可选过滤；④ ?q= 名称模糊（title ILIKE，
+    LIKE 通配符转义防注入）+ ?limit=/?offset= 分页（缺省 50，上限 200）。空列表合法。
     """
     statuses: tuple[str, ...] | None = None
     if status_filter is not None:
@@ -289,6 +302,10 @@ async def list_documents(
                 or_(*(Document.mime_type.ilike(p) for p in mime_patterns)),
             )
         )
+    needle = (q or "").strip()
+    if needle:  # ?q= 名称模糊（R17 增量）：通配符字面化后整词包裹 %（防 LIKE 注入）
+        escaped = needle.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        conditions.append(Document.title.ilike(f"%{escaped}%", escape="\\"))
 
     total = (await session.execute(select(func.count()).select_from(Document).where(*conditions))).scalar_one()
     docs = (
@@ -301,55 +318,126 @@ async def list_documents(
         .all()
     )
 
-    chunk_counts: dict[uuid.UUID, int] = {}
-    step_stats: dict[uuid.UUID, tuple[int, str | None]] = {}
-    if docs:
-        doc_ids = [doc.id for doc in docs]
+    chunk_counts = await _chunk_counts_of(session, [doc.id for doc in docs])
+    step_stats = await _step_stats_of(session, principal.tenant_id, [doc.id for doc in docs])
+    items = [_document_item_of(doc, chunk_counts, step_stats) for doc in docs]
+    return DocumentListEnvelope(data=DocumentListData(items=items, total=total, offset=offset, limit=limit))
+
+
+async def _chunk_counts_of(session: AsyncSession, doc_ids: Sequence[uuid.UUID]) -> dict[uuid.UUID, int]:
+    """分片计数投影（列表/详情共用一条 SQL；detail 传单元素列表）。"""
+    if not doc_ids:
+        return {}
+    return {
+        doc_id: count
         for doc_id, count in (
             await session.execute(
                 select(DocumentChunk.document_id, func.count())
                 .where(DocumentChunk.document_id.in_(doc_ids))
                 .group_by(DocumentChunk.document_id)
             )
-        ).all():
-            chunk_counts[doc_id] = count
-        for row in (
-            await session.execute(
-                select(KbPipelineStep.document_id, KbPipelineStep.status, KbPipelineStep.error)
-                .where(KbPipelineStep.tenant_id == principal.tenant_id, KbPipelineStep.document_id.in_(doc_ids))
-                .order_by(KbPipelineStep.created_at)
-            )
-        ).all():
-            done, err = step_stats.get(row.document_id, (0, None))
-            if row.status == "done":
-                done += 1
-            elif row.status == "failed" and err is None:
-                err = (row.error or "流水线步骤失败")[:200]
-            step_stats[row.document_id] = (done, err)
+        ).all()
+    }
 
-    total_steps = len(M2_FULL_STEPS)
-    today = datetime.now(UTC).date()
-    items = [
-        DocumentListItem(
-            id=doc.id,
-            name=doc.title,
-            doc_type=doc_type_of(doc.title, doc.mime_type),
-            size=doc.size_bytes or 0,
-            size_bytes=doc.size_bytes,
-            chunk_count=chunk_counts.get(doc.id, 0),
-            status=ui_status_of(doc.status),
-            progress=100
-            if doc.status == "indexed"
-            else int(round(100 * step_stats.get(doc.id, (0, None))[0] / total_steps)),
-            pipeline=DocumentPipelineProgress(step=step_stats.get(doc.id, (0, None))[0], total=total_steps),
-            error=step_stats.get(doc.id, (0, None))[1] if doc.status == "failed" else None,
-            created_at=doc.created_at,
-            updated_at=doc.updated_at,
-            indexed_today=(doc.status == "indexed" and doc.updated_at.date() == today),
+
+async def _step_stats_of(
+    session: AsyncSession, tenant_id: uuid.UUID, doc_ids: Sequence[uuid.UUID]
+) -> dict[uuid.UUID, tuple[int, str | None]]:
+    """流水线步投影（done 步数 + 首个 failed 错误摘录；列表/详情共用）。"""
+    stats: dict[uuid.UUID, tuple[int, str | None]] = {}
+    if not doc_ids:
+        return stats
+    for row in (
+        await session.execute(
+            select(KbPipelineStep.document_id, KbPipelineStep.status, KbPipelineStep.error)
+            .where(KbPipelineStep.tenant_id == tenant_id, KbPipelineStep.document_id.in_(doc_ids))
+            .order_by(KbPipelineStep.created_at)
         )
-        for doc in docs
-    ]
-    return DocumentListEnvelope(data=DocumentListData(items=items, total=total, offset=offset, limit=limit))
+    ).all():
+        done, err = stats.get(row.document_id, (0, None))
+        if row.status == "done":
+            done += 1
+        elif row.status == "failed" and err is None:
+            err = (row.error or "流水线步骤失败")[:200]
+        stats[row.document_id] = (done, err)
+    return stats
+
+
+def _document_item_of(
+    doc: Document,
+    chunk_counts: dict[uuid.UUID, int],
+    step_stats: dict[uuid.UUID, tuple[int, str | None]],
+) -> DocumentListItem:
+    """documents 行 → 前端 KbDocument 行 DTO（列表/详情共用投影，R51/R17 同源）。"""
+    total_steps = len(M2_FULL_STEPS)
+    done, err = step_stats.get(doc.id, (0, None))
+    return DocumentListItem(
+        id=doc.id,
+        name=doc.title,
+        doc_type=doc_type_of(doc.title, doc.mime_type),
+        size=doc.size_bytes or 0,
+        size_bytes=doc.size_bytes,
+        chunk_count=chunk_counts.get(doc.id, 0),
+        status=ui_status_of(doc.status),
+        progress=100 if doc.status == "indexed" else int(round(100 * done / total_steps)),
+        pipeline=DocumentPipelineProgress(step=done, total=total_steps),
+        error=err if doc.status == "failed" else None,
+        created_at=doc.created_at,
+        updated_at=doc.updated_at,
+        indexed_today=(doc.status == "indexed" and doc.updated_at.date() == datetime.now(UTC).date()),
+    )
+
+
+@router.get("/documents/{document_id}", summary="文档详情（R17-a live 对账补齐：列表 DTO 全字段 + chunk 计数/error）")
+async def get_document(document_id: uuid.UUID, principal: KbReadDep, session: SessionDep) -> DocumentDetailEnvelope:
+    """单文档详情（api/01 §5 kb 行 GET /kb/documents/{id}）：复用列表投影 + 定位字段。
+
+    404 = 文档域既有口径（_load_document：code 404「文档不存在」，api/01 §5 登记的 404*）。
+    """
+    doc = await _load_document(session, principal.tenant_id, document_id)
+    chunk_counts = await _chunk_counts_of(session, [document_id])
+    step_stats = await _step_stats_of(session, principal.tenant_id, [document_id])
+    item = _document_item_of(doc, chunk_counts, step_stats)
+    return DocumentDetailEnvelope(
+        data=DocumentDetailData(**item.model_dump(), collection_id=doc.kb_collection_id, mime_type=doc.mime_type)
+    )
+
+
+@router.delete("/documents/{document_id}", summary="删除文档（R17-b：硬删 + 应用层级联；幂等）")
+async def delete_document(document_id: uuid.UUID, principal: KbWriteDep, session: SessionDep) -> DocumentDeleteEnvelope:
+    """级联删除文档（api/01 §5.15 对账行 DELETE /kb/documents/{id}）。
+
+    DB FK（document_chunks/kb_pipeline_step/kb_facts → documents.id）均无 ON DELETE CASCADE
+    且 kb_facts.chunk_id 还指向 document_chunks.id → 应用层按依赖逆序手动级联后删文档行。
+    幂等：文档不存在（含他人租户，deny-by-default 同口径）亦 200 deleted=false，不 404。
+    """
+    doc = (
+        await session.execute(
+            select(Document).where(Document.id == document_id, Document.tenant_id == principal.tenant_id)
+        )
+    ).scalar_one_or_none()
+    if doc is None:
+        return DocumentDeleteEnvelope(data=DocumentDeleteData(deleted=False))
+    chunk_count = (
+        await session.execute(
+            select(func.count()).select_from(DocumentChunk).where(DocumentChunk.document_id == document_id)
+        )
+    ).scalar_one()
+    for stmt in (  # kb_facts 先于 chunks（其 chunk_id FK 指向 document_chunks.id）
+        delete(KbFact).where(KbFact.tenant_id == principal.tenant_id, KbFact.document_id == document_id),
+        delete(KbPipelineStep).where(
+            KbPipelineStep.tenant_id == principal.tenant_id, KbPipelineStep.document_id == document_id
+        ),
+        delete(DocumentChunk).where(
+            DocumentChunk.tenant_id == principal.tenant_id, DocumentChunk.document_id == document_id
+        ),
+    ):
+        await session.execute(stmt)
+    await session.delete(doc)
+    await session.commit()
+    return DocumentDeleteEnvelope(
+        data=DocumentDeleteData(deleted=True, cascade=DocumentDeleteCascade(chunks=int(chunk_count)))
+    )
 
 
 @router.post(

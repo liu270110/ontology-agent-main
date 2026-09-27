@@ -771,6 +771,7 @@
         "title": "BlockIn",
         "type": "object"
       },
+<<<<<<< HEAD
       "BlockPutRequest": {
         "properties": {
           "content": {
@@ -785,6 +786,8 @@
         "title": "BlockPutRequest",
         "type": "object"
       },
+=======
+>>>>>>> feature/test-align-groupchat-event
       "CandidateDecisionIn": {
         "additionalProperties": false,
         "description": "单条终审决策请求（api/01 §5.4 ★ POST /kb/review/candidates/{cid}/decision）。\n\naction=accept|reject|edit_accept；edit_accept 必附编辑载荷（契约原文「修订后入审」），\naccept/reject 拒带编辑载荷（防呆：编辑语义只属 edit_accept）。DTO 校验失败 → 3001 统一错误体。",

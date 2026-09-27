@@ -200,9 +200,7 @@ def _fake_request() -> Request:
     return Request({"type": "http", "app": SimpleNamespace(state=state), "headers": [], "query_string": b""})
 
 
-async def test_端点层_source_context透传冒烟_PMS排前(
-    sc_pg: async_sessionmaker[AsyncSession], sc_seeded: dict
-) -> None:
+async def test_端点层_source_context透传冒烟_PMS排前(sc_pg: async_sessionmaker[AsyncSession], sc_seeded: dict) -> None:
     """直调 POST /kb/search 路由函数：KbSearchIn.source_context → 软路由重排 → citations 序。"""
     async with sc_pg() as session:
         body = KbSearchIn(query=QUERY, kb_id=sc_seeded["collection_id"], top_k=10, source_context="PMS")

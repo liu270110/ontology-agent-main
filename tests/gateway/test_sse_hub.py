@@ -39,8 +39,9 @@ def test_帧编码按_02_5_帧格式输出_id_event_data_与空行() -> None:
 
 
 def test_主干波事件名与生产侧单一事实源一致() -> None:
-    """主干波=12 事件（02 §5 M3 主干 11 + ROUTING_DECISION 群聊系统事件，27 篇 X15）。"""
-    assert len(ChatEventName) == 12
+    """主干波=11 事件（02 §5 M3 主干行）：编码侧校验集与 ChatEventName 同源同值。"""
+    assert len(ChatEventName) == 12  # 11 主干波 + 群聊 ROUTING_DECISION（27 篇 X15，M5.5 群聊批次扩展）
+
     assert MAINSTREAM_EVENT_NAMES == {name.value for name in ChatEventName}
     assert "GATE_VERDICT" not in MAINSTREAM_EVENT_NAMES  # 扩展波不入主干（协议向前兼容）
 

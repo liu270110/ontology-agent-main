@@ -13,6 +13,16 @@
     POST /memory/promotions                   发起 L2→L3 升级申请单（202，409* 重复）
     GET  /memory/promotions                   升级单记录回放（M5 前占位面：登记行投影）
     GET  /memory/audit                        记忆审计查询（按 user/session 回放）
+    ── records 权威链路（M4 计划 1+2 落位，2026-09-28；规格 06 篇 §6，records 三表权威）──
+    POST /memory/records                      写入记录（Observation 仅后台管线，422 拒绝）
+    GET  /memory/records/{id}                 读单条记录（404* 未命中/跨租户）
+    POST /memory/records/search               记录检索（关键词/时间/召回三通道 RRF）
+    GET  /memory/sessions/{sid}/blocks        读 L1 会话块
+    PUT  /memory/sessions/{sid}/blocks/{blk}  写 L1 会话块
+    POST /memory/sessions/{sid}/settle        手动沉淀（幂等登记闸门，202 语义 200 壳）
+    GET  /memory/reviews                      待复核队列（limit 20）
+    POST /memory/promotions（records 权威版）  记录升级申请（memory_promotions 表；fact 版
+                                              过渡路由改挂 /memory/facts/{id}/promotions）
 
 scope：memory:read / memory:write，deny-by-default（08 §2.5）。
 授权矩阵（memory §5.3）：用户读写本人记忆；跨用户 → 403（2002）。
@@ -21,12 +31,13 @@ L1 Redis 不可达 → 存储层降级（空快照/degraded 标注），不阻�
 
 from __future__ import annotations
 
+import hashlib
 import logging
 import uuid
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Annotated, Any, Literal
 
-from fastapi import APIRouter, BackgroundTasks, Depends, Query, Request, status
+from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, Query, Request, status
 
 from services.memory.api.schemas.memory import (
     AuditEntryOut,
@@ -48,8 +59,24 @@ from services.memory.api.schemas.memory import (
     PromotionRecordOut,
     SearchHitOut,
 )
+from services.memory.api.schemas.records import (
+    BlockPutRequest,
+    PromotionCreateRequest,
+    RecordCreateRequest,
+    RecordResponse,
+    ReviewItemResponse,
+    SearchHitResponse,
+    SearchRequest,
+    SettleRequest,
+)
 from services.memory.business.consolidation import consolidate_session
 from services.memory.business.context import build_memory_context, merge_l2_hits
+from services.memory.business.memory_service import (
+    MemoryService,
+    ObservationOriginError,
+    RecordUpsert,
+    SearchQuery,
+)
 from services.memory.business.pipeline_store import RedisCheckpointStore, RedisDeadLetterSink
 from services.memory.business.timeline import build_timeline
 from services.memory.data.l1 import RedisL1Store
@@ -337,10 +364,12 @@ async def fact_timeline(fact_id: uuid.UUID, principal: MemoryReadDep, db: Sessio
     return FactTimelineOut.from_domain(build_timeline(chain, fact_id))
 
 
+# M3 过渡方案（2026-09-27）：权威实现见下方 records 系 create_record_promotion
+# （POST /memory/promotions 写 memory_promotions 表；用户裁决 2026-09-28）
 @router.post(
-    "/promotions",
+    "/facts/{fact_id}/promotions",
     status_code=status.HTTP_202_ACCEPTED,
-    summary="发起 L2→L3 升级申请单（M5 前占位登记：仅审计留痕，不写 L3、不建工单）",
+    summary="发起 L2→L3 升级申请单（M3 过渡：仅审计留痕，不写 L3、不建工单）",
 )
 async def create_promotion(
     body: PromotionIn, request: Request, principal: MemoryWriteDep, db: SessionDep
@@ -431,3 +460,139 @@ def _hit_out(hit: L2Hit) -> SearchHitOut:
         score=hit.score,
         source=hit.source,
     )
+
+
+# ---------------------------------------------------------------- records 权威链路（M4 计划 1+2 落位）
+# 三审+终审绿代码落位（feature/memory-m4p2-api @ 9951d3f，2026-09-28 集成）；鉴权沿用源 X-Tenant-Id
+# 头依赖（与上方 scope 体系并存，统一收口随 api/01 登记册批次）——装配在组合根 lifespan 替换，
+# 测试经 dependency_overrides 覆盖（tests/gateway/test_memory_api.py）。
+
+
+def get_memory_service() -> MemoryService:
+    """真实装配在 app.py 生命周期里替换（依赖 Redis/PG 连接）；测试经 dependency_overrides 覆盖本函数。"""
+    raise HTTPException(status_code=503, detail="memory service not wired")
+
+
+def tenant_id(x_tenant_id: Annotated[str, Header(alias="X-Tenant-Id")]) -> uuid.UUID:
+    # TODO(M1)：换 JWT 解析（02 篇中间件链），dev 阶段用租户头
+    try:
+        return uuid.UUID(x_tenant_id)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail="X-Tenant-Id 非法 UUID") from e
+
+
+Svc = Annotated[MemoryService, Depends(get_memory_service)]
+Tid = Annotated[uuid.UUID, Depends(tenant_id)]
+
+
+def get_pipeline() -> tuple:
+    """返回 (ConsolidationPipeline, MemoryRepository)；真实装配在 lifespan 替换。"""
+    raise HTTPException(status_code=503, detail="consolidation pipeline not wired")
+
+
+Pipe = Annotated[tuple, Depends(get_pipeline)]
+
+
+def _rec_fields(rec) -> dict:
+    return {
+        "id": rec.id,
+        "tenant_id": rec.tenant_id,
+        "layer": int(rec.layer),
+        "record_type": str(rec.record_type),
+        "subject_iri": rec.subject_iri,
+        "content": rec.content,
+        "scope": str(rec.scope),
+        "confidence": rec.confidence,
+        "proof_count": rec.proof_count,
+        "state": str(rec.state),
+        "created_at": rec.created_at,
+    }
+
+
+@router.post("/records", response_model=dict)
+async def create_record(body: RecordCreateRequest, svc: Svc, tid: Tid) -> dict:
+    try:
+        rec = await svc.upsert_record(RecordUpsert(**{**body.model_dump(), "tenant_id": tid}), now=datetime.now(UTC))
+    except ObservationOriginError as e:
+        raise HTTPException(status_code=422, detail=str(e)) from e
+    return {"code": 0, "message": "ok", "data": RecordResponse(**_rec_fields(rec)).model_dump(mode="json")}
+
+
+@router.get("/records/{record_id}", response_model=dict)
+async def get_record(record_id: uuid.UUID, svc: Svc, tid: Tid) -> dict:
+    rec = await svc.get_record(tid, record_id)
+    if rec is None:
+        raise HTTPException(status_code=404, detail="record not found")
+    return {"code": 0, "message": "ok", "data": RecordResponse(**_rec_fields(rec)).model_dump(mode="json")}
+
+
+@router.post("/records/search", response_model=dict)
+async def search_records(body: SearchRequest, svc: Svc, tid: Tid) -> dict:
+    hits = await svc.search(SearchQuery(tenant_id=tid, **body.model_dump()), now=datetime.now(UTC))
+    data = [
+        SearchHitResponse(
+            record_id=h.record_id,
+            score=round(h.score, 6),
+            content=h.record.content,
+            record_type=str(h.record.record_type),
+            subject_iri=h.record.subject_iri,
+        ).model_dump(mode="json")
+        for h in hits
+    ]
+    return {"code": 0, "message": "ok", "data": data}
+
+
+@router.get("/sessions/{session_id}/blocks", response_model=dict)
+async def get_blocks(session_id: uuid.UUID, svc: Svc, tid: Tid) -> dict:
+    # TODO(M1)：校验 session 归属租户（服务签名加 tenant 维度属任务 7 范围，届时接线）
+    return {"code": 0, "message": "ok", "data": await svc.get_l1(session_id)}
+
+
+@router.put("/sessions/{session_id}/blocks/{block}", response_model=dict)
+async def put_block(session_id: uuid.UUID, block: str, body: BlockPutRequest, svc: Svc, tid: Tid) -> dict:
+    # TODO(M1)：校验 session 归属租户（服务签名加 tenant 维度属任务 7 范围，届时接线）
+    await svc.write_l1(session_id, block, body.content)
+    return {"code": 0, "message": "ok", "data": None}
+
+
+@router.post("/sessions/{session_id}/settle", response_model=dict)
+async def settle_session(session_id: uuid.UUID, body: SettleRequest, pipe: Pipe, tid: Tid) -> dict:
+    """手动沉淀（在线路径，不过 IdleGate——§5.5.2 空闲调度只管后台自动沉淀）。
+
+    幂等：确定性键 manual:{session_id}:{sha256(transcript)} 走登记闸门（与计划"组装走 settle_session_task"同语义），
+    重复提交短路返回 skipped，不重复调管线。
+    """
+    pipeline, repo = pipe
+    key = f"manual:{session_id}:{hashlib.sha256(body.transcript.encode()).hexdigest()}"
+    if not await repo.register_task(tid, key, payload={"session_id": str(session_id), "transcript": body.transcript}):
+        return {
+            "code": 0,
+            "message": "ok",
+            "data": {"added": 0, "duplicates": 0, "to_review": 0, "skipped": "idempotent"},
+        }
+    result = await pipeline.settle_session(
+        tenant_id=tid, session_id=session_id, transcript=body.transcript, now=datetime.now(UTC)
+    )
+    return {
+        "code": 0,
+        "message": "ok",
+        "data": {"added": result.added, "duplicates": result.duplicates, "to_review": result.to_review},
+    }
+
+
+@router.get("/reviews", response_model=dict)
+async def list_reviews(pipe: Pipe, tid: Tid) -> dict:
+    _pipeline, repo = pipe
+    items = await repo.list_pending_reviews(tid, limit=20)
+    return {"code": 0, "message": "ok", "data": [ReviewItemResponse(**i).model_dump(mode="json") for i in items]}
+
+
+@router.post("/promotions", response_model=dict, summary="记录升级申请（records 三表权威实现）")
+async def create_record_promotion(body: PromotionCreateRequest, pipe: Pipe, tid: Tid) -> dict:
+    """记录升级申请（权威实现，写 memory_promotions 表）：record 存在性+归属双校验封跨租户引用；
+    M3 过渡的 fact 版申请单见 POST /memory/facts/{fact_id}/promotions（用户裁决 2026-09-28）。"""
+    _pipeline, repo = pipe
+    if await repo.get(tid, body.record_id) is None:  # 存在性 + 归属双校验（顺带封跨租户引用）
+        raise HTTPException(status_code=404, detail="record not found")
+    promo_id = await repo.add_promotion(tid, record_id=body.record_id, to_layer=body.to_layer)
+    return {"code": 0, "message": "ok", "data": {"id": str(promo_id), "state": "submitted"}}

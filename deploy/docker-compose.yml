@@ -3,7 +3,7 @@ name: onto-agent
 
 services:
   postgres:
-    image: postgres:16-alpine  # M2 换 pgvector/pgvector:pg16（镜像拉取成功后）
+    image: pgvector/pgvector:pg16  # 2026-09-27 已换（daocloud 镜像通道拉取，pg_data 卷数据保留）
     environment:
       POSTGRES_USER: ${OA_PG_USER:-onto}
       POSTGRES_PASSWORD: ${OA_PG_PASSWORD:-onto_dev}

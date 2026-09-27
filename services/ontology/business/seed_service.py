@@ -14,6 +14,7 @@ from pydantic import BaseModel
 from rdflib import RDF, Graph
 from rdflib.namespace import OWL, SH
 
+from services.ontology.business.changeset_service import project_published_version
 from services.ontology.core.lint import lint
 from services.ontology.core.shacl import ValidationReport, validate
 from services.ontology.core.tbox import TASK, default_namespace, load_turtle
@@ -69,7 +70,10 @@ SEED_PROJECT_NAME = "电力停电分析本体"  # display_name 缺省定名（�
 
 
 class SeedImportResult(BaseModel):
-    """导入结果：聚合（head 已推进 v1）+ 制品指针 + 种子自检报告（L2 响应摘要来源）。"""
+    """导入结果：聚合（head 已推进 v1）+ 制品指针 + 种子自检报告（L2 响应摘要来源）。
+
+    返回即含读模型四表投影（classes/properties/axioms/rules 随 publish 同事务落库）。
+    """
 
     ontology: Ontology
     version: OntologyVersionRef
@@ -91,7 +95,8 @@ async def import_seed_as_project(
     （slug 冲突在制品写入前暴露，零孤儿制品，uk_ontologies_tenant_id_iri_base 以
     IntegrityError 上抛）→ 单变更单五动词链（solo 档：导入人即审批人，种子为专家定稿
     资产非 LLM 候选）→ append_version（种子 Turtle 为 v1 制品，制品写成功→PG 版本行）
-    → 聚合 publish 推进 head（状态 published，列表/详情即刻可见）。
+    → 聚合 publish 推进 head（状态 published，列表/详情即刻可见）→ 读模型四表投影
+    （project_published_version，与 L2 publish/rollback 路由同款：检索/工作台即刻可消费）。
     """
     turtle = SEED_PATH.read_text(encoding="utf-8")  # 调用期读模块全局（测试可 monkeypatch 注入损坏资产）
     try:
@@ -117,4 +122,13 @@ async def import_seed_as_project(
     )
     ontology.publish(True, {}, version_ref=version_ref, actor_id=actor_id)  # approvals 复用 approve 留痕
     await repo.save(ontology)
+    # 发布读模型投影（database/01 §3.3 四表，与 L2 publish/rollback 路由同事务同款）：种子冷启动
+    # 即可被检索/工作台消费；routes 缺省由投影用例在制品图重跑 lint 取权威路由（§2.3，rollback 同款）
+    try:
+        await project_published_version(repo, ontology, version_ref=version_ref, changeset=changeset)
+    except ValueError:
+        # 投影属发布后内部不变式（过门禁不应失败）：回收孤儿制品后透出（PG 行随调用方会话回滚）；
+        # artifacts 为 L6 实现细节（Protocol 未声明），鸭子访问与 L2 publish 路由同款回收语义
+        repo.artifacts.discard(version_ref.artifact_key)
+        raise
     return SeedImportResult(ontology=ontology, version=version_ref, report=report)

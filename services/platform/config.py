@@ -72,6 +72,19 @@ class Settings(BaseSettings):
     memory_rrf_k: int = 60  # RRF 平滑常数（Σ1/(k+rank)）
     memory_decay_half_life_days: int = 30  # 衰减半衰期（天）
 
+    # 沉淀与空闲调度（06 篇 §5.1/§5.5；M4 计划 2 落位 2026-09-28；沉淀模型复用上方 llm_model
+    # ——注意现役默认 deepseek-chat 面向 OpenAI 兼容网关，沉淀 Ollama 通道需 OA_LLM_MODEL 指向本地模型）
+    memory_l2_confidence_threshold: float = 0.65  # ≥ 阈值静默写，低于进待复核
+    memory_observation_min_proof: int = 2  # 观察固化最少独立事实数
+    memory_task_deadline_hours: int = 24  # 空闲任务 deadline，超期升级在线
+    llm_timeout_seconds: float = 60.0
+    idle_off_peak_start_hour: int = 1  # 低峰直通时段 [start, end)
+    idle_off_peak_end_hour: int = 7
+    idle_gate_max_qps: int = 5  # 四信号阈值（全部达标才发令牌）
+    idle_gate_max_queue_depth: int = 3
+    idle_gate_max_llm_concurrency: int = 1
+    idle_gate_max_active_sessions: int = 2
+
     # 知识库检索 ACL 预过滤开关（docs/OntRAG §4.3；M5 收缩裁决=13 篇「配置开关化（无迁移方案）」）。
     # 默认 false=零行为变化（存量三路 SQL 不变）；true 时按 documents.acl_tags 列存在性探测下推，
     # 列缺失自动 no-op 并 DEBUG 留痕。DDL（documents.acl_tags jsonb）为本批报告欠账（迁移唯一归属=并行 agent）。

@@ -35,6 +35,11 @@ from services.kb.data.orm import (  # noqa: F401
     KbPipelineStep,
 )
 from services.memory.data.orm import MemoryL2Fact  # noqa: F401
+from services.memory.data.orm_records import (  # noqa: F401  M4 计划 1+2：records 三表权威（memory_records/promotions/review_items）
+    MemoryPromotionORM,
+    MemoryRecordORM,
+    MemoryReviewItemORM,
+)
 from services.ontology.data.orm import (  # noqa: F401
     Axiom,
     OntoClass,

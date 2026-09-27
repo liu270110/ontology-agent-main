@@ -595,6 +595,155 @@
         "title": "AuditPageOut",
         "type": "object"
       },
+      "BatchCandidateDecisionIn": {
+        "additionalProperties": false,
+        "description": "批量决策条目（candidate_id 定位候选；action/edit 语义同单条）。",
+        "properties": {
+          "action": {
+            "enum": [
+              "accept",
+              "reject",
+              "edit_accept"
+            ],
+            "title": "Action",
+            "type": "string"
+          },
+          "candidate_id": {
+            "format": "uuid",
+            "title": "Candidate Id",
+            "type": "string"
+          },
+          "edit": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CandidateEditIn"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "action",
+          "candidate_id"
+        ],
+        "title": "BatchCandidateDecisionIn",
+        "type": "object"
+      },
+      "BatchCandidateDecisionItemOut": {
+        "additionalProperties": false,
+        "description": "批量逐条结果（部分成功语义：单条失败不整批回滚）。",
+        "properties": {
+          "candidate_id": {
+            "format": "uuid",
+            "title": "Candidate Id",
+            "type": "string"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          }
+        },
+        "required": [
+          "candidate_id",
+          "ok"
+        ],
+        "title": "BatchCandidateDecisionItemOut",
+        "type": "object"
+      },
+      "BatchCandidateDecisionMetaOut": {
+        "additionalProperties": false,
+        "description": "批量结果汇总（响应 meta；edited=edit_accept 成功数，accept/reject 成功各计 accepted/rejected）。",
+        "properties": {
+          "accepted": {
+            "title": "Accepted",
+            "type": "integer"
+          },
+          "edited": {
+            "title": "Edited",
+            "type": "integer"
+          },
+          "failed": {
+            "title": "Failed",
+            "type": "integer"
+          },
+          "rejected": {
+            "title": "Rejected",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "accepted",
+          "rejected",
+          "edited",
+          "failed"
+        ],
+        "title": "BatchCandidateDecisionMetaOut",
+        "type": "object"
+      },
+      "BatchCandidateDecisionOut": {
+        "additionalProperties": false,
+        "properties": {
+          "meta": {
+            "$ref": "#/components/schemas/BatchCandidateDecisionMetaOut"
+          },
+          "results": {
+            "items": {
+              "$ref": "#/components/schemas/BatchCandidateDecisionItemOut"
+            },
+            "title": "Results",
+            "type": "array"
+          }
+        },
+        "required": [
+          "results",
+          "meta"
+        ],
+        "title": "BatchCandidateDecisionOut",
+        "type": "object"
+      },
+      "BatchDecisionIn": {
+        "additionalProperties": false,
+        "description": "批量终审决策请求体（api/01 §5.4 ★ batch-decision；上限 200 条/批在端点侧断言 → 3001）。",
+        "properties": {
+          "decisions": {
+            "items": {
+              "$ref": "#/components/schemas/BatchCandidateDecisionIn"
+            },
+            "minItems": 1,
+            "title": "Decisions",
+            "type": "array"
+          }
+        },
+        "required": [
+          "decisions"
+        ],
+        "title": "BatchDecisionIn",
+        "type": "object"
+      },
       "BlockIn": {
         "properties": {
           "content": {
@@ -620,6 +769,154 @@
           "content"
         ],
         "title": "BlockIn",
+        "type": "object"
+      },
+      "BlockPutRequest": {
+        "properties": {
+          "content": {
+            "minLength": 1,
+            "title": "Content",
+            "type": "string"
+          }
+        },
+        "required": [
+          "content"
+        ],
+        "title": "BlockPutRequest",
+        "type": "object"
+      },
+      "CandidateDecisionIn": {
+        "additionalProperties": false,
+        "description": "单条终审决策请求（api/01 §5.4 ★ POST /kb/review/candidates/{cid}/decision）。\n\naction=accept|reject|edit_accept；edit_accept 必附编辑载荷（契约原文「修订后入审」），\naccept/reject 拒带编辑载荷（防呆：编辑语义只属 edit_accept）。DTO 校验失败 → 3001 统一错误体。",
+        "properties": {
+          "action": {
+            "enum": [
+              "accept",
+              "reject",
+              "edit_accept"
+            ],
+            "title": "Action",
+            "type": "string"
+          },
+          "edit": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CandidateEditIn"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "action"
+        ],
+        "title": "CandidateDecisionIn",
+        "type": "object"
+      },
+      "CandidateDecisionOut": {
+        "additionalProperties": false,
+        "description": "单条决策结果（202 受理；status=决策后事实状态）。",
+        "properties": {
+          "action": {
+            "title": "Action",
+            "type": "string"
+          },
+          "candidate_id": {
+            "format": "uuid",
+            "title": "Candidate Id",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "trail_recorded": {
+            "title": "Trail Recorded",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "candidate_id",
+          "action",
+          "status",
+          "trail_recorded"
+        ],
+        "title": "CandidateDecisionOut",
+        "type": "object"
+      },
+      "CandidateEditIn": {
+        "additionalProperties": false,
+        "description": "edit_accept 编辑载荷：None=不覆盖既有值（「可空字段不覆盖」——缺省字段保持原样）。",
+        "properties": {
+          "canonical_name": {
+            "anyOf": [
+              {
+                "maxLength": 256,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Canonical Name"
+          },
+          "object": {
+            "anyOf": [
+              {
+                "maxLength": 1024,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Object"
+          },
+          "object_type": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Object Type"
+          },
+          "predicate": {
+            "anyOf": [
+              {
+                "maxLength": 256,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Predicate"
+          },
+          "subject": {
+            "anyOf": [
+              {
+                "maxLength": 256,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Subject"
+          }
+        },
+        "title": "CandidateEditIn",
         "type": "object"
       },
       "ChangesetApproveIn": {
@@ -2142,6 +2439,18 @@
             "title": "Query",
             "type": "string"
           },
+          "source_context": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Context"
+          },
           "top_k": {
             "default": 8,
             "maximum": 50.0,
@@ -3391,6 +3700,27 @@
         "title": "PluginVersionOut",
         "type": "object"
       },
+      "PromotionCreateRequest": {
+        "properties": {
+          "record_id": {
+            "format": "uuid",
+            "title": "Record Id",
+            "type": "string"
+          },
+          "to_layer": {
+            "maximum": 3.0,
+            "minimum": 3.0,
+            "title": "To Layer",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "record_id",
+          "to_layer"
+        ],
+        "title": "PromotionCreateRequest",
+        "type": "object"
+      },
       "PromotionIn": {
         "additionalProperties": false,
         "description": "POST /memory/promotions：发起 L2→L3 升级申请单（M5 前仅登记，memory §1/§2）。",
@@ -3555,6 +3885,92 @@
         "title": "PromotionRecordOut",
         "type": "object"
       },
+      "RecordCreateRequest": {
+        "properties": {
+          "confidence": {
+            "default": 0.5,
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Confidence",
+            "type": "number"
+          },
+          "content": {
+            "minLength": 1,
+            "title": "Content",
+            "type": "string"
+          },
+          "layer": {
+            "maximum": 4.0,
+            "minimum": 1.0,
+            "title": "Layer",
+            "type": "integer"
+          },
+          "record_type": {
+            "title": "Record Type",
+            "type": "string"
+          },
+          "scope": {
+            "default": "personal",
+            "title": "Scope",
+            "type": "string"
+          },
+          "source_ref": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Source Ref",
+            "type": "array"
+          },
+          "structured": {
+            "additionalProperties": true,
+            "title": "Structured",
+            "type": "object"
+          },
+          "subject_iri": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Subject Iri"
+          },
+          "valid_from": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Valid From"
+          },
+          "valid_to": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Valid To"
+          }
+        },
+        "required": [
+          "layer",
+          "record_type",
+          "content"
+        ],
+        "title": "RecordCreateRequest",
+        "type": "object"
+      },
       "RefreshRequest": {
         "additionalProperties": false,
         "description": "POST /auth/refresh 请求体（匿名；body 携 refresh token，api/01 §5.9）。",
@@ -3570,6 +3986,223 @@
           "refresh_token"
         ],
         "title": "RefreshRequest",
+        "type": "object"
+      },
+      "ReviewCandidateEvidenceOut": {
+        "additionalProperties": false,
+        "description": "证据信封（B2 双层结构全量透出）：quote=LLM 自报引语、span=引语在 chunk 内 [start, end)、\nsource_ref=document/doc_version/chunk_id/span 四元组（终审逐字比对与出处回指依据）。",
+        "properties": {
+          "quote": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quote"
+          },
+          "source_ref": {
+            "additionalProperties": true,
+            "title": "Source Ref",
+            "type": "object"
+          },
+          "span": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "integer"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Span"
+          }
+        },
+        "title": "ReviewCandidateEvidenceOut",
+        "type": "object"
+      },
+      "ReviewCandidateOut": {
+        "additionalProperties": false,
+        "description": "候选实例列表项（工作台裁决依据全量透出：evidence.quote 与 violations 必在列）。",
+        "properties": {
+          "aliases": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Aliases",
+            "type": "array"
+          },
+          "align": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Align"
+          },
+          "canonical_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Canonical Name"
+          },
+          "confidence": {
+            "title": "Confidence",
+            "type": "number"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "evidence": {
+            "$ref": "#/components/schemas/ReviewCandidateEvidenceOut"
+          },
+          "fact_type": {
+            "title": "Fact Type",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "object": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Object"
+          },
+          "object_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Object Type"
+          },
+          "predicate": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Predicate"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "subject": {
+            "title": "Subject",
+            "type": "string"
+          },
+          "subject_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Subject Type"
+          },
+          "violations": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Violations",
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "fact_type",
+          "subject",
+          "subject_type",
+          "predicate",
+          "object",
+          "object_type",
+          "canonical_name",
+          "confidence",
+          "status",
+          "evidence",
+          "created_at"
+        ],
+        "title": "ReviewCandidateOut",
+        "type": "object"
+      },
+      "ReviewCandidatePageMetaOut": {
+        "additionalProperties": false,
+        "description": "分页 meta（api/01 §3.1 meta 惯例；offset 分页）。",
+        "properties": {
+          "limit": {
+            "title": "Limit",
+            "type": "integer"
+          },
+          "offset": {
+            "title": "Offset",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "offset",
+          "limit",
+          "total"
+        ],
+        "title": "ReviewCandidatePageMetaOut",
+        "type": "object"
+      },
+      "ReviewCandidatePageOut": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ReviewCandidateOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/ReviewCandidatePageMetaOut"
+          }
+        },
+        "required": [
+          "items",
+          "meta"
+        ],
+        "title": "ReviewCandidatePageOut",
         "type": "object"
       },
       "RunOut": {
@@ -3671,6 +4304,41 @@
           "source"
         ],
         "title": "SearchHitOut",
+        "type": "object"
+      },
+      "SearchRequest": {
+        "properties": {
+          "layer": {
+            "anyOf": [
+              {
+                "maximum": 4.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "层过滤（召回后过滤；pushdown 计划 3）",
+            "title": "Layer"
+          },
+          "limit": {
+            "default": 8,
+            "maximum": 50.0,
+            "minimum": 1.0,
+            "title": "Limit",
+            "type": "integer"
+          },
+          "text_q": {
+            "minLength": 1,
+            "title": "Text Q",
+            "type": "string"
+          }
+        },
+        "required": [
+          "text_q"
+        ],
+        "title": "SearchRequest",
         "type": "object"
       },
       "SeedImportOut": {
@@ -3954,6 +4622,20 @@
         ],
         "title": "SessionStatus",
         "type": "string"
+      },
+      "SettleRequest": {
+        "properties": {
+          "transcript": {
+            "minLength": 1,
+            "title": "Transcript",
+            "type": "string"
+          }
+        },
+        "required": [
+          "transcript"
+        ],
+        "title": "SettleRequest",
+        "type": "object"
       },
       "SourceRefsIn": {
         "description": "溯源指针（memory §9.2：来源指针必填；§5.4 幂等依赖它）。",
@@ -5443,6 +6125,242 @@
         ]
       }
     },
+    "/api/v1/kb/documents/{document_id}/review/batch-decision": {
+      "post": {
+        "description": "逐条独立执行（单条失败仅记 error 不中断批次），响应 meta 汇总 accepted/rejected/edited/failed。",
+        "operationId": "batch_decide_candidates_api_v1_kb_documents__document_id__review_batch_decision_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "document_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Document Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BatchDecisionIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BatchCandidateDecisionOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "批量终审决策（≤200 条/批，超出 3001；逐条独立执行，不整批回滚）",
+        "tags": [
+          "knowledge-base"
+        ]
+      }
+    },
+    "/api/v1/kb/documents/{document_id}/review/candidates": {
+      "get": {
+        "description": "P4 终审队列（api/01 §5.4 ★）：按 document_id（租户过滤）列出 kb_facts 候选。",
+        "operationId": "list_review_candidates_api_v1_kb_documents__document_id__review_candidates_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "document_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Document Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "fact_type",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "entity",
+                    "relation",
+                    "attribute",
+                    "event"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Fact Type"
+            }
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "candidate",
+                    "rejected",
+                    "authoritative"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          {
+            "in": "query",
+            "name": "min_confidence",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 1,
+                  "minimum": 0,
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Min Confidence"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReviewCandidatePageOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "终审候选实例列表（分页；quote/violations/align 全量透出）",
+        "tags": [
+          "knowledge-base"
+        ]
+      }
+    },
+    "/api/v1/kb/review/candidates/{candidate_id}/decision": {
+      "post": {
+        "description": "宪法第 3 条（候选非成品）：LLM 产物一律人工终审才生效——本端点即该关口的工作台动作面。\n\naccept 翻转 authoritative（OntRAG §2.7）；决策留痕经 ReviewTicketService 落候选 open 单\n（无单容忍）；fact 不存在 404（kb 段）、非 candidate 态 409、单已终态迟到决策 4701。",
+        "operationId": "decide_candidate_api_v1_kb_review_candidates__candidate_id__decision_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "candidate_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Candidate Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CandidateDecisionIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CandidateDecisionOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "单条终审决策 accept|reject|edit_accept（唯一 authoritative 写路径，review:approve 背书）",
+        "tags": [
+          "knowledge-base"
+        ]
+      }
+    },
     "/api/v1/kb/search": {
       "post": {
         "description": "OntRAG §5 契约 REST 子集全量：citations 全字段 / evidence.graph_paths / answers+confidence / usage。\n\n降级：嵌入路不可用 → BM25-only（degraded=true, reason=vector_unavailable）；\nmode=global/drift 无社区摘要索引 → local 降级（degraded=true, reason=mode_downgraded:*，二期）；\n图路无已发布本体读模型 → 层次闭包退化为类自身，同类扩展照常（非降级）。\nACL：X-Acl-Tags 头 + OA_KB_ACL_FILTER_ENABLED 开关双条件激活 → 三路同源谓词下推（§4.3）；\n无头 = no-op（调用方未接入标签面，零行为变化红线）。",
@@ -6032,6 +6950,48 @@
         ]
       }
     },
+    "/api/v1/memory/facts/{fact_id}/promotions": {
+      "post": {
+        "description": "L2→L3 升级申请（★ POST /memory/promotions）：登记=audit_logs 一行（memory §2 门禁表\nM5 前口径）；同事实重复申请 409*（bare code，02 §7 登记后回填）；审计存储缺失 503。",
+        "operationId": "create_promotion_api_v1_memory_facts__fact_id__promotions_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PromotionIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PromotionOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "发起 L2→L3 升级申请单（M3 过渡：仅审计留痕，不写 L3、不建工单）",
+        "tags": [
+          "memory"
+        ]
+      }
+    },
     "/api/v1/memory/facts/{fact_id}/timeline": {
       "get": {
         "description": "版本链时间线（★ GET /memory/facts/{id}/timeline）：supersedes 链双向回放 →\n事件流投影（business.timeline 纯函数）；未命中/跨用户一律 404（不泄露存在性）。",
@@ -6194,24 +7154,37 @@
         ]
       },
       "post": {
-        "description": "L2→L3 升级申请（★ POST /memory/promotions）：登记=audit_logs 一行（memory §2 门禁表\nM5 前口径）；同事实重复申请 409*（bare code，02 §7 登记后回填）；审计存储缺失 503。",
-        "operationId": "create_promotion_api_v1_memory_promotions_post",
+        "description": "记录升级申请（权威实现，写 memory_promotions 表）：record 存在性+归属双校验封跨租户引用；\nM3 过渡的 fact 版申请单见 POST /memory/facts/{fact_id}/promotions（用户裁决 2026-09-28）。",
+        "operationId": "create_record_promotion_api_v1_memory_promotions_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-Tenant-Id",
+            "required": true,
+            "schema": {
+              "title": "X-Tenant-Id",
+              "type": "string"
+            }
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/PromotionIn"
+                "$ref": "#/components/schemas/PromotionCreateRequest"
               }
             }
           },
           "required": true
         },
         "responses": {
-          "202": {
+          "200": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/PromotionOut"
+                  "additionalProperties": true,
+                  "title": "Response Create Record Promotion Api V1 Memory Promotions Post",
+                  "type": "object"
                 }
               }
             },
@@ -6228,7 +7201,213 @@
             "description": "Validation Error"
           }
         },
-        "summary": "发起 L2→L3 升级申请单（M5 前占位登记：仅审计留痕，不写 L3、不建工单）",
+        "summary": "记录升级申请（records 三表权威实现）",
+        "tags": [
+          "memory"
+        ]
+      }
+    },
+    "/api/v1/memory/records": {
+      "post": {
+        "operationId": "create_record_api_v1_memory_records_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-Tenant-Id",
+            "required": true,
+            "schema": {
+              "title": "X-Tenant-Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RecordCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Create Record Api V1 Memory Records Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Record",
+        "tags": [
+          "memory"
+        ]
+      }
+    },
+    "/api/v1/memory/records/search": {
+      "post": {
+        "operationId": "search_records_api_v1_memory_records_search_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-Tenant-Id",
+            "required": true,
+            "schema": {
+              "title": "X-Tenant-Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SearchRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Search Records Api V1 Memory Records Search Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Search Records",
+        "tags": [
+          "memory"
+        ]
+      }
+    },
+    "/api/v1/memory/records/{record_id}": {
+      "get": {
+        "operationId": "get_record_api_v1_memory_records__record_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "record_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Record Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Tenant-Id",
+            "required": true,
+            "schema": {
+              "title": "X-Tenant-Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Get Record Api V1 Memory Records  Record Id  Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Record",
+        "tags": [
+          "memory"
+        ]
+      }
+    },
+    "/api/v1/memory/reviews": {
+      "get": {
+        "operationId": "list_reviews_api_v1_memory_reviews_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-Tenant-Id",
+            "required": true,
+            "schema": {
+              "title": "X-Tenant-Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response List Reviews Api V1 Memory Reviews Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Reviews",
         "tags": [
           "memory"
         ]
@@ -6270,6 +7449,198 @@
           }
         },
         "summary": "语义检索（M3 过渡：双通道 RRF；向量通道随嵌入接入）",
+        "tags": [
+          "memory"
+        ]
+      }
+    },
+    "/api/v1/memory/sessions/{session_id}/blocks": {
+      "get": {
+        "operationId": "get_blocks_api_v1_memory_sessions__session_id__blocks_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Session Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Tenant-Id",
+            "required": true,
+            "schema": {
+              "title": "X-Tenant-Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Get Blocks Api V1 Memory Sessions  Session Id  Blocks Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Blocks",
+        "tags": [
+          "memory"
+        ]
+      }
+    },
+    "/api/v1/memory/sessions/{session_id}/blocks/{block}": {
+      "put": {
+        "operationId": "put_block_api_v1_memory_sessions__session_id__blocks__block__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Session Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "block",
+            "required": true,
+            "schema": {
+              "title": "Block",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Tenant-Id",
+            "required": true,
+            "schema": {
+              "title": "X-Tenant-Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BlockPutRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Put Block Api V1 Memory Sessions  Session Id  Blocks  Block  Put",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Put Block",
+        "tags": [
+          "memory"
+        ]
+      }
+    },
+    "/api/v1/memory/sessions/{session_id}/settle": {
+      "post": {
+        "description": "手动沉淀（在线路径，不过 IdleGate——§5.5.2 空闲调度只管后台自动沉淀）。\n\n幂等：确定性键 manual:{session_id}:{sha256(transcript)} 走登记闸门（与计划\"组装走 settle_session_task\"同语义），\n重复提交短路返回 skipped，不重复调管线。",
+        "operationId": "settle_session_api_v1_memory_sessions__session_id__settle_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Session Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Tenant-Id",
+            "required": true,
+            "schema": {
+              "title": "X-Tenant-Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SettleRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Settle Session Api V1 Memory Sessions  Session Id  Settle Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Settle Session",
         "tags": [
           "memory"
         ]

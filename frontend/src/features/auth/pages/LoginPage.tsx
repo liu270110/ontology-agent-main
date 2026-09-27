@@ -100,7 +100,7 @@ export function LoginPage() {
             <div
               role="status"
               data-testid="join-banner"
-              className="max-w-[440px] rounded-xl border border-green/40 bg-green/10 px-4 py-2.5 text-center text-xs text-green"
+              className="max-w-[440px] rounded-xl border border-green/40 bg-green/10 px-4 py-2.5 text-center text-xs text-green [text-wrap:balance]"
             >
               你受邀加入〈{joinPreview.data.tenant_name}〉工作区 · 角色〈{ROLE_LABEL[joinPreview.data.role] ?? joinPreview.data.role}〉，注册后将自动加入
             </div>

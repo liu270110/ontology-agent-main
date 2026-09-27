@@ -10,6 +10,7 @@ import {
   Timer,
 } from 'lucide-react'
 import { Sheet } from '@/components/sheet'
+import { useSessionStore } from '@/stores/session-store'
 import {
   fmtSize,
   workspaceApi,
@@ -77,7 +78,7 @@ function TreeNode({
         type="button"
         data-testid={`ws-node-${node.name}`}
         onClick={() => (isDir ? onToggle(node.path) : onPick(node))}
-        className={`flex w-full items-center gap-1 rounded-lg py-[3px] pr-1.5 text-left text-[11.5px] leading-5 hover:bg-surface-2 ${
+        className={`flex w-full items-center gap-1 rounded-lg py-[3px] pr-1.5 text-left text-[11px] leading-5 hover:bg-surface-2 ${
           selected ? 'bg-accent-soft' : ''
         }`}
         style={{ paddingLeft: 6 + depth * 12 }}
@@ -104,7 +105,7 @@ function TreeNode({
             <FileText size={12} className="flex-none text-label-2" aria-hidden />
             <span className={`truncate ${selected ? 'font-semibold text-accent' : ''}`}>{node.name}</span>
             {node.dirty && <span className="h-1.5 w-1.5 flex-none rounded-full bg-orange" aria-label="有改动" />}
-            <span className="mono ml-auto flex-none pl-1.5 text-[10px] text-label-3">
+            <span className="mono ml-auto flex-none pl-1.5 text-2xs text-label-3">
               {node.dirty ? node.updated_at : fmtSize(node.size ?? 0)}
             </span>
           </>
@@ -125,7 +126,7 @@ function TreeNode({
               />
             ))
           ) : (
-            <div className="py-0.5 text-[10.5px] text-label-3" style={{ paddingLeft: 6 + (depth + 1) * 12 + 22 }}>
+            <div className="py-0.5 text-[11px] text-label-3" style={{ paddingLeft: 6 + (depth + 1) * 12 + 22 }}>
               （空目录）
             </div>
           )}
@@ -158,21 +159,55 @@ export function WorkspacePanel({ sessionId }: { sessionId: string }) {
   const [execBusy, setExecBusy] = useState(false)
   const termEndRef = useRef<HTMLDivElement>(null)
 
+  // 工作区实时联动（31 篇）：workspace.file.* → workspaceVersion 自增，防抖 300ms 合流重拉文件树；
+  // 会话切换 / 挂载首拉不防抖
+  const wsVersion = useSessionStore(s => s.workspaceVersion)
+  const seen = useRef({ sid: sessionId, v: wsVersion })
+  const pushDraftInsert = useSessionStore(s => s.pushDraftInsert)
+
   useEffect(() => {
     let alive = true
-    void workspaceApi.tree(sessionId).then(t => {
-      if (!alive) return
-      setTree(t)
-      // 根行不再渲染（根=静态 /workspace/ 标签），expanded 只种子可折叠的子目录
-      setExpanded(new Set((t.root.children ?? []).flatMap(c => collectDirs(c))))
-    })
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const load = () => {
+      void workspaceApi.tree(sessionId).then(t => {
+        if (!alive) return
+        setTree(t)
+        // 根行不再渲染（根=静态 /workspace/ 标签），expanded 只种子可折叠的子目录
+        setExpanded(new Set((t.root.children ?? []).flatMap(c => collectDirs(c))))
+      })
+    }
+    if (seen.current.sid !== sessionId || seen.current.v === wsVersion) {
+      seen.current = { sid: sessionId, v: wsVersion }
+      load()
+    } else {
+      timer = setTimeout(() => {
+        seen.current = { sid: sessionId, v: wsVersion }
+        load()
+      }, 300)
+    }
     void workspaceApi.resources(sessionId).then(r => {
       if (alive) setResources(r.items)
     })
     return () => {
       alive = false
+      if (timer) clearTimeout(timer)
     }
-  }, [sessionId])
+  }, [sessionId, wsVersion])
+
+  // terminal.output（31 篇）：按游标消费 store 缓冲追加进本地终端回放
+  const storeTerm = useSessionStore(s => s.terminalLines)
+  const consumedTerm = useRef(-1)
+  useEffect(() => {
+    if (consumedTerm.current < 0) {
+      consumedTerm.current = storeTerm.length // 基线对齐：只消费挂载/换会话之后的增量
+      return
+    }
+    if (storeTerm.length > consumedTerm.current) {
+      const fresh = storeTerm.slice(consumedTerm.current)
+      consumedTerm.current = storeTerm.length
+      setTermLines(v => [...v, ...fresh.map(l => ({ kind: 'out' as const, text: l.text }))])
+    }
+  }, [storeTerm, sessionId])
 
   useEffect(() => {
     // ?.() 兼容 jsdom（无 scrollIntoView 实现）
@@ -209,11 +244,11 @@ export function WorkspacePanel({ sessionId }: { sessionId: string }) {
     <aside data-testid="ws-panel" className="flex w-60 flex-none flex-col border-l border-separator bg-surface">
       <div className="flex items-center gap-1.5 px-3.5 pb-1 pt-3">
         <FolderOpen size={13} className="text-teal" aria-hidden />
-        <b className="text-[12.5px]">Agent 工作区</b>
+        <b className="text-xs">Agent 工作区</b>
         {recycle != null && (
           <span
             data-testid="ws-recycle"
-            className="badge ml-auto gap-1 text-[10px]"
+            className="badge ml-auto gap-1 text-2xs"
             style={recycle <= 30 ? { background: 'var(--orange-soft)', color: 'var(--orange)' } : undefined}
             title="工作区易失：会话关闭后进入休眠，到期快照归档并销毁（20 篇 SBX）"
           >
@@ -244,7 +279,7 @@ export function WorkspacePanel({ sessionId }: { sessionId: string }) {
 
       {tab === 'tree' && (
         <div className="scroll-thin min-h-0 flex-1 overflow-y-auto px-2.5 py-2">
-          <div className="mono px-1.5 pb-1 text-[10.5px] text-label-3">/workspace/</div>
+          <div className="mono px-1.5 pb-1 text-[11px] text-label-3">/workspace/</div>
           {tree ? (
             tree.root.children?.map(c => (
               <TreeNode
@@ -265,7 +300,7 @@ export function WorkspacePanel({ sessionId }: { sessionId: string }) {
               />
             ))
           ) : (
-            <div className="px-1.5 py-3 text-[11.5px] text-label-3">正在读取沙箱文件树…</div>
+            <div className="px-1.5 py-3 text-[11px] text-label-3">正在读取沙箱文件树…</div>
           )}
         </div>
       )}
@@ -299,14 +334,14 @@ export function WorkspacePanel({ sessionId }: { sessionId: string }) {
             </div>
             <div ref={termEndRef} />
           </div>
-          <div className="pt-1 text-[10px] text-label-2">白名单：ls · pwd · cat · head · tail，其余拒绝</div>
+          <div className="pt-1 text-2xs text-label-2">白名单：ls · pwd · cat · head · tail，其余拒绝</div>
         </div>
       )}
 
       {tab === 'res' && (
         <div className="scroll-thin min-h-0 flex-1 overflow-y-auto px-3.5 pb-3 pt-2">
           {!resources ? (
-            <div className="py-3 text-[11.5px] text-label-3">正在读取资源列表…</div>
+            <div className="py-3 text-[11px] text-label-3">正在读取资源列表…</div>
           ) : (
             RES_GROUPS.map(g => {
               const items = resources.filter(r => r.type === g.type)
@@ -318,7 +353,7 @@ export function WorkspacePanel({ sessionId }: { sessionId: string }) {
                     <span className="font-normal">{items.length}</span>
                   </div>
                   {items.length === 0 ? (
-                    <div className="py-0.5 pl-3 text-[10.5px] text-label-3">（无）</div>
+                    <div className="py-0.5 pl-3 text-[11px] text-label-3">（无）</div>
                   ) : (
                     items.map(r => {
                       const st = RES_STATUS[r.status]
@@ -326,13 +361,24 @@ export function WorkspacePanel({ sessionId }: { sessionId: string }) {
                         <div
                           key={r.id}
                           data-testid={`ws-res-${r.id}`}
-                          className="flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-[11.5px] hover:bg-surface-2"
+                          className="group flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-[11px] hover:bg-surface-2"
                           title={`${r.name} · ${fmtSize(r.size)} · 上传者 ${r.uploaded_by}`}
                         >
                           <FileText size={12} className="flex-none text-label-2" aria-hidden />
                           <span className="min-w-0 flex-1 truncate">{r.name}</span>
-                          <span className="mono flex-none text-[10px] text-label-3">{fmtSize(r.size)}</span>
-                          <span className={`badge flex-none text-[10px] ${st.cls}`}>{st.text}</span>
+                          {/* 行级 hover 动作：@文件名 入队消息草稿（31 篇 → 26 篇 IX-CHT） */}
+                          <button
+                            type="button"
+                            data-testid={`ws-ref-${r.id}`}
+                            title={`把 @${r.name} 插入输入框`}
+                            aria-label={`引用 ${r.name}`}
+                            onClick={() => pushDraftInsert(`@${r.name}`)}
+                            className="flex-none rounded-md px-1 py-0.5 text-2xs text-accent opacity-0 transition-opacity hover:bg-accent-soft focus:opacity-100 group-hover:opacity-100"
+                          >
+                            @引用
+                          </button>
+                          <span className="mono flex-none text-2xs text-label-3">{fmtSize(r.size)}</span>
+                          <span className={`badge flex-none text-2xs ${st.cls}`}>{st.text}</span>
                         </div>
                       )
                     })
@@ -349,7 +395,7 @@ export function WorkspacePanel({ sessionId }: { sessionId: string }) {
         {preview && (
           <pre
             data-testid="ws-preview"
-            className="scroll-thin mono m-0 max-h-[calc(100vh-160px)] overflow-auto whitespace-pre-wrap break-words rounded-xl border border-separator bg-surface-2 p-3.5 text-[11.5px] leading-[1.8] text-label"
+            className="scroll-thin mono m-0 max-h-[calc(100vh-160px)] overflow-auto whitespace-pre-wrap break-words rounded-xl border border-separator bg-surface-2 p-3.5 text-[11px] leading-[1.8] text-label"
           >
             {preview.content}
           </pre>

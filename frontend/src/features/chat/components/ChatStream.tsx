@@ -48,7 +48,7 @@ function EvidenceChips({
   return (
     <div className="ev-row mt-2 flex flex-wrap gap-1.5">
       {degraded && (
-        <span className="rounded-full border border-orange/50 px-2 py-0.5 text-[10px] text-orange">证据链暂缺（降级）</span>
+        <span className="rounded-full border border-orange/50 px-2 py-0.5 text-2xs text-orange">证据链暂缺（降级）</span>
       )}
       {chunks.map(c => (
         <button
@@ -57,7 +57,7 @@ function EvidenceChips({
           data-testid={`ev-chip-${c.chunk_id}`}
           title="查看证据原文"
           onClick={() => onOpen({ chunk: c, graph_paths: graphPaths })}
-          className="flex max-w-full items-center gap-1 rounded-full border border-separator bg-surface-2 px-2 py-0.5 text-[10px] text-label-2 hover:border-accent hover:text-accent"
+          className="flex max-w-full items-center gap-1 rounded-full border border-separator bg-surface-2 px-2 py-0.5 text-2xs text-label-2 hover:border-accent hover:text-accent"
         >
           <FileText size={9} aria-hidden /> {c.doc_id} · {c.quote.slice(0, 18)}… ({c.score.toFixed(2)})
         </button>
@@ -77,7 +77,7 @@ function EvidenceChips({
               graph_paths: [p],
             })
           }
-          className="flex max-w-full items-center gap-1 rounded-full border border-separator bg-surface-2 px-2 py-0.5 text-[10px] text-label-2 hover:border-accent hover:text-accent"
+          className="flex max-w-full items-center gap-1 rounded-full border border-separator bg-surface-2 px-2 py-0.5 text-2xs text-label-2 hover:border-accent hover:text-accent"
         >
           ◆ {p.nodes.join(' ← ')}
         </button>
@@ -109,7 +109,7 @@ function MessageActions({ m, sessionId, regenerateContent }: { m: ChatMessage; s
             }
           })
         }}
-        className="flex h-6 items-center gap-1 rounded-md px-1.5 text-[10.5px] text-label-3 hover:bg-surface-2 hover:text-label"
+        className="flex h-6 items-center gap-1 rounded-md px-1.5 text-[11px] text-label-3 hover:bg-surface-2 hover:text-label"
       >
         {copied ? <Check size={11} className="text-green" aria-hidden /> : <Copy size={11} aria-hidden />}
         {copied ? '已复制' : '复制'}
@@ -123,7 +123,7 @@ function MessageActions({ m, sessionId, regenerateContent }: { m: ChatMessage; s
           // IX-CHT-07 重新生成：携带相同上下文重发（M1 简化——旧回答保留，折叠对比随 F-03 branch 批）
           if (regenerateContent) void api.post(`/sessions/${sessionId}/messages`, { content: regenerateContent })
         }}
-        className="flex h-6 items-center gap-1 rounded-md px-1.5 text-[10.5px] text-label-3 hover:bg-surface-2 hover:text-label disabled:opacity-40"
+        className="flex h-6 items-center gap-1 rounded-md px-1.5 text-[11px] text-label-3 hover:bg-surface-2 hover:text-label disabled:opacity-40"
       >
         <RefreshCw size={11} aria-hidden /> 重新生成
       </button>
@@ -148,6 +148,9 @@ function MessageActions({ m, sessionId, regenerateContent }: { m: ChatMessage; s
     </div>
   )
 }
+
+/** workspace.file.* 系统行动词（31 篇：创建/更新/删除按事件区分） */
+const WS_VERB: Record<NonNullable<ChatMessage['wsAction']>, string> = { created: '创建', modified: '更新', deleted: '删除' }
 
 export function ChatStream({ sessionId, onOpenEvidence }: { sessionId: string; onOpenEvidence: (f: EvidenceFocus) => void }) {
   const messages = useSessionStore(s => s.messages)
@@ -182,6 +185,14 @@ export function ChatStream({ sessionId, onOpenEvidence }: { sessionId: string; o
             </div>
             <span className="avatar mt-0.5 flex h-8 w-8 flex-none items-center justify-center rounded-full bg-accent-soft text-xs text-accent">刘</span>
           </div>
+        ) : m.role === 'system' ? (
+          // workspace.file.* 系统行（31 篇）：占满行宽、克制不抢戏
+          <div key={m.id} data-testid="ws-sysrow" className="flex w-full items-center gap-2 rounded-lg border border-separator bg-surface-2 px-3 py-1.5 text-[11px] text-label-2">
+            <FileText size={11} className="flex-none text-label-3" aria-hidden />
+            <span className="flex-none text-label-3">Agent 已{WS_VERB[m.wsAction ?? 'created']}</span>
+            <span className="max-w-[40%] flex-none truncate font-medium text-label">{m.wsName}</span>
+            <span className="mono min-w-0 truncate text-2xs text-label-3">→ {m.wsPath}</span>
+          </div>
         ) : (
           <div key={m.id} className="msg group flex gap-2">
             <span className="avatar mt-0.5 flex h-8 w-8 flex-none items-center justify-center rounded-full bg-surface-2 text-xs">✦</span>
@@ -192,7 +203,7 @@ export function ChatStream({ sessionId, onOpenEvidence }: { sessionId: string; o
                 {running && m.id === messages[messages.length - 1]?.id && <span className="stream-caret ml-0.5 animate-pulse">▍</span>}
                 {/* IX-CHT-06：手动停止后保留已生成部分 + 标记 */}
                 {m.finishReason === 'stopped' && (
-                  <span data-testid="stopped-mark" className="badge b-gray ml-2 align-middle text-[10px]">已手动停止</span>
+                  <span data-testid="stopped-mark" className="badge b-gray ml-2 align-middle text-2xs">已手动停止</span>
                 )}
                 {/* 证据 chip：历史消息用附着证据，实时末条用 RETRIEVAL_EVIDENCE */}
                 {(() => {

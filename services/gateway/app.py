@@ -24,18 +24,33 @@ lifespan 内装配 app.state.mcp_registry——装配逻辑抽至共享工厂 se
 from __future__ import annotations
 
 import asyncio
+import sys
+
+# Windows 默认 ProactorEventLoop 与 psycopg async 不兼容（S6 联调发现）：入口统一 Selector 循环
+if sys.platform == "win32":  # pragma: no cover - 平台分支
+    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+
+import asyncio
 import logging
 import uuid
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
 from starlette.middleware.cors import CORSMiddleware
 
+from services.agent.api.agents import router as agents_router
+from services.agent.api.sessions import get_or_build_chat_orchestrator
 from services.agent.api.sessions import router as sessions_router
 from services.agent.api.tasks import router as tasks_router
+from services.agent.business.task_worker import TaskRunWorker
+from services.agent.data.repo_impl.task_poller import RunQueuePoller
+from services.agent.domain.model.task import RunRetryPolicy
+from services.gateway.health import readyz as readyz_probe
+from services.gateway.health import router as health_router
 from services.gateway.middlewares import (
     AuditLogMiddleware,
     ErrorCode,
@@ -54,6 +69,7 @@ from services.platform.db.uow import AsyncUnitOfWork
 from services.platform.deps import dispose_gateways, get_engine
 from services.plugin.api.plugins import router as plugin_router
 from services.review.api.admin import router as review_admin_router
+from services.writeback.api.ledger import router as writeback_ledger_router
 from services.writeback.business.relay import LoggingEventPublisher, OutboxRelay
 from services.writeback.data.repo_impl.writeback_repo import PgOutboxPoller
 
@@ -107,6 +123,25 @@ def _build_model_port(s: Settings) -> ModelPort | None:
     )
     budget = LlmBudgetGate(get_redis(s), limit_tokens=_LLM_BUDGET_WINDOW_TOKENS, window_s=_LLM_BUDGET_WINDOW_S)
     return AuditedModelPort(inner, audit, budget)
+
+
+def _build_capability_bindings(settings: Any) -> tuple:
+    """能力层 P0 工具绑定（docs/Agent/06）：fs 工作区白名单 + web 出口白名单，配置门控。
+
+    workspace_root 未配置 → fs 不注册；web 白名单为空 → web 全拒 fail-closed（注册但不可出网）。
+    terminal 绑定待沙箱会话供给批次接线（每 Run 一个沙箱会话句柄）。
+    """
+    bindings: list = []
+    if settings.workspace_root:
+        from services.agent.business.capabilities.fs import build_fs_bindings
+
+        bindings.extend(build_fs_bindings(settings.workspace_root))
+    from services.agent.business.capabilities.web import build_web_bindings
+
+    allowlist = tuple(d.strip() for d in settings.web_egress_allowlist.split(",") if d.strip())
+    fetch_tool, search_tool = build_web_bindings(fetch_allowlist=allowlist, search_backend=None)
+    bindings.extend((fetch_tool, search_tool))
+    return tuple(bindings)
 
 
 def _build_candidate_review(session_factory: async_sessionmaker[AsyncSession]) -> CandidateReviewPort:
@@ -220,6 +255,25 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         logger.info("outbox relay started: batch=100 interval=1s max_retries=5")
     except Exception:  # noqa: BLE001 ——relay 装配失败不阻塞应用启动（fail-soft，投影可补扫）
         logger.exception("outbox relay 启动失败（应用以无 relay 继续）")
+    # 任务执行 worker（非 SSE 受理路径 + 重试监督，2026-09-27 批）：queued Run 认领执行、
+    # failed-run 重试监督（RunRetryPolicy 退避；attempt≤3 耗尽→task failed+5005）。
+    # 编排器经 get_or_build_chat_orchestrator(app.state) 与 SSE 端点共享同一实例（含结果汇
+    # 终态回写）。fail-soft 同 relay：装配失败应用继续（非 SSE 路径回退挂起行为）。
+    worker_stop = asyncio.Event()
+    worker_task: asyncio.Task | None = None
+    if getattr(s, "task_worker_enabled", True):
+        try:
+            worker = TaskRunWorker(
+                uow=app.state.uow,
+                poller=RunQueuePoller(get_session_factory(s)),
+                orchestrator_provider=lambda: get_or_build_chat_orchestrator(app.state),
+                policy=RunRetryPolicy(),
+                poll_interval_s=s.task_worker_poll_interval_s,
+            )
+            worker_task = asyncio.create_task(worker.run(worker_stop))
+            logger.info("task worker started: poll_interval=%ss", s.task_worker_poll_interval_s)
+        except Exception:  # noqa: BLE001
+            logger.exception("task worker 启动失败（应用以无 worker 继续，非 SSE 路径挂起）")
     # 计划 3.3：llm_calls 审计批量 flush 常驻循环（T 秒触发；N 条触发在 record 侧即时补）
     flush_task: asyncio.Task | None = None
     audit_buffer = getattr(app.state.model_port, "audit", None) if app.state.model_port is not None else None
@@ -229,9 +283,14 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             "llm_calls audit buffer started: batch=%d interval=%ss", _LLM_AUDIT_MAX_BATCH, _LLM_AUDIT_FLUSH_INTERVAL_S
         )
     logger.info("gateway started: version=%s profile=%s api_prefix=%s", VERSION, s.deploy_profile, s.api_prefix)
-    # TODO(M3)：初始化 L7 客户端（MCP 网关/插件运行时/OTel）+ readyz 五存储探活
+    # TODO(M3)：初始化 L7 客户端（MCP 网关/插件运行时/OTel）；readyz 聚合探活已由
+    # services/gateway/health.py 承接（PG/Redis/MinIO，复用本 lifespan 预热的引擎/Redis 单例）
     yield
     # 停机：relay 排空 → 冲刷 llm_calls 审计缓冲 → 冲刷审计日志 → 关闭模型端口连接池 → 关闭引擎与 Redis（02 §2 J/K/L）
+    if worker_task is not None:
+        worker_stop.set()
+        await asyncio.gather(worker_task, return_exceptions=True)
+        logger.info("task worker stopped on shutdown")
     if relay_task is not None:
         relay_stop.set()
         await asyncio.gather(relay_task, return_exceptions=True)
@@ -250,18 +309,25 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     logger.info("gateway shutting down: connections disposed")
 
 
-def _validation_error_body(request: Request, exc: RequestValidationError) -> dict:
-    """DTO 校验失败 → 3001（02 §6/§7；detail 为 [{field, issue}] 结构化数组）。"""
+def _validation_error_body(request: Request, exc: RequestValidationError) -> JSONResponse:
+    """DTO 校验失败 → 3001（02 §6/§7；detail 为 [{field, issue}] 结构化数组）。
+
+    R50 联调修复（2026-09-28）：必须返回 JSONResponse 而非裸 dict——Starlette ≥0.50 的
+    wrap_app_handling_exceptions 对 handler 返回值直接 ``await response(...)``（不再包装
+    dict），裸 dict 触发 ``TypeError: 'dict' object is not callable`` 使一切校验 422 变 500
+    （live 对账实测 GET /admin/reviews?status=pending 触发）。
+    """
     detail = [
         {"field": ".".join(str(loc) for loc in err.get("loc", [])[1:]), "issue": err.get("msg", "")}
         for err in exc.errors()
     ]
-    return {
+    body = {
         "code": int(ErrorCode.PARAM_INVALID),
         "message": "参数校验失败",
         "detail": detail,
         "trace_id": getattr(request.state, "trace_id", None),
     }
+    return JSONResponse(body, status_code=422)
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -297,6 +363,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     # ---- 路由（02 §4：统一前缀 /api/v1；M1 已落 auth / sessions / tasks，余随批次补齐）----
     app.include_router(auth_router, prefix=settings.api_prefix)
+    app.include_router(agents_router, prefix=settings.api_prefix)  # M3.1：agents CRUD（api/01 §5.1）
     app.include_router(sessions_router, prefix=settings.api_prefix)
     app.include_router(tasks_router, prefix=settings.api_prefix)
     app.include_router(kb_router, prefix=settings.api_prefix)  # M2：知识库基线（上传/流水线/混合检索）
@@ -304,18 +371,25 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(memory_router, prefix=settings.api_prefix)  # 计划 3.3：记忆域（L1/L2 六端点）
     app.include_router(plugin_router, prefix=settings.api_prefix)  # M5-1：插件市场（api/01 §5.6 八端点）
     app.include_router(review_admin_router, prefix=settings.api_prefix)  # M5 条件四：审核工单审批决策（api/01 §5.8 ★）
+    app.include_router(health_router, prefix=settings.api_prefix)  # M3 销项：readyz 聚合探活（health.py）
+    app.include_router(writeback_ledger_router, prefix=settings.api_prefix)  # api/01 §5.8 ★：台账查询（writeback.api）
 
     # DTO 校验异常 → 统一错误体 3001（02 §6；默认 422 体不合错误码契约，改写）
     app.add_exception_handler(RequestValidationError, _validation_error_body)
 
     @app.get("/api/v1/healthz", tags=["probe"])
     async def healthz() -> dict[str, str]:
-        # TODO(M3)：聚合 PG/Redis/MinIO 探活（deploy compose healthcheck 对应）
+        # 轻量存活探针（进程活着即 200，不触外部依赖）；聚合依赖探活见 readyz（gateway/health.py）
         return {"status": "ok", "version": VERSION, "profile": settings.deploy_profile}
 
     # 探针统一挂 /api/v1/healthz（02 §2）；根路径保留一个版本兼容
     @app.get("/healthz", tags=["probe"], include_in_schema=False)
     async def healthz_legacy() -> dict[str, str]:
         return await healthz()
+
+    # readyz 根路径兼容别名（/api/v1/readyz 由 health_router 提供；JWT 匿名白名单两路径均已登记）
+    @app.get("/readyz", tags=["probe"], include_in_schema=False)
+    async def readyz_legacy(request: Request) -> JSONResponse:
+        return await readyz_probe(request)
 
     return app

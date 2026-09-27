@@ -14,6 +14,7 @@
 from __future__ import annotations
 
 import uuid
+from collections import deque
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -279,4 +280,267 @@ async def expand_graph(
         paths=[path] if path is not None else [],
         matched_chunk_ids=matched,
         classes=sorted(seen_classes),
+    )
+
+
+# ---------------------------------------------------------------- 类级图三查（api/01 §5.4 kb 行 /kb/graph/*）
+#
+# lite=类级图（与 expand_graph 同源的层次读模型）：节点=本体类（ontology 读模型公开查询），
+# 边=subclass_of（层次）+ 关系谓词（kb_facts authoritative relation——候选不入图=宪法第 3 条，
+# 墓碑文档（documents.valid_to 封口）的关系边一并下线）。三查均为纯函数（层次+关系边入参，
+# 零会话），会话面仅 authoritative_relations 一条只读 SQL；空结果非失败（OntRAG §4）。
+
+QUERY_NODE_CAP = 64  # 图三查节点上限（防全租户图撑爆响应；种子/关系对端恒保留不计入截断，示例值/待实测）
+QUERY_REL_CAP = 96  # 图三查边上限（同上；subclass_of 与关系边交错预算防挤占）
+RELATION_EDGE_CAP = 200  # 权威关系边单次装载上限（lite 护栏；示例值/待实测）
+RELATION_ATTACH_CAP = 32  # 单次图查询实际挂载的关系边上限（防关系对端类无限膨胀节点集；示例值/待实测）
+
+# 权威关系边源（仅 authoritative + fact_type=relation；墓碑文档 join 封口下线；
+# DISTINCT 去重——同三元组被多文档/chunk 断言只出一条边；predicate 非空防呆纵深——
+# 空谓词行不得入图（api 层 DTO type 必填，缺防呆会 500））
+_RELATION_EDGES_SQL = (
+    "SELECT DISTINCT f.subject_type, f.predicate, f.object_type "
+    "FROM kb_facts f "
+    "JOIN documents d ON d.id = f.document_id AND d.valid_to IS NULL "
+    "WHERE f.tenant_id = :tenant_id AND f.status = 'authoritative' AND f.fact_type = 'relation' "
+    "AND f.subject_type IS NOT NULL AND f.predicate IS NOT NULL AND f.object_type IS NOT NULL "
+    "ORDER BY f.subject_type, f.predicate, f.object_type "
+    "LIMIT :cap"
+)
+
+
+@dataclass(slots=True)
+class GraphQueryResult:
+    """类级图三查结果：节点 + 边列表（matched=查询命中的种子类 IRI，供调用方回显）。"""
+
+    nodes: list[GraphNode] = field(default_factory=list)
+    rels: list[GraphRel] = field(default_factory=list)
+    matched: list[str] = field(default_factory=list)
+
+
+async def authoritative_relations(
+    session: AsyncSession,
+    *,
+    tenant_id: uuid.UUID,
+    relation_cap: int = RELATION_EDGE_CAP,
+) -> list[tuple[str, str, str]]:
+    """租户权威关系边 (subject_type, predicate, object_type)——图三查的关系扩展源。
+
+    仅 authoritative（候选非成品不入图）；墓碑文档（valid_to 封口）的关系边一并下线。
+    """
+    rows = await session.execute(text(_RELATION_EDGES_SQL), {"tenant_id": tenant_id, "cap": relation_cap})
+    return [(row[0], row[1], row[2]) for row in rows]
+
+
+def _known_class(hierarchy: ClassHierarchy, iri: str) -> bool:
+    """类 IRI 是否在层次读模型中（names/parents/children 任一出现即视为已知类）。"""
+    return iri in hierarchy.names or iri in hierarchy.parents or iri in hierarchy.children
+
+
+def _all_class_keys(hierarchy: ClassHierarchy) -> list[str]:
+    """类键全集（names ∪ parents ∪ children，稳定序）：层次读模型未作行的纯超类键
+    （如平台顶类 ob2:*）与已行类同权可见——search 面与 neighborhood/path 面口径一致。"""
+    return sorted(set(hierarchy.names) | set(hierarchy.parents) | set(hierarchy.children))
+
+
+def _match_classes(hierarchy: ClassHierarchy, needle: str) -> list[str]:
+    """关键词/IRI 片段匹配类（大小写不敏感：IRI 全串 / 读模型名 / 本地名三面），稳定序。
+
+    扫描类键全集（_all_class_keys，含 parents/children 里的纯超类键）——保证 search 命中的
+    类必被 _known_class 认可，两处口径永不漂移。
+    """
+    low = needle.strip().lower()
+    if not low:
+        return []
+    return [
+        iri
+        for iri in _all_class_keys(hierarchy)
+        if low in iri.lower() or low in (hierarchy.names.get(iri) or "").lower() or low in _local_name(iri).lower()
+    ]
+
+
+def _hierarchy_bfs(hierarchy: ClassHierarchy, seeds: set[str], depth: int) -> set[str]:
+    """层次双向 BFS（父+子边同权行走）depth 跳内的类集合（含种子）。"""
+    members = set(seeds)
+    frontier = set(seeds)
+    for _ in range(max(0, depth)):
+        nxt: set[str] = set()
+        for iri in frontier:
+            nxt.update(hierarchy.parents.get(iri, ()))
+            nxt.update(hierarchy.children.get(iri, ()))
+        nxt -= members
+        if not nxt:
+            break
+        members |= nxt
+        frontier = nxt
+        if len(members) >= QUERY_NODE_CAP:
+            break
+    return members
+
+
+def _subclass_edges(hierarchy: ClassHierarchy, members: set[str]) -> list[GraphRel]:
+    """节点集内 subclass_of 边（父子均在集内才成边）。"""
+    return [
+        GraphRel(type="subclass_of", weight=1.0)
+        for iri in sorted(members)
+        for parent in hierarchy.parents.get(iri, ())
+        if parent in members
+    ]
+
+
+def _relation_edges(
+    relations: Sequence[tuple[str, str, str]],
+    members: set[str],
+    *,
+    relation_type: str | None = None,
+    attach_cap: int = RELATION_ATTACH_CAP,
+) -> list[tuple[str, str, str]]:
+    """触及节点集的权威关系边（relation_type 给定时按谓词精确过滤）；对端类随边并入节点集。
+
+    attach_cap 截断挂载边数（输入已稳定序，截断确定）——防大量关系对端类把节点集撑穿
+    QUERY_NODE_CAP；被截断的边整体缺席（不带悬挂端点），节点/边引用一致性不破。
+    """
+    edges = [
+        (s, p, o)
+        for s, p, o in relations
+        if (s in members or o in members) and (relation_type is None or p == relation_type)
+    ]
+    edges = edges[:attach_cap]
+    for s, _, o in edges:
+        members.add(s)
+        members.add(o)
+    return edges
+
+
+def _select_nodes(members: set[str], preserved: set[str], cap: int) -> list[str]:
+    """节点截断（ocr 评审 high/medium）：preserved（种子 + 关系对端类）恒保留，cap 只裁纯
+    扩展层——matched 与关系边引用的 IRI 不得在 nodes 中缺席；整体稳定序。"""
+    keep = sorted(preserved & members)
+    extension = sorted(m for m in members if m not in preserved)
+    return [*keep, *extension[: max(cap - len(keep), 0)]]
+
+
+def _merge_edges(subclass_rels: list[GraphRel], relation_rels: list[GraphRel], cap: int) -> list[GraphRel]:
+    """边预算（ocr 评审 low）：subclass_of 与关系边交错选取，cap 压力下单类不挤光另一类；
+    任一类耗尽后其预算自然让渡给另一类；结果确定（输入各自稳定序）。"""
+    out: list[GraphRel] = []
+    si = ri = 0
+    while len(out) < cap and (si < len(subclass_rels) or ri < len(relation_rels)):
+        if si < len(subclass_rels):
+            out.append(subclass_rels[si])
+            si += 1
+        if len(out) < cap and ri < len(relation_rels):
+            out.append(relation_rels[ri])
+            ri += 1
+    return out
+
+
+def graph_search(
+    hierarchy: ClassHierarchy,
+    query: str,
+    *,
+    depth: int = 1,
+    top_k: int = 10,
+    relations: Sequence[tuple[str, str, str]] = (),
+) -> GraphQueryResult:
+    """图检索（api/01 §5.4 GET /kb/graph/search）：q 关键词/IRI 片段匹配类 → 层次 depth 跳扩展
+    + 权威关系边扩展（对端类并入节点集，类层次+关系扩展语义）。
+
+    无匹配类 → 空结果（非失败，OntRAG §4）；top_k 截断匹配种子；节点截断恒保留种子与
+    关系对端类（_select_nodes），边集 subclass_of/关系边交错预算（_merge_edges）。
+    """
+    seeds = _match_classes(hierarchy, query)[:top_k]
+    if not seeds:
+        return GraphQueryResult()
+    members = _hierarchy_bfs(hierarchy, set(seeds), depth)
+    rel_edges = _relation_edges(relations, members)
+    preserved = set(seeds) | {s for s, _, _ in rel_edges} | {o for _, _, o in rel_edges}
+    nodes = _select_nodes(members, preserved, QUERY_NODE_CAP)
+    member_set = set(nodes)
+    rels = _merge_edges(
+        _subclass_edges(hierarchy, member_set),
+        [GraphRel(type=predicate, weight=1.0) for s, predicate, o in rel_edges if s in member_set and o in member_set],
+        QUERY_REL_CAP,
+    )
+    return GraphQueryResult(
+        nodes=[_node(iri, hierarchy, member_set) for iri in nodes],
+        rels=rels,
+        matched=seeds,
+    )
+
+
+def graph_neighborhood(
+    hierarchy: ClassHierarchy,
+    class_iri: str,
+    *,
+    depth: int = 1,
+    limit: int = 20,
+    relations: Sequence[tuple[str, str, str]] = (),
+    relation_type: str | None = None,
+) -> GraphQueryResult:
+    """邻域查询（api/01 §5.4 GET /kb/graph/neighborhood）：从类 IRI 出发层次近邻 depth 跳
+    （lite 语义一跳直达，上限 2）+ 触及该类的权威关系边（谓词可过滤）。
+
+    被查类与关系对端类恒入 nodes（limit 只裁纯扩展层，matched 不得列出缺席 IRI）；
+    未知类 IRI（不在层次读模型）→ 空结果非失败（OntRAG §4，404 仅用于资源不存在口径）。
+    """
+    iri = class_iri.strip()
+    if not iri or not _known_class(hierarchy, iri):
+        return GraphQueryResult()
+    members = _hierarchy_bfs(hierarchy, {iri}, depth)
+    rel_edges = _relation_edges(relations, members, relation_type=relation_type)
+    preserved = {iri} | {s for s, _, _ in rel_edges} | {o for _, _, o in rel_edges}
+    nodes = _select_nodes(members, preserved, limit)
+    member_set = set(nodes)
+    rels = _merge_edges(
+        _subclass_edges(hierarchy, member_set),
+        [GraphRel(type=predicate, weight=1.0) for s, predicate, o in rel_edges if s in member_set and o in member_set],
+        QUERY_REL_CAP,
+    )
+    return GraphQueryResult(
+        nodes=[_node(x, hierarchy, member_set) for x in nodes],
+        rels=rels,
+        matched=[iri],
+    )
+
+
+def graph_shortest_path(
+    hierarchy: ClassHierarchy,
+    from_iri: str,
+    to_iri: str,
+    *,
+    max_hops: int = 3,
+) -> GraphPath | None:
+    """路径查询（api/01 §5.4 GET /kb/graph/path）：类层次图内 BFS 最短路（父子边双向可行走——
+    subclass_of 链上下行语义均有效），max_hops 限深；无路/端点未知 → None（空结果非失败）。
+    """
+    src, dst = from_iri.strip(), to_iri.strip()
+    if not src or not dst or not _known_class(hierarchy, src) or not _known_class(hierarchy, dst):
+        return None
+    depth_of: dict[str, int] = {src: 0}
+    prev: dict[str, str | None] = {src: None}
+    queue: deque[str] = deque([src])
+    while queue:
+        cur = queue.popleft()
+        if cur == dst:
+            break
+        cur_depth = depth_of[cur]
+        if cur_depth >= max_hops:
+            continue
+        for nxt in (*hierarchy.parents.get(cur, ()), *hierarchy.children.get(cur, ())):
+            if nxt not in depth_of:
+                depth_of[nxt] = cur_depth + 1
+                prev[nxt] = cur
+                queue.append(nxt)
+    if dst not in depth_of:
+        return None
+    chain = [dst]
+    while chain[-1] != src:
+        chain.append(prev[chain[-1]])  # type: ignore[arg-type]
+    chain.reverse()
+    members = set(chain)
+    return GraphPath(
+        nodes=[_node(iri, hierarchy, members) for iri in chain],
+        rels=[GraphRel(type="subclass_of", weight=1.0) for _ in chain[1:]],
+        chunk_ids=[],
     )

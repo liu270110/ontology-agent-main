@@ -7,16 +7,22 @@
                                               offset/limit 分页，limit 缺省 50 上限 200）
     GET  /kb/documents/{id}                   文档详情（R17-a live 对账补齐：列表 DTO 全字段
                                               + chunk 计数/error；404=文档域 404* 同款错误体）
-    DELETE /kb/documents/{id}                 删除文档（R17-b live 对账补齐：硬删 + 应用层级联
-                                              facts/steps/chunks——DB FK 无 ON DELETE CASCADE；
-                                              幂等，不存在亦 200 deleted=false）
+    DELETE /kb/documents/{id}                 删除文档（B6 墓碑式软删：documents.valid_to 封口
+                                              下线检索，chunks/kb_facts/审计物理保留；幂等
+                                              恒 200，已删态与不存在对调用方等价不 404）
     POST /kb/documents                        JSON 内容直传（MinIO 随 M3；checksum 幂等）
     POST /kb/documents/{id}/pipeline/start    后台流水线（202 受理；M2 lite 四步 / M2 full
                                               七步中段 extract/align/validate 已插回）
-    GET  /kb/documents/{id}/pipeline          进度（八态 + 步级 checkpoint）
+    POST /kb/documents/{id}/pipeline/retry    失败文档流水线重试（B6：202 受理 + 后台断点续跑，
+                                              非 failed 态 409）
+    GET  /kb/documents/{id}/chunks            分片列表（B6：seq 升序 + offset/limit 分页 +
+                                              meta.total；content 预览截断/has_embedding 布尔）
+    GET  /kb/graph/search                     图检索（B6：q/class_name 匹配类 + 层次/关系扩展）
+    GET  /kb/graph/neighborhood               邻域查询（B6：类 IRI depth≤2 一跳近邻 + 关系边）
+    GET  /kb/graph/path                       路径查询（B6：类层次图内 BFS 最短路）
     POST /kb/search                           knowledge.search lite：bm25+向量+图三路 RRF
                                               （图=LazyGraphRAG lite 查询时扩展，retrieval/graph.py）
-    GET  /kb/documents/{id}/review/candidates     终审候选列表（api/01 §5.4 ★，quote/violations 透出）
+    GET  /kb/documents/{id}/review/candidates 终审候选列表（api/01 §5.4 ★，quote/violations 透出）
     POST /kb/review/candidates/{cid}/decision     单条终审决策 accept|reject|edit_accept（202）
     POST /kb/documents/{id}/review/batch-decision 批量终审决策（≤200 条/批，逐条独立执行，202）
     GET  /kb/review-queue                     needs_review 聚合复核队列（§7.1 批次纪律：
@@ -46,7 +52,7 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Annotated, Any
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Query, Request, status
-from sqlalchemy import delete, func, or_, select
+from sqlalchemy import func, or_, select, text
 from sqlalchemy.exc import IntegrityError
 
 from services.kb.api.schemas.kb import (
@@ -75,11 +81,15 @@ from services.kb.api.schemas.kb import (
     FactTypeFilter,
     KbAnswerOut,
     KbAnswerSentenceOut,
+    KbChunkOut,
+    KbChunkPageMetaOut,
+    KbChunkPageOut,
     KbCitationOut,
     KbDocType,
     KbEvidenceOut,
     KbGraphNodeOut,
     KbGraphPathOut,
+    KbGraphQueryOut,
     KbGraphRelOut,
     KbHitOut,
     KbSearchIn,
@@ -101,12 +111,26 @@ from services.kb.api.schemas.kb import (
     doc_type_of,
     ui_status_of,
 )
-from services.kb.business.kb_pipeline import M2_FULL_STEPS, PipelineError, run_pipeline
+from services.kb.business.kb_pipeline import (
+    M2_FULL_STEPS,
+    PipelineError,
+    assert_document_transition,
+    run_pipeline,
+)
 from services.kb.business.review_queue import ReviewQueueService
 from services.kb.business.search_service import rerank_hits_by_source_context
 from services.kb.data.orm import Document, DocumentChunk, KbCollection, KbFact, KbPipelineStep
-from services.kb.retrieval.embed import AclPushdown, OllamaEmbedder, bm25_search, vector_search
-from services.kb.retrieval.graph import ClassHierarchy, build_class_hierarchy, expand_graph
+from services.kb.retrieval.embed import AclPushdown, OllamaEmbedder, bm25_search, vector_ready, vector_search
+from services.kb.retrieval.graph import (
+    ClassHierarchy,
+    GraphQueryResult,
+    authoritative_relations,
+    build_class_hierarchy,
+    expand_graph,
+    graph_neighborhood,
+    graph_search,
+    graph_shortest_path,
+)
 from services.kb.retrieval.retrieve import ExtractiveAnswer, GraphExpansion, GraphPath, SearchHit, hybrid_search
 from services.ontology.business.hierarchy_service import get_class_hierarchy
 
@@ -172,8 +196,16 @@ ModelPortDep = Annotated[ModelPort | None, Depends(get_model_port)]
 
 
 async def _load_document(session: AsyncSession, tenant_id: uuid.UUID, document_id: uuid.UUID) -> Document:
+    """当前有效文档载入（墓碑口径：valid_to IS NULL——已封口文档对详情/分片/候选/流水线/
+    重试等读写面一律 404 不可见；DELETE 的幂等判定自行装载含墓碑行，不经此处）。"""
     doc = (
-        await session.execute(select(Document).where(Document.id == document_id, Document.tenant_id == tenant_id))
+        await session.execute(
+            select(Document).where(
+                Document.id == document_id,
+                Document.tenant_id == tenant_id,
+                Document.valid_to.is_(None),
+            )
+        )
     ).scalar_one_or_none()
     if doc is None:
         raise GatewayError(404, "文档不存在", status_code=404)
@@ -219,15 +251,13 @@ async def create_document(body: DocumentCreateIn, principal: KbWriteDep, session
         raise GatewayError(404, "知识库不存在", status_code=404)
 
     checksum = hashlib.sha256(body.content.encode("utf-8")).hexdigest()
-    existing = (
-        await session.execute(
-            select(Document).where(
-                Document.tenant_id == principal.tenant_id,
-                Document.kb_collection_id == body.collection_id,
-                Document.checksum_sha256 == checksum,
-            )
-        )
-    ).scalar_one_or_none()
+    live_checksum = (  # 唯一性=部分唯一索引（valid_to IS NULL）：墓碑文档不占唯一性，同内容重传=全新插入
+        Document.tenant_id == principal.tenant_id,
+        Document.kb_collection_id == body.collection_id,
+        Document.checksum_sha256 == checksum,
+        Document.valid_to.is_(None),
+    )
+    existing = (await session.execute(select(Document).where(*live_checksum))).scalar_one_or_none()
     if existing is not None:
         return _document_out(existing, created=False)  # 幂等命中既有文档
 
@@ -247,17 +277,9 @@ async def create_document(body: DocumentCreateIn, principal: KbWriteDep, session
     session.add(doc)
     try:
         await session.commit()
-    except IntegrityError as exc:  # 并发重复上传兜底（uk checksum）
+    except IntegrityError as exc:  # 并发重复上传兜底（uk checksum，部分唯一索引同键）
         await session.rollback()
-        raced = (
-            await session.execute(
-                select(Document).where(
-                    Document.tenant_id == principal.tenant_id,
-                    Document.kb_collection_id == body.collection_id,
-                    Document.checksum_sha256 == checksum,
-                )
-            )
-        ).scalar_one_or_none()
+        raced = (await session.execute(select(Document).where(*live_checksum))).scalar_one_or_none()
         if raced is None:
             raise GatewayError(409, "文档写入冲突", status_code=409) from exc
         return _document_out(raced, created=False)
@@ -402,7 +424,8 @@ def _document_item_of(
 async def get_document(document_id: uuid.UUID, principal: KbReadDep, session: SessionDep) -> DocumentDetailEnvelope:
     """单文档详情（api/01 §5 kb 行 GET /kb/documents/{id}）：复用列表投影 + 定位字段。
 
-    404 = 文档域既有口径（_load_document：code 404「文档不存在」，api/01 §5 登记的 404*）。
+    404 = 文档域既有口径（_load_document：code 404「文档不存在」，api/01 §5 登记的 404*）；
+    已墓碑（DELETE 后 valid_to 封口）文档同样 404 不可见（墓碑口径：删除后详情不可见）。
     """
     doc = await _load_document(session, principal.tenant_id, document_id)
     chunk_counts = await _chunk_counts_of(session, [document_id])
@@ -413,41 +436,155 @@ async def get_document(document_id: uuid.UUID, principal: KbReadDep, session: Se
     )
 
 
-@router.delete("/documents/{document_id}", summary="删除文档（R17-b：硬删 + 应用层级联；幂等）")
+@router.delete("/documents/{document_id}", summary="删除文档（墓碑式软删：valid_to 封口下线检索；幂等恒 200）")
 async def delete_document(document_id: uuid.UUID, principal: KbWriteDep, session: SessionDep) -> DocumentDeleteEnvelope:
-    """级联删除文档（api/01 §5.15 对账行 DELETE /kb/documents/{id}）。
+    """墓碑式软删（api/01 §5.15 DELETE 行「不物理删除」=平台底线；database/01 §3.3 documents
+    双时间线「失效=封口不删除」）。
 
-    DB FK（document_chunks/kb_pipeline_step/kb_facts → documents.id）均无 ON DELETE CASCADE
-    且 kb_facts.chunk_id 还指向 document_chunks.id → 应用层按依赖逆序手动级联后删文档行。
-    幂等：文档不存在（含他人租户，deny-by-default 同口径）亦 200 deleted=false，不 404。
+    口径（B6 实装裁决）：
+    - 墓碑 = documents.valid_to = now()（status 八态 CHECK 无 deleted 态可置；bm25/vector/graph
+      三路检索 SQL 均内建 d.valid_to IS NULL 谓词——封口即全线下线检索，契约「已索引内容下线」）；
+    - chunks/kb_facts/kb_pipeline_step 物理保留（kb_facts 与审计不删——复核与追溯依据）；
+      删除后详情/分片/候选/流水线/重试经 _load_document（valid_to 过滤）一律 404 不可见；
+    - 同内容可重传：checksum 唯一性=部分唯一索引（uk_documents_tenant_id_kb_collection_id_
+      checksum_sha256，WHERE valid_to IS NULL，迁移 partial-unique 改建）——墓碑行不占唯一性，
+      重传=全新插入（database/01 documents 段契约同批登记）；
+    - 幂等：重复删除与不存在对调用方等价 → 200 deleted=false（不 404；他人租户同口径 deny-by-default）；
+    - 契约行成功码 204 与 live 对账（R17-b）200 强信封解包并存：按 live 口径保留 200+envelope，
+      deleted 标志区分命中/幂等未命中（偏离已在报告登记）。
     """
     doc = (
         await session.execute(
             select(Document).where(Document.id == document_id, Document.tenant_id == principal.tenant_id)
         )
     ).scalar_one_or_none()
-    if doc is None:
+    if doc is None or doc.valid_to is not None:  # 不存在 / 已墓碑 → 等价幂等未命中
         return DocumentDeleteEnvelope(data=DocumentDeleteData(deleted=False))
     chunk_count = (
         await session.execute(
-            select(func.count()).select_from(DocumentChunk).where(DocumentChunk.document_id == document_id)
+            select(func.count())
+            .select_from(DocumentChunk)
+            .where(
+                DocumentChunk.document_id == document_id,
+                DocumentChunk.valid_to.is_(None),  # 只计当前有效分片（墓碑 chunk 不算下线数，ocr 评审 low）
+            )
         )
     ).scalar_one()
-    for stmt in (  # kb_facts 先于 chunks（其 chunk_id FK 指向 document_chunks.id）
-        delete(KbFact).where(KbFact.tenant_id == principal.tenant_id, KbFact.document_id == document_id),
-        delete(KbPipelineStep).where(
-            KbPipelineStep.tenant_id == principal.tenant_id, KbPipelineStep.document_id == document_id
-        ),
-        delete(DocumentChunk).where(
-            DocumentChunk.tenant_id == principal.tenant_id, DocumentChunk.document_id == document_id
-        ),
-    ):
-        await session.execute(stmt)
-    await session.delete(doc)
+    doc.valid_to = datetime.now(UTC)  # 封口即下线（检索三路 d.valid_to IS NULL 谓词即时生效）
     await session.commit()
     return DocumentDeleteEnvelope(
         data=DocumentDeleteData(deleted=True, cascade=DocumentDeleteCascade(chunks=int(chunk_count)))
     )
+
+
+@router.get("/documents/{document_id}/chunks", summary="分片列表（seq 升序；offset/limit 分页 + meta.total）")
+async def list_document_chunks(
+    document_id: uuid.UUID,
+    principal: KbReadDep,
+    session: SessionDep,
+    offset: Annotated[int, Query(ge=0)] = 0,
+    limit: Annotated[int, Query(ge=1, le=200)] = 50,
+) -> KbChunkPageOut:
+    """分片预览（api/01 §5.4 ★ 行，FR-KB-03）：仅当前有效分片（chunk.valid_to IS NULL），seq 升序。
+
+    content=原文预览截断（≤500 字符；全文走文档原文）；span=命中高亮偏移（meta.span，指向原文
+    [start, end)）；has_embedding=布尔（向量本体不回传；pgvector 列缺失恒 False=BM25-only 降级）。
+    文档不存在/已墓碑 → 404（_load_document 统一口径）。
+    """
+    await _load_document(session, principal.tenant_id, document_id)  # 404 前置校验（含墓碑）
+    conds = [
+        DocumentChunk.tenant_id == principal.tenant_id,
+        DocumentChunk.document_id == document_id,
+        DocumentChunk.valid_to.is_(None),
+    ]
+    total = (await session.execute(select(func.count()).select_from(DocumentChunk).where(*conds))).scalar_one()
+    rows = (
+        (
+            await session.execute(
+                select(DocumentChunk).where(*conds).order_by(DocumentChunk.seq).offset(offset).limit(limit)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    embedded = await _embedded_chunk_ids(session, [row.id for row in rows])
+    items = []
+    for row in rows:
+        meta = row.meta if isinstance(row.meta, dict) else {}
+        span = meta.get("span")
+        items.append(
+            KbChunkOut(
+                id=row.id,
+                document_id=row.document_id,
+                seq=row.seq,
+                content=row.content[:_CHUNK_PREVIEW_CHARS],
+                token_count=row.token_count,
+                page_no=row.page_no,
+                span=[int(v) for v in span] if isinstance(span, list) else None,
+                has_embedding=row.id in embedded,
+                created_at=row.created_at,
+            )
+        )
+    return KbChunkPageOut(items=items, meta=KbChunkPageMetaOut(offset=offset, limit=limit, total=int(total)))
+
+
+@router.post(
+    "/documents/{document_id}/pipeline/retry",
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="失败文档流水线重试（202 受理 + 后台断点续跑；非 failed 态 409）",
+)
+async def retry_pipeline(
+    document_id: uuid.UUID,
+    principal: KbWriteDep,
+    request: Request,
+    background: BackgroundTasks,
+    session: SessionDep,
+    model: ModelPortDep,
+) -> PipelineStartOut:
+    """api/01 §5.4 retry 行（202 受理 / 409*）：对 failed 文档受理一次 run_pipeline。
+
+    断点续跑语义（kb_pipeline.run_pipeline）：受理即返回，从失败步骤续跑（done 步跳过、
+    attempt 跨运行累计 ≤3、checkpoint 幂等）。
+    并发防呆（ocr 评审 medium）：document 行 with_for_update 锁内复核 status 并**预复位
+    failed→preprocessed（状态机唯一入口）先行提交**——并发第二调用在锁上排队、进锁后见
+    非 failed 态 → 409，重试不双跑（复位后 run_pipeline 内的复位断言为幂等 no-op）。
+    防呆：非 failed 态（进行中/已入库/uploaded 等）→ 409；文档不存在或已墓碑 → 404。
+    """
+    doc = (
+        await session.execute(  # 含墓碑过滤的行锁装载（不复用 _load_document：本处需 FOR UPDATE）
+            select(Document)
+            .where(
+                Document.id == document_id,
+                Document.tenant_id == principal.tenant_id,
+                Document.valid_to.is_(None),
+            )
+            .with_for_update()
+        )
+    ).scalar_one_or_none()
+    if doc is None:
+        raise GatewayError(404, "文档不存在", status_code=404)
+    if doc.status != "failed":
+        raise GatewayError(409, f"文档非 failed 态（当前 {doc.status}），仅失败文档可重试", status_code=409)
+    assert_document_transition("failed", "preprocessed")  # 状态机唯一入口（禁直改 status）
+    doc.status = "preprocessed"
+    await session.commit()  # 锁内预复位先行持久 → 并发重试在锁上串行化（不双跑）
+    background.add_task(_pipeline_task, request.app, principal.tenant_id, document_id, model)
+    return PipelineStartOut(document_id=document_id, accepted=True)
+
+
+_CHUNK_PREVIEW_CHARS = 500  # 分片预览截断长度（FR-KB-03 预览语义；全文走文档原文）
+
+
+async def _embedded_chunk_ids(session: AsyncSession, chunk_ids: Sequence[uuid.UUID]) -> set[uuid.UUID]:
+    """已向量化分片 id 集（pgvector 列缺失 → 空集=has_embedding 恒 False，降级契约同源）；
+    按当前页 chunk ids 过滤（ocr 评审 low：不整文档扫描）。"""
+    if not chunk_ids or not await vector_ready(session):
+        return set()
+    rows = await session.execute(
+        text("SELECT id FROM document_chunks WHERE id = ANY(CAST(:ids AS uuid[])) AND embedding IS NOT NULL"),
+        {"ids": list(chunk_ids)},
+    )
+    return {row[0] for row in rows}
 
 
 @router.post(
@@ -712,6 +849,108 @@ def _answer_to_out(answer: ExtractiveAnswer) -> KbAnswerOut:
     )
 
 
+# ---------------------------------------------------------------- 图三查（api/01 §5.4 ★ GET /kb/graph/*，B6 实装）
+#
+# lite=类级图（retrieval/graph.py 纯函数，与 /kb/search 图路共用类层次读模型）：
+# 节点=本体类（ontology 读模型公开查询，_class_hierarchy 进程内 TTL 缓存共用）；
+# 边=subclass_of（层次）+ 权威关系谓词（kb_facts status=authoritative，候选不入图=宪法第 3 条；
+# 墓碑文档 valid_to 封口的关系边一并下线——删除后图查询不可见）。
+# 空结果非失败（OntRAG §4）：未知类 IRI / 无路径 → 200 空 nodes/rels，404 仅用于资源不存在口径。
+
+
+def _graph_query_out(result: GraphQueryResult) -> KbGraphQueryOut:
+    return KbGraphQueryOut(
+        nodes=[KbGraphNodeOut(iri=node.iri, name=node.name, type=node.type) for node in result.nodes],
+        rels=[KbGraphRelOut(type=rel.type, weight=rel.weight) for rel in result.rels],
+    )
+
+
+@router.get("/graph/search", summary="图谱实体搜索（q/class_name 匹配类 + 层次 depth 跳 + 权威关系扩展）")
+async def search_graph_entities(
+    principal: KbReadDep,
+    request: Request,
+    session: SessionDep,
+    q: Annotated[str | None, Query(max_length=256)] = None,
+    class_name: Annotated[str | None, Query(max_length=256)] = None,  # 任务面别名：与 q 同义（类名/IRI 片段）
+    depth: Annotated[int, Query(ge=0, le=3)] = 1,
+    top_k: Annotated[int, Query(ge=1, le=50)] = 10,
+) -> KbGraphQueryOut:
+    """图检索（api/01 §5.4 ★ 行，`q=` 关键词/IRI 片段）：类名/IRI/本地名片段匹配 → 类层次双向
+    BFS depth 跳扩展 + 权威关系边扩展（对端类并入节点集，类层次+关系扩展语义）。
+
+    q 与 class_name 至少一个（缺失 → 3001/422）；无匹配类 → 200 空结果（OntRAG §4 非失败）。
+    """
+    needle = (q or class_name or "").strip()
+    if not needle:
+        raise GatewayError(ErrorCode.PARAM_INVALID, "q 与 class_name 至少提供一个", status_code=422)
+    hierarchy = await _class_hierarchy(request, session, principal.tenant_id)
+    relations = await authoritative_relations(session, tenant_id=principal.tenant_id)
+    return _graph_query_out(graph_search(hierarchy, needle, depth=depth, top_k=top_k, relations=relations))
+
+
+@router.get("/graph/neighborhood", summary="实体邻域展开（类 IRI depth≤2 层次近邻 + 权威关系边，谓词可过滤）")
+async def expand_neighborhood(
+    principal: KbReadDep,
+    request: Request,
+    session: SessionDep,
+    class_iri: Annotated[str | None, Query(max_length=512)] = None,
+    entity_id: Annotated[str | None, Query(max_length=512)] = None,  # 契约行参数名（与 class_iri 同义别名）
+    depth: Annotated[int, Query(ge=0, le=2)] = 1,
+    limit: Annotated[int, Query(ge=1, le=100)] = 20,
+    relation_type: Annotated[str | None, Query(max_length=128)] = None,  # 关系谓词精确过滤（契约行）
+) -> KbGraphQueryOut:
+    """邻域查询（api/01 §5.4 ★ 行）：从类 IRI 出发层次近邻 depth 跳（lite 语义一跳直达，上限 2）
+    + 触及该类的权威关系边（relation_type 可过滤，对端类入节点集）。
+
+    class_iri（或契约别名 entity_id）必填（缺失 → 3001/422）；未知类 IRI → 200 空结果
+    （OntRAG §4 空结果非失败，404 仅用于资源不存在口径）。
+    """
+    iri = (class_iri or entity_id or "").strip()
+    if not iri:
+        raise GatewayError(ErrorCode.PARAM_INVALID, "class_iri（或契约别名 entity_id）必填", status_code=422)
+    hierarchy = await _class_hierarchy(request, session, principal.tenant_id)
+    relations = await authoritative_relations(session, tenant_id=principal.tenant_id)
+    result = graph_neighborhood(
+        hierarchy, iri, depth=depth, limit=limit, relations=relations, relation_type=relation_type
+    )
+    return _graph_query_out(result)
+
+
+@router.get("/graph/path", summary="两实体间路径查询（类层次图内 BFS 最短路；max_hops 限深）")
+async def find_graph_path(
+    principal: KbReadDep,
+    request: Request,
+    session: SessionDep,
+    from_class_iri: Annotated[str | None, Query(max_length=512)] = None,
+    to_class_iri: Annotated[str | None, Query(max_length=512)] = None,
+    source: Annotated[str | None, Query(max_length=512)] = None,  # 契约行参数名（与 from_class_iri 同义）
+    target: Annotated[str | None, Query(max_length=512)] = None,  # 契约行参数名（与 to_class_iri 同义）
+    max_hops: Annotated[int, Query(ge=1, le=8)] = 3,
+) -> KbGraphQueryOut:
+    """路径查询（api/01 §5.4 ★ 行）：类层次图内 BFS 最短路（父子边双向可行走，subclass_of 链
+    上下行语义均有效），节点按路径序返回、边=逐跳 subclass_of。
+
+    from_class_iri/to_class_iri（或契约别名 source/target）均必填（缺失 → 3001/422）；
+    端点未知 / max_hops 内无路 → 200 空结果（OntRAG §4 空结果非失败）。
+    """
+    src = (from_class_iri or source or "").strip()
+    dst = (to_class_iri or target or "").strip()
+    if not src or not dst:
+        raise GatewayError(
+            ErrorCode.PARAM_INVALID,
+            "from_class_iri/to_class_iri（或契约别名 source/target）均必填",
+            status_code=422,
+        )
+    hierarchy = await _class_hierarchy(request, session, principal.tenant_id)
+    path = graph_shortest_path(hierarchy, src, dst, max_hops=max_hops)
+    if path is None:
+        return KbGraphQueryOut()
+    return KbGraphQueryOut(
+        nodes=[KbGraphNodeOut(iri=node.iri, name=node.name, type=node.type) for node in path.nodes],
+        rels=[KbGraphRelOut(type=rel.type, weight=rel.weight) for rel in path.rels],
+    )
+
+
 # ---------------------------------------------------------------- 终审工作台（api/01 §5.4 ★ 三端点）
 #
 # B4 逐候选消费面：B2 抽取深化已把 evidence.quote/span 与 violations 写进 kb_facts，列表端点是
@@ -818,11 +1057,17 @@ def _apply_decision(fact: KbFact, action: str, edit: Any) -> str:
     - edit_accept → 按编辑载荷修订（None 字段不覆盖）后保持/复位 candidate（契约「修订后入审」；
       rejected 候选修订后复活重进审）。
     防呆：accept/reject 仅对 candidate 态（对 rejected/authoritative 重复决策 → 409）；
-    edit_accept 不接受 authoritative（终审生效态不被工作台静默降级）。
+    edit_accept 不接受 authoritative（终审生效态不被工作台静默降级）；
+    accept 对缺 predicate 的 relation 事实拒绝（authoritative 关系必须带谓词——图三查关系边
+    与同类扩展均以谓词为语义载体，脏候选不放行进图；ocr 评审 high 防呆纵深配套）。
     """
     if action in ("accept", "reject"):
         if fact.status != "candidate":
             raise GatewayError(409, f"候选非 candidate 态（当前 {fact.status}），重复决策拒绝", status_code=409)
+        if action == "accept" and getattr(fact, "fact_type", None) == "relation" and not fact.predicate:
+            raise GatewayError(
+                409, "关系事实缺 predicate，不可 accept（authoritative 关系必须带谓词）", status_code=409
+            )
         fact.status = "authoritative" if action == "accept" else "rejected"
         return fact.status
     # edit_accept：candidate 保持入审；rejected 修订复活；authoritative 拒绝降级

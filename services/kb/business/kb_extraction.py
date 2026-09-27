@@ -21,10 +21,11 @@
   review ticket payload.gate_result；任一违例 → status=rejected（kb_facts.status 枚举内取值），
   单据仍留人工终审队列，任何路径不写 authoritative（底线 4 / 宪法第 3 条）。
 
-提示词治理（standards/01 §5.1）：抽取/对齐模板以代码常量 ``_EXTRACT_PROMPT_V2``/
-``_ALIGN_PROMPT_V1`` 版本化落地（template_ref 随信封落库可追溯；v1→v2 变更=新增 evidence
-逐字引语要求）；种子本体 = seeds/power_seed.ttl（电力停电 wedge，M2 出口条件）。评审票据写入
-经 CandidateReviewPort（review.data 模块私有，见端口 docstring）。
+提示词治理（standards/01 §5.1 / 18 篇 §1）：抽取模板为版本化资产，正文落
+business/prompts/ 包（active=extract_v2，v1→v2 变更=新增 evidence 逐字引语要求），运行期经
+business/prompts 注册表按 template_ref 取用（version pin：同一 job 全程同版本，未知 ref 明确
+抛错），ref 随 kb_facts.meta 与审核信封落库可追溯；种子本体 = seeds/power_seed.ttl（电力停电
+wedge，M2 出口条件）。评审票据写入经 CandidateReviewPort（review.data 模块私有，见端口 docstring）。
 """
 
 from __future__ import annotations
@@ -46,6 +47,7 @@ from rdflib.namespace import OWL, RDF, RDFS
 from sqlalchemy import false, select
 
 from services.kb.business.pipeline_base import PipelineError, StepContext
+from services.kb.business.prompts import extract_v2, get_prompt, get_system_prompt
 from services.kb.data.orm import Document, DocumentChunk, KbFact
 from services.kb.retrieval.embed import EmbeddingUnavailableError
 from services.ontology.core import shacl as ontology_shacl
@@ -139,23 +141,7 @@ def _resolve_property_iri(name: str, catalog: SeedCatalog) -> str | None:
 
 # ---------------------------------------------------------------- extract（§2.3 批量抽取）
 
-_EXTRACT_TEMPLATE_REF = "kb_extract@v2"  # v1→v2：新增 evidence 原文逐字引语要求（逐字门禁依据）
-
-# 提示词版本化资产（standards/01 §5.1：模板版本可追溯，变更走评审）。
-# 硬要求：禁止凭空创造 / 附原文逐字证据 / 只输出 JSON（§2.3 表 1 文本知识型要点 + 宪法第 2 条）。
-_EXTRACT_PROMPT_V2 = """你是电力配电网领域的知识抽取引擎。从「抽取文本」中抽取实体/属性/关系/事件候选。
-规则（违反即无效）：
-1. 禁止凭空创造：只抽取文本明确提及的内容，每条候选必须能在原文中找到依据；
-2. ontology_class 只能取自「本体引导清单」中的类 IRI；清单没有合适类时省略该字段；
-3. predicate（如有）优先取清单中的属性本地名（如 hasStatus/orderNo）；
-4. confidence ∈ [0,1]，反映该候选的确定性；
-5. evidence 必须是「抽取文本」中的原文逐字片段（禁止改写、概括、拼接，每条候选附一条）；
-   出处四元组（source_ref）由系统自动附加，禁止生成，候选之间不得互为证据；
-6. 只输出 JSON 对象：{"candidates": [{"kind", "name", "ontology_class", "predicate",
-   "object", "evidence", "confidence", "detail", "properties"}]}，kind ∈ entity|relation|attribute|event，
-   relation/attribute 必须附 predicate 与 object，properties 为「属性本地名 → 字符串值」；
-7. 文本没有任何可抽取内容时返回 {"candidates": []}。"""
-
+_EXTRACT_TEMPLATE_REF = extract_v2.TEMPLATE_REF  # "kb_extract@v2"：v1→v2 新增 evidence 逐字引语要求（逐字门禁依据）
 # 抽取输出 JSON Schema（端口实现负责校验，宪法第 2 条；兼容 FakeModelPort 确定性输出）。
 # evidence 为可选字段：旧模型/确定性桩不产出时仅逐字门禁空转（无引语无可证伪），不判违例。
 _EXTRACT_SCHEMA_V2: dict[str, Any] = {
@@ -203,22 +189,14 @@ class _ChunkRef:
     meta: dict[str, Any]
 
 
-def _catalog_prompt(catalog: SeedCatalog) -> str:
-    lines = [f"- 类 {iri}（标签：{label}）" for iri, label, _ in catalog.classes]
-    lines += [f"- 属性 {tbox.local_name(iri)}（标签：{label}）" for iri, label, _ in catalog.properties]
-    return "\n".join(lines)
-
-
-def _extract_user_prompt(catalog_text: str, chunk_content: str) -> str:
-    return f"## 本体引导清单\n{catalog_text}\n\n## 抽取文本\n{chunk_content}"
-
-
 def _fact_key(fact_type: str, subject: str, predicate: str | None, obj: str | None, chunk_id: uuid.UUID) -> str:
     """候选业务键（幂等基准）：三元组 + 出处 chunk；kb_facts 无 uk，应用层去重依据。"""
     return f"{fact_type}|{subject}|{predicate or ''}|{obj or ''}|{chunk_id}"
 
 
-def _candidate_fact(ctx: StepContext, chunk: _ChunkRef, cand: dict[str, Any], trace_id: str) -> dict[str, Any]:
+def _candidate_fact(
+    ctx: StepContext, chunk: _ChunkRef, cand: dict[str, Any], trace_id: str, template_ref: str
+) -> dict[str, Any]:
     """LLM 候选 → kb_facts 行值（status=candidate；evidence=source_ref 四元组信封 + 逐字引语）。
 
     evidence 双层结构（D1 证据逐字门禁，层轴验收 P1-3 等价移植）：
@@ -262,19 +240,19 @@ def _candidate_fact(ctx: StepContext, chunk: _ChunkRef, cand: dict[str, Any], tr
         "violations": [],
         "meta": {
             "fact_key": _fact_key(kind if kind in _FACT_TYPES else "entity", subject, predicate, obj, chunk.id),
-            "template_ref": _EXTRACT_TEMPLATE_REF,
+            "template_ref": template_ref,
             "detail": str(cand["detail"]) if cand.get("detail") else None,
             "properties": {str(k): str(v) for k, v in (cand.get("properties") or {}).items()},
         },
     }
 
 
-def _ticket_envelope(fact: dict[str, Any], trace_id: str) -> dict[str, Any]:
+def _ticket_envelope(fact: dict[str, Any], trace_id: str, template_ref: str) -> dict[str, Any]:
     """统一信封（standards/01 §5.3）：系统回填流转字段，LLM 只产 payload 与 confidence。"""
     return {
         "envelope_version": "v1",
         "candidate_type": "knowledge_instance",
-        "template_ref": _EXTRACT_TEMPLATE_REF,
+        "template_ref": template_ref,
         "trace_id": trace_id,
         "payload": {
             "fact": {
@@ -337,19 +315,20 @@ async def run_extract(ctx: StepContext) -> None:
         if isinstance(key, str):
             existing[key] = row.id
 
-    catalog_text = _catalog_prompt(catalog)
+    catalog_text = extract_v2.render_catalog(catalog)
+    template_ref = _EXTRACT_TEMPLATE_REF  # version pin（18 篇 §1.1）：同一 job 全程同版本
     for chunk in chunks:  # 单 chunk 失败即抛 → 步级重试 ≤3；已落候选按 fact_key 去重续跑
         trace_id = f"kb-extract:{ctx.document_id}:{chunk.seq}"
         data = await ctx.model.complete_structured(
-            system=_EXTRACT_PROMPT_V2,
-            user=_extract_user_prompt(catalog_text, chunk.content),
+            system=get_system_prompt(_EXTRACT_TEMPLATE_REF),
+            user=get_prompt(_EXTRACT_TEMPLATE_REF)(catalog_text, chunk.content),
             json_schema=_EXTRACT_SCHEMA_V2,
             trace_id=trace_id,
         )
         candidates = data.get("candidates")
         if not isinstance(candidates, list):
             raise ModelUnavailableError(f"抽取输出缺 candidates 数组（chunk seq={chunk.seq}）")
-        await _persist_candidates(ctx, chunk, candidates, existing, trace_id)
+        await _persist_candidates(ctx, chunk, candidates, existing, trace_id, template_ref)
 
 
 async def _persist_candidates(
@@ -358,6 +337,7 @@ async def _persist_candidates(
     candidates: list[Any],
     existing: dict[str, uuid.UUID],
     trace_id: str,
+    template_ref: str,
 ) -> None:
     """候选落库：kb_facts 一个短事务（fact_key 去重）→ 审核单逐条幂等登记（独立短事务）。
 
@@ -368,7 +348,7 @@ async def _persist_candidates(
     for cand in candidates:
         if not isinstance(cand, dict) or not cand.get("name"):
             continue  # 残缺候选丢弃（可追溯：原始输出随 trace 日志留存）
-        facts.append(_candidate_fact(ctx, chunk, cand, trace_id))
+        facts.append(_candidate_fact(ctx, chunk, cand, trace_id, template_ref))
     if not facts:
         return
     review = ctx.review
@@ -389,7 +369,7 @@ async def _persist_candidates(
             tenant_id=ctx.tenant_id,
             target_type="knowledge_instance",
             target_id=fact_id,
-            payload=_ticket_envelope(fact, trace_id),
+            payload=_ticket_envelope(fact, trace_id, template_ref),
             status="pending_review",
         )
 

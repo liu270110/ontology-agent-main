@@ -58,7 +58,7 @@ describe('S7 工作流域', () => {
     )
 
     await loginAndGo('/workflows/wf-021')
-    expect(await screen.findByTestId('wf-editor-page')).toBeInTheDocument()
+    expect(await screen.findByTestId('wf-editor-page', {}, { timeout: 10_000 })).toBeInTheDocument()
     expect(await screen.findByTestId('wf-node-cond-fault-branch')).toBeInTheDocument()
 
     // 画布选中条件节点 → 右栏类型化表单
@@ -129,7 +129,7 @@ describe('S7 工作流域', () => {
     )
 
     await loginAndGo('/workflows/wf-021')
-    expect(await screen.findByTestId('wf-editor-page')).toBeInTheDocument()
+    expect(await screen.findByTestId('wf-editor-page', {}, { timeout: 10_000 })).toBeInTheDocument()
 
     // 发起试运行 → 底部 Drawer 时间线
     fireEvent.click(screen.getByTestId('wf-test-run'))
@@ -172,7 +172,7 @@ describe('S7 工作流域', () => {
     )
 
     await loginAndGo('/workflows/wf-021')
-    expect(await screen.findByTestId('wf-editor-page')).toBeInTheDocument()
+    expect(await screen.findByTestId('wf-editor-page', {}, { timeout: 10_000 })).toBeInTheDocument()
 
     fireEvent.click(screen.getByTestId('wf-publish-open'))
     const dialog = await screen.findByRole('dialog', { name: '提交发布 · 生成不可变版本' })

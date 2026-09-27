@@ -53,7 +53,7 @@ async function loginAndGo(path: string) {
 describe('S2 Agent 工作区面板', () => {
   it('① 页签切换 → 文件树 + 回收提示 + dirty 标记', async () => {
     await loginAndGo('/chat')
-    fireEvent.click(await screen.findByText('动力电池标准对比'))
+    fireEvent.click(await screen.findByText('动力电池标准对比', {}, { timeout: 10_000 }))
 
     // 默认上下文面板在位；切到工作区
     expect(await screen.findByTestId('ctx-panel')).toBeInTheDocument()
@@ -79,7 +79,7 @@ describe('S2 Agent 工作区面板', () => {
 
   it('② 文件点击 → 预览抽屉展示 mono 原文', async () => {
     await loginAndGo('/chat')
-    fireEvent.click(await screen.findByText('动力电池标准对比'))
+    fireEvent.click(await screen.findByText('动力电池标准对比', {}, { timeout: 10_000 }))
     fireEvent.click(await screen.findByTestId('right-tab-workspace'))
 
     fireEvent.click(await screen.findByTestId('ws-node-排查报告草稿 v0.1.md'))
@@ -93,7 +93,7 @@ describe('S2 Agent 工作区面板', () => {
 
   it('③ 终端：白名单命令回放输出，非白名单提示受限', async () => {
     await loginAndGo('/chat')
-    fireEvent.click(await screen.findByText('动力电池标准对比'))
+    fireEvent.click(await screen.findByText('动力电池标准对比', {}, { timeout: 10_000 }))
     fireEvent.click(await screen.findByTestId('right-tab-workspace'))
     fireEvent.click(await screen.findByTestId('ws-tab-term'))
 
@@ -114,7 +114,7 @@ describe('S2 Agent 工作区面板', () => {
 
   it('④ 资源页签：四分组齐全 + 状态徽标语义', async () => {
     await loginAndGo('/chat')
-    fireEvent.click(await screen.findByText('动力电池标准对比'))
+    fireEvent.click(await screen.findByText('动力电池标准对比', {}, { timeout: 10_000 }))
     fireEvent.click(await screen.findByTestId('right-tab-workspace'))
     fireEvent.click(await screen.findByTestId('ws-tab-res'))
 

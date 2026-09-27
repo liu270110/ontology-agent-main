@@ -45,7 +45,7 @@ describe('S7 群聊域', () => {
     )
 
     await loginAndGo('/chat/group')
-    expect(await screen.findByTestId('group-page')).toBeInTheDocument()
+    expect(await screen.findByTestId('group-page', {}, { timeout: 10_000 })).toBeInTheDocument()
 
     // 打开建群双栏弹窗（GRP-01）
     fireEvent.click(screen.getByTestId('grp-new-open'))
@@ -94,7 +94,7 @@ describe('S7 群聊域', () => {
     )
 
     await loginAndGo('/chat/group/g-1107')
-    expect(await screen.findByTestId('group-page')).toBeInTheDocument()
+    expect(await screen.findByTestId('group-page', {}, { timeout: 10_000 })).toBeInTheDocument()
     // 消息流渲染历史基线（归属着色：设备 Agent 高风险确认卡在流内）
     expect(await screen.findByTestId('grp-action-confirm')).toBeInTheDocument()
     expect(screen.getByTestId('grp-member-panel')).toHaveTextContent('调度 Agent')

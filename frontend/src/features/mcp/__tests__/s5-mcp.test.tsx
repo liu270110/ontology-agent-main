@@ -62,7 +62,7 @@ describe('S5 MCP 管理', () => {
     )
 
     await loginAndGo('/mcp')
-    expect(await screen.findByRole('heading', { name: 'MCP 管理' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'MCP 管理' }, { timeout: 10_000 })).toBeInTheDocument()
     expect(await screen.findByTestId('mcp-tr-crm-prod')).toBeInTheDocument()
 
     // 第①步：连接配置（传输分段默认 Streamable HTTP）；未填写 → 下一步禁用

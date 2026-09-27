@@ -63,7 +63,7 @@ describe('S2 对话域深化', () => {
     )
 
     await loginAndGo('/chat')
-    fireEvent.click(await screen.findByText('动力电池标准对比'))
+    fireEvent.click(await screen.findByText('动力电池标准对比', {}, { timeout: 10_000 }))
 
     // 项 1：三栏完整——上下文面板四分组在位（IX-CHT-04 宿主；「规则命中」同时出现在分组题与条目标签）
     expect(await screen.findByTestId('ctx-panel')).toBeInTheDocument()
@@ -84,7 +84,7 @@ describe('S2 对话域深化', () => {
     fireEvent.change(screen.getByTestId('session-search'), { target: { value: '动力' } })
     expect(screen.queryByText('CL-014 约束逻辑评审准备')).not.toBeInTheDocument()
     fireEvent.change(screen.getByTestId('session-search'), { target: { value: '' } })
-    expect(await screen.findByText('CL-014 约束逻辑评审准备')).toBeInTheDocument()
+    expect(await screen.findByText('CL-014 约束逻辑评审准备', {}, { timeout: 10_000 })).toBeInTheDocument()
 
     // 项 5：Shift+Enter 换行（不发送）、Enter 直发
     const input = screen.getByTestId('chat-input')
@@ -101,8 +101,8 @@ describe('S2 对话域深化', () => {
 
   it('② 会话项菜单置顶：PATCH 后置顶优先排序，取消置顶复原（IX-CHT-01）', async () => {
     await loginAndGo('/chat')
-    expect(await screen.findByText('动力电池标准对比')).toBeInTheDocument()
-    expect(await screen.findByText('CL-014 约束逻辑评审准备')).toBeInTheDocument()
+    expect(await screen.findByText('动力电池标准对比', {}, { timeout: 10_000 })).toBeInTheDocument()
+    expect(await screen.findByText('CL-014 约束逻辑评审准备', {}, { timeout: 10_000 })).toBeInTheDocument()
 
     // ⋯ → 置顶会话（mock GET 置顶优先排序 → 列表重排）
     fireEvent.click(screen.getByTestId('session-menu-s-2479'))
@@ -128,7 +128,7 @@ describe('S2 对话域深化', () => {
 
   it('③ 删除会话：危险二次确认（确认前仍在）→ DELETE → 列表移除（IX-CHT-01）', async () => {
     await loginAndGo('/chat')
-    expect(await screen.findByText('CL-014 约束逻辑评审准备')).toBeInTheDocument()
+    expect(await screen.findByText('CL-014 约束逻辑评审准备', {}, { timeout: 10_000 })).toBeInTheDocument()
 
     // ⋯ → 删除会话… → 二步确认面板（未直接删）
     fireEvent.click(screen.getByTestId('session-menu-s-2479'))

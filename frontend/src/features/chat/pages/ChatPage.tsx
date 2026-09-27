@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { SessionList } from '../components/SessionList'
 import { ChatStream } from '../components/ChatStream'
 import { MessageInput } from '../components/MessageInput'
+import { ContextMeter } from '../components/ContextMeter'
 import { useSessionStore } from '@/stores/session-store'
 import { useSessionStream } from '@/sse/useSessionStream'
 import { api } from '@/api/client'
@@ -58,6 +59,7 @@ export function ChatPage() {
         {sessionId ? (
           <>
             <ChatStream />
+            <ContextMeter used={62_000} limit={128_000} />
             <MessageInput sessionId={sessionId} />
           </>
         ) : (

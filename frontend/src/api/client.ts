@@ -1,3 +1,5 @@
+
+if (typeof window !== 'undefined') { (window as unknown as Record<string, unknown>).__BUILD_PROBE = 'PROBE-9f3a7c-client' }
 /** 类型化 API client（16 篇 §2.3）。
  *  响应信封 {code,message,data}（api/01 §3.1）；code≠0 抛 ApiError；
  *  429 读 Retry-After（05 篇 §2）；401 → 单飞（single-flight）静默刷新后重放原请求，
@@ -79,10 +81,19 @@ async function rawJsonRequest<T>(path: string, init: RequestInit): Promise<T> {
   if (res.status === 429) {
     throw new ApiError(1005, '请求过于频繁', 429, Number(res.headers.get('Retry-After') ?? 0))
   }
-  const body = (await res.json().catch(() => null)) as Envelope<T> | null
-  if (!res.ok || !body) throw new ApiError(body?.code ?? -1, body?.message ?? `HTTP ${res.status}`, res.status)
-  if (body.code !== 0) throw new ApiError(body.code, body.message, res.status)
-  return body.data
+  const body = (await res.json().catch(() => null)) as (Envelope<T> & { code: number | string }) | T | null
+  if (!res.ok) {
+    // 错误响应恒为四字段信封（api/01 §4）：错误码/文案从信封提取（1002 防枚举、1005 限速等）
+    const err = body as { code?: number; message?: string } | null
+    throw new ApiError(err?.code ?? -1, err?.message ?? `HTTP ${res.status}`, res.status)
+  }
+  if (!body) throw new ApiError(-1, `HTTP ${res.status}`, res.status)
+  // 双形态兼容：auth 组端点（api/01 §5.9）返回裸 DTO；其余端点返回 {code,message,data} 信封（§3.1）。
+  // live 联调（2026-09-27）实证 login 返回裸 TokenPair——mock 曾错误包裹信封致 live 断链，已双向兼容。
+  const isEnvelope = typeof body === 'object' && body !== null && 'code' in body && 'data' in body && typeof (body as Envelope<T>).code !== 'undefined'
+  if (!isEnvelope) return body as T
+  if ((body as Envelope<T>).code !== 0) throw new ApiError((body as Envelope<T>).code, (body as Envelope<T>).message, res.status)
+  return (body as Envelope<T>).data
 }
 
 async function apiFetchEnvelope<T>(path: string, init?: RequestInit): Promise<T> {

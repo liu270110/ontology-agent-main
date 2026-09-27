@@ -30,7 +30,7 @@ export const ROUTES: RouteMeta[] = [
   // S7 协作域：Agent 群聊（27 篇 P14 / 26 篇 §15 GRP-01~05；hidden=深链直达，入口在群聊页 ＋。
   // /chat/group 无会话态 = 建群入口页，同元素渲染空态）
   { path: '/chat/group/:sessionId', title: 'Agent 群聊', icon: 'chat', group: '工作台', roles: AUTHED, hidden: true },
-  { path: '/chat/group', title: 'Agent 群聊', icon: 'chat', group: '工作台', roles: AUTHED, hidden: true },
+  { path: '/chat/group', title: '群聊', icon: 'spark', group: '工作台', roles: AUTHED },
   { path: '/ontology', title: '本体工作台', icon: 'cube', group: '语义资产', roles: ['admin', 'ontologist', 'curator', 'super_admin'] },
   { path: '/ontology/versions', title: '版本与评审', icon: 'branch', group: '语义资产', roles: ['admin', 'ontologist', 'curator', 'super_admin'] },
   // S4 本体域动态路由（hidden=侧栏/cmdk 不露，深链直达；roles 对齐 08 篇 §2.2——ontologist/admin

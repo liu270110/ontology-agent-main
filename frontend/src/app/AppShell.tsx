@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
-import { Bell, LogOut, PanelLeft, Search } from 'lucide-react'
+import { Bell, LogOut, PanelLeft, Search, Settings } from 'lucide-react'
 import { useUiStore } from '@/stores/ui-store'
 import { useAuthStore } from '@/stores/auth-store'
 import { ThemeToggle } from '@/components/theme-toggle'
@@ -77,6 +77,15 @@ export function AppShell() {
               {user?.roles?.[0] ?? '成员'} · {user?.tenantId ?? '默认租户'}
             </small>
           )}
+          <button
+            type="button"
+            aria-label="设置"
+            title="设置"
+            onClick={() => navigate('/settings')}
+            className="ml-auto flex h-7 w-7 flex-none items-center justify-center rounded-lg text-label-2 hover:bg-surface-2"
+          >
+            <Settings size={15} aria-hidden />
+          </button>
         </div>
       </aside>
 

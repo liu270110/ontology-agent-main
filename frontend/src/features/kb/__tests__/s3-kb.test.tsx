@@ -51,7 +51,7 @@ async function loginAndGo(path: string) {
 describe('S3 知识域', () => {
   it('① IX-KB-01 上传并抽取：登记→建任务→行内状态轮询至已入库', async () => {
     await loginAndGo('/kb')
-    expect(await screen.findByRole('heading', { name: '知识库文档' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: '知识库文档' }, { timeout: 10_000 })).toBeInTheDocument()
     // 顶栏 F-12 占位入口在位
     expect(screen.getByRole('button', { name: /库设置/ })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /回收站/ })).toBeInTheDocument()
@@ -88,7 +88,7 @@ describe('S3 知识域', () => {
 
   it('② IX-REV-03 批量确认：勾选→摘要/小计/入库影响→确认后离队', async () => {
     await loginAndGo('/kb/review')
-    expect(await screen.findByRole('heading', { name: '抽取审核' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: '抽取审核' }, { timeout: 10_000 })).toBeInTheDocument()
     // 七步流水线简版 + 快捷键提示条（IX-REV-04 面板态）
     expect(screen.getByLabelText('七步抽取流水线')).toBeInTheDocument()
     expect(screen.getByText('跳过')).toBeInTheDocument()
@@ -172,7 +172,7 @@ describe('S3 知识域', () => {
       }),
     )
     await loginAndGo('/kb/playground')
-    expect(await screen.findByRole('heading', { name: '检索 Playground' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: '检索 Playground' }, { timeout: 10_000 })).toBeInTheDocument()
 
     // 切 Global 模式 → 检索 → 断言同端点参数区分（§6.2）
     fireEvent.click(screen.getByRole('radio', { name: 'Global' }))

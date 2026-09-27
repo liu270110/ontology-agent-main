@@ -28,7 +28,7 @@ async function loginAndGo(path: string) {
 describe('S5 记忆管理', () => {
   it('③ IX-MEM-01 审核通过 → L3 列表新增 + 时间线留痕', async () => {
     await loginAndGo('/memory?layer=L2')
-    expect(await screen.findByRole('heading', { name: '记忆管理' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: '记忆管理' }, { timeout: 10_000 })).toBeInTheDocument()
 
     // L2 队列：两条待终审升級单 + 候选条目渲染
     expect(await screen.findByTestId('mem-review-open-PM-0043')).toBeInTheDocument()

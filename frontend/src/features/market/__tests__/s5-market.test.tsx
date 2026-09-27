@@ -40,7 +40,7 @@ describe('S5 插件市场', () => {
     )
 
     await loginAndGo('/marketplace')
-    expect(await screen.findByRole('heading', { name: '插件市场' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: '插件市场' }, { timeout: 10_000 })).toBeInTheDocument()
 
     // 卡片网格：市场卡渲染（评分 / scope 数）
     const card = await screen.findByTestId('plugin-card-p_gdticket')

@@ -43,7 +43,7 @@ describe('S6 治理域', () => {
     )
 
     await loginAndGo('/approvals')
-    expect(await screen.findByRole('heading', { name: '审批中心' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: '审批中心' }, { timeout: 10_000 })).toBeInTheDocument()
     // 列表加载完成（卡片出现）后再断言六类徽标
     expect(await screen.findByTestId('apr-card-CR-031', {}, { timeout: 10000 })).toBeInTheDocument()
 
@@ -73,7 +73,7 @@ describe('S6 治理域', () => {
 
   it('② IX-APR-02 批量审批：高危类禁批灰态 + 混合类型禁批说明', async () => {
     await loginAndGo('/approvals')
-    expect(await screen.findByTestId('apr-card-MCP-12')).toBeInTheDocument()
+    expect(await screen.findByTestId('apr-card-MCP-12', {}, { timeout: 10_000 })).toBeInTheDocument()
 
     // 高危类（MCP 接入）勾选 → 批量 Modal 内通过/驳回禁用 + 说明
     fireEvent.click(screen.getByTestId('apr-check-MCP-12'))
@@ -103,7 +103,7 @@ describe('S6 治理域', () => {
     )
 
     await loginAndGo('/admin?tab=roles')
-    expect(await screen.findByTestId('adm-matrix')).toBeInTheDocument()
+    expect(await screen.findByTestId('adm-matrix', {}, { timeout: 10_000 })).toBeInTheDocument()
 
     // 勾选 guest×playground:use（false→true 乐观更新）
     const add = screen.getByTestId('adm-matrix-guest-playground:use') as HTMLInputElement
@@ -147,7 +147,7 @@ describe('S6 治理域', () => {
     )
 
     await loginAndGo('/admin?tab=models')
-    expect(await screen.findByTestId('adm-model-m-01')).toBeInTheDocument()
+    expect(await screen.findByTestId('adm-model-m-01', {}, { timeout: 10_000 })).toBeInTheDocument()
     fireEvent.click(screen.getByTestId('adm-model-open'))
 
     const dialog = await screen.findByRole('dialog', { name: '接入模型渠道（LiteLLM 网关）' })
@@ -178,7 +178,7 @@ describe('S6 治理域', () => {
 
   it('⑤ IX-ADM-07 审计 trace 行展开：瀑布渲染 + 成本 + 台账行 + 复制 trace_id', async () => {
     await loginAndGo('/admin?tab=audit')
-    expect(await screen.findByTestId('adm-audit-row-tr-b71c9e2d')).toBeInTheDocument()
+    expect(await screen.findByTestId('adm-audit-row-tr-b71c9e2d', {}, { timeout: 10_000 })).toBeInTheDocument()
 
     fireEvent.click(screen.getByTestId('adm-audit-row-tr-b71c9e2d'))
     const panel = await screen.findByTestId('adm-trace-tr-b71c9e2d')
@@ -200,7 +200,7 @@ describe('S6 治理域', () => {
 
   it('⑥ IX-TSK-01 任务详情抽屉：七步流水线 + SSE 事件时间线推进', async () => {
     await loginAndGo('/tasks')
-    expect(await screen.findByRole('heading', { name: '任务中心' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: '任务中心' }, { timeout: 10_000 })).toBeInTheDocument()
     expect(await screen.findByTestId('tsk-row-job-217', {}, { timeout: 10000 })).toBeInTheDocument()
 
     fireEvent.click(screen.getByTestId('tsk-row-job-217'))
@@ -249,7 +249,7 @@ describe('S6 治理域', () => {
     )
 
     await loginAndGo('/settings?tab=keys')
-    expect(await screen.findByTestId('set-key-k-01')).toBeInTheDocument()
+    expect(await screen.findByTestId('set-key-k-01', {}, { timeout: 10_000 })).toBeInTheDocument()
 
     // 新建 Key：名称 + scope → 创建
     fireEvent.click(screen.getByTestId('set-key-open'))

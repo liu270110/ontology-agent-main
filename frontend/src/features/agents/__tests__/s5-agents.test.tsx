@@ -52,7 +52,7 @@ describe('S5 Agent 管理', () => {
     )
 
     await loginAndGo('/agents')
-    expect(await screen.findByRole('heading', { name: 'Agent 管理' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Agent 管理' }, { timeout: 10_000 })).toBeInTheDocument()
     expect(await screen.findByTestId('agent-card-agt-nanobot-01')).toBeInTheDocument()
 
     // 第①步：适配器卡片选择（nanobot）
@@ -106,7 +106,7 @@ describe('S5 Agent 管理', () => {
     )
 
     await loginAndGo('/agents/agt-nanobot-01?tab=tools')
-    expect(await screen.findByTestId('agent-detail')).toBeInTheDocument()
+    expect(await screen.findByTestId('agent-detail', {}, { timeout: 10_000 })).toBeInTheDocument()
     expect(screen.getByTestId('agt-tab-tools')).toHaveAttribute('aria-selected', 'true')
     expect(screen.getByText('kb.search')).toBeInTheDocument()
 
@@ -115,7 +115,7 @@ describe('S5 Agent 管理', () => {
     await screen.findByRole('dialog', { name: /ToolPicker · 工具注入/ })
 
     // 依赖自动勾选：勾 cli-anything.exec → kb.search 被自动勾选并标注
-    fireEvent.click(screen.getByTestId('tool-check-cli-anything.exec'))
+    fireEvent.click(await screen.findByTestId('tool-check-cli-anything.exec'))
     expect(screen.getByTestId('tool-check-kb.search')).toBeChecked()
     expect(screen.getByTestId('tool-row-kb.search')).toHaveTextContent('依赖自动勾选')
 

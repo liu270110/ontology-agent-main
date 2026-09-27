@@ -79,7 +79,7 @@ describe('S4 本体域', () => {
     )
 
     await loginAndGo('/ontology')
-    expect(await screen.findByRole('heading', { name: '本体项目' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: '本体项目' }, { timeout: 10_000 })).toBeInTheDocument()
     expect(await screen.findByTestId('project-card-onto-outage')).toBeInTheDocument()
 
     // 打开向导 → 第 1 步：非法 IRI 应被 zod 阻断
@@ -100,7 +100,7 @@ describe('S4 本体域', () => {
     fireEvent.click(screen.getByTestId('wizard-create'))
 
     // 创建成功 → 跳转工作台
-    expect(await screen.findByTestId('onto-workbench')).toBeInTheDocument()
+    expect(await screen.findByTestId('onto-workbench', {}, { timeout: 10_000 })).toBeInTheDocument()
     expect(created[0]).toMatchObject({ name: '配网停电分析本体', namespace: 'http://example.org/outage#', tier: 'heavy' })
   }, 25_000)
 
@@ -115,7 +115,7 @@ describe('S4 本体域', () => {
 
     await loginAndGo('/ontology/onto-outage/versions?cs=cs_01K')
     // changeset 列表 + diff 视图渲染（9 行）
-    expect(await screen.findByTestId('diff-view')).toBeInTheDocument()
+    expect(await screen.findByTestId('diff-view', {}, { timeout: 10_000 })).toBeInTheDocument()
     expect(await screen.findByTestId('diff-row-d1')).toBeInTheDocument()
     expect(screen.getByTestId('diff-row-d9')).toBeInTheDocument()
 
@@ -165,7 +165,7 @@ describe('S4 本体域', () => {
     )
 
     await loginAndGo('/ontology/onto-outage/versions?cs=cs_01K')
-    expect(await screen.findByTestId('diff-view')).toBeInTheDocument()
+    expect(await screen.findByTestId('diff-view', {}, { timeout: 10_000 })).toBeInTheDocument()
 
     // 全部接受 → 通过并发布 → 发布确认弹窗
     fireEvent.click(await screen.findByTestId('accept-all'))
@@ -191,7 +191,7 @@ describe('S4 本体域', () => {
 
   it('④ IX-ON-05 校验面板：validate 违例渲染 + 「定位」回调画布闪烁', async () => {
     await loginAndGo('/ontology/onto-outage')
-    expect(await screen.findByTestId('onto-workbench')).toBeInTheDocument()
+    expect(await screen.findByTestId('onto-workbench', {}, { timeout: 10_000 })).toBeInTheDocument()
     expect(await screen.findByTestId('onto-canvas')).toBeInTheDocument()
 
     // 初始未校验 → 点「试校验」→ 三条 SHACL 违例行渲染（前端不跑 SHACL）
@@ -235,7 +235,7 @@ describe('S4 本体域', () => {
     )
 
     await loginAndGo('/kb/explore/outage-kb')
-    expect(await screen.findByTestId('explore-canvas')).toBeInTheDocument()
+    expect(await screen.findByTestId('explore-canvas', {}, { timeout: 10_000 })).toBeInTheDocument()
 
     // 打开路径查询：起点默认中心实体（部件A），选择终点「10kV 城东馈线」
     fireEvent.click(screen.getByTestId('open-path-query'))

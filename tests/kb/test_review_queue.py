@@ -250,10 +250,7 @@ async def test_样本上限3条且取最旧(svc: ReviewQueueService, kb_factory:
     chunks = [uuid.uuid4() for _ in range(5)]
     fact_ids = await _add_rows(
         kb_factory,
-        [
-            _seed_row(TENANT, subject="线路L5", created_at=_T(10, i), chunk_id=chunks[i])
-            for i in range(5)
-        ],
+        [_seed_row(TENANT, subject="线路L5", created_at=_T(10, i), chunk_id=chunks[i]) for i in range(5)],
     )
     groups = await svc.queue_summary(TENANT, statuses=("candidate",))
     assert len(groups) == 1

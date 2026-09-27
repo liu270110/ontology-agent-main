@@ -64,6 +64,7 @@ ignore_imports = [
     "services.platform.db.registry -> services.ontology.data.orm",
     "services.platform.db.registry -> services.review.data.orm",
     "services.platform.db.registry -> services.memory.data.orm",
+    "services.platform.db.registry -> services.memory.data.orm_records",
     "services.platform.db.registry -> services.sandbox.data.orm",
     "services.platform.db.registry -> services.writeback.data.orm",
     "services.platform.db.registry -> services.plugin.data.orm",
@@ -170,7 +171,10 @@ name = "模块内聚：kb.data 模块私有"
 type = "forbidden"
 source_modules = ["services.gateway", "services.iam", "services.agent", "services.ontology", "services.review", "services.memory", "services.plugin", "services.mcp", "services.writeback", "services.rsi", "services.sandbox"]
 forbidden_modules = ["services.kb.data"]
-ignore_imports = ["services.gateway.app -> services.kb.api.kb"]
+ignore_imports = [
+    "services.gateway.app -> services.kb.api.kb",
+    "services.kb.business.usage_service -> services.kb.data.usage_orm",  # 知识活性计数落库（TODO(M5) 随 kb-usage-counters 收口）
+]
 
 [[tool.importlinter.contracts]]
 name = "模块内聚：review.data 模块私有"
@@ -254,6 +258,7 @@ source_modules = ["services.gateway", "services.iam", "services.agent", "service
 forbidden_modules = ["services.memory.data", "services.sandbox.data"]
 ignore_imports = [
     # memory 模块内装配面（api/business → data 为模块内合法分层；跨模块消费仅经 memory.business.runtime 公开面）
+    "services.gateway.app -> services.memory.api.memory",  # 挂载根边豁免（间接链经模块内分层属合法）
     "services.memory.api.memory -> services.memory.data.l1",
     "services.memory.api.memory -> services.memory.data.repo_impl.fact_repo",
     "services.memory.business.runtime -> services.memory.data.l1",

@@ -526,9 +526,7 @@ class CursorStore:
                 row.last_error = last_error
             await session.commit()
 
-    async def append_event(
-        self, *, tenant_id: uuid.UUID, event: SourceEvent, trace_id: str | None = None
-    ) -> bool:
+    async def append_event(self, *, tenant_id: uuid.UUID, event: SourceEvent, trace_id: str | None = None) -> bool:
         """登记一条事件；重复（uk 命中）返回 False，新登记返回 True（只追加，长期保留）。"""
         async with self._session_factory() as session:
             exists = await session.scalar(

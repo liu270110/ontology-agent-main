@@ -51,6 +51,7 @@ if sys.platform == "win32":
 
 try:
     import aiosqlite  # noqa: F401
+
     _HAS_AIOSQLITE = True
 except ImportError:  # 本地开发依赖缺失：仅落库用例跳过（CI requirements 未含 aiosqlite）
     _HAS_AIOSQLITE = False
@@ -112,9 +113,7 @@ async def kb_factory(tmp_path: Path) -> AsyncIterator[async_sessionmaker[AsyncSe
     engine = create_async_engine(f"sqlite+aiosqlite:///{(tmp_path / 'kb.db').as_posix()}")
     async with engine.begin() as conn:
         await conn.run_sync(
-            lambda c: Base.metadata.create_all(
-                c, tables=[KbConnectorCursor.__table__, KbConnectorEvent.__table__]
-            )
+            lambda c: Base.metadata.create_all(c, tables=[KbConnectorCursor.__table__, KbConnectorEvent.__table__])
         )
     factory = async_sessionmaker(engine, expire_on_commit=False)
     yield factory
@@ -213,9 +212,7 @@ async def test_删除产生tombstone_序号冻结_指针置空_哈希追溯锚(c
     assert e.dedup_key == ("files-01", ".", "a", old_seq)  # 幂等去重锚=三元组+序号
 
 
-async def test_删除最后一种类型文件_扩展名集合收敛触发schema_changed(
-    connector: FileConnector, tmp_path: Path
-) -> None:
+async def test_删除最后一种类型文件_扩展名集合收敛触发schema_changed(connector: FileConnector, tmp_path: Path) -> None:
     (tmp_path / "source" / "only.csv").write_text("1", encoding="utf-8")
     cursor = (await connector.fetch(None))[0].cursor
 
@@ -315,14 +312,10 @@ async def test_游标读写往返_覆盖推进与流租户隔离(store: CursorSt
     }
     assert await store.load_cursor(tenant_id=TENANT, source_id="files-01") is None  # 未保存→None
 
-    await store.save_cursor(
-        tenant_id=TENANT, source_id="files-01", cursor=cursor, connector_version="1.0.0"
-    )
+    await store.save_cursor(tenant_id=TENANT, source_id="files-01", cursor=cursor, connector_version="1.0.0")
     assert await store.load_cursor(tenant_id=TENANT, source_id="files-01") == cursor  # 往返一致
 
-    await store.save_cursor(
-        tenant_id=TENANT, source_id="files-01", cursor={"version": 2}, connector_version="1.1.0"
-    )
+    await store.save_cursor(tenant_id=TENANT, source_id="files-01", cursor={"version": 2}, connector_version="1.1.0")
     assert await store.load_cursor(tenant_id=TENANT, source_id="files-01") == {"version": 2}  # upsert 覆盖
 
     assert await store.load_cursor(tenant_id=TENANT, source_id="files-01", stream_id="docs") is None
@@ -345,8 +338,8 @@ async def test_登记幂等去重_重放吸收与语义列落库(
 
     async with kb_factory() as session:
         rows = (
-            await session.execute(select(KbConnectorEvent).order_by(KbConnectorEvent.source_sequence))
-        ).scalars().all()
+            (await session.execute(select(KbConnectorEvent).order_by(KbConnectorEvent.source_sequence))).scalars().all()
+        )
     assert len(rows) == 4
     head = rows[0]
     assert head.trace_id == "trace-1"  # 审计纪律：登记随行 trace_id
@@ -361,16 +354,12 @@ async def test_登记幂等去重_重放吸收与语义列落库(
 
 
 @sqlite_needed
-async def test_端到端_游标推进与登记吸收重放(
-    connector: FileConnector, store: CursorStore, tmp_path: Path
-) -> None:
+async def test_端到端_游标推进与登记吸收重放(connector: FileConnector, store: CursorStore, tmp_path: Path) -> None:
     (tmp_path / "source" / "a.txt").write_text("v1", encoding="utf-8")
     events = await connector.fetch(None)
     for e in events:
         assert await store.append_event(tenant_id=TENANT, event=e) is True
-    await store.save_cursor(
-        tenant_id=TENANT, source_id="files-01", cursor=events[0].cursor, connector_version="1.0.0"
-    )
+    await store.save_cursor(tenant_id=TENANT, source_id="files-01", cursor=events[0].cursor, connector_version="1.0.0")
 
     # 同水位重放：连接器零事件（第一层幂等）+ 登记层吸收（第二层幂等，防上游重投）
     assert await connector.fetch(events[0].cursor) == []

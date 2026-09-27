@@ -334,13 +334,23 @@ pw:PowerDeviceShape a sh:NodeShape ;
     dev_iri = f"{PW}Breaker"
 
     missing = _CandidateRef(
-        id=uuid.uuid4(), subject="断路器B12", predicate=None, object=None,
-        subject_type=dev_iri, canonical_name=None, meta={},
+        id=uuid.uuid4(),
+        subject="断路器B12",
+        predicate=None,
+        object=None,
+        subject_type=dev_iri,
+        canonical_name=None,
+        meta={},
     )
     assert not _gate_candidate(missing, catalog).conforms  # 闭包并入：子类实例命中父类必填
 
     ok = _CandidateRef(
-        id=uuid.uuid4(), subject="断路器B12", predicate=None, object=None,
-        subject_type=dev_iri, canonical_name=None, meta={"properties": {"deviceCode": "B12"}},
+        id=uuid.uuid4(),
+        subject="断路器B12",
+        predicate=None,
+        object=None,
+        subject_type=dev_iri,
+        canonical_name=None,
+        meta={"properties": {"deviceCode": "B12"}},
     )
     assert _gate_candidate(ok, catalog).conforms  # 合规候选照常放行

@@ -138,9 +138,7 @@ def _ctx(kb_pg: async_sessionmaker[AsyncSession], env: dict) -> object:
     )
 
 
-async def test_m2_demo_建模_抽取_终审_检索_端到端(
-    kb_pg: async_sessionmaker[AsyncSession], demo_env: dict
-) -> None:
+async def test_m2_demo_建模_抽取_终审_检索_端到端(kb_pg: async_sessionmaker[AsyncSession], demo_env: dict) -> None:
     """建模（种子目录）→ 抽取（引导+对齐+门禁）→ 终审（candidate→authoritative）→ 检索（引用命中）。"""
     catalog = load_seed_catalog()  # 建模资产：类目表即抽取提示词的本体引导清单
     assert catalog.classes, "种子类目为空"

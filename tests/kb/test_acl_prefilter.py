@@ -4,8 +4,9 @@
 断言目标：
 - 开关 false → 零行为变化：不下推探测、SQL 不含 acl 谓词与绑定参数（红线）；
 - 开关 true + acl_tags 列缺失 → 自动 no-op 并 DEBUG 留痕（迁移容错，vector_ready 同款）；
-- 开关 true + 列存在（用例内临时建列，非迁移文件）→ 三路（BM25/向量/图）同源谓词过滤生效：
-  未标注文档继承租户全员可见、异标签文档被拒、空标签面仅租户继承文档可见（deny-by-default）。
+- 开关 true + 列存在（夹具自管：迁移未建列时临时补建，已建则复用且不撤）→ 三路（BM25/向量/图）
+  同源谓词过滤生效：未标注文档继承租户全员可见、异标签文档被拒、空标签面仅租户继承文档可见
+  （deny-by-default）。
 
 环境纪律：纯函数/桩用例零外部依赖；集成用例直连本地 PG（不可达即跳过）。
 psycopg 异步要求 Selector 事件循环（Windows 默认 Proactor 不可用）——导入期固定策略。
@@ -31,7 +32,7 @@ from services.iam.data.orm import Tenant as TenantORM
 from services.kb.data.orm import Document as DocumentORM
 from services.kb.data.orm import DocumentChunk as DocumentChunkORM
 from services.kb.data.orm import KbCollection as KbCollectionORM
-from services.kb.retrieval.embed import AclPushdown, bm25_search, vector_search
+from services.kb.retrieval.embed import AclPushdown, bm25_search, set_chunk_embeddings, vector_search
 from services.kb.retrieval.graph import ClassHierarchy, expand_graph
 from services.kb.retrieval.retrieve import SearchHit
 from services.platform.config import Settings
@@ -49,8 +50,27 @@ SEEDS = {
     "finance": "feeder F300 finance billing contract settlement",
 }
 
+# 向量路用例的种子向量（全 chunk 同向量：ACL 断言与相似度排序解耦；1024=bge-m3 维度）
+_SEED_EMBEDDING: list[float] = [0.1] * 1024
+
 _ADD_COLUMN_DDL = text("ALTER TABLE documents ADD COLUMN IF NOT EXISTS acl_tags jsonb")
 _DROP_COLUMN_DDL = text("ALTER TABLE documents DROP COLUMN IF EXISTS acl_tags")
+_COLUMN_EXISTS_SQL = text(
+    "SELECT EXISTS (SELECT 1 FROM information_schema.columns"
+    " WHERE table_name = 'documents' AND column_name = 'acl_tags')"
+)
+
+
+async def _ensure_acl_column(db: AsyncSession) -> bool:
+    """确保 acl_tags 列存在；返回是否为本夹具新建（迁移已建列时 False，结束不撤——防毁列）。
+
+    并行 worktree 共库竞态护栏：旧版用例的无条件 DROP 会把迁移建的列一并撤掉
+    （alembic_version 记版与实际 schema 漂移，AclPushdown 探测静默 no-op）。
+    幂等 ADD IF NOT EXISTS 无条件执行（不依赖先探测后执行的事务间隙）。
+    """
+    existed = bool((await db.execute(_COLUMN_EXISTS_SQL)).scalar())
+    await db.execute(_ADD_COLUMN_DDL)
+    return not existed
 
 
 # ── 桩会话（探测可编程 / SQL 捕获）────────────────────────────────────────
@@ -164,9 +184,12 @@ async def acl_pg() -> AsyncIterator[async_sessionmaker[AsyncSession]]:
 
 @pytest.fixture
 async def acl_seeded(acl_pg: async_sessionmaker[AsyncSession]) -> AsyncIterator[dict]:
-    """独立租户 + 三文档（public 未标注 / power 标注 / finance 异标签）各单 chunk；用例内临时建列。"""
+    """独立租户 + 三文档（public 未标注 / power 标注 / finance 异标签）各单 chunk；用例内临时建列。
+
+    向量可用时为全部 chunk 播种真向量行（评审 §3-1：否则向量路用例被 embedding IS NOT NULL
+    滤空、恒假红；probe 不过则不播种，向量用例沿各自跳过守卫降级）。"""
     async with acl_pg() as db, db.begin():
-        await db.execute(_ADD_COLUMN_DDL)  # 测试自管 DDL（用例内临时建列，非迁移文件；结束即撤）
+        created_column = await _ensure_acl_column(db)  # 幂等补建（并行撤列竞态护栏，防毁列撤除同前）
         tenant = TenantORM(name="acl-it-租户", slug=f"acl-it-{uuid.uuid4().hex[:12]}")
         db.add(tenant)
         await db.flush()
@@ -205,6 +228,21 @@ async def acl_seeded(acl_pg: async_sessionmaker[AsyncSession]) -> AsyncIterator[
                     meta={"span": [0, len(content)]},
                 )
             )
+        await db.flush()
+        chunk_ids = (
+            (await db.execute(select(DocumentChunkORM.id).where(DocumentChunkORM.tenant_id == tenant.id)))
+            .scalars()
+            .all()
+        )
+        probe = await db.execute(
+            text(
+                "SELECT to_regtype('vector') IS NOT NULL AND EXISTS ("
+                " SELECT 1 FROM information_schema.columns"
+                " WHERE table_name = 'document_chunks' AND column_name = 'embedding')"
+            )
+        )
+        if bool(probe.scalar()) and chunk_ids:
+            await set_chunk_embeddings(db, [(cid, _SEED_EMBEDDING) for cid in chunk_ids])
     env = {"tenant_id": tenant.id, "collection_id": collection.id, "doc_ids": doc_ids}
     yield env
     async with acl_pg() as db, db.begin():  # FK 逆序清理 + 撤临时列
@@ -213,9 +251,10 @@ async def acl_seeded(acl_pg: async_sessionmaker[AsyncSession]) -> AsyncIterator[
             delete(DocumentORM).where(DocumentORM.tenant_id == env["tenant_id"]),
             delete(KbCollectionORM).where(KbCollectionORM.id == env["collection_id"]),
             delete(TenantORM).where(TenantORM.id == env["tenant_id"]),
-            _DROP_COLUMN_DDL,
         ):
             await db.execute(stmt)
+        if created_column:  # 仅撤本夹具新建的列（迁移已建列时保留，防 alembic 记版/schema 漂移）
+            await db.execute(_DROP_COLUMN_DDL)
 
 
 def _visible_doc_ids(rows: list[dict]) -> set[str]:
@@ -276,7 +315,7 @@ async def test_向量路_ACL过滤生效(acl_pg: async_sessionmaker[AsyncSession
     rows = await vector_search(
         db,
         tenant_id=acl_seeded["tenant_id"],
-        query_embedding=[0.1] * 1024,
+        query_embedding=_SEED_EMBEDDING,
         top_k=10,
         acl=pushdown,
     )

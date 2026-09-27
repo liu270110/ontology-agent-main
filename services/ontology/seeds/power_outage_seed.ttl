@@ -1,0 +1,192 @@
+# 电力停电分析种子本体 v0.2 — M2 出口资产（锚点 §7：种子本体 20~50 类，禁空工作台冷启动）
+#
+# OB2 三层：对象(第一性) / 行动(rdfs:subClassOf ob2:Action，闭环=ob2:triggeredByEvent + ob2:guardedByRule)
+#           / 规则(声明 ob2:Rule 的 SHACL NodeShape，路由判定 shacl/engine 通道)
+# 命名空间：任务词表=平台标准 dev/ns/task#（07a 草案 example 前缀由 tbox 规范收编）；域=dev/ns/power#。
+# v0.1→v0.2：类 16→24（增 Substation/RingMainUnit/OutageArea/RestorationPlan/MaintenanceWindow/
+#           OutageCause/ScheduledOutage/FaultOutage）；行动类补 OB2 闭环；规则声明 ob2:Rule；
+#           NS 收编 example→dev/ns。
+
+@prefix ob2:  <https://ontology-agent.dev/ns/ob2#> .
+@prefix owl:  <http://www.w3.org/2002/07/owl#> .
+@prefix rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix sh:   <http://www.w3.org/ns/shacl#> .
+@prefix task: <https://ontology-agent.dev/ns/task#> .
+@prefix xsd:  <http://www.w3.org/2001/XMLSchema#> .
+@prefix pwr:  <https://ontology-agent.dev/ns/power#> .
+
+<https://ontology-agent.dev/ns/power> a owl:Ontology ;
+    owl:versionInfo "v0.2-m2-seed" ;
+    ob2:profile "rl" ;
+    rdfs:label "电力停电分析种子本体"@zh .
+
+# ============ 对象层 (OB2-Object, 15) ============
+
+pwr:Substation a owl:Class ; rdfs:label "变电站"@zh .
+pwr:Feeder a owl:Class ; rdfs:label "10kV 馈线"@zh .
+pwr:RingMainUnit a owl:Class ; rdfs:label "环网柜"@zh .
+pwr:Switch a owl:Class ; rdfs:label "分段开关"@zh .
+pwr:Transformer a owl:Class ; rdfs:label "配电变压器"@zh .
+pwr:Customer a owl:Class ; rdfs:label "用电客户"@zh .
+pwr:OutageEvent a owl:Class ; rdfs:label "停电事件"@zh .
+pwr:ScheduledOutage a owl:Class ; rdfs:subClassOf pwr:OutageEvent ; rdfs:label "计划停运事件"@zh .
+pwr:FaultOutage a owl:Class ; rdfs:subClassOf pwr:OutageEvent ; rdfs:label "故障停运事件"@zh .
+pwr:OutageArea a owl:Class ; rdfs:label "停电区域"@zh .
+pwr:WorkTicket a owl:Class ; rdfs:label "停电工单"@zh .
+pwr:RepairCrew a owl:Class ; rdfs:label "抢修班"@zh .
+pwr:RestorationPlan a owl:Class ; rdfs:label "复电方案"@zh .
+pwr:Complaint a owl:Class ; rdfs:label "客户投诉"@zh .
+pwr:FaultIndicator a owl:Class ; rdfs:label "故障指示器"@zh .
+
+# ============ 词表层 (值对象) ============
+
+pwr:TicketState a owl:Class ; rdfs:label "工单状态"@zh .
+pwr:tOpen a pwr:TicketState ; rdfs:label "已受理"@zh .
+pwr:tDispatched a pwr:TicketState ; rdfs:label "已派单"@zh .
+pwr:tRestored a pwr:TicketState ; rdfs:label "已复电"@zh .
+pwr:tClosed a pwr:TicketState ; rdfs:label "已归档"@zh .
+
+pwr:OutageCause a owl:Class ; rdfs:label "停电原因"@zh .
+pwr:cFault a pwr:OutageCause ; rdfs:label "故障停运"@zh .
+pwr:cPlanned a pwr:OutageCause ; rdfs:label "计划停运"@zh .
+pwr:cOverload a pwr:OutageCause ; rdfs:label "过载限电"@zh .
+
+# ============ 属性层 ============
+
+pwr:feederId a owl:DatatypeProperty ; rdfs:domain pwr:Feeder ; rdfs:range xsd:string .
+pwr:supplies a owl:ObjectProperty ; rdfs:domain pwr:Feeder ; rdfs:range pwr:Transformer ; rdfs:label "馈线-所带配变"@zh .
+pwr:suppliesTo a owl:ObjectProperty ; rdfs:domain pwr:Transformer ; rdfs:range pwr:Customer ; rdfs:label "配变-所供客户"@zh .
+pwr:ratedCapacityKva a owl:DatatypeProperty ; rdfs:domain pwr:Transformer ; rdfs:range xsd:integer .
+pwr:upstreamOf a owl:ObjectProperty ; rdfs:domain pwr:Switch ; rdfs:range pwr:Switch ; rdfs:label "开关上下游"@zh .
+pwr:inSubstation a owl:ObjectProperty ; rdfs:domain pwr:RingMainUnit ; rdfs:range pwr:Substation ; rdfs:label "环网柜-所属变电站"@zh .
+pwr:suppliesRing a owl:ObjectProperty ; rdfs:domain pwr:Substation ; rdfs:range pwr:Feeder ; rdfs:label "变电站-出线馈线"@zh .
+pwr:mountedOn a owl:ObjectProperty ; rdfs:domain pwr:FaultIndicator ; rdfs:range pwr:Switch .
+pwr:indicatedFaultAt a owl:DatatypeProperty ; rdfs:domain pwr:FaultIndicator ; rdfs:range xsd:dateTime .
+
+pwr:outageOn a owl:ObjectProperty ; rdfs:domain pwr:OutageEvent ; rdfs:range pwr:Feeder ; rdfs:label "停电事件-所在馈线"@zh .
+pwr:occurredAt a owl:DatatypeProperty ; rdfs:domain pwr:OutageEvent ; rdfs:range xsd:dateTime .
+pwr:restoredAt a owl:DatatypeProperty ; rdfs:domain pwr:OutageEvent ; rdfs:range xsd:dateTime .
+pwr:affectedCustomers a owl:DatatypeProperty ; rdfs:domain pwr:OutageEvent ; rdfs:range xsd:integer .
+pwr:hasArea a owl:ObjectProperty ; rdfs:domain pwr:OutageEvent ; rdfs:range pwr:OutageArea ; rdfs:label "停电事件-影响区域"@zh .
+pwr:causeCode a owl:ObjectProperty ; rdfs:domain pwr:OutageEvent ; rdfs:range pwr:OutageCause ; rdfs:label "停电原因"@zh .
+pwr:areaName a owl:DatatypeProperty ; rdfs:domain pwr:OutageArea ; rdfs:range xsd:string .
+pwr:affectedTransformers a owl:DatatypeProperty ; rdfs:domain pwr:OutageArea ; rdfs:range xsd:integer .
+
+pwr:ticketNo a owl:DatatypeProperty ; rdfs:domain pwr:WorkTicket ; rdfs:range xsd:string .
+pwr:ticketState a owl:ObjectProperty ; rdfs:domain pwr:WorkTicket ; rdfs:range pwr:TicketState .
+pwr:ticketOfOutage a owl:ObjectProperty ; rdfs:domain pwr:WorkTicket ; rdfs:range pwr:OutageEvent .
+pwr:dispatches a owl:ObjectProperty ; rdfs:domain pwr:WorkTicket ; rdfs:range pwr:RepairCrew .
+pwr:slaDeadline a owl:DatatypeProperty ; rdfs:domain pwr:WorkTicket ; rdfs:range xsd:dateTime .
+pwr:crewName a owl:DatatypeProperty ; rdfs:domain pwr:RepairCrew ; rdfs:range xsd:string .
+pwr:onDuty a owl:DatatypeProperty ; rdfs:domain pwr:RepairCrew ; rdfs:range xsd:boolean .
+pwr:restorationPlan a owl:ObjectProperty ; rdfs:domain pwr:OutageEvent ; rdfs:range pwr:RestorationPlan ; rdfs:label "停电事件-复电方案"@zh .
+pwr:planForTicket a owl:DatatypeProperty ; rdfs:domain pwr:RestorationPlan ; rdfs:range xsd:string ; rdfs:comment "方案-关联回填工单号（lite 档以工单号弱关联，实体级关联随 ABox 投影 v0.3）"@zh .
+
+pwr:maintenanceWindow a owl:ObjectProperty ; rdfs:domain pwr:PlannedMaintenance ; rdfs:range pwr:MaintenanceWindow .
+pwr:windowStart a owl:DatatypeProperty ; rdfs:domain pwr:MaintenanceWindow ; rdfs:range xsd:dateTime .
+pwr:windowEnd a owl:DatatypeProperty ; rdfs:domain pwr:MaintenanceWindow ; rdfs:range xsd:dateTime .
+pwr:underPlannedMaintenance a owl:DatatypeProperty ; rdfs:domain pwr:Feeder ; rdfs:range xsd:boolean ;
+    rdfs:comment "规则物化产物: 计划检修期内置 true(生产由 SPARQL CONSTRUCT 物化, 此处为静态事实)。"@zh .
+
+# ============ 行动层 (OB2-Behavior，闭环=触发事件+守卫规则) ============
+
+pwr:QueryTicket a owl:Class ; rdfs:subClassOf ob2:Action ; rdfs:label "查询工单"@zh ;
+    task:executionMode task:modeReadOnly ; task:deterministic true ;
+    ob2:triggeredByEvent pwr:Complaint ; ob2:guardedByRule pwr:WorkTicketShape .
+pwr:LocateFault a owl:Class ; rdfs:subClassOf ob2:Action ; rdfs:label "定位故障段"@zh ;
+    task:executionMode task:modeReadOnly ; task:deterministic false ;
+    ob2:triggeredByEvent pwr:FaultOutage ; ob2:guardedByRule pwr:OutageEventShape .
+pwr:DispatchRepair a owl:Class ; rdfs:subClassOf ob2:Action ; rdfs:label "派发抢修"@zh ;
+    task:executionMode task:modeExternalWrite ; task:deterministic false ;
+    ob2:triggeredByEvent pwr:FaultOutage ; ob2:guardedByRule pwr:DispatchedTicketShape .
+pwr:ConfirmRestoration a owl:Class ; rdfs:subClassOf ob2:Action ; rdfs:label "确认复电"@zh ;
+    task:executionMode task:modeExternalWrite ; task:deterministic false ;
+    ob2:triggeredByEvent pwr:ScheduledOutage ; ob2:guardedByRule pwr:OutageEventShape .
+pwr:NotifyCustomer a owl:Class ; rdfs:subClassOf ob2:Action ; rdfs:label "通知客户"@zh ;
+    task:executionMode task:modeStateful ; task:deterministic true ;
+    ob2:triggeredByEvent pwr:Complaint ; ob2:guardedByRule pwr:WorkTicketShape .
+
+# ============ 规则层 (OB2-Rule，SHACL NodeShape 声明为 ob2:Rule) ============
+
+pwr:WorkTicketShape a ob2:Rule, sh:NodeShape ;
+    sh:targetClass pwr:WorkTicket ;
+    sh:property [
+        sh:path pwr:ticketNo ; sh:minCount 1 ; sh:maxCount 1 ;
+        sh:pattern "^GD-[0-9]{8}-[0-9]{4}$" ; sh:name "工单号格式"@zh ;
+    ] ;
+    sh:property [
+        sh:path pwr:ticketState ; sh:minCount 1 ;
+        sh:in ( pwr:tOpen pwr:tDispatched pwr:tRestored pwr:tClosed ) ;
+        sh:name "工单状态词表封闭"@zh ;
+    ] ;
+    sh:property [
+        sh:path pwr:slaDeadline ; sh:minCount 1 ; sh:datatype xsd:dateTime ;
+        sh:name "SLA 时限必填"@zh ;
+    ] .
+
+pwr:DispatchedTicketShape a ob2:Rule, sh:NodeShape ;
+    sh:targetClass pwr:WorkTicket ;
+    sh:sparql [
+        a sh:SPARQLConstraint ;
+        sh:message "工单状态为已派单时必须绑定抢修班" ;
+        sh:select """
+            PREFIX pwr: <https://ontology-agent.dev/ns/power#>
+            SELECT $this WHERE {
+                $this pwr:ticketState pwr:tDispatched .
+                FILTER NOT EXISTS { $this pwr:dispatches ?crew }
+            }""" ;
+    ] .
+
+pwr:OutageEventShape a ob2:Rule, sh:NodeShape ;
+    sh:targetClass pwr:OutageEvent ;
+    sh:property [
+        sh:path pwr:affectedCustomers ; sh:minInclusive 0 ; sh:datatype xsd:integer ;
+        sh:name "影响客户数非负"@zh ;
+    ] ;
+    sh:sparql [
+        a sh:SPARQLConstraint ;
+        sh:message "复电时间早于停电发生时间" ;
+        sh:select """
+            PREFIX pwr: <https://ontology-agent.dev/ns/power#>
+            SELECT $this WHERE {
+                $this pwr:occurredAt ?t1 ; pwr:restoredAt ?t2 .
+                FILTER ( ?t2 < ?t1 )
+            }""" ;
+    ] .
+
+pwr:FeederShape a ob2:Rule, sh:NodeShape ;
+    sh:targetClass pwr:Feeder ;
+    sh:property [
+        sh:path pwr:feederId ; sh:minCount 1 ; sh:maxCount 1 ;
+        sh:pattern "^F-[0-9]{3}$" ; sh:name "馈线编号格式"@zh ;
+    ] .
+
+pwr:TransformerShape a ob2:Rule, sh:NodeShape ;
+    sh:targetClass pwr:Transformer ;
+    sh:property [
+        sh:path pwr:ratedCapacityKva ; sh:minInclusive 100 ; sh:maxInclusive 2500 ;
+        sh:datatype xsd:integer ; sh:name "配变容量区间(kVA)"@zh ;
+    ] .
+
+pwr:RepairCrewShape a ob2:Rule, sh:NodeShape ;
+    sh:targetClass pwr:RepairCrew ;
+    sh:property [ sh:path pwr:crewName ; sh:minCount 1 ; sh:datatype xsd:string ; ] ;
+    sh:property [ sh:path pwr:onDuty ; sh:minCount 1 ; sh:datatype xsd:boolean ; ] .
+
+pwr:RestorationPlanShape a ob2:Rule, sh:NodeShape ;
+    sh:targetClass pwr:RestorationPlan ;
+    sh:property [ sh:path pwr:planForTicket ; sh:minCount 1 ; sh:name "复电方案必须关联工单"@zh ; ] .
+
+pwr:MaintenanceWindowShape a ob2:Rule, sh:NodeShape ;
+    sh:targetClass pwr:MaintenanceWindow ;
+    sh:sparql [
+        a sh:SPARQLConstraint ;
+        sh:message "检修窗口结束早于开始" ;
+        sh:select """
+            PREFIX pwr: <https://ontology-agent.dev/ns/power#>
+            SELECT $this WHERE {
+                $this pwr:windowStart ?t1 ; pwr:windowEnd ?t2 .
+                FILTER ( ?t2 < ?t1 )
+            }""" ;
+    ] .

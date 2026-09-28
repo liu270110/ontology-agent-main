@@ -495,7 +495,11 @@ Pipe = Annotated[tuple, Depends(get_pipeline)]
 
 
 def _parse_optional_uuid(raw: str | None) -> uuid.UUID | None:
-    """可选用户头解析（dev 模式，TODO(M1) JWT）：缺失/非法值一律忽略置 None，不报错。"""
+    """可选用户头解析（dev 模式，TODO(M1) JWT）：缺失/非法值一律忽略置 None，不报错。
+
+    滥用面备案（dev 模式，登记册偏差备注同步）：客户端可自报 user_id 写记录污染其画像
+    （写侧伪造），profile 路径参数可查任意用户画像（读侧扩大）——均为 M1 JWT 统一收口点。
+    """
     if raw is None:
         return None
     try:
@@ -580,8 +584,16 @@ async def settle_session(
     重复提交短路返回 skipped，不重复调管线。
     """
     pipeline, repo = pipe
+    owner_user_id = _parse_optional_uuid(x_user_id)  # 归属用户（dev 头；非法值已静默忽略）
     key = f"manual:{session_id}:{hashlib.sha256(body.transcript.encode()).hexdigest()}"
-    if not await repo.register_task(tid, key, payload={"session_id": str(session_id), "transcript": body.transcript}):
+    payload = {
+        "session_id": str(session_id),
+        "transcript": body.transcript,
+        # 登记行随任务持久化 owner：escalate 兜底重跑同源取回；缺了则重跑记录 owner 归零，
+        # 从该用户 warmup/profile 静默消失（与 settle_session_task 的 payload 同语义）
+        "owner_user_id": str(owner_user_id) if owner_user_id else None,
+    }
+    if not await repo.register_task(tid, key, payload=payload):
         return {
             "code": 0,
             "message": "ok",
@@ -592,7 +604,7 @@ async def settle_session(
         session_id=session_id,
         transcript=body.transcript,
         now=datetime.now(UTC),
-        owner_user_id=_parse_optional_uuid(x_user_id),  # 归属用户（dev 头；非法值已静默忽略）
+        owner_user_id=owner_user_id,
     )
     return {
         "code": 0,

@@ -203,6 +203,40 @@ function jsonErr(code: number, message: string, status: number) {
   return HttpResponse.json({ code, message, data: null }, { status })
 }
 
+// ---- 回收站（B3-Q 转实；软删 7 天保留期 → 恢复 / 彻底删除，契约=api/01 §5.4 追加行）----
+const DAY_MS = 86_400_000
+
+/** 回收站条目 = KbDoc 快照 + 删除元数据；status 恒 'deleted'（不进 GET /kb/documents 主列表） */
+export type KbRecycleDoc = Omit<KbDoc, 'status'> & {
+  status: 'deleted'
+  collection_id: string
+  deleted_at: string
+  expires_at: string
+  /** 恢复时回填的流水线状态（软删前原态） */
+  prev_status: KbDoc['status']
+}
+
+const NOW_MS = Date.now()
+/** deleted 种子 ×2：d-901 剩 0.5 天（红档） / d-902 剩 2 天（橙档）；灰档由 UI 兜底分支覆盖 */
+const KB_RECYCLE: KbRecycleDoc[] = [
+  { id: 'd-901', name: '废弃接线图草稿.pdf', doc_type: 'PDF', size_bytes: 4_194_304, chunk_count: 96, status: 'deleted', progress: 100, job_id: null, error: null, updated_at: new Date(NOW_MS - 6.6 * DAY_MS).toISOString(), indexed_today: false, collection_id: 'col-1', deleted_at: new Date(NOW_MS - 6.5 * DAY_MS).toISOString(), expires_at: new Date(NOW_MS + 0.5 * DAY_MS).toISOString(), prev_status: 'indexed' },
+  { id: 'd-902', name: '停用台账备份.csv', doc_type: 'CSV', size_bytes: 61_440, chunk_count: 12, status: 'deleted', progress: 100, job_id: null, error: null, updated_at: new Date(NOW_MS - 5.1 * DAY_MS).toISOString(), indexed_today: false, collection_id: 'col-1', deleted_at: new Date(NOW_MS - 5 * DAY_MS).toISOString(), expires_at: new Date(NOW_MS + 2 * DAY_MS).toISOString(), prev_status: 'indexed' },
+]
+
+// ---- 库设置（B3-Q 转实；chunk_size/chunk_overlap/extract_prompt_level/auto_extract，PUT 全量）----
+interface KbSettings {
+  chunk_size: number
+  chunk_overlap: number
+  extract_prompt_level: 'standard' | 'deep'
+  auto_extract: boolean
+}
+
+const KB_SETTINGS: Record<string, KbSettings> = {}
+
+function settingsFor(id: string): KbSettings {
+  return KB_SETTINGS[id] ?? { chunk_size: 500, chunk_overlap: 50, extract_prompt_level: 'standard', auto_extract: true }
+}
+
 export const kbHandlers = [
   // ---- documents（§5.4 前六行） ----
   http.get('*/api/v1/kb/documents', () =>
@@ -254,10 +288,17 @@ export const kbHandlers = [
     return HttpResponse.json({ code: 0, message: 'ok', data: doc }, { status: 201 })
   }),
 
+  // 软删（B3-Q 最小改，对齐 api/01 §8 补录行「文档软删 status=deleted，不物理删除」）：
+  // 移入回收站（7 天保留期，expires_at=deleted_at+7d），恢复/彻底删除走 /restore、/:id/purge。
+  // 回 200 信封而非 204 空体——client apiFetch 解析不了空体会误抛（与 purge 同口径）。
   http.delete('*/api/v1/kb/documents/:id', ({ params }) => {
     const idx = KB_DOCS.findIndex(d => d.id === params.id)
-    if (idx >= 0) KB_DOCS.splice(idx, 1)
-    return new HttpResponse(null, { status: 204 })
+    if (idx >= 0) {
+      const [doc] = KB_DOCS.splice(idx, 1)
+      const now = new Date()
+      KB_RECYCLE.unshift({ ...doc, status: 'deleted', collection_id: 'col-1', deleted_at: now.toISOString(), expires_at: new Date(now.getTime() + 7 * DAY_MS).toISOString(), prev_status: doc.status })
+    }
+    return HttpResponse.json({ code: 0, message: 'ok', data: { deleted: true } })
   }),
 
   // 七步流水线：启动 / 断点重试（IX-KB-04 重新抽取、IX-REV-05 重抽分片共用，scope 区分）
@@ -343,5 +384,77 @@ export const kbHandlers = [
       else accepted++
     }
     return HttpResponse.json({ code: 0, message: 'ok', data: { accepted, rejected } }, { status: 202 })
+  }),
+
+  // ---- 回收站（B3-Q：GET 列表 / POST 恢复 / DELETE 彻底删除；信封体，勿回 204 空体） ----
+  http.get('*/api/v1/kb/recycle-bin', () =>
+    HttpResponse.json({
+      code: 0,
+      message: 'ok',
+      data: {
+        items: KB_RECYCLE.map(r => ({
+          id: r.id,
+          name: r.name,
+          collection_id: r.collection_id,
+          deleted_at: r.deleted_at,
+          expires_at: r.expires_at,
+          size: r.size_bytes,
+          status: 'deleted' as const,
+        })),
+        next_cursor: null,
+      },
+    }),
+  ),
+
+  // 恢复：移出回收站回主列表（prev_status 回填原流水线态）；响应 status='ready'（B3-Q 契约口径）
+  http.post('*/api/v1/kb/documents/:id/restore', ({ params }) => {
+    const idx = KB_RECYCLE.findIndex(d => d.id === String(params.id))
+    if (idx < 0) return jsonErr(4041, '文档不在回收站', 404)
+    const [rec] = KB_RECYCLE.splice(idx, 1)
+    KB_DOCS.unshift({
+      id: rec.id,
+      name: rec.name,
+      doc_type: rec.doc_type,
+      size_bytes: rec.size_bytes,
+      chunk_count: rec.chunk_count,
+      status: rec.prev_status,
+      progress: rec.prev_status === 'indexed' ? 100 : rec.progress,
+      job_id: rec.job_id,
+      error: rec.error,
+      updated_at: new Date().toISOString(),
+      indexed_today: true,
+    })
+    return HttpResponse.json({ code: 0, message: 'ok', data: { id: rec.id, status: 'ready' } })
+  }),
+
+  // 彻底删除（物理删除：连分片/向量引用一并清；200 信封体——client 不解析 204 空体）
+  http.delete('*/api/v1/kb/documents/:id/purge', ({ params }) => {
+    const idx = KB_RECYCLE.findIndex(d => d.id === String(params.id))
+    if (idx < 0) return jsonErr(4041, '文档不在回收站', 404)
+    const [rec] = KB_RECYCLE.splice(idx, 1)
+    delete KB_CHUNKS[rec.id]
+    return HttpResponse.json({ code: 0, message: 'ok', data: { id: rec.id } })
+  }),
+
+  // ---- 库设置（B3-Q：GET 读 / PUT 全量写；未知 collection id 发默认值） ----
+  http.get('*/api/v1/kb/collections/:id/settings', ({ params }) =>
+    HttpResponse.json({ code: 0, message: 'ok', data: settingsFor(String(params.id)) }),
+  ),
+  http.put('*/api/v1/kb/collections/:id/settings', async ({ params, request }) => {
+    const body = (await request.json()) as Partial<KbSettings>
+    if (
+      typeof body.chunk_size !== 'number' || body.chunk_size < 300 || body.chunk_size > 2000 ||
+      typeof body.chunk_overlap !== 'number' || body.chunk_overlap < 0 || body.chunk_overlap > 500
+    ) {
+      return jsonErr(3001, '参数越界：分片大小 300-2000，分片重叠 0-500', 422)
+    }
+    const next: KbSettings = {
+      chunk_size: body.chunk_size,
+      chunk_overlap: body.chunk_overlap,
+      extract_prompt_level: body.extract_prompt_level === 'deep' ? 'deep' : 'standard',
+      auto_extract: body.auto_extract === true,
+    }
+    KB_SETTINGS[String(params.id)] = next
+    return HttpResponse.json({ code: 0, message: 'ok', data: next })
   }),
 ]

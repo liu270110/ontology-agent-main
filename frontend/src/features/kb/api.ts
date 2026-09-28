@@ -298,3 +298,54 @@ export function batchDecide(docId: string, decisions: { cid: string; action: Rev
     decisions,
   })
 }
+
+// ---------------------------------------------------------------- 回收站（B3-Q 转实：软删 7 天保留期）
+
+/** 回收站条目（GET /kb/recycle-bin；expires_at = deleted_at + 7d，到期物理清理） */
+export interface RecycleItem {
+  id: string
+  name: string
+  collection_id: string
+  deleted_at: string
+  expires_at: string
+  size: number
+  status: 'deleted'
+}
+
+/** GET /kb/recycle-bin —— 回收站列表（status=deleted 文档，主列表不可见） */
+export function listRecycleBin() {
+  return api.get<{ items: RecycleItem[]; next_cursor: string | null }>('/kb/recycle-bin')
+}
+
+/** POST /kb/documents/{id}/restore —— 回收站恢复（status 回 ready，重入文档列表） */
+export function restoreDocument(id: string) {
+  return api.post<{ id: string; status: string }>(`/kb/documents/${id}/restore`)
+}
+
+/** DELETE /kb/documents/{id}/purge —— 彻底删除（物理删除；信封体 {id}，勿回 204 空体——client 不解析空体） */
+export function purgeDocument(id: string) {
+  return api.delete<{ id: string }>(`/kb/documents/${id}/purge`)
+}
+
+// ---------------------------------------------------------------- 库设置（B3-Q 转实）
+
+export interface KbCollectionSettings {
+  /** 分片大小 tokens（300–2000） */
+  chunk_size: number
+  /** 分片重叠 tokens（0–500） */
+  chunk_overlap: number
+  /** 抽取深度：standard=主链路 / deep=追加属性与公理 */
+  extract_prompt_level: 'standard' | 'deep'
+  /** 上传后自动抽取 */
+  auto_extract: boolean
+}
+
+/** GET /kb/collections/{id}/settings —— 库设置读取（未知 id 发默认值 500/50/standard/true） */
+export function getCollectionSettings(collectionId: string) {
+  return api.get<KbCollectionSettings>(`/kb/collections/${collectionId}/settings`)
+}
+
+/** PUT /kb/collections/{id}/settings —— 库设置保存（全量对象） */
+export function updateCollectionSettings(collectionId: string, body: KbCollectionSettings) {
+  return api.put<KbCollectionSettings>(`/kb/collections/${collectionId}/settings`, body)
+}

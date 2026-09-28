@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ArrowRight, Download, Search, ShieldAlert } from 'lucide-react'
@@ -9,9 +9,23 @@ import { FactStatusBadge, FactTimeline, LayerBadge, relativeTime } from './share
 
 /** IX-MEM-02 记忆条目详情抽屉（26 篇 §8.1；画板 ix-mem-02）：480px 右侧——
  *  完整内容 + 层级徽标 + 来源会话（跳转对话定位）+ 全生命周期时间线（失效边红色）
- *  + 引用计数 + 失效（danger：理由必填）+ 搜索 ⌘F / 导出（IX-ACC-08 语义入口）。 */
+ *  + 引用计数 + 失效（danger：理由必填）+ 搜索 ⌘F / 导出（IX-ACC-08 语义入口）。
+ *  B3-P 转实：搜索/导出为纯客户端能力（无新端点）——⌘F 交由页面级搜索（onSearch，
+ *  当前层内按标题/内容过滤事实清单）；导出当前层清单为 JSON 下载（onExport）。 */
 
-export function FactDetailSheet({ fact, onClose }: { fact: MemoryFact | null; onClose: () => void }) {
+export function FactDetailSheet({
+  fact,
+  onClose,
+  onSearch,
+  onExport,
+}: {
+  fact: MemoryFact | null
+  onClose: () => void
+  /** ⌘F / 搜索按钮 → 打开页面级搜索（MemoryPage 提升的搜索状态） */
+  onSearch?: () => void
+  /** 导出按钮 → 导出当前层 facts 清单为 JSON 下载（Blob + a.download） */
+  onExport?: () => void
+}) {
   const qc = useQueryClient()
   const [invalidateMode, setInvalidateMode] = useState(false)
   const [reason, setReason] = useState('')
@@ -21,6 +35,19 @@ export function FactDetailSheet({ fact, onClose }: { fact: MemoryFact | null; on
     queryFn: () => getFactTimeline(fact!.id),
     enabled: !!fact,
   })
+
+  // ⌘F（Ctrl+F / Cmd+F）：抽屉打开期间接管浏览器查找，改接真搜索（IX-ACC-08 语义入口）
+  useEffect(() => {
+    if (!fact) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key.toLowerCase() === 'f' && (e.metaKey || e.ctrlKey)) {
+        e.preventDefault()
+        onSearch?.()
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [fact, onSearch])
 
   const invalidate = useMutation({
     mutationFn: () => invalidateFact(fact!.id, reason),
@@ -83,26 +110,28 @@ export function FactDetailSheet({ fact, onClose }: { fact: MemoryFact | null; on
           </div>
         </div>
 
-        {/* 搜索 ⌘F / 导出（IX-ACC-08 语义入口：M1 仅占位说明） */}
+        {/* 搜索 ⌘F / 导出（IX-ACC-08 语义入口；B3-P 转实：纯客户端，无新端点） */}
         <div className="mt-3 flex gap-2">
           <button
             type="button"
             className="btn btn-g btn-sm"
-            onClick={() => toast('搜索我的记忆（⌘F）', { description: '全文检索走检索端点 · 范围=本人记忆；入口语义属 IX-ACC-08，M1 占位' })}
+            data-testid="mem-search-open"
+            onClick={() => onSearch?.()}
           >
             <Search size={12} aria-hidden /> 搜索我的记忆 <span className="badge b-gray">⌘F</span>
           </button>
           <button
             type="button"
             className="btn btn-g btn-sm"
-            onClick={() => toast('导出记忆数据', { description: '走 IX-ACC-08 数据导出任务流（含审计），完成后在任务中心下载' })}
+            data-testid="mem-export-go"
+            onClick={() => onExport?.()}
           >
             <Download size={12} aria-hidden /> 导出
           </button>
         </div>
         <div className="mt-1.5 flex flex-wrap gap-1.5 text-[11px] text-label-3">
-          <span className="badge b-blue">⌘F：全文检索走检索端点 · 范围 = 本人记忆</span>
-          <span className="badge b-blue">导出：走 IX-ACC-08 数据导出任务流</span>
+          <span className="badge b-blue">⌘F：当前层内按标题 / 内容过滤事实清单（客户端过滤）</span>
+          <span className="badge b-blue">导出：当前层清单 JSON 下载（浏览器直下，不经服务端）</span>
         </div>
 
         {/* 全生命周期时间线 */}

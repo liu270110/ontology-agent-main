@@ -915,6 +915,71 @@ export const adminHandlers = [
     }
     return ok({ joined: true, tenant_name: INVITE_TENANT_NAME })
   }),
+
+  // ---- ★ 权限申请流（§5.10 permission-requests 两行预登记；2026-09-29 B3-R 切片：
+  //      ForbiddenPage「申请权限」占位转实。提交即向 REVIEWS 插入第六类
+  //      permission_request 待办工单（type 与审批枚举严格一致）+ 审计留痕；
+  //      DTO 细化与 409 重复语义见 api/01 §5.10 追加注记） ----
+  http.post('*/api/v1/permission-requests', async ({ request }) => {
+    const body = (await request.json()) as {
+      route?: string; permission?: string; reason?: string; desired_role?: string
+      requester?: { name?: string; email?: string }
+    }
+    const route = body.route?.trim()
+    const reason = body.reason?.trim() ?? ''
+    if (!route || reason.length < 10) return err(3001, '被拒路径与申请理由（≥10 字）必填', 422)
+    const email = body.requester?.email?.trim().toLowerCase() ?? ''
+    // 409：同一申请人同一资源已有 pending 申请（预登记行 409* 口径）
+    if (ACCESS_REQUESTS.some(r => r.status === 'pending' && r.requester.email === email && r.route === route)) {
+      return err(3409, '该资源已有进行中的申请，请等待审批结果', 409)
+    }
+    const name = body.requester?.name?.trim() || '当前用户'
+    const req: AccessRequest = {
+      id: `ar-${String(accessReqSeq++).padStart(2, '0')}`,
+      route,
+      permission: body.permission?.trim() || undefined,
+      reason,
+      desired_role: body.desired_role?.trim() || undefined,
+      requester: { name, email: email || 'unknown@example.com' },
+      status: 'pending',
+      created_at: new Date().toISOString(),
+    }
+    ACCESS_REQUESTS.unshift(req)
+    // 审批联动副作用：第六类 permission_request 待办工单（/console/approvals 待办可见）
+    const ticketId = `ACC-${accessTicketSeq++}`
+    REVIEWS.unshift({
+      id: ticketId, type: 'permission_request', high_risk: false, status: 'pending',
+      title: `权限申请 ${ticketId} · ${name}申请 ${route}`,
+      summary: `403 申请权限闭环：目标资源「${route}」，通过后自动授权并审计`,
+      applicant: name, department: '—', submitted_at: req.created_at,
+      payload: {
+        scope: req.desired_role ?? req.permission ?? 'access',
+        resource: route, reason,
+      },
+      chain: [
+        { label: '提交', actor: name, at: '刚刚', state: 'done', note: '403 状态页「申请权限」发起' },
+        { label: '当前节点', actor: '刘以在（管理员）', at: '—', state: 'current' },
+      ],
+    })
+    // 审计留痕（宪法 5：动作带审计；与种子 ACC-09 的 permission.request 行同构）
+    AUDIT_ROWS.unshift({
+      time: new Date().toLocaleString('zh-CN', { hour12: false }).replace(/\//g, '-'),
+      operator: name, action: 'permission.request',
+      resource: `${req.desired_role ?? req.permission ?? 'access'} · ${route}`,
+      result: '待确认', trace_id: `tr-${Math.random().toString(16).slice(2, 10)}`,
+    })
+    return ok(req, 201)
+  }),
+
+  // 本人申请列表（?role=mine|approvable；M1 简化：不做 requester 过滤全量返回、
+  // 不校验 review:read——正式实现按预登记行 scope 执行，交付报告已注明）
+  http.get('*/api/v1/permission-requests', ({ request }) => {
+    const role = new URL(request.url).searchParams.get('role')
+    const items = role === 'approvable'
+      ? ACCESS_REQUESTS.filter(r => r.status === 'pending')
+      : ACCESS_REQUESTS
+    return ok({ items, next_cursor: null })
+  }),
 ]
 
 // ============================================================
@@ -946,3 +1011,26 @@ function derivedLinkStatus(l: InviteLink): 'active' | 'revoked' | 'expired' {
   if (l.status === 'revoked') return 'revoked'
   return Date.now() > new Date(l.expires_at).getTime() ? 'expired' : 'active'
 }
+
+// ============================================================
+// §5.10 ★ permission-requests —— 权限申请（内存态；2026-09-29 B3-R 切片）
+// ============================================================
+
+/** 申请单 DTO（api/01 §5.10 追加注记细化；id 前缀 ar-，审批工单 id 前缀 ACC-） */
+export interface AccessRequest {
+  id: string
+  /** 被拒资源路径（403 页 useLocation().pathname） */
+  route: string
+  /** 缺失权限点（11 篇 资源:动作；可选） */
+  permission?: string
+  reason: string
+  /** 期望角色（curator/ontologist/analyst；可选） */
+  desired_role?: string
+  requester: { name: string; email: string }
+  status: 'pending' | 'approved' | 'rejected'
+  created_at: string
+}
+
+const ACCESS_REQUESTS: AccessRequest[] = []
+let accessReqSeq = 1
+let accessTicketSeq = 10 // ACC-09 为种子工单，提交生成自 ACC-10 起

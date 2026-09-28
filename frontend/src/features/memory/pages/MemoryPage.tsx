@@ -1,7 +1,8 @@
-import { useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { Gavel, Lock } from 'lucide-react'
+import { Gavel, Lock, Search, X } from 'lucide-react'
+import { toast } from 'sonner'
 import { ApiError } from '@/api/client'
 import { ErrorState, SkeletonCards, SkeletonRows } from '@/components/states'
 import { listFacts, listL1, listPromotions, type FactLayer, type MemoryFact } from '../api'
@@ -15,7 +16,10 @@ import { FactDetailSheet } from '../components/FactDetailSheet'
  *  + IX-MEM-01 升级审核对照弹窗（L2 候选「升级审核」入口）
  *  + IX-MEM-02 条目详情抽屉（时间线/引用/失效）
  *  + IX-MEM-03 L1 只读视图（热数据卡 TTL 倒计时 + 脱敏展示，不可编辑）。
- *  层级查询 ?layer=L1..L4（26 篇 §11 路由表）。 */
+ *  层级查询 ?layer=L1..L4（26 篇 §11 路由表）。
+ *  B3-P 转实：⌘F 搜索 / 导出为纯客户端能力——搜索=当前层内按标题/内容客户端过滤
+ *  （react-query 数据 useMemo filter，无检索端点）；导出=当前层清单 JSON 下载
+ *  （Blob + a.download，文件名 memory-export-<layer>-<YYYYMMDD>.json，无新端点）。 */
 
 const LAYERS: FactLayer[] = ['L1', 'L2', 'L3', 'L4']
 
@@ -24,6 +28,10 @@ export function MemoryPage() {
   const layer = (sp.get('layer') ?? 'L3') as FactLayer
   const [reviewId, setReviewId] = useState<string | null>(null)
   const [detail, setDetail] = useState<MemoryFact | null>(null)
+  // B3-P：页面级搜索（⌘F / 抽屉「搜索我的记忆」打开；状态提升至此以过滤当前层清单）
+  const [searchOpen, setSearchOpen] = useState(false)
+  const [kw, setKw] = useState('')
+  const searchRef = useRef<HTMLInputElement>(null)
 
   function switchLayer(l: FactLayer) {
     setSp(prev => {
@@ -61,6 +69,57 @@ export function MemoryPage() {
   )
   const activeL1 = l1Items.length
 
+  // ---- B3-P：客户端搜索（当前层内过滤；口径=L2/L4 按标题+内容，L1 按会话标题+块 key/value） ----
+  const q = kw.trim().toLowerCase()
+  const visibleFacts = useMemo(
+    () => (q ? facts.filter(f => f.title.toLowerCase().includes(q) || f.content.toLowerCase().includes(q)) : facts),
+    [facts, q],
+  )
+  const visibleL1 = useMemo(
+    () =>
+      q
+        ? l1Items.filter(
+            s =>
+              s.title.toLowerCase().includes(q) ||
+              s.blocks.some(b => b.key.toLowerCase().includes(q) || b.value.toLowerCase().includes(q)),
+          )
+        : l1Items,
+    [l1Items, q],
+  )
+
+  // ⌘F / 抽屉搜索按钮：关抽屉 + 打开页面级搜索输入（effect 兜底落焦，防抽屉关闭时焦点回迁）
+  const openSearch = useCallback(() => {
+    setDetail(null)
+    setSearchOpen(true)
+  }, [])
+
+  useEffect(() => {
+    if (searchOpen) searchRef.current?.focus()
+  }, [searchOpen])
+
+  /** 导出当前层清单为 JSON 下载（纯客户端：Blob + a.download，无新端点；有搜索词时导出过滤后清单） */
+  function exportLayer() {
+    const now = new Date()
+    const ymd = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`
+    const items = layer === 'L1' ? visibleL1 : visibleFacts
+    const filename = `memory-export-${layer}-${ymd}.json`
+    const payload = {
+      layer,
+      exported_at: now.toISOString(),
+      search: q || null,
+      count: items.length,
+      items,
+    }
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = filename
+    a.click()
+    URL.revokeObjectURL(url)
+    toast.success(`已导出 ${items.length} 条`, { description: `${filename} · 当前层${q ? '（含搜索过滤）' : ''} · 纯客户端导出` })
+  }
+
   return (
     <div className="mx-auto max-w-[1080px]">
       <div className="flex flex-wrap items-center gap-2">
@@ -86,6 +145,47 @@ export function MemoryPage() {
         ))}
       </div>
 
+      {/* 页面级搜索（B3-P 转实 IX-ACC-08）：⌘F / 抽屉「搜索我的记忆」打开；当前层内客户端过滤 */}
+      {searchOpen && (
+        <div className="mt-3 flex items-center gap-2" data-testid="mem-search-bar">
+          <label className="fakeinput flex w-full items-center gap-1.5 rounded-lg border border-separator bg-surface-2 px-2 py-1.5">
+            <Search size={12} className="flex-none text-label-3" aria-hidden />
+            <input
+              ref={searchRef}
+              data-testid="mem-search-input"
+              value={kw}
+              onChange={e => setKw(e.target.value)}
+              onKeyDown={e => {
+                if (e.key === 'Escape') {
+                  setSearchOpen(false)
+                  setKw('')
+                }
+              }}
+              placeholder="搜索当前层记忆（标题 / 内容）…"
+              autoFocus
+              className="w-full bg-transparent text-xs outline-none placeholder:text-label-3"
+            />
+          </label>
+          {q && (
+            <span className="flex-none text-[11px] text-label-3" data-testid="mem-search-count">
+              {layer === 'L1' ? visibleL1.length : visibleFacts.length}/{layer === 'L1' ? l1Items.length : facts.length} 条匹配
+            </span>
+          )}
+          <button
+            type="button"
+            aria-label="关闭搜索"
+            data-testid="mem-search-close"
+            className="icobtn flex-none cursor-pointer rounded-md border border-separator px-1.5 text-label-2"
+            onClick={() => {
+              setSearchOpen(false)
+              setKw('')
+            }}
+          >
+            <X size={12} aria-hidden />
+          </button>
+        </div>
+      )}
+
       {/* ---- IX-MEM-03：L1 只读视图 ---- */}
       {layer === 'L1' && (
         <div className="mt-4">
@@ -95,7 +195,7 @@ export function MemoryPage() {
             <span className="mono ml-auto text-[11px] text-label-3">GET /memory/l1/&#123;session_id&#125;</span>
           </div>
           <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
-            {l1Items.map(s => (
+            {visibleL1.map(s => (
               <div key={s.session_id} className="card !p-4" data-testid={`l1-card-${s.session_id}`}>
                 <div className="flex items-center gap-2">
                   <span className="mono text-xs font-bold">{s.session_id}</span>
@@ -136,6 +236,12 @@ export function MemoryPage() {
               <div className="d">L1 随会话创建，会话关闭时触发归档与 L2 沉淀。</div>
             </div>
           )}
+          {l1Items.length > 0 && visibleL1.length === 0 && q && (
+            <div className="empty mt-6" data-testid="mem-search-empty-l1">
+              <div className="t">无匹配会话</div>
+              <div className="d">当前层内没有标题或内容块包含「{kw.trim()}」的 L1 会话。</div>
+            </div>
+          )}
           <div className="mt-3 text-[11px] text-label-3">
             L1 写入仅限系统沉淀与用户自编辑记忆块（PUT /memory/l1/&#123;session_id&#125;）；平台管理页对本层只读。脱敏规则待权限矩阵评审定稿（25 篇 §14）。
           </div>
@@ -171,7 +277,7 @@ export function MemoryPage() {
           )}
 
           <div className="mt-3 space-y-2" data-testid="fact-list">
-            {facts.map(f => (
+            {visibleFacts.map(f => (
               <button
                 type="button"
                 key={f.id}
@@ -213,6 +319,12 @@ export function MemoryPage() {
               <div className="d">L2 候选来自会话关闭时的 consolidate 沉淀；L3 需升级终审通过。</div>
             </div>
           )}
+          {!factsQuery.isLoading && !factsQuery.isError && facts.length > 0 && visibleFacts.length === 0 && q && (
+            <div className="empty mt-6" data-testid="mem-search-empty">
+              <div className="t">无匹配条目</div>
+              <div className="d">当前层内没有标题或内容包含「{kw.trim()}」的记忆；搜索仅作用于当前层。</div>
+            </div>
+          )}
         </div>
       )}
 
@@ -221,7 +333,12 @@ export function MemoryPage() {
         fact={reviewFact}
         onClose={() => setReviewId(null)}
       />
-      <FactDetailSheet fact={detail} onClose={() => setDetail(null)} />
+      <FactDetailSheet
+        fact={detail}
+        onClose={() => setDetail(null)}
+        onSearch={openSearch}
+        onExport={exportLayer}
+      />
     </div>
   )
 }

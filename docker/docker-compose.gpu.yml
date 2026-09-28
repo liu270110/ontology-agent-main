@@ -1,0 +1,65 @@
+# GPU 推理资源体（权威：14 篇 §9.1/§9.6）——vLLM + TEI，独立于 deploy/ 主编排
+# 启动：cd docker && docker compose -f docker-compose.gpu.yml up -d
+# 开发机 Windows 需 Docker Desktop（WSL2 后端）+ GPU 直通；生产同文件只改模型规格变量
+# 端口（仅绑 127.0.0.1）：vLLM 8001 / TEI-embed 8002 / TEI-rerank 8003（P2）
+# 渠道切换：起服后根目录 .env 改 OA_LLM_BASE_URL=http://127.0.0.1:8001/v1、OA_LLM_MODEL=local-main
+
+services:
+  vllm:                                             # 推理体：OpenAI 兼容 server
+    image: ${VLLM_IMAGE:-vllm/vllm-openai:latest}   # 生产锁固定版本（14 篇 §6 禁 latest）
+    container_name: oa-vllm
+    restart: unless-stopped
+    ports: ["127.0.0.1:8001:8000"]
+    environment:
+      HF_ENDPOINT: ${HF_ENDPOINT:-https://hf-mirror.com}
+    volumes:
+      - hf_cache:/root/.cache/huggingface
+    # served-model-name 固定 local-main：开发/生产换模型不动客户端配置（§9.2 同家族策略）
+    command: >
+      --model ${VLLM_MODEL:-Qwen/Qwen3-4B-AWQ}
+      --served-model-name local-main
+      --max-model-len 16384
+      --gpu-memory-utilization 0.90
+      --enable-prefix-caching
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 10
+      start_period: 600s                             # 首次拉取/加载权重耗时
+
+  tei-embed:                                        # 向量体：bge-m3（02 篇 §4 统一 embedding；CPU 起步，§9.1）
+    image: ${TEI_IMAGE:-ghcr.io/huggingface/text-embeddings-inference:cpu-latest}
+    container_name: oa-tei-embed
+    restart: unless-stopped
+    ports: ["127.0.0.1:8002:80"]
+    environment:
+      HF_ENDPOINT: ${HF_ENDPOINT:-https://hf-mirror.com}
+      HUGGINGFACEHUB_API_TOKEN: ${HF_TOKEN:-}
+    volumes: [tei_cache:/data]
+    command: --model-id BAAI/bge-m3 --max-client-batch-size 32
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 180s
+
+  # tei-rerank:                                     # P2：bge-reranker-v2-m3（04 篇六路召回启用时放开）
+  #   image: ${TEI_IMAGE:-ghcr.io/huggingface/text-embeddings-inference:cpu-latest}
+  #   container_name: oa-tei-rerank
+  #   restart: unless-stopped
+  #   ports: ["127.0.0.1:8003:80"]
+  #   environment:
+  #     HF_ENDPOINT: ${HF_ENDPOINT:-https://hf-mirror.com}
+  #   volumes: [tei_cache:/data]
+  #   command: --model-id BAAI/bge-reranker-v2-m3
+
+volumes: { hf_cache: {}, tei_cache: {} }

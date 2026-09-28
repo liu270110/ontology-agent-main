@@ -1,0 +1,20 @@
+{
+  "experiment": "E14_microvm",
+  "notes": [],
+  "boot_to_login_s": 21.8,
+  "guest_modules": [
+    "virtio_balloon         32768  0"
+  ],
+  "kvm": true,
+  "monitor_balloon_info": "\u001b[D\u001b[D\u001b[D\u001b[D\u001b[D\u001b[Dinfo ball\u001b[K\u001b[D\u001b[D\u001b[D\u001b[D\u001b[D\u001b[D\u001b[D\u001b[D\u001b[Dinfo ballo\u001b[K\u001b[D\u001b[D\u001b[D\u001b[D\u001b[D\u001b[D\u001b[D\u001b[D\u001b[D\u001b[Dinfo balloo\u001b[K\u001b[D\u001b[D\u001b[D\u001b[D\u001b[D\u001b[D\u001b[D\u001b[D\u001b[D\u001b[D\u001b[Dinfo balloon\u001b[K\r\nballoon: actual=742\r\n(qemu) \r\n(qemu)",
+  "host_rss": {
+    "before_balloon_mb": 797.6,
+    "after_balloon_256mb_mb": 786.1,
+    "released_mb": 11.5
+  },
+  "guest_balloon_actual_mb": 742,
+  "balloon_reclaim_verified": true,
+  "virtio_pmem": "N/A：需 guest libnvdimm/virtio_pmem 模块与 ndctl 配置；无盘 netboot 环境不含，记录为未验证（论文生产路径为 Firecracker virtio-pmem+DAX）",
+  "paper_reference": "论文：virtio-pmem+DAX 峰值宿主内存 −40.2%；DAMON+balloon FPR 时间积分内存 −21.2%（balloon 回收语义本地已复现）",
+  "passed": true
+}

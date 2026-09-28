@@ -14,26 +14,31 @@ import { adminHandlers } from './admin-handlers'
  *  （X17 两段式，一次性）；locked@example.com 恒 1002（防枚举）；失败 5 次/10min → 429 2005 RATE_LIMITED + Retry-After（api/01 §4.3，2026-09-27 对账 §8 裁决：1005 号段不存在）。 */
 
 /** 角色码权威 = 08 篇 §2.2；scope 词汇 = 11 篇 资源:动作（与 routes.tsx meta.permission 对齐） */
-const DIRECTORY: Record<string, { roles: string[]; scopes: string[] }> = {
+const DIRECTORY: Record<string, { name: string; roles: string[]; scopes: string[] }> = {
   'admin@example.com': {
+    name: '刘以在',
     roles: ['admin'],
     scopes: ['user:manage', 'tenant:manage', 'session:chat', 'session:write', 'ontology:read', 'ontology:write', 'kb:read', 'kb:write', 'memory:read', 'agent:read', 'agent:write', 'plugin:read', 'tool:read', 'tool:manage', 'approval:decide', 'dashboard:view'],
   },
   'member@example.com': {
+    name: '成员样例',
     roles: ['member'],
     scopes: ['session:chat', 'kb:read', 'memory:read', 'agent:read', 'plugin:read', 'tool:read', 'dashboard:view'],
   },
   // S6 治理域演示账号（super_admin 全量；仅演示/截图用，s1 契约断言不涉及）
   'super@example.com': {
+    name: '平台管理员',
     roles: ['super_admin'],
     scopes: ['user:manage', 'tenant:manage', 'admin:read', 'admin:write', 'session:chat', 'session:read', 'session:write', 'ontology:read', 'ontology:write', 'kb:read', 'kb:write', 'memory:read', 'agent:read', 'agent:write', 'plugin:read', 'tool:read', 'tool:manage', 'review:read', 'review:approve', 'approval:decide', 'dashboard:view', 'audit:read'],
   },
   'mfa@example.com': {
+    name: '双因子用户',
     roles: ['member'],
     scopes: ['session:chat', 'kb:read', 'memory:read', 'agent:read', 'plugin:read', 'tool:read', 'dashboard:view'],
   },
 }
 const DEFAULT_SEED = DIRECTORY['admin@example.com']
+const TENANT_NAME = '默认租户'
 
 const TENANT_ID = 't-10000000-0000-0000-0000-000000000001'
 const LOCKED_EMAIL = 'locked@example.com'
@@ -49,7 +54,8 @@ function subFor(email: string): string {
 
 /** 无签名 JWT（base64url.header.payload.sig）——mock 专用，生产为网关真签发（08 篇 §2.1） */
 function makeJwt(claims: Record<string, unknown>): string {
-  const b64 = (o: unknown) => btoa(JSON.stringify(o)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
+  // UTF-8 安全 base64url（name 为中文——btoa 直编码非 Latin1 会抛 InvalidCharacterError）
+  const b64 = (o: unknown) => btoa(String.fromCharCode(...new TextEncoder().encode(JSON.stringify(o)))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
   return `${b64({ alg: 'none', typ: 'JWT' })}.${b64(claims)}.mock`
 }
 function tokenPairFor(email: string) {
@@ -57,7 +63,9 @@ function tokenPairFor(email: string) {
   const now = Math.floor(Date.now() / 1000)
   const claims = (typ: 'access' | 'refresh', ttl: number) => ({
     sub: subFor(email),
+    name: seed.name,
     tenant_id: TENANT_ID,
+    tenant_name: TENANT_NAME,
     roles: seed.roles,
     scopes: seed.scopes,
     typ,

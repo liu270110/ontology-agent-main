@@ -28,6 +28,11 @@ class WritebackLedgerRepository(Protocol):
         """按 id 取台账行（租户作用域内；未命中返回 None）。"""
         ...  # pragma: no cover — Protocol 方法无实现
 
+    async def get_for_update(self, tenant_id: UUID, entry_id: UUID) -> WritebackLedger | None:
+        """行锁读取（SELECT … FOR UPDATE，租户过滤）：dispose「标记+落库」单事务入口
+        （B8.1 修复①：锁内取行→守卫复核→聚合迁移→commit，防并发写者 lost-update）。"""
+        ...  # pragma: no cover — Protocol 方法无实现
+
     async def get_by_idempotency_key(self, idempotency_key: str) -> WritebackLedger | None:
         """按幂等键取台账行（幂等重放/对账核实）。"""
         ...  # pragma: no cover — Protocol 方法无实现

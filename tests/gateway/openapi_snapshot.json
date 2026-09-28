@@ -6538,7 +6538,7 @@
     },
     "/api/v1/admin/writeback/ledger/{ledger_id}/dispose": {
       "post": {
-        "description": "人工处置台账行（§3.3 三动作；处置人取 principal，处置理由/注记由 dispatcher 追加留痕）。\n\n202=处置受理（redispatch 的外部投递异步完成，响应体为落账后投影）；不可处置态 409（3003）、\n未找到 404、缺必填 note 3001——沿 _domain_error 单口径映射。",
+        "description": "人工处置台账行（§3.3 三动作；处置人取 principal，处置理由/注记由 dispatcher 追加留痕）。\n\n202=处置受理即返：标记段落库（B8.1 修复①行锁单事务）后立即响应，响应体为落账后从仓储\n重取的最新投影（修复②）；redispatch 的外部投递经 BackgroundTasks 后台执行（修复③，\n最坏重试 ~90s 不阻塞响应），响应体 status=pending、投递结果经台账查询面读取；\nclose/mark_compensated 同步完成，响应体即终态。不可处置态 409（3003）、未找到 404、\n缺必填 note 3001——沿 _domain_error 单口径映射。",
         "operationId": "dispose_writeback_ledger_api_v1_admin_writeback_ledger__ledger_id__dispose_post",
         "parameters": [
           {

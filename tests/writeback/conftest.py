@@ -76,6 +76,11 @@ class FakeLedgerRepo:
     async def get(self, entry_id: uuid.UUID) -> WritebackLedger | None:
         return self.rows.get(entry_id)
 
+    async def get_for_update(self, tenant_id: uuid.UUID, entry_id: uuid.UUID) -> WritebackLedger | None:
+        """行锁读取的内存同形（无真实锁；租户过滤与 PG 同形——他租户行不可见）。"""
+        row = self.rows.get(entry_id)
+        return row if row is not None and row.tenant_id == tenant_id else None
+
     async def get_by_idempotency_key(self, idempotency_key: str) -> WritebackLedger | None:
         return next((r for r in self.rows.values() if r.idempotency_key == idempotency_key), None)
 

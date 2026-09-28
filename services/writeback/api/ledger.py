@@ -13,6 +13,10 @@ scope 裁决：本批按 api/03 §3.9 writeback.status ★ 行登记 ``action:in
 - POST /admin/writeback/ledger/{id}/dispose 人工处置（重发/标记冲正/关闭，§3.3）    admin:write 202 409*
 scope 按契约行用 admin:read/admin:write；与既有详情端点 action:invoke 的并存口径
 （同族台账查询面两种 scope）随登记册主持人裁决收敛，本批不擅改既有端点。
+
+B8.1 加固批（2026-09-28，ocr 评审三发现收口）：①dispose 标记+落库=行锁单事务
+（repo.get_for_update，防并发写者 lost-update）；②响应体=落库后仓储重取最新投影；
+③redispatch 投递经 BackgroundTasks 后台执行——202 受理即返，响应体 status=pending。
 """
 
 from __future__ import annotations
@@ -21,6 +25,7 @@ import uuid
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, Query, Request
+from starlette.background import BackgroundTasks
 
 from services.platform.deps import Principal, require_scope
 from services.platform.errors import GatewayError
@@ -110,14 +115,19 @@ async def dispose_writeback_ledger(
     body: WritebackLedgerDisposeIn,
     principal: LedgerDisposeDep,
     request: Request,
+    background_tasks: BackgroundTasks,
 ) -> WritebackLedgerOut:
     """人工处置台账行（§3.3 三动作；处置人取 principal，处置理由/注记由 dispatcher 追加留痕）。
 
-    202=处置受理（redispatch 的外部投递异步完成，响应体为落账后投影）；不可处置态 409（3003）、
-    未找到 404、缺必填 note 3001——沿 _domain_error 单口径映射。
+    202=处置受理即返：标记段落库（B8.1 修复①行锁单事务）后立即响应，响应体为落账后从仓储
+    重取的最新投影（修复②）；redispatch 的外部投递经 BackgroundTasks 后台执行（修复③，
+    最坏重试 ~90s 不阻塞响应），响应体 status=pending、投递结果经台账查询面读取；
+    close/mark_compensated 同步完成，响应体即终态。不可处置态 409（3003）、未找到 404、
+    缺必填 note 3001——沿 _domain_error 单口径映射。
     """
+    dispatcher = _dispatcher(request)
     try:
-        result = await _dispatcher(request).dispose(
+        result = await dispatcher.dispose(
             tenant_id=principal.tenant_id,
             ledger_id=ledger_id,
             action=body.action,
@@ -126,4 +136,10 @@ async def dispose_writeback_ledger(
         )
     except WritebackError as exc:
         raise _domain_error(exc) from exc
+    if body.action == "redispatch":  # 投递段后台执行（响应生成后运行；ASGI 生命周期内）
+        background_tasks.add_task(
+            dispatcher.run_redispatch_delivery,
+            tenant_id=principal.tenant_id,
+            ledger_id=ledger_id,
+        )
     return WritebackLedgerOut(**result)

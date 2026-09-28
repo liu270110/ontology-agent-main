@@ -102,6 +102,23 @@ class PgWritebackLedgerRepository:
             return None
         return _entry_from_orm(row)
 
+    async def get_for_update(self, tenant_id: uuid.UUID, entry_id: uuid.UUID) -> WritebackLedger | None:
+        """行锁读取（SELECT … FOR UPDATE，租户过滤）：dispose「标记+落库」单事务入口。
+
+        B8.1 加固批修复①：聚合读（短会话）与 save_state 全字段覆盖之间原无锁无版本谓词，
+        并发写者（relay/reconcile/另一 dispose）会被覆盖（lost-update）——dispose 改为
+        锁内取行 → 守卫复核 → 聚合迁移 → commit，写者串行化于行锁。
+        """
+        if tenant_id != self._tenant_id:
+            raise WritebackError(ErrorCode.TENANT_MISMATCH, "租户不匹配：拒绝查询他租户台账")
+        stmt = (
+            select(WritebackLedgerORM)
+            .where(WritebackLedgerORM.id == entry_id, WritebackLedgerORM.tenant_id == self._tenant_id)
+            .with_for_update()
+        )
+        row = (await self._db.execute(stmt)).scalar_one_or_none()
+        return _entry_from_orm(row) if row is not None else None
+
     async def get_by_idempotency_key(self, idempotency_key: str) -> WritebackLedger | None:
         stmt = select(WritebackLedgerORM).where(
             WritebackLedgerORM.tenant_id == self._tenant_id,

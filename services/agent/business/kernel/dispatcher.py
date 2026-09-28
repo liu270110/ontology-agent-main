@@ -2,7 +2,9 @@
 
 注册面（02 §4.1 注 1）：register_tool / register_gate / register_context_provider /
 register_planning_strategy / register_event_sink / register_execution_backend /
-register_reasoning_engine / register_memory_policy / register_agent_slot / register_model。
+register_reasoning_engine / register_memory_policy / register_agent_slot / register_model /
+register_hook（H-0a ``on(event)`` 生命周期钩子，07 研究 §7.4/§332——observer 无契约
+版本，不适用版本握手）。
 注册即校验（违反即拒注册，fail-fast）：
 
 - meta 为 :class:`ExtensionMeta` 且 name 带「命名空间.名称」、version 合 semver（§4.1 纪律③）；
@@ -14,6 +16,8 @@ register_reasoning_engine / register_memory_policy / register_agent_slot / regis
 from __future__ import annotations
 
 import re
+from collections.abc import Callable
+from typing import Any
 
 from services.agent.business.kernel.errors import KernelContractError
 from services.agent.business.kernel.extensions import (
@@ -28,6 +32,7 @@ from services.agent.business.kernel.extensions import (
     ReasoningEngine,
     ToolPort,
 )
+from services.agent.business.kernel.hooks import HookName, HookRegistry
 from services.agent.domain.model.kernel_context import ExtensionMeta
 from services.platform.ports.model_port import ModelPort
 
@@ -76,6 +81,7 @@ class ExtensionDispatcher:
         self._execution_backends: dict[str, ExecutionBackend] = {}
         self._agent_slots: dict[str, AgentSlot] = {}
         self._model: ModelPort | None = None
+        self._hooks = HookRegistry()  # H-0a 生命周期钩子（observer-only，唯一 block 点=pre_tool_call）
 
     # ── 注册面 ────────────────────────────────────────────────────────────
     def register_tool(self, tool: ToolPort, *, loop_versions: tuple[str, ...] = (LOOP_CONTRACT_VERSION,)) -> None:
@@ -160,7 +166,21 @@ class ExtensionDispatcher:
             raise KernelContractError("ModelPort 实现缺少 complete_structured（platform 端口契约）")
         self._model = model
 
+    def register_hook(self, event: HookName | str, fn: Callable[..., Any]) -> None:
+        """H-0a hook 注册面（``on(event)``，07 研究 §7.4/§332 L3 通道）。
+
+        与扩展点注册的差异：无 ExtensionMeta/语义标注/版本握手要求——observer 无契约
+        版本，不参与 loop 契约兼容矩阵；事件名为闭合枚举（首批 pre/post_tool_call、
+        on_kernel_event，扩面须锚点评审），未登记名即 ValueError（fail-fast）。
+        """
+        self._hooks.register(HookName(event), fn)
+
     # ── 取用面（内核只认 Protocol）────────────────────────────────────────
+    @property
+    def hooks(self) -> HookRegistry:
+        """H-0a hook 注册表（空注册零开销：调用点判空 fast-path）。"""
+        return self._hooks
+
     @property
     def model(self) -> ModelPort | None:
         return self._model

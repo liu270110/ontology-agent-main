@@ -493,12 +493,14 @@ class AgentKernel:
         event_type: str,
         data: dict[str, Any],
     ) -> None:
-        ledger.append_event(
-            KernelEvent(
-                event_type=event_type,
-                tenant_id=ctx.tenant_id,
-                run_id=run_id,
-                trace_id=ctx.trace_id,
-                data=data,
-            )
+        event = KernelEvent(
+            event_type=event_type,
+            tenant_id=ctx.tenant_id,
+            run_id=run_id,
+            trace_id=ctx.trace_id,
+            data=data,
         )
+        ledger.append_event(event)
+        # H-0a on_kernel_event：锚点事件落账时同步广播给注册 observer（fire-and-forget，
+        # 空注册零开销；hook 回调禁止再调内核——嵌套广播由注册表守卫丢弃）
+        self._dispatcher.hooks.broadcast_kernel_event(event)

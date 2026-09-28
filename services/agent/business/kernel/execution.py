@@ -14,6 +14,7 @@ import logging
 from services.agent.business.kernel.dispatcher import ExtensionDispatcher
 from services.agent.business.kernel.errors import KernelContractError
 from services.agent.business.kernel.gate_baseline import canonical_param_hash
+from services.agent.business.kernel.hooks import Block
 from services.agent.business.kernel.run_context import Emit, RunContext
 from services.agent.business.kernel.spill import SpillStore, spill_if_oversized
 from services.agent.domain.model.kernel_actions import (
@@ -83,7 +84,15 @@ class ExecutionStage:
 
     # ── tools.bindings 分发 ───────────────────────────────────────────────
     async def _execute_tool(self, rc: RunContext, step: PlanStep, *, approval: ApprovalTicket | None) -> None:
-        """工具分发：在途任务可取消追踪 + 结构化失败 + B3 标界 + C3 租户核验。"""
+        """工具分发：在途任务可取消追踪 + 结构化失败 + B3 标界 + C3 租户核验。
+
+        H-0a hook 调用点（评审 2026-09-28 §4；既有结果管线次序不许变）：
+        pre_tool_call hooks 在 invoke 之前求值（B5 审批路由之后）——任一 Block 即
+        合成结构化拒绝 ToolResult（``hook_refusal`` 标记）且**不执行工具**、记审计
+        事件、调用按失败闭合；post_tool_call hooks 在结果管线（B3 标界 → C3 租户
+        核验 → 错误 2048 截断 → spill）全部完成后以 observer 观察（异常吞掉留
+        WARNING，不影响结果；hook 拒绝路径无执行、不通知 post hooks）。
+        """
         state, ctx, ledger, coordinator = rc.states[step.seq], rc.ctx, rc.ledger, rc.coordinator
         tool = self._dispatcher.tool_for(step.action_iri)
         assert tool is not None  # 门禁已断言绑定存在（B1 R1）；类型收窄用
@@ -95,41 +104,77 @@ class ExecutionStage:
             step_seq=step.seq,
         )
         ledger.open_tool_call(call)
-        invoke_task = asyncio.create_task(
-            tool.invoke(call, ctx, approval=approval, timeout_ms=int(self._tool_timeout_s * 1000))
-        )
-        coordinator.track_tool_task(call.call_id, invoke_task)
-        invoke_task.add_done_callback(lambda _t, call_id=call.call_id: coordinator.untrack_tool_task(call_id))
-        try:
-            result = await asyncio.wait_for(asyncio.shield(invoke_task), timeout=self._tool_timeout_s)
-        except TimeoutError:  # 单调用超时 → 结构化失败（禁异常逃逸循环；任务留协调器可取消）
-            result = ToolResult(
-                ok=False,
-                error_code=int(ErrorCode.MCP_TARGET_UNAVAILABLE),
-                error_message="工具调用超时（结构化失败）",
+        hooks = self._dispatcher.hooks
+        blocked: Block | None = None
+        if hooks.pre_tool_call_hooks:  # 空注册零开销（fast-path 判空）
+            decision = await hooks.run_pre_tool_call(call, ctx)  # 唯一 block 点（H-0a）
+            blocked = decision if isinstance(decision, Block) else None
+        if blocked is not None:
+            # hook 拒绝：内核合成结构化 ToolResult（B3/C3 对内核自产结果恒为 no-op：
+            # 默认 agent_attested、无租户声明），仅走 2048 截断保守处理超长 reason
+            result = self.truncate_error(
+                ToolResult(
+                    ok=False,
+                    error_code=int(ErrorCode.SCOPE_INSUFFICIENT),
+                    error_message=f"hook 拒绝（pre_tool_call Block）: {blocked.reason}",
+                    output={
+                        "hook_refusal": True,
+                        "reason": blocked.reason,
+                        "message": blocked.structured_message or blocked.reason,
+                    },
+                )
             )
-        except asyncio.CancelledError:
-            raise  # 取消传播：未闭合调用由取消清单以取消错误闭合（§2.4 步骤 2）
-        except Exception as exc:  # 能力实现裸异常 → 结构化转义（B 契约：禁裸异常逃逸）
-            logger.warning("工具 %s 裸异常转义: %s", tool.meta.name, exc)
-            result = ToolResult(
-                ok=False,
-                error_code=int(ErrorCode.INTERNAL_ERROR),
-                error_message=f"工具实现裸异常: {type(exc).__name__}",
+            ledger.close_tool_call(call.call_id, error_code=result.error_code)
+            self._emit(
+                ledger,
+                ctx,
+                state.run_id,
+                "kernel.hook_refused",
+                {
+                    "step_seq": state.seq,
+                    "call_id": str(call.call_id),
+                    "action_iri": step.action_iri,
+                    "reason": blocked.reason,
+                },
             )
-        result = self.mark_untrusted(result)  # B3：自称 externally_verified 一律降权
-        result = self.reject_cross_tenant(result, ctx)  # C3：产出声明租户≠注入租户 → 拒收
-        result = self.truncate_error(result)  # 错误正文 2048 硬截断（§11.2-2）
-        if self._spill_store is not None and result.ok:  # spill（§11.2-11）：超大成功结果→预览+locator
-            result = await spill_if_oversized(
-                result,
-                self._spill_store,
-                key=f"spill/{ctx.tenant_id}/{state.run_id}/{call.call_id}.json",
+        else:
+            invoke_task = asyncio.create_task(
+                tool.invoke(call, ctx, approval=approval, timeout_ms=int(self._tool_timeout_s * 1000))
             )
-        usage_tokens = result.usage.get("total_tokens")
-        if isinstance(usage_tokens, int) and usage_tokens > 0:
-            rc.tracker.add_tokens(usage_tokens)  # A4 token 记账（工具回传口径）
-        ledger.close_tool_call(call.call_id, error_code=None if result.ok else result.error_code)
+            coordinator.track_tool_task(call.call_id, invoke_task)
+            invoke_task.add_done_callback(lambda _t, call_id=call.call_id: coordinator.untrack_tool_task(call_id))
+            try:
+                result = await asyncio.wait_for(asyncio.shield(invoke_task), timeout=self._tool_timeout_s)
+            except TimeoutError:  # 单调用超时 → 结构化失败（禁异常逃逸循环；任务留协调器可取消）
+                result = ToolResult(
+                    ok=False,
+                    error_code=int(ErrorCode.MCP_TARGET_UNAVAILABLE),
+                    error_message="工具调用超时（结构化失败）",
+                )
+            except asyncio.CancelledError:
+                raise  # 取消传播：未闭合调用由取消清单以取消错误闭合（§2.4 步骤 2）
+            except Exception as exc:  # 能力实现裸异常 → 结构化转义（B 契约：禁裸异常逃逸）
+                logger.warning("工具 %s 裸异常转义: %s", tool.meta.name, exc)
+                result = ToolResult(
+                    ok=False,
+                    error_code=int(ErrorCode.INTERNAL_ERROR),
+                    error_message=f"工具实现裸异常: {type(exc).__name__}",
+                )
+            result = self.mark_untrusted(result)  # B3：自称 externally_verified 一律降权
+            result = self.reject_cross_tenant(result, ctx)  # C3：产出声明租户≠注入租户 → 拒收
+            result = self.truncate_error(result)  # 错误正文 2048 硬截断（§11.2-2）
+            if self._spill_store is not None and result.ok:  # spill（§11.2-11）：超大成功结果→预览+locator
+                result = await spill_if_oversized(
+                    result,
+                    self._spill_store,
+                    key=f"spill/{ctx.tenant_id}/{state.run_id}/{call.call_id}.json",
+                )
+            if hooks.post_tool_call_hooks:  # observer：仅实际执行过的调用（空注册零开销）
+                await hooks.run_post_tool_call(result, ctx)
+            usage_tokens = result.usage.get("total_tokens")
+            if isinstance(usage_tokens, int) and usage_tokens > 0:
+                rc.tracker.add_tokens(usage_tokens)  # A4 token 记账（工具回传口径）
+            ledger.close_tool_call(call.call_id, error_code=None if result.ok else result.error_code)
         rc.results[step.seq] = StepResult(
             step_id=state.step_id,
             run_id=state.run_id,

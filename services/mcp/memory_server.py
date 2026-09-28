@@ -11,6 +11,7 @@ write/forget（06 §6 表）涉写入与软删，待审批接续任务经候选�
 
 from __future__ import annotations
 
+import asyncio
 import uuid
 from typing import TYPE_CHECKING, Any
 
@@ -73,10 +74,15 @@ async def memory_read(record_id: str) -> dict[str, Any]:
     }
 
 
-def ontology_validate(payload: dict[str, Any]) -> dict[str, Any]:
-    """mem 候选 SHACL 校验（返回 valid + violations 清单；同步 rdflib 栈直调；只读）。"""
+def _ontology_validate_impl(payload: dict[str, Any]) -> dict[str, Any]:
+    """SHACL 校验核心（同步 rdflib/pySHACL 栈；供工具包装与测试直调）。"""
     violations = validate_mem_record(payload)
     return {"valid": not violations, "violations": violations}
+
+
+async def ontology_validate(payload: dict[str, Any]) -> dict[str, Any]:
+    """mem 候选 SHACL 校验（返回 valid + violations 清单；同步 rdflib 栈经 to_thread 卸载）。"""
+    return await asyncio.to_thread(_ontology_validate_impl, payload)
 
 
 # 注册为 MCP tool：fastmcp 的 @mcp.tool 会以 FunctionTool 遮蔽原函数名，此处显式注册

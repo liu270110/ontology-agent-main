@@ -68,8 +68,9 @@ async def test_memory_read_not_found(fake_repo):
     assert out == {"found": False}
 
 
-def test_ontology_validate_tool_sync():
-    ok = server.ontology_validate(
+async def test_ontology_validate_tool():
+    """公网面直调（含 to_thread 卸载路径）；同步核心另由 _ontology_validate_impl 覆盖语义。"""
+    ok = await server.ontology_validate(
         {
             "record_type": "mem:FactClaim",
             "subject_iri": "http://e/s1",
@@ -78,7 +79,7 @@ def test_ontology_validate_tool_sync():
         }
     )
     assert ok["valid"] is True and ok["violations"] == []
-    bad = server.ontology_validate({"record_type": "mem:FactClaim", "confidence": 0.9})
+    bad = await server.ontology_validate({"record_type": "mem:FactClaim", "confidence": 0.9})
     assert bad["valid"] is False and bad["violations"]
 
 

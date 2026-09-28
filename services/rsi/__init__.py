@@ -10,6 +10,11 @@ B9 G0 批（2026-09-29，09 §13.3/§13.4）追加：进化面注册表（surfac
 零 LLM）、缺口轨信号汇（sinks.py：台账 FAILED→execution_failure、dispatcher resolve-miss
 →unbound_action）与 TriggerTrack.GAP 枚举位。**sinks.py 因依赖 writeback 台账域模型不进
 包根命名空间**（防包根 import 拉起跨模块边）——直 ``from services.rsi.sinks import …``。
+
+B10 G1 批（2026-09-29，09 §13.3 G1）追加：起草引擎 drafter.py（三级降路径 L1 组合既有
+工具→L2 市场检索→L3 LLM 起草过确定性校验；产物只写 envelope["draft_artifact"] 不迁状态）。
+**drafter.py 因依赖 ontology.core.tbox（种子装载）与 platform.ports（模型端口）同不进包根
+命名空间**——直 ``from services.rsi.drafter import …``。
 """
 
 from __future__ import annotations

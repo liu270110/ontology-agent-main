@@ -245,6 +245,27 @@ _SCOPE_HINT = (
 )
 
 
+async def await_session_idle(client: httpx.AsyncClient, args: argparse.Namespace, sid: str, token: str, *, timeout_s: float = 90.0) -> bool:
+    """等待会话无活跃任务（running/queued/waiting_tool 全无）。
+
+    无 LLM 渠道环境：RUN_ERROR(5002) 触发 task_worker 重试监督（failed+attempt<3 → 退避后新
+    run），POST 会话消息窗口期撞 4102 属设计内交互（03 §3 预检）——判定③连发两轮前须等
+    重试链耗尽（3 次 × 退避 ≈ 15~60s）。
+    """
+    deadline = asyncio.get_event_loop().time() + timeout_s
+    while asyncio.get_event_loop().time() < deadline:
+        tasks = await rest_json(client, "GET", f"{args.gateway_a}{_PREFIX}/tasks?session_id={sid}&status=running", token)
+        items = tasks.get("data") or tasks.get("items") or []
+        if not items:
+            queued = await rest_json(client, "GET", f"{args.gateway_a}{_PREFIX}/tasks?session_id={sid}&status=queued", token)
+            items = queued.get("data") or queued.get("items") or []
+            if not items:
+                return True
+        await asyncio.sleep(2.0)
+    return False
+
+
+
 # ── 四个判定 ─────────────────────────────────────────────────────────────────
 
 
@@ -282,6 +303,8 @@ async def judge_2_reconnect(
     client: httpx.AsyncClient, args: argparse.Namespace, sid: str, token: str
 ) -> tuple[bool, str]:
     """② 断线重连（api/02 §4）：从 A 断开 → Last-Event-ID 重连 B，回放+实时不重不漏。"""
+    if not await await_session_idle(client, args, sid, token):  # ①后重试窗口规避（同③注记，防相位 flake）
+        return False, "①后任务链未空闲即进入②，撞 4102 窗口"
     url_a = f"{args.gateway_a}{_PREFIX}/sessions/{sid}/events"
     url_b = f"{args.gateway_b}{_PREFIX}/sessions/{sid}/events"
     # 阶段 1：A 副本在线订阅，收完一轮（在线期最后一帧 id = 断点 last_event_id）
@@ -339,9 +362,14 @@ async def judge_3_replay_window(
     """③ 回放窗口（api/02 §4）：last_event_id 早于窗口 → HTTP 410 + code 4301；窗内仍可订阅。"""
     url_b = f"{args.gateway_b}{_PREFIX}/sessions/{sid}/events"
     stream_key = _STREAM_KEY.format(sid=sid)
+    # 重试监督交互窗口规避：连发前等待会话任务链耗尽（见 await_session_idle 注记）
+    if not await await_session_idle(client, args, sid, token):
+        return False, "会话任务链未空闲（重试监督循环中），无法构造缺口窗口"
     # 缺口构造：两轮发布使 last_event_id 与窗口最旧条目拉开 ≥2（缺口判定=oldest-1 > last_event_id）
     final = await post_message(client, args.gateway_a, sid, token, "B1-判定③-超窗位点轮")
     stale_id = _seqs(final)[-1]
+    if not await await_session_idle(client, args, sid, token):
+        return False, "第二轮前会话任务链未空闲"
     extra = await post_message(client, args.gateway_a, sid, token, "B1-判定③-缺口拉开轮")
     if _seqs(extra)[-1] - stale_id < 2:
         return False, f"事件间隔不足（latest={_seqs(extra)[-1]}, stale={stale_id}），无法构造缺口"
@@ -482,7 +510,7 @@ async def main() -> int:
             except redis.RedisError as exc:
                 print(f"[清理] Redis 键清理失败（不影响判定）: {exc}")
     finally:
-        rds.aclose()
+        getattr(rds, "aclose", rds.close)()
 
     passed = sum(1 for _, ok, _ in results if ok)
     print("\n=== 批次 B-① 双副本 SSE 压测结果（api/02 §4/§5）===")

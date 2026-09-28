@@ -9,6 +9,7 @@ send_message 适用豁免①（消息落库 + 任务受理同一事务，03 §6.
 
 from __future__ import annotations
 
+import inspect
 import uuid
 from collections.abc import AsyncIterator, Awaitable, Callable
 from typing import Annotated, Any, Protocol
@@ -445,7 +446,12 @@ def _chat_stream_response(
         else:
             source = orchestrator.stream_chat(command)
         async for event in source:
-            _, frame = hub.publish(session_id, event.name.value, event.data)
+            # hub 形态二态：进程内 publish=同步二元组，Redis Stream publish=协程（双副本形态）——
+            # 双副本压测（批次 B-①）暴露的形态差异 bug，统一在此收敛
+            published = hub.publish(session_id, event.name.value, event.data)
+            if inspect.isawaitable(published):
+                published = await published
+            _, frame = published
             yield frame
 
     _ = settings

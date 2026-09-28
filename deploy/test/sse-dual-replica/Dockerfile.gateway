@@ -2,7 +2,7 @@
 # 仓库尚无正式网关 Dockerfile（deploy/README 规划中的 gateway 服务未落 compose），
 # 本镜像仅为压测资产：构建上下文=仓库根，依赖唯一事实源 requirements.txt（pyproject 薄导出）。
 # 构建由 docker-compose.sse-dual.yml 的 build 段触发，不手工 docker build。
-FROM python:3.11-slim
+FROM python:3.12-slim
 
 ENV PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
@@ -12,7 +12,7 @@ WORKDIR /app
 
 # 先装依赖再拷源码：requirements 未变时源码改动不击穿依赖层缓存
 COPY requirements.txt ./
-RUN pip install -r requirements.txt
+RUN pip install -r requirements.txt greenlet  # greenlet：sqlalchemy asyncio 必需（host 经传递依赖满足，镜像显式补）
 
 COPY alembic.ini ./
 COPY services ./services

@@ -40,6 +40,22 @@ class WritebackLedgerRepository(Protocol):
         """对账扫描（§4.1 非终态清单；updated_at 升序，优先最老未决行）。"""
         ...  # pragma: no cover — Protocol 方法无实现
 
+    async def list_page(
+        self,
+        tenant_id: UUID,
+        *,
+        status: LedgerStatus | None = None,
+        needs_human: bool | None = None,
+        offset: int = 0,
+        limit: int = 50,
+    ) -> tuple[list[WritebackLedger], int]:
+        """admin 台账分页（api/01 §5.8 GET /admin/writeback/ledger；§8 查询面）。
+
+        显式租户入参（admin 面口径，区别于 relay 内部扫描）；status/needs_human 过滤，
+        updated_at 倒序（最新优先），total 独立 count（与行集解耦的分页元数据）。
+        """
+        ...  # pragma: no cover — Protocol 方法无实现
+
 
 @runtime_checkable
 class OutboxRepository(Protocol):

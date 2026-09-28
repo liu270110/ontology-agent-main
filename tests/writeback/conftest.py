@@ -87,6 +87,24 @@ class FakeLedgerRepo:
         selected.sort(key=lambda r: r.updated_at or NOW)
         return selected[:limit]
 
+    async def list_page(
+        self,
+        tenant_id: uuid.UUID,
+        *,
+        status: Any = None,
+        needs_human: bool | None = None,
+        offset: int = 0,
+        limit: int = 50,
+    ) -> tuple[list[WritebackLedger], int]:
+        """admin 台账分页（api/01 §5.8）：租户过滤与 PG 实现同形（他租户行不可见）。"""
+        selected = [r for r in self.rows.values() if r.tenant_id == tenant_id]
+        if status is not None:
+            selected = [r for r in selected if r.status == status]
+        if needs_human is not None:
+            selected = [r for r in selected if r.needs_human == needs_human]
+        selected.sort(key=lambda r: (r.updated_at or NOW, r.id), reverse=True)  # updated_at 倒序同 PG
+        return selected[offset : offset + limit], len(selected)
+
     def by_key(self, idempotency_key: str) -> WritebackLedger | None:
         return next((r for r in self.rows.values() if r.idempotency_key == idempotency_key), None)
 

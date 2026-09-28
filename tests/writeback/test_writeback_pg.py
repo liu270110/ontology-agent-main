@@ -5,6 +5,7 @@ from __future__ import annotations
 import sys
 import uuid
 from collections.abc import AsyncIterator
+from datetime import UTC, datetime
 
 import pytest
 from sqlalchemy import delete, select
@@ -24,7 +25,14 @@ from services.writeback.data.repo_impl.writeback_repo import (
     PgOutboxRepository,
     PgWritebackLedgerRepository,
 )
-from services.writeback.domain.model import LedgerStatus, OutboxEvent, OutboxStatus, WritebackAction, WritebackLedger
+from services.writeback.domain.model import (
+    LedgerStatus,
+    OutboxEvent,
+    OutboxStatus,
+    WritebackAction,
+    WritebackError,
+    WritebackLedger,
+)
 
 if sys.platform == "win32":
     import asyncio
@@ -226,6 +234,42 @@ async def test_Pg台账仓储_状态前向迁移落库_对账扫描升序(wb_pg)
         assert loaded.receipt is not None and loaded.receipt["receipt_no"] == "ORD-PG-1"
         pending = await repo.list_by_statuses([LedgerStatus.ACCEPTED], limit=10)
         assert [e.id for e in pending] == [entry.id]  # 对账扫描面可达
+
+
+async def test_Pg台账list_page_租户过滤_分页total_admin面口径(wb_pg):
+    """admin 台账分页（api/01 §5.8）：租户显式入参 + 防御性双保险、status/needs_human 过滤、total 独立。"""
+    entry = _entry(
+        WritebackAction.instantiate(
+            tenant_id=TENANT_ID,
+            action_iri="http://ontology-agent.local/o/power#CreateOutageRepairOrder",
+            params={"a": 1},
+            risk_level="medium",
+            connector_id=uuid.uuid4(),
+        )
+    )
+    async with wb_pg() as db:
+        repo = PgWritebackLedgerRepository(db, TENANT_ID)
+        await repo.add(entry)
+        entry.mark_unknown(entry.created_at or datetime.now(UTC))
+        entry.note_incident("RECON_DEADLINE: 测试挂人工位", entry.updated_at or entry.created_at or datetime.now(UTC))
+        await repo.save_state(entry)
+        await db.commit()
+
+    async with wb_pg() as db:
+        repo = PgWritebackLedgerRepository(db, TENANT_ID)
+        rows, total = await repo.list_page(TENANT_ID, status=LedgerStatus.UNKNOWN, needs_human=True)
+        assert [e.id for e in rows] == [entry.id] and total == 1  # 过滤命中 + total 独立
+        rows, total = await repo.list_page(TENANT_ID, needs_human=False)
+        assert rows == [] and total == 0  # needs_human=False 过滤
+        with pytest.raises(WritebackError) as exc:  # 租户不匹配：构造期绑定 × 入参双保险
+            await repo.list_page(uuid.uuid4())
+        assert "租户不匹配" in exc.value.message
+
+    async with wb_pg() as db:  # 他租户视角（独立绑定）：本租户行不可见
+        other_tenant = uuid.uuid4()
+        foreign = PgWritebackLedgerRepository(db, other_tenant)
+        rows, total = await foreign.list_page(other_tenant)
+        assert rows == [] and total == 0
 
 
 def _entry(action: WritebackAction) -> WritebackLedger:

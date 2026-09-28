@@ -45,6 +45,9 @@ logger = logging.getLogger("services.writeback.dispatcher")
 # （HTTP 状态码对齐语义，api/03 §2 显式登记），非新编业务码。
 _NOT_FOUND = 404
 
+# admin 台账面（api/01 §5.8 ★ 两端点；业务回写设计 §3.3 人工处置三动作 / §8 查询面）
+_DISPOSE_ACTIONS: frozenset[str] = frozenset({"redispatch", "mark_compensated", "close"})
+
 
 def _utcnow() -> datetime:
     return datetime.now(UTC)
@@ -77,6 +80,12 @@ def project_status(entry: WritebackLedger) -> dict[str, Any]:
         "last_error": entry.last_error,
         "updated_at": entry.updated_at.isoformat() if entry.updated_at else None,
     }
+
+
+def _audit_note(note: str | None, actor_id: str | None) -> str | None:
+    """人工处置审计注记：处置理由 + 处置人，追加式留痕（§3.3 全部留审计）。"""
+    parts = [p for p in (note, f"by={actor_id}" if actor_id else None) if p]
+    return "；".join(parts) or None
 
 
 class ActionDispatcher:
@@ -375,6 +384,128 @@ class ActionDispatcher:
         await self._save(tenant_id, entry, commit=True)
         logger.info("writeback compensated: ledger=%s reason=%s", entry.id, reason)
         return project_entry(entry)
+
+    # ---------------------------------------------------------------- admin 台账面（api/01 §5.8；§3.3/§8）
+
+    async def list_ledger(
+        self,
+        *,
+        tenant_id: uuid.UUID,
+        status: str | None = None,
+        needs_human: bool | None = None,
+        offset: int = 0,
+        limit: int = 50,
+    ) -> dict[str, Any]:
+        """台账分页查询（api/01 §5.8 GET /admin/writeback/ledger；§8 查询面）。
+
+        薄投影复用 project_status（= project_entry + last_error/updated_at，与单条详情/
+        writeback.status 同形，api/01 §6.5 示例行全字段）；租户过滤在仓储层（他租户行不可见）；
+        status 非法值 3001（api/03 §3.9 状态枚举）。
+        """
+        status_filter: LedgerStatus | None = None
+        if status is not None:
+            try:
+                status_filter = LedgerStatus(status)
+            except ValueError as exc:
+                raise WritebackError(ErrorCode.PARAM_INVALID, f"非法台账状态: {status}（§2.5 状态枚举）") from exc
+        async with self._ledger(tenant_id) as repo:
+            items, total = await repo.list_page(
+                tenant_id, status=status_filter, needs_human=needs_human, offset=offset, limit=limit
+            )
+        return {"items": [project_status(e) for e in items], "total": total, "offset": offset, "limit": limit}
+
+    async def dispose(
+        self,
+        *,
+        tenant_id: uuid.UUID,
+        ledger_id: str | uuid.UUID,
+        action: str,
+        note: str | None = None,
+        actor_id: str | None = None,
+    ) -> dict[str, Any]:
+        """人工处置（api/01 §5.8 POST /admin/writeback/ledger/{id}/dispose；§3.3 三动作）。
+
+        - redispatch：unknown/failed（含挂人工位的 pending）重开投递窗口——同幂等键复用
+          ``_dispatch`` 既有重试入口（新 attempt 计数；业务侧按键幂等不重复创建，§2.2）；
+        - mark_compensated：原单有受理凭证 → 委托 ``compensate``（§3.2 业务冲正契约，凭证据证）；
+          无凭证 → 显式人工标记（note 必填；人工标记收据落 receipt 审计位，``manual=true``）；
+        - close：附理由前向定性 failed 终局 + needs_human 清位（§3.3 关闭附理由）；
+        - 状态迁移必经聚合方法（前向纪律）；不可处置态（终态关闭/accepted 重发等）3003→REST 409；
+          留痕统一追加写 ledger.last_error（聚合唯一自由文本审计位，docstring 见聚合方法）。
+        """
+        if action not in _DISPOSE_ACTIONS:
+            raise WritebackError(
+                ErrorCode.PARAM_INVALID, f"action 须为 redispatch/mark_compensated/close 之一: {action}"
+            )
+        async with self._ledger(tenant_id) as repo:
+            entry = await repo.get(_coerce_uuid(ledger_id, "ledger_id"))
+        if entry is None:
+            raise WritebackError(_NOT_FOUND, "台账行不存在（按所给键未命中或跨租户）")
+        audit = _audit_note(note, actor_id)
+        if action == "redispatch":
+            await self._dispose_redispatch(tenant_id, entry, audit)
+        elif action == "mark_compensated":
+            await self._dispose_compensate(tenant_id, entry, note, actor_id)
+        else:
+            await self._dispose_close(tenant_id, entry, audit)
+        return project_status(entry)
+
+    async def _dispose_redispatch(self, tenant_id: uuid.UUID, entry: WritebackLedger, note: str | None) -> None:
+        """重发（§3.3）：仅 unknown/failed（含挂人工位的 pending）可重开投递窗口。"""
+        if entry.is_terminal or entry.status is LedgerStatus.ACCEPTED:
+            raise WritebackError(
+                ErrorCode.VERSION_CONFLICT,
+                f"台账状态不可重发: {entry.status.value}（终态/accepted 不可重发——accepted 处置走冲正或关闭，§3.3）",
+                detail={"ledger_id": str(entry.id), "status": entry.status.value},
+            )
+        if entry.status is LedgerStatus.PENDING and not entry.needs_human:
+            raise WritebackError(
+                ErrorCode.VERSION_CONFLICT,
+                "pending 态在投递窗口内（对账/重试自然续投），无需人工重发",
+                detail={"ledger_id": str(entry.id)},
+            )
+        binding = self._require_binding(entry.connector_id)
+        entry.mark_redispatched(self._now(), note=note)
+        await self._save(tenant_id, entry, commit=True)  # 两段式第一段：重发意图先落台账
+        await self._dispatch(tenant_id, entry, binding)  # 复用投递循环：同幂等键新 attempt
+
+    async def _dispose_compensate(
+        self, tenant_id: uuid.UUID, entry: WritebackLedger, note: str | None, actor_id: str | None
+    ) -> None:
+        """标记冲正（§3.3）：凭证据证走 §3.2 冲正契约；无凭证显式人工标记（note 必填）。"""
+        if entry.receipt:
+            await self.compensate(
+                tenant_id=tenant_id,
+                ledger_id=entry.id,
+                reason=_audit_note(note or "人工标记冲正（原单凭证据证）", actor_id) or "人工标记冲正",
+            )
+            return
+        if not note:
+            raise WritebackError(ErrorCode.PARAM_INVALID, "无凭证的人工标记冲正必须附 note（审计留痕，§3.3）")
+        receipt = {
+            "accepted": True,
+            "receipt_no": "",
+            "idempotency_key": f"{entry.idempotency_key}:compensate",
+            "occurred_at": self._now().isoformat(),
+            "manual": True,  # 显式人工标记（无业务凭证；审计依据=note+处置人，§3.3 留审计）
+            "note": note,
+            "marked_by": actor_id,
+        }
+        entry.mark_compensated(receipt, self._now())  # 迁移合法性由聚合闸门（pending/终态外均可）
+        await self._save(tenant_id, entry, commit=True)
+
+    async def _dispose_close(self, tenant_id: uuid.UUID, entry: WritebackLedger, note: str | None) -> None:
+        """关闭（§3.3 附理由）：未决态前向定性 failed 终局，needs_human 清位，理由留痕。"""
+        if not note:
+            raise WritebackError(ErrorCode.PARAM_INVALID, "关闭必须附理由（§3.3 关闭附理由，审计留痕）")
+        if entry.is_terminal:
+            raise WritebackError(
+                ErrorCode.VERSION_CONFLICT,
+                f"终态不可关闭: {entry.status.value}（succeeded/compensated 已终局，§2.5）",
+                detail={"ledger_id": str(entry.id), "status": entry.status.value},
+            )
+        entry.mark_closed(note, self._now())
+        await self._save(tenant_id, entry, commit=True)
 
     # ---------------------------------------------------------------- 对账（§4）
 

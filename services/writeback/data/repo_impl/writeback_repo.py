@@ -15,7 +15,7 @@ from collections.abc import Sequence
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import select, update
+from sqlalchemy import func, select, update
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -134,6 +134,39 @@ class PgWritebackLedgerRepository:
         )
         rows = (await self._db.execute(stmt)).scalars().all()
         return [_entry_from_orm(r) for r in rows]
+
+    async def list_page(
+        self,
+        tenant_id: uuid.UUID,
+        *,
+        status: LedgerStatus | None = None,
+        needs_human: bool | None = None,
+        offset: int = 0,
+        limit: int = 50,
+    ) -> tuple[list[WritebackLedger], int]:
+        """admin 台账分页（api/01 §5.8）：租户显式入参 + 构造期绑定双保险（防御跨租户）；
+        status/needs_human 过滤，updated_at 倒序走 idx_writeback_recon（§8），total 独立 count。"""
+        if tenant_id != self._tenant_id:
+            raise WritebackError(ErrorCode.TENANT_MISMATCH, "租户不匹配：拒绝查询他租户台账")
+        where = [WritebackLedgerORM.tenant_id == self._tenant_id]
+        if status is not None:
+            where.append(WritebackLedgerORM.status == status.value)
+        if needs_human is not None:
+            where.append(WritebackLedgerORM.needs_human == needs_human)
+        total = int(
+            (
+                await self._db.execute(select(func.count()).select_from(WritebackLedgerORM).where(*where))
+            ).scalar_one()
+        )
+        stmt = (
+            select(WritebackLedgerORM)
+            .where(*where)
+            .order_by(WritebackLedgerORM.updated_at.desc(), WritebackLedgerORM.id.desc())
+            .offset(offset)
+            .limit(limit)
+        )
+        rows = (await self._db.execute(stmt)).scalars().all()
+        return [_entry_from_orm(r) for r in rows], total
 
 
 def _is_idem_conflict(exc: IntegrityError) -> bool:

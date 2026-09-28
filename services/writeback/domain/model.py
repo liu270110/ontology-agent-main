@@ -2,8 +2,10 @@
 
 权威设计：docs/MCP/业务回写设计 §2（回写契约：幂等键/受理凭证/状态机）、§8（数据模型）；
 docs/api/03 §3.7/§7（action.invoke 契约）。状态只前进不回退（设计宪法 5 全程可追溯）；
-台账状态机 = 业务回写设计 §2.5 状态图（唯一扩展：succeeded→compensated，§3.2 冲正触发
-「平台已记成功而业务实际失败」的前向冲正，保持单调性，见模块报告）。
+台账状态机 = 业务回写设计 §2.5 状态图（两处登记扩展，均保持单调可追溯，见模块报告）：
+① succeeded→compensated（§3.2 冲正触发「平台已记成功而业务实际失败」的前向冲正）；
+② unknown/failed→pending 受控重入（§3.3 人工处置·重发：同幂等键新 attempt 重开投递窗口，
+``mark_redispatched`` 唯一入口，attempts/last_error 保留不抹，needs_human 清位）。
 """
 
 from __future__ import annotations
@@ -37,6 +39,11 @@ class DuplicateIdempotencyKeyError(Exception):
     def __init__(self, existing: WritebackLedger) -> None:
         super().__init__(f"幂等键已受理: {existing.idempotency_key}")
         self.existing = existing
+
+
+def _append_audit(existing: str | None, note: str) -> str:
+    """审计留痕追加式（§4.2「不允许直接改写历史台账行」：人工处置注记只增不覆盖）。"""
+    return f"{existing} || {note}" if existing else note
 
 
 # ---------------------------------------------------------------- 台账状态机（业务回写设计 §2.5）
@@ -161,6 +168,37 @@ class WritebackLedger(BaseModel):
         """补偿失败/对账超时进人工干预队列（§3.3 死信不静默：needs_human=true，状态不变）。"""
         self.last_error = last_error
         self.needs_human = True
+        self.updated_at = now
+
+    def mark_redispatched(self, now: datetime, *, note: str | None = None) -> None:
+        """人工处置·重发（§3.3）：unknown/failed（含挂人工位的 pending）重开投递窗口回到
+        pending，同幂等键走新 attempt 再投（业务侧按键幂等不重复创建，§2.2）。
+
+        状态机 §2.5 的 §3.3 人工处置扩展（模块 docstring 扩展②）：仅 unknown/failed/pending
+        三态可达；accepted/终态不可重发（3003，调用方映射 409）。needs_human 清位（回到自动
+        投递管线）；attempts/last_error 保留不抹（全程可追溯）；note 追加留痕 last_error。
+        """
+        if self.status not in (LedgerStatus.PENDING, LedgerStatus.UNKNOWN, LedgerStatus.FAILED):
+            raise WritebackError(
+                ErrorCode.VERSION_CONFLICT,
+                f"台账状态不可重发: {self.status.value}（仅 unknown/failed/pending 可人工重发，§3.3）",
+                detail={"ledger_id": str(self.id), "from": self.status.value},
+            )
+        if self.status is not LedgerStatus.PENDING:
+            self.status = LedgerStatus.PENDING
+        if note:
+            self.last_error = _append_audit(self.last_error, f"REDISPATCH: {note}")
+        self.needs_human = False
+        self.updated_at = now
+
+    def mark_closed(self, note: str, now: datetime) -> None:
+        """人工处置·关闭（§3.3 附理由）：未决态前向定性 failed 终局（pending/accepted/unknown
+        →failed 均为 §2.5 合法迁移；已 failed 原态关闭），needs_human 清位；关闭理由追加留痕
+        last_error。终态（succeeded/compensated）不可关闭（_transit 拒绝 → 3003/409）。"""
+        if self.status is not LedgerStatus.FAILED:
+            self._transit(LedgerStatus.FAILED, now)  # 终态/非法迁移在此抛 3003（前向纪律）
+        self.last_error = _append_audit(self.last_error, f"CLOSED: {note}")
+        self.needs_human = False
         self.updated_at = now
 
     @property

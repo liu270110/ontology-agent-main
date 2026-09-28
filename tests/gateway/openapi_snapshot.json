@@ -6091,6 +6091,38 @@
         "title": "WindowMessageIn",
         "type": "object"
       },
+      "WritebackLedgerDisposeIn": {
+        "additionalProperties": false,
+        "description": "人工处置入参（api/01 §5.8 POST .../dispose；§3.3：重发/标记冲正/关闭附理由）。",
+        "properties": {
+          "action": {
+            "enum": [
+              "redispatch",
+              "mark_compensated",
+              "close"
+            ],
+            "title": "Action",
+            "type": "string"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          }
+        },
+        "required": [
+          "action"
+        ],
+        "title": "WritebackLedgerDisposeIn",
+        "type": "object"
+      },
       "WritebackLedgerOut": {
         "additionalProperties": false,
         "description": "回写台账状态查询输出（api/03 §3.9：状态机全字段 + updated_at；额外含受理凭证 receipt）。",
@@ -6166,6 +6198,39 @@
           "updated_at"
         ],
         "title": "WritebackLedgerOut",
+        "type": "object"
+      },
+      "WritebackLedgerPageOut": {
+        "additionalProperties": false,
+        "description": "台账分页输出（api/01 §5.8 GET /admin/writeback/ledger；行=单条详情同形投影）。",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/WritebackLedgerOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "limit": {
+            "title": "Limit",
+            "type": "integer"
+          },
+          "offset": {
+            "title": "Offset",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "offset",
+          "limit"
+        ],
+        "title": "WritebackLedgerPageOut",
         "type": "object"
       }
     }
@@ -6330,6 +6395,103 @@
         ]
       }
     },
+    "/api/v1/admin/writeback/ledger": {
+      "get": {
+        "description": "分页列出本租户台账行（api/01 §5.8；租户过滤在仓储层，updated_at 倒序最新优先）。",
+        "operationId": "list_writeback_ledger_api_v1_admin_writeback_ledger_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "pending",
+                    "accepted",
+                    "succeeded",
+                    "failed",
+                    "compensated",
+                    "unknown"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          {
+            "in": "query",
+            "name": "needs_human",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Needs Human"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WritebackLedgerPageOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "回写台账分页查询（status/needs_human 过滤；§3.3 人工队列经 needs_human=true）",
+        "tags": [
+          "writeback"
+        ]
+      }
+    },
     "/api/v1/admin/writeback/ledger/{ledger_id}": {
       "get": {
         "description": "按 id 查本租户台账行（租户过滤在仓储层；跨租户一律「不存在」不泄露存在性）。",
@@ -6369,6 +6531,60 @@
           }
         },
         "summary": "回写台账单条详情（writeback.status 的 REST 对应；含 receipt 凭证与 attempts）",
+        "tags": [
+          "writeback"
+        ]
+      }
+    },
+    "/api/v1/admin/writeback/ledger/{ledger_id}/dispose": {
+      "post": {
+        "description": "人工处置台账行（§3.3 三动作；处置人取 principal，处置理由/注记由 dispatcher 追加留痕）。\n\n202=处置受理（redispatch 的外部投递异步完成，响应体为落账后投影）；不可处置态 409（3003）、\n未找到 404、缺必填 note 3001——沿 _domain_error 单口径映射。",
+        "operationId": "dispose_writeback_ledger_api_v1_admin_writeback_ledger__ledger_id__dispose_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "ledger_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Ledger Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WritebackLedgerDisposeIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WritebackLedgerOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "人工处置：redispatch 重发（同幂等键新 attempt）/ mark_compensated 标记冲正 / close 关闭（§3.3）",
         "tags": [
           "writeback"
         ]

@@ -73,6 +73,14 @@ class Settings(BaseSettings):
     # 新会话拒绑、存量 Run 跑完；成功清零自愈）
     agent_degrade_threshold: int = 3
 
+    # H-2 上下文工程（2026-09-29 批，docs/Agent/07 边界契约 D-7/F-2/F-4 三层归属：
+    # 策略=能力层/阈值=配置层/断点=内核）。context_budget_tokens=组装器绝对预算
+    # （A1，原 kernel/grounding.py 的 GROUNDING_BUDGET_TOKENS 常量收编于此——内核不藏
+    # 数值策略，D2 同款纪律）；context_compaction_threshold=压缩触发水位（估算 tokens
+    # 超预算 × 阈值即触发，「压缩即再生成防线」，研究 07 §11；缺省 0.8=超预算 80% 触发）。
+    context_budget_tokens: int = Field(default=4_000, gt=0)
+    context_compaction_threshold: float = Field(default=0.8, ge=0.0, le=1.0)
+
     # 记忆域（06 篇 §4/§5.2/§5.5；计划 1 仅 L1 与检索参数）
     memory_l1_ttl_seconds: int = 24 * 3600  # L1 会话记忆块 TTL（会话活跃期）
     memory_search_top_k: int = 8  # 检索注入条数上限

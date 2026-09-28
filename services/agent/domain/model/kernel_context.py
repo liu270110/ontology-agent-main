@@ -72,6 +72,11 @@ class ContextBlock(BaseModel):
 
     trust_level 由内核装配器覆写为 agent_attested——供给器自称 externally_verified 无效；
     budget_tokens 是绝对上限：超预算块由内核截断或丢弃（A1 组装器骨架）。
+
+    tier=稳定性分层（H-2 上下文工程批，研究 07 §6.3 三断点预算表）：0=宪法/persona、
+    1=稳定知识（TBox 摘要/模板/工具 schema）、2=任务态+证据、3=对话尾（最易变）。
+    未声明缺省 3（未声明稳定性=按最易变处理，保守）；组装器按 tier 稳定排序——同 tier
+    保持供给器注册序（缺省即注册序），预算淘汰从易变尾向前（保稳定前缀=冻结前缀）。
     """
 
     model_config = ConfigDict(frozen=True)
@@ -80,6 +85,7 @@ class ContextBlock(BaseModel):
     content: str
     tokens: int = 0  # 供给器自报 token 数，仅供核对（内核按绝对预算裁剪）
     trust_level: TrustLevel = TrustLevel.AGENT_ATTESTED  # 内核强制 agent_attested（B3）
+    tier: int = Field(default=3, ge=0, le=3)  # 稳定性分层 0~3（07 §6.3；缺省=最易变）
 
 
 class KernelEvent(BaseModel):

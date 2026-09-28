@@ -16,12 +16,16 @@
   落 prompt.ref_resolved 事件）；未装配 resolver 时 fail-closed（5002，宁拒不错载）。
   非 ``prompt:`` 前缀的行为不变（平台缺省角色约定——成员 persona 字面量消费是独立缺口，
   随 chat 编排批另行登记）。
+- **H-2 遮蔽式工具 schema（2026-09-29）**：``render_tool_schema_section`` /
+  ``mask_tools`` / ``build_tools_segment``——全量定义常驻 + 当轮启用清单遮蔽
+  （KV-cache 前缀稳定，07 §3 规律 2）；消费接线随逐轮 tool-calling 批。
 """
 
 from __future__ import annotations
 
 import asyncio
-from collections.abc import AsyncIterator
+import json
+from collections.abc import AsyncIterator, Mapping
 from typing import Any
 
 from services.agent.business.adapters.base import CHAT_ACTION_IRI, ChatAdapter, ChatTurn, GenerationEvent
@@ -37,6 +41,45 @@ _ANSWER_SCHEMA: dict[str, Any] = {
     "properties": {"answer": {"type": "string"}},
 }
 _DELTA_CHARS = 24  # 回退路径透传切片步长（示例值；SSE 投影粒度，非生成粒度）
+
+# ── H-2 遮蔽式工具 schema（2026-09-29 批，研究 07 §3 规律 2 Manus 教训）────────────────
+# KV-cache 前缀不可被打穿：工具 schema 定义**逐轮增删会让前缀字节漂移、缓存全灭**——
+# 定义本体全量常驻 system 前缀（稳定性=tier 1），当轮启用子集只经遮蔽清单表达。
+# builtin 现无逐轮工具集变化（chat 单步形态），机制以下列纯函数落成可复用件，
+# 消费接线随逐轮 tool-calling（ReAct）批（02 §11.3 开放问题）。
+
+_TOOL_SCHEMA_SECTION_HEADER = "【工具 Schema·全量定义（常驻；当轮启用以清单为准）】"
+_TOOL_MASK_HEADER = "本轮可用工具："
+
+
+def render_tool_schema_section(definitions: Mapping[str, Any]) -> str:
+    """全量工具 schema 常驻段（tier=1 稳定知识）：按名确定性排序 + 固定序列化。
+
+    纯函数：同一 ``definitions`` 任意轮次产出**字节一致**（sorted + sort_keys JSON，
+    禁时间戳/禁 dict 迭代序）——这是 KV-cache 前缀稳定的前置契约。
+    """
+    lines = [_TOOL_SCHEMA_SECTION_HEADER]
+    for name in sorted(definitions):
+        lines.append(f"- {name}: {json.dumps(definitions[name], ensure_ascii=False, sort_keys=True)}")
+    return "\n".join(lines)
+
+
+def mask_tools(available: set[str]) -> str:
+    """当轮启用遮蔽清单（纯函数）：定义本体不动，只换这一行（易变尾在常驻段之后）。
+
+    确定性：``sorted`` 消化 set 迭代序（同集合同输出）；空集显式声明（遮蔽全量=全不可用）。
+    """
+    names = ", ".join(sorted(available)) if available else "（无）"
+    return f"{_TOOL_MASK_HEADER}{names}"
+
+
+def build_tools_segment(definitions: Mapping[str, Any], available: set[str]) -> str:
+    """常驻段拼装：全量定义（稳定前缀）在前 + 遮蔽清单（易变尾）在后。
+
+    轮间差异被压到段尾一行——前缀字节稳定（07 §6.3 区块 3「候选集用遮蔽限定，
+    不增删 schema 定义」的落地形态）。
+    """
+    return f"{render_tool_schema_section(definitions)}\n{mask_tools(available)}"
 
 
 def _build_system_prompt(turn: ChatTurn) -> str:
@@ -107,9 +150,7 @@ class BuiltinAdapter(ChatAdapter):
         if is_prompt_ref(turn.system_prompt):
             if self._prompt_resolver is None:
                 # fail-closed：引用语法在但解析器未装配（组合根接线遗留），宁拒不错载
-                raise ModelUnavailableError(
-                    f"prompt: 钉死引用未接线解析器（5002）: {turn.system_prompt}"
-                )
+                raise ModelUnavailableError(f"prompt: 钉死引用未接线解析器（5002）: {turn.system_prompt}")
             resolved = await self._prompt_resolver(turn.system_prompt)
             return persona_text(resolved)
         return _build_system_prompt(turn)

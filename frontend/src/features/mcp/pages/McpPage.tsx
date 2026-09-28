@@ -94,7 +94,7 @@ export function McpPage() {
 
       {servers.length > 0 && (
         <div className="mt-3 text-[11px] text-label-3">
-          {servers.length} 个 Server · {healthy} 个健康 · 平台能力出口清单 GET /mcp/capabilities（§5.7）
+          {servers.length} 个 Server · {healthy} 个健康 · 能力出口清单由平台统一暴露
         </div>
       )}
 

@@ -102,7 +102,7 @@ describe('S7 群聊域', () => {
     // 顶栏路由控件 → 四模式卡 Popover（GRP-02）
     fireEvent.click(screen.getByTestId('grp-routing-open'))
     expect(await screen.findByTestId('grp-mode-mention')).toBeInTheDocument()
-    expect(screen.getByText(/宪法 2 落法/)).toBeInTheDocument()
+    expect(screen.getByText(/仅协调者模式消耗一次路由判定/)).toBeInTheDocument()
 
     // 选「多答对比」→ PATCH /sessions/g-1107 {routing:'all'}
     fireEvent.click(screen.getByTestId('grp-mode-all'))

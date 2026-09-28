@@ -26,7 +26,7 @@ export function KeysTab() {
     <div>
       <div className="flex items-center gap-2">
         <b className="text-sm">API Key</b>
-        <span className="text-[11px] text-label-3">库中只存哈希与前缀；明文仅签发响应返回一次（08 篇 §2.6 状态机）</span>
+        <span className="text-[11px] text-label-3">库中只存哈希与前缀；明文仅在签发时完整返回一次</span>
         <button type="button" className="btn btn-p btn-sm ml-auto" data-testid="set-key-open" onClick={() => setCreateOpen(true)}>
           <Plus size={13} aria-hidden /> 新建 Key
         </button>

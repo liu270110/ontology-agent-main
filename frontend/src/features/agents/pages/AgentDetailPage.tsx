@@ -128,7 +128,6 @@ export function AgentDetailPage() {
             {t.label}
           </button>
         ))}
-        <span className="mono ml-auto self-center text-[11px] text-label-3">?tab=history 深链可达</span>
       </div>
 
       {/* 基本信息 */}

@@ -140,7 +140,7 @@ function TypedSummary({ approval }: { approval: Approval }) {
             <span className="text-xs text-label-2">{p.resource}</span>
           </div>
           <p className="mt-2 text-xs leading-5 text-label-2">{p.reason}</p>
-          <div className="fhint mt-2">通过后自动授权并审计（权威落点 11 篇 §6）。</div>
+          <div className="fhint mt-2">通过后自动授权并写入审计日志。</div>
         </div>
       )
   }

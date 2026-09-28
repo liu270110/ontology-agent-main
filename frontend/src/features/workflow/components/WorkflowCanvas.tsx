@@ -46,6 +46,19 @@ const KIND_COLOR: Record<WfNode['kind'], string> = {
   template: 'var(--indigo)',
 }
 
+/** MiniMap 的节点色：SVG fill 属性语境不解析 var(--*)（令牌在 CSS 上下文才生效），
+ *  必须给字面色，否则 minimap 节点全部不可见只剩视口框。取令牌亮色值（迷你图示意用途）。 */
+const MINIMAP_COLOR: Record<WfNode['kind'], string> = {
+  start_end: '#aeaeb2',
+  agent: '#af52de',
+  tool: '#34c759',
+  retrieval: '#30b0c7',
+  condition: '#0071e3',
+  parallel: '#30b0c7',
+  approval: '#ff3b30',
+  template: '#5856d6',
+}
+
 const RUN_BADGE: Record<NonNullable<WfCanvasNodeData['runState']>, { txt: string; color: string } | null> = {
   queued: { txt: '排队', color: 'var(--label-3)' },
   running: { txt: '运行中', color: 'var(--accent)' },
@@ -195,7 +208,7 @@ function InnerCanvas({ nodes, edges, selectedId, runStates, onSelect, onConnect,
           pannable
           zoomable
           style={{ background: 'var(--surface)', border: '1px solid var(--separator)', borderRadius: 10 }}
-          nodeColor={n => KIND_COLOR[(n.data as WfCanvasNodeData).kind]}
+          nodeColor={n => MINIMAP_COLOR[(n.data as WfCanvasNodeData)?.kind] ?? '#aeaeb2'}
           maskColor="rgba(0,0,0,.08)"
         />
       </ReactFlow>

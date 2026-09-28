@@ -94,7 +94,8 @@ export function App() {
     <ErrorBoundary>
       <ThemeProvider>
         <QueryClientProvider client={queryClient}>
-          <BrowserRouter>
+          {/* v7 future flags：消除控制台 future-flag 警告，提前对齐 v7 行为（startTransition 包装状态更新 + splat 相对解析） */}
+          <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
             <Suspense fallback={null}>
       <Routes>
               <Route path="/login" element={<LoginPage />} />

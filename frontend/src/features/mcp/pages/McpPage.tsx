@@ -1,6 +1,8 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Plug, Plus } from 'lucide-react'
+import { ApiError } from '@/api/client'
+import { ErrorState, SkeletonCards } from '@/components/states'
 import { listServers, MCP_STATUS_LABEL, type McpServerRow } from '../api'
 import { AddServerWizard } from '../components/AddServerWizard'
 import { ServerDetailSheet } from '../components/ServerDetailSheet'
@@ -15,7 +17,7 @@ export function McpPage() {
   const [detailId, setDetailId] = useState<string | null>(null)
   const [removing, setRemoving] = useState<McpServerRow | null>(null)
 
-  const { data, isLoading } = useQuery({ queryKey: ['mcp', 'list'], queryFn: listServers })
+  const { data, isLoading, isError, error, refetch } = useQuery({ queryKey: ['mcp', 'list'], queryFn: listServers })
   const servers = data?.items ?? []
   const healthy = servers.filter(s => s.status === 'healthy').length
 
@@ -64,10 +66,25 @@ export function McpPage() {
             ))}
           </tbody>
         </table>
-        {isLoading && <div className="empty"><div className="t">加载中…</div></div>}
+        {/* S8 状态切片：加载骨架卡（数量≈mock Server 3）/ 错误态（重试=refetch） */}
+        {isLoading && (
+          <div className="!p-4">
+            <SkeletonCards count={3} />
+          </div>
+        )}
       </div>
 
-      {!isLoading && servers.length === 0 && (
+      {isError && (
+        <div className="mt-4">
+          <ErrorState
+            message={error instanceof Error ? error.message : undefined}
+            code={error instanceof ApiError ? error.code : undefined}
+            onRetry={() => void refetch()}
+          />
+        </div>
+      )}
+
+      {!isLoading && !isError && servers.length === 0 && (
         <div className="empty mt-6">
           <Plug size={28} aria-hidden />
           <div className="t">还没有接入的 MCP Server</div>

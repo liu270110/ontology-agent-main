@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { ApiError } from '@/api/client'
+import { ErrorState, SkeletonRows } from '@/components/states'
 import { TASK_STATUS_BADGE, TASK_STATUS_LABEL, TASK_TYPE_LABEL, getTask, listTasks, type TaskStatus } from '../api'
 import { TaskDetailDrawer } from '../components/TaskDetailDrawer'
 
@@ -22,7 +24,7 @@ export function TasksPage() {
   const status = (params.get('status') ?? 'all') as 'all' | TaskStatus
   const [openId, setOpenId] = useState<string | null>(null)
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['tasks', 'list', status],
     queryFn: () => listTasks({ status }),
     refetchInterval: status === 'all' || status === 'running' ? 8000 : false,
@@ -124,14 +126,29 @@ export function TasksPage() {
             ))}
           </tbody>
         </table>
-        {isLoading && <div className="empty"><div className="t">加载中…</div></div>}
-        {!isLoading && tasks.length === 0 && (
+        {/* S8 状态切片：加载骨架行（行数≈mock 任务量）/ 错误态（重试=refetch 恢复轮询） */}
+        {isLoading && (
+          <div className="px-4 py-3">
+            <SkeletonRows rows={5} rowHeight={36} />
+          </div>
+        )}
+        {!isLoading && !isError && tasks.length === 0 && (
           <div className="empty">
             <div className="t">没有任务</div>
             <div className="d">上传文档抽取、审计导出等异步动作的任务会出现在这里。</div>
           </div>
         )}
       </div>
+
+      {isError && (
+        <div className="mt-3">
+          <ErrorState
+            message={error instanceof Error ? error.message : undefined}
+            code={error instanceof ApiError ? error.code : undefined}
+            onRetry={() => void refetch()}
+          />
+        </div>
+      )}
 
       {task && (
         <TaskDetailDrawer

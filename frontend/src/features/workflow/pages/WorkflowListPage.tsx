@@ -2,6 +2,8 @@ import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { ArrowRight, GitBranch, History, Lock, Play, Plus } from 'lucide-react'
+import { ApiError } from '@/api/client'
+import { ErrorState, SkeletonCards } from '@/components/states'
 import { listWorkflows } from '../api'
 import { NewWorkflowDialog } from '../components/WfDialogs'
 
@@ -68,7 +70,23 @@ export function WorkflowListPage() {
         ))}
       </div>
 
-      {(listQ.data?.items.length ?? 0) === 0 && (
+      {/* S8 状态切片：加载骨架卡（数量≈mock 工作流 3）/ 错误态（重试=refetch）；空态仅在成功后出现 */}
+      {listQ.isLoading && (
+        <div className="mt-4">
+          <SkeletonCards count={3} />
+        </div>
+      )}
+      {listQ.isError && (
+        <div className="mt-4">
+          <ErrorState
+            message={listQ.error instanceof Error ? listQ.error.message : undefined}
+            code={listQ.error instanceof ApiError ? listQ.error.code : undefined}
+            onRetry={() => void listQ.refetch()}
+          />
+        </div>
+      )}
+
+      {!listQ.isLoading && !listQ.isError && (listQ.data?.items.length ?? 0) === 0 && (
         <div className="empty mt-16">
           <Play aria-hidden />
           <div className="t">还没有工作流</div>

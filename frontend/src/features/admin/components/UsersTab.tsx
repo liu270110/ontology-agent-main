@@ -2,6 +2,8 @@ import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { UserPlus } from 'lucide-react'
 import { toast } from 'sonner'
+import { ApiError } from '@/api/client'
+import { ErrorState, SkeletonRows } from '@/components/states'
 import { Modal } from '@/components/modal'
 import { relativeTime } from '@/lib/reltime'
 import {
@@ -29,7 +31,7 @@ export function UsersTab() {
   const [editing, setEditing] = useState<AdminUser | null>(null)
   const [disabling, setDisabling] = useState<AdminUser | null>(null)
 
-  const { data, isLoading } = useQuery({ queryKey: ['admin', 'users'], queryFn: listUsers })
+  const { data, isLoading, isError, error, refetch } = useQuery({ queryKey: ['admin', 'users'], queryFn: listUsers })
   const users = useMemo(() => data?.items ?? [], [data])
 
   return (
@@ -86,8 +88,23 @@ export function UsersTab() {
             ))}
           </tbody>
         </table>
-        {isLoading && <div className="empty"><div className="t">加载中…</div></div>}
+        {/* S8 状态切片：加载骨架行 / 错误态在表格外（重试=refetch） */}
+        {isLoading && (
+          <div className="px-4 py-3">
+            <SkeletonRows rows={5} rowHeight={32} />
+          </div>
+        )}
       </div>
+
+      {isError && (
+        <div className="mt-3">
+          <ErrorState
+            message={error instanceof Error ? error.message : undefined}
+            code={error instanceof ApiError ? error.code : undefined}
+            onRetry={() => void refetch()}
+          />
+        </div>
+      )}
 
       {inviteOpen && <InviteModal onClose={() => setInviteOpen(false)} />}
       {editing && <EditUserModal user={editing} onClose={() => setEditing(null)} />}

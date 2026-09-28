@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Protocol
 
 from sqlalchemy import func, select, update
@@ -69,6 +69,28 @@ class MemoryRepository(Protocol):
         self, tenant_id: uuid.UUID, *, record_id: uuid.UUID, reason: str, detail: dict
     ) -> None: ...
     async def add_promotion(self, tenant_id: uuid.UUID, *, record_id: uuid.UUID, to_layer: int) -> uuid.UUID: ...
+    async def get_promotion(self, tenant_id: uuid.UUID, promotion_id: uuid.UUID) -> dict | None:
+        """升级单只读视图（M4P3-T5）：{id, record_id, from_layer, to_layer, state, approval_id,
+        payload, created_at}；租户过滤，无单/跨租户返回 None。"""
+        ...
+
+    async def set_promotion_approval(
+        self, tenant_id: uuid.UUID, promotion_id: uuid.UUID, *, approval_id: uuid.UUID
+    ) -> None:
+        """回填审批中心工单 id（M4P3-T5 同请求两写的收尾步）。"""
+        ...
+
+    async def apply_promotion(self, tenant_id: uuid.UUID, promotion_id: uuid.UUID) -> bool:
+        """升级生效（M4P3-T5 状态机）：submitted/approved→applied + memory_records.layer 2→3
+        （06 篇 M4「L3/L4 骨架」落点，Neo4j 投影 TODO 缝）；单短事务，非法流转/记录非 L2 返回
+        False（升级单原地保留，交对账巡检），幂等可重入。"""
+        ...
+
+    async def reject_promotion(self, tenant_id: uuid.UUID, promotion_id: uuid.UUID) -> bool:
+        """升级驳回（M4P3-T5 状态机）：submitted/reviewing→rejected；记录保留 L2 不动（06 篇
+        §5.4 驳回退回不删数据）；非法流转返回 False。"""
+        ...
+
     async def list_pending_reviews(self, tenant_id: uuid.UUID, *, limit: int) -> list[dict]: ...
     async def list_records_since(self, tenant_id: uuid.UUID, *, since: datetime, limit: int) -> list[MemoryRecord]: ...
     async def list_stale_for_decay(
@@ -231,6 +253,66 @@ class PgMemoryRepository(MemoryRepository):
             s.add(row)
             await s.flush()
             return row.id
+
+    async def get_promotion(self, tenant_id: uuid.UUID, promotion_id: uuid.UUID) -> dict | None:
+        async with self._sm() as s:
+            row = await s.get(MemoryPromotionORM, promotion_id)
+            if row is None or row.tenant_id != tenant_id:
+                return None
+            return {
+                "id": row.id,
+                "record_id": row.record_id,
+                "from_layer": int(row.from_layer),
+                "to_layer": int(row.to_layer),
+                "state": row.state,
+                "approval_id": row.approval_id,
+                "payload": dict(row.payload or {}),
+                "created_at": row.created_at,
+            }
+
+    async def set_promotion_approval(
+        self, tenant_id: uuid.UUID, promotion_id: uuid.UUID, *, approval_id: uuid.UUID
+    ) -> None:
+        async with self._sm() as s, s.begin():
+            await s.execute(
+                update(MemoryPromotionORM)
+                .where(MemoryPromotionORM.id == promotion_id, MemoryPromotionORM.tenant_id == tenant_id)
+                .values(approval_id=approval_id)
+            )
+
+    async def apply_promotion(self, tenant_id: uuid.UUID, promotion_id: uuid.UUID) -> bool:
+        now = datetime.now(UTC)
+        async with self._sm() as s, s.begin():
+            row = await s.get(MemoryPromotionORM, promotion_id)
+            # 状态机：submitted/approved→applied（approved=审批已落、联动中断的迟到写容差）
+            if row is None or row.tenant_id != tenant_id or row.state not in ("submitted", "approved"):
+                return False
+            res = await s.execute(
+                update(MemoryRecordORM)
+                .where(
+                    MemoryRecordORM.id == row.record_id,
+                    MemoryRecordORM.tenant_id == tenant_id,
+                    MemoryRecordORM.layer == 2,  # L2→L3：记录非 L2（缺失/已升级）→ 拒绝，升级单保留
+                )
+                .values(layer=3, updated_at=now)
+            )
+            if not res.rowcount:
+                return False
+            row.state = "applied"
+            return True
+
+    async def reject_promotion(self, tenant_id: uuid.UUID, promotion_id: uuid.UUID) -> bool:
+        async with self._sm() as s, s.begin():
+            res = await s.execute(
+                update(MemoryPromotionORM)
+                .where(
+                    MemoryPromotionORM.id == promotion_id,
+                    MemoryPromotionORM.tenant_id == tenant_id,
+                    MemoryPromotionORM.state.in_(("submitted", "reviewing")),  # 终态不可再动
+                )
+                .values(state="rejected")
+            )
+            return bool(res.rowcount)
 
     async def list_records_since(self, tenant_id: uuid.UUID, *, since: datetime, limit: int) -> list[MemoryRecord]:
         stmt = (

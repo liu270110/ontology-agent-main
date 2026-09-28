@@ -222,6 +222,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     review_service = _build_candidate_review(get_session_factory(s))
     app.state.plugin_review = review_service
+    app.state.promotion_review = (
+        review_service  # M4P3-T5：memory L2→L3 升级单工单端口（同实例，uk_review_one_open 口径共享）
+    )
     app.state.review_approvals = build_review_approval(get_session_factory(s))
     app.state.plugin_runtime = PluginRuntime()
     # 计划 3.2：ChatStream 组合根（最小接线）——仅 SSE hub（02 §5 进程内形态，多副本随 M4

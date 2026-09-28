@@ -22,7 +22,8 @@
     POST /memory/sessions/{sid}/settle        手动沉淀（幂等登记闸门，202 语义 200 壳）
     GET  /memory/profile/{uid}                画像聚合视图（§5.2 按类型分组 top 置信，owner 维度）
     GET  /memory/reviews                      待复核队列（limit 20）
-    POST /memory/promotions（records 权威版）  记录升级申请（memory_promotions 表；fact 版
+    POST /memory/promotions（records 权威版）  记录升级申请（memory_promotions 表 + 同请求建审批
+                                              中心工单 memory_l2_upgrade，M4P3-T5；fact 版
                                               过渡路由改挂 /memory/facts/{id}/promotions）
 
 scope：memory:read / memory:write，deny-by-default（08 §2.5）。
@@ -79,6 +80,7 @@ from services.memory.business.memory_service import (
     SearchQuery,
 )
 from services.memory.business.pipeline_store import RedisCheckpointStore, RedisDeadLetterSink
+from services.memory.business.promotion_review import PromotionReviewService
 from services.memory.business.timeline import build_timeline
 from services.memory.data.l1 import RedisL1Store
 from services.memory.data.repo_impl.fact_repo import (
@@ -91,6 +93,7 @@ from services.memory.data.repo_impl.fact_repo import (
 )
 from services.memory.domain.model.l2_fact import FactCategory, FactStatus, L2Fact, fact_fingerprint
 from services.memory.domain.repo.fact_repo import L1MemoryStore  # 运行时 import：FastAPI 装饰期解析注解
+from services.memory.domain.repo.review_port import PromotionDecisionPort, PromotionReviewPort
 from services.platform.deps import Principal, SessionDep, get_redis, require_scope
 from services.platform.errors import ErrorCode, GatewayError
 
@@ -626,12 +629,44 @@ async def list_reviews(pipe: Pipe, tid: Tid) -> dict:
     return {"code": 0, "message": "ok", "data": [ReviewItemResponse(**i).model_dump(mode="json") for i in items]}
 
 
+def _promotion_review(request: Request, repo: Any) -> PromotionReviewService:
+    """升级单审批编排装配（M4P3-T5）：工单/决策端口为 lifespan 单例（app.state），仓储随请求。
+
+    端口未装配=503 fail-closed（候选非成品：无审批工单的升级单不放行；plugin 路由端口检查先例）。
+    """
+    review = getattr(request.app.state, "promotion_review", None)
+    approvals = getattr(request.app.state, "review_approvals", None)
+    if not isinstance(review, PromotionReviewPort) or not isinstance(approvals, PromotionDecisionPort):
+        raise HTTPException(status_code=503, detail="promotion review ports not wired")
+    return PromotionReviewService(repo, review, approvals)
+
+
 @router.post("/promotions", response_model=dict, summary="记录升级申请（records 三表权威实现）")
-async def create_record_promotion(body: PromotionCreateRequest, pipe: Pipe, tid: Tid) -> dict:
-    """记录升级申请（权威实现，写 memory_promotions 表）：record 存在性+归属双校验封跨租户引用；
-    M3 过渡的 fact 版申请单见 POST /memory/facts/{fact_id}/promotions（用户裁决 2026-09-28）。"""
+async def create_record_promotion(
+    body: PromotionCreateRequest,
+    pipe: Pipe,
+    tid: Tid,
+    request: Request,
+    x_user_id: Annotated[str | None, Header(alias="X-User-Id")] = None,
+) -> dict:
+    """记录升级申请（权威实现）：同请求两写——memory_promotions(state=submitted) + 审批中心工单
+    （target_type=memory_l2_upgrade）+ approval_id 回填；record 存在性+归属双校验封跨租户引用；
+    v1 无跨服务事务（一致性靠状态机幂等 + 对账巡检，TODO(M5) 巡检缝）；M3 过渡的 fact 版申请单
+    见 POST /memory/facts/{fact_id}/promotions（用户裁决 2026-09-28）。"""
     _pipeline, repo = pipe
-    if await repo.get(tid, body.record_id) is None:  # 存在性 + 归属双校验（顺带封跨租户引用）
-        raise HTTPException(status_code=404, detail="record not found")
-    promo_id = await repo.add_promotion(tid, record_id=body.record_id, to_layer=body.to_layer)
-    return {"code": 0, "message": "ok", "data": {"id": str(promo_id), "state": "submitted"}}
+    svc = _promotion_review(request, repo)
+    try:
+        data = await svc.submit(
+            tenant_id=tid,
+            record_id=body.record_id,
+            to_layer=body.to_layer,
+            submitter_id=_parse_optional_uuid(x_user_id),
+            trace_id=getattr(request.state, "trace_id", "") or "",
+        )
+    except LookupError as exc:  # record 存在性+归属双校验（顺带封跨租户引用）
+        raise HTTPException(status_code=404, detail="record not found") from exc
+    return {
+        "code": 0,
+        "message": "ok",
+        "data": {"id": str(data["id"]), "state": data["state"], "approval_id": str(data["approval_id"])},
+    }

@@ -7760,9 +7760,25 @@
         ]
       },
       "post": {
-        "description": "记录升级申请（权威实现，写 memory_promotions 表）：record 存在性+归属双校验封跨租户引用；\nM3 过渡的 fact 版申请单见 POST /memory/facts/{fact_id}/promotions（用户裁决 2026-09-28）。",
+        "description": "记录升级申请（权威实现）：同请求两写——memory_promotions(state=submitted) + 审批中心工单\n（target_type=memory_l2_upgrade）+ approval_id 回填；record 存在性+归属双校验封跨租户引用；\nv1 无跨服务事务（一致性靠状态机幂等 + 对账巡检，TODO(M5) 巡检缝）；M3 过渡的 fact 版申请单\n见 POST /memory/facts/{fact_id}/promotions（用户裁决 2026-09-28）。",
         "operationId": "create_record_promotion_api_v1_memory_promotions_post",
         "parameters": [
+          {
+            "in": "header",
+            "name": "X-User-Id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-User-Id"
+            }
+          },
           {
             "in": "header",
             "name": "X-Tenant-Id",

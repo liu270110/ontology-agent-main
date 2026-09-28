@@ -55,6 +55,7 @@ class StubRepo:
     def __init__(self) -> None:
         self._keys: set[str] = set()
         self.known_record_id = uuid.uuid4()  # 预置"存在"的记录（promotions 存在性校验用）
+        self.promotions: dict[uuid.UUID, dict] = {}  # M4P3-T5：promotion_id → 行（approval_id 回填断言用）
 
     async def list_pending_reviews(self, tenant_id, *, limit):
         return [
@@ -69,7 +70,13 @@ class StubRepo:
         ]
 
     async def add_promotion(self, tenant_id, *, record_id, to_layer):
-        return uuid.uuid4()
+        promo_id = uuid.uuid4()
+        self.promotions[promo_id] = {"record_id": record_id, "to_layer": to_layer, "approval_id": None}
+        return promo_id
+
+    async def set_promotion_approval(self, tenant_id, promotion_id, *, approval_id):
+        if promotion_id in self.promotions:
+            self.promotions[promotion_id]["approval_id"] = approval_id
 
     async def register_task(self, tenant_id, idempotency_key, *, payload=None):
         if idempotency_key in self._keys:
@@ -91,15 +98,67 @@ class StubRepo:
         )
 
 
+class StubPromotionReviewPort:
+    """工单端口替身（M4P3-T5）：结构化满足 PromotionReviewPort；记录建单行为。"""
+
+    def __init__(self) -> None:
+        self.submitted: list[dict] = []
+
+    async def submit_candidate(
+        self,
+        *,
+        tenant_id,
+        target_type,
+        target_id,
+        payload,
+        status="pending_review",
+        submitter_id=None,
+        sla_deadline=None,
+    ):
+        ticket_id = uuid.uuid4()
+        self.submitted.append(
+            {
+                "id": ticket_id,
+                "tenant_id": tenant_id,
+                "target_type": target_type,
+                "target_id": target_id,
+                "payload": payload,
+                "status": status,
+                "submitter_id": submitter_id,
+            }
+        )
+        return ticket_id
+
+    async def get_ticket(self, *, tenant_id, ticket_id):
+        return next((t for t in self.submitted if t["id"] == ticket_id), None)
+
+    async def mark_published(self, *, tenant_id, ticket_id, note=""):
+        return None
+
+
+class StubPromotionDecisionPort:
+    """决策端口替身（M4P3-T5）：结构化满足 PromotionDecisionPort（API 提交面不触达 decide）。"""
+
+    async def decide(self, *, tenant_id, ticket_id, action, approver_id, note=""):
+        raise AssertionError("API 提交路径不应触达 decide")
+
+    async def tier(self, tenant_id):
+        return "solo"
+
+
 @pytest.fixture
 def wired():
-    """client + 同一实例的 stub（跨请求共享状态：幂等键集合、管线调用计数）。"""
+    """client + 同一实例的 stub（跨请求共享状态：幂等键集合、管线调用计数、审批工单记录）。"""
     app = create_app()
     pipeline, repo = StubPipeline(), StubRepo()
+    review_port = StubPromotionReviewPort()
+    # M4P3-T5：升级单审批端口挂 app.state（gateway lifespan 装配同名属性；鸭子类型同 plugin 先例）
+    app.state.promotion_review = review_port
+    app.state.review_approvals = StubPromotionDecisionPort()
     # 依赖覆盖键=路由引用的可调用对象本身（get_memory_service / get_pipeline 函数）
     app.dependency_overrides[get_memory_service] = lambda: StubService()
     app.dependency_overrides[get_pipeline] = lambda: (pipeline, repo)
-    return TestClient(app), pipeline, repo
+    return TestClient(app), pipeline, repo, review_port
 
 
 @pytest.fixture
@@ -184,13 +243,38 @@ def test_list_reviews_200(client):
 
 
 def test_create_promotion_200(wired):
-    client, _pipeline, repo = wired
+    """M4P3-T5：提交即两写——升级单行 + 审批中心工单（memory_l2_upgrade）+ approval_id 回填。"""
+    client, _pipeline, repo, review_port = wired
     resp = client.post(
-        "/api/v1/memory/promotions", headers=_h(), json={"record_id": str(repo.known_record_id), "to_layer": 3}
+        "/api/v1/memory/promotions",
+        headers={**_h(), "X-User-Id": str(uuid.uuid4())},  # dev 头 → 工单 submitter_id（禁自批输入）
+        json={"record_id": str(repo.known_record_id), "to_layer": 3},
     )
     assert resp.status_code == 200
     body = resp.json()
     assert body["code"] == 0 and body["data"]["id"] and body["data"]["state"] == "submitted"
+    # 审批中心工单行存在（同请求两写）
+    assert len(review_port.submitted) == 1
+    ticket = review_port.submitted[0]
+    assert ticket["target_type"] == "memory_l2_upgrade"
+    assert ticket["target_id"] == uuid.UUID(body["data"]["id"])  # 工单多态引用 = 升级单 id
+    assert ticket["payload"]["candidate_type"] == "memory_l2_upgrade"
+    assert ticket["payload"]["record_id"] == str(repo.known_record_id)
+    assert ticket["status"] == "pending_review"
+    # promotion.approval_id 回填工单 id
+    promo_row = repo.promotions[uuid.UUID(body["data"]["id"])]
+    assert promo_row["approval_id"] == ticket["id"]
+    assert body["data"]["approval_id"] == str(ticket["id"])
+
+
+def test_create_promotion_ports_not_wired_503():
+    """端口未装配=503 fail-closed（候选非成品：无审批工单的升级单不放行；plugin 先例同款）。"""
+    app = create_app()
+    app.dependency_overrides[get_memory_service] = lambda: StubService()
+    app.dependency_overrides[get_pipeline] = lambda: (StubPipeline(), StubRepo())
+    client = TestClient(app)
+    resp = client.post("/api/v1/memory/promotions", headers=_h(), json={"record_id": str(uuid.uuid4()), "to_layer": 3})
+    assert resp.status_code == 503
 
 
 def test_promotion_missing_header_422(client):
@@ -199,7 +283,7 @@ def test_promotion_missing_header_422(client):
 
 
 def test_settle_idempotent_second_call_skipped(wired):
-    client, pipeline, _repo = wired
+    client, pipeline, _repo, _review = wired
     h = _h()
     sid = uuid.uuid4()
     r1 = client.post(f"/api/v1/memory/sessions/{sid}/settle", headers=h, json={"transcript": "t"})
@@ -235,7 +319,7 @@ def test_profile_missing_tenant_422(client):
 
 def test_settle_passes_owner_header_to_pipeline(wired):
     """settle 端点 X-User-Id 头（dev 模式）→ pipeline.settle_session(owner_user_id=...)。"""
-    client, pipeline, _repo = wired
+    client, pipeline, _repo, _review = wired
     owner = uuid.uuid4()
     resp = client.post(
         f"/api/v1/memory/sessions/{uuid.uuid4()}/settle",
@@ -248,7 +332,7 @@ def test_settle_passes_owner_header_to_pipeline(wired):
 
 def test_settle_invalid_user_header_ignored(wired):
     """X-User-Id 非法值静默忽略置 None（不报错，dev 宽松语义）。"""
-    client, pipeline, _repo = wired
+    client, pipeline, _repo, _review = wired
     resp = client.post(
         f"/api/v1/memory/sessions/{uuid.uuid4()}/settle",
         headers={**_h(), "X-User-Id": "not-a-uuid"},

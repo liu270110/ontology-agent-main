@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { CircleAlert, Link2, Maximize2, Search, Settings2, ZoomIn, ZoomOut } from 'lucide-react'
+import { CircleAlert, Link2, Loader2, Maximize2, Search, Settings2, ZoomIn, ZoomOut } from 'lucide-react'
 import { GraphCanvas, type GraphCanvasApi, type GraphEdgeBiz, type GraphNodeBiz } from '@/components/graph/GraphCanvas'
+import { ApiError } from '@/api/client'
+import { ErrorState } from '@/components/states'
 import {
   graphNeighborhood, graphSearch,
   type GraphEntity, type GraphPath,
@@ -214,6 +216,35 @@ export function ExplorePage() {
           onReady={onReady}
           testId="explore-canvas"
         />
+        {/* S8 状态切片：图数据首载转圈占位 / 失败错误态（仅在画布尚无节点时覆盖，展开重拉不打扰） */}
+        {(nb.data?.nodes.length ?? 0) === 0 && !nb.loading && (searchQ.isError || !!nb.error) && (
+          <div className="absolute inset-0 flex items-center justify-center" data-testid="explore-error">
+            <ErrorState
+              message={searchQ.isError
+                ? searchQ.error instanceof Error ? searchQ.error.message : undefined
+                : nb.error instanceof Error ? nb.error.message : undefined}
+              code={searchQ.isError
+                ? searchQ.error instanceof ApiError ? searchQ.error.code : undefined
+                : nb.error instanceof ApiError ? nb.error.code : undefined}
+              onRetry={() => {
+                if (searchQ.isError) void searchQ.refetch()
+                if (nb.error) nb.retry()
+              }}
+            />
+          </div>
+        )}
+        {(searchQ.isPending || nb.loading) && (nb.data?.nodes.length ?? 0) === 0 && (
+          <div
+            className="pointer-events-none absolute inset-0 flex items-center justify-center"
+            data-testid="explore-loading"
+            role="status"
+            aria-label="图数据加载中"
+          >
+            <span className="flex items-center gap-2 text-xs text-label-2">
+              <Loader2 size={14} className="animate-spin" aria-hidden /> 图谱加载中…
+            </span>
+          </div>
+        )}
         {/* 右上工具 */}
         <div className="absolute right-3 top-3 flex flex-col gap-1.5">
           <button type="button" aria-label="放大" className="btn btn-g btn-sm" onClick={() => canvasApi.current?.zoomIn()}>
@@ -271,21 +302,29 @@ export function ExplorePage() {
   )
 }
 
-/** 邻域拉取（组件内轻封装：失败静默空图） */
+/** 邻域拉取（组件内轻封装）：失败记 error 供 S8 错误态渲染（不再完全静默），
+ *  retry 以 nonce 重触发 effect；成功路径数据流不变 */
 function useNeighborhoodSafe(entityId: string | null, relations: string[], depth: 1 | 2) {
   const [data, setData] = useState<Awaited<ReturnType<typeof graphNeighborhood>> | null>(null)
   const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<unknown>(null)
+  const [nonce, setNonce] = useState(0)
+  const retry = useCallback(() => setNonce(n => n + 1), [])
   const relKey = relations.join(',')
   useEffect(() => {
     if (!entityId) return
     let alive = true
     setLoading(true)
+    setError(null)
     graphNeighborhood(entityId, { depth, relations: relations.length ? relations : undefined })
       .then(res => {
         if (alive) setData(res)
       })
-      .catch(() => {
-        if (alive) setData(null)
+      .catch(e => {
+        if (alive) {
+          setData(null)
+          setError(e)
+        }
       })
       .finally(() => {
         if (alive) setLoading(false)
@@ -294,8 +333,8 @@ function useNeighborhoodSafe(entityId: string | null, relations: string[], depth
       alive = false
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [entityId, relKey, depth])
-  return { data, loading }
+  }, [entityId, relKey, depth, nonce])
+  return { data, loading, error, retry }
 }
 
 function segGroup(category: string): string {

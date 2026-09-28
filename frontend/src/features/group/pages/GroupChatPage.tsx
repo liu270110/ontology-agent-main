@@ -2,7 +2,8 @@ import { useCallback, useEffect, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate, useParams } from 'react-router-dom'
 import { Plus, Search, Share2, Users, Zap } from 'lucide-react'
-import { api } from '@/api/client'
+import { api, ApiError } from '@/api/client'
+import { ErrorState, SkeletonRows } from '@/components/states'
 import { getGroupSession, listGroupSessions, type GroupMessageRow, type GroupSessionDetail, type RoutingMode } from '../api'
 import { useGroupStreamStore } from '../group-store'
 import { useGroupStream } from '../useGroupStream'
@@ -105,6 +106,16 @@ export function GroupChatPage() {
           </div>
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto">
+          {/* S8 状态切片：群会话列表首载骨架 / 失败错误态（重试=refetch） */}
+          {listQ.isPending && <SkeletonRows rows={4} rowHeight={48} className="px-3 pt-2" />}
+          {listQ.isError && (
+            <ErrorState
+              className="mx-3 mt-2"
+              message={listQ.error instanceof Error ? listQ.error.message : undefined}
+              code={listQ.error instanceof ApiError ? listQ.error.code : undefined}
+              onRetry={() => void listQ.refetch()}
+            />
+          )}
           {(listQ.data?.items ?? []).map(s => (
             <button
               key={s.id}
@@ -123,7 +134,9 @@ export function GroupChatPage() {
               </div>
             </button>
           ))}
-          {(listQ.data?.items.length ?? 0) === 0 && <div className="px-4 py-6 text-center text-xs text-label-3">暂无群聊 · 点 ＋ 新建</div>}
+          {!listQ.isPending && !listQ.isError && (listQ.data?.items.length ?? 0) === 0 && (
+            <div className="px-4 py-6 text-center text-xs text-label-3">暂无群聊 · 点 ＋ 新建</div>
+          )}
         </div>
       </aside>
 
@@ -159,6 +172,24 @@ export function GroupChatPage() {
               onSent={n => setMentionCount(n)}
             />
           </>
+        ) : sessionId && sessionQ.isPending ? (
+          // S8 状态切片：会话详情/成员基线加载中
+          <div className="flex flex-1 flex-col justify-center px-8">
+            <SkeletonRows rows={3} rowHeight={36} />
+          </div>
+        ) : sessionId && sessionQ.isError ? (
+          // S8 状态切片：详情失败（含成员加载失败）→ 错误态可重试
+          <div className="flex flex-1 items-center justify-center px-8">
+            <ErrorState
+              title="群会话加载失败"
+              message={sessionQ.error instanceof Error ? sessionQ.error.message : undefined}
+              code={sessionQ.error instanceof ApiError ? sessionQ.error.code : undefined}
+              onRetry={() => {
+                setMissing(false)
+                void sessionQ.refetch()
+              }}
+            />
+          </div>
         ) : (
           <div className="flex flex-1 items-center justify-center text-sm text-label-3">
             {missing ? `群会话 ${sessionId} 不存在` : '← 从左侧选择群聊，或点 ＋ 新建群聊'}

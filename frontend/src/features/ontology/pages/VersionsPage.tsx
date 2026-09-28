@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
+import { ApiError } from '@/api/client'
+import { ErrorState, SkeletonRows } from '@/components/states'
 import { Check, GitCompare, RotateCcw, ShieldCheck, X } from 'lucide-react'
 import {
   approveChangeset, diffVersions, getProject, listChangesets, publishChangeset, rejectChangeset, rollbackChangeset,
@@ -134,6 +136,25 @@ export function VersionsPage() {
             </tr>
           </thead>
           <tbody>
+            {/* S8 状态切片：changeset 列表首载骨架 / 失败错误态（重试=refetch）；成功路径渲染不变 */}
+            {changesetsQ.isPending && (
+              <tr>
+                <td colSpan={7}>
+                  <SkeletonRows rows={4} rowHeight={36} />
+                </td>
+              </tr>
+            )}
+            {changesetsQ.isError && (
+              <tr>
+                <td colSpan={7}>
+                  <ErrorState
+                    message={changesetsQ.error instanceof Error ? changesetsQ.error.message : undefined}
+                    code={changesetsQ.error instanceof ApiError ? changesetsQ.error.code : undefined}
+                    onRetry={() => void changesetsQ.refetch()}
+                  />
+                </td>
+              </tr>
+            )}
             {changesets.map(cs => (
               <tr key={cs.id} className={cs.id === activeCs ? 'sel' : undefined}>
                 <td className="mono font-semibold">{cs.id}</td>

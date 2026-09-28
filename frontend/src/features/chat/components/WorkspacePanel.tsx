@@ -10,6 +10,7 @@ import {
   Timer,
 } from 'lucide-react'
 import { Sheet } from '@/components/sheet'
+import { Tooltip } from '@/components/tooltip'
 import { useSessionStore } from '@/stores/session-store'
 import {
   fmtSize,
@@ -246,15 +247,17 @@ export function WorkspacePanel({ sessionId }: { sessionId: string }) {
         <FolderOpen size={13} className="text-teal" aria-hidden />
         <b className="text-xs">Agent 工作区</b>
         {recycle != null && (
-          <span
-            data-testid="ws-recycle"
-            className="badge ml-auto gap-1 text-2xs"
-            style={recycle <= 30 ? { background: 'var(--orange-soft)', color: 'var(--orange)' } : undefined}
-            title="工作区易失：会话关闭后进入休眠，到期快照归档并销毁（20 篇 SBX）"
-          >
-            <Timer size={10} aria-hidden />
-            {recycle} 分钟后回收
-          </span>
+          /* S8 Tooltip：回收倒计时徽标悬停解释工作区易失语义（替代原生 title） */
+          <Tooltip content="工作区易失：会话关闭后进入休眠，到期快照归档并销毁" placement="bottom">
+            <span
+              data-testid="ws-recycle"
+              className="badge ml-auto gap-1 text-2xs"
+              style={recycle <= 30 ? { background: 'var(--orange-soft)', color: 'var(--orange)' } : undefined}
+            >
+              <Timer size={10} aria-hidden />
+              {recycle} 分钟后回收
+            </span>
+          </Tooltip>
         )}
       </div>
 

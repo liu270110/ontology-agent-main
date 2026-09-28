@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Check, Copy, FileText, RefreshCw, ThumbsDown, ThumbsUp } from 'lucide-react'
 import { useSessionStore, type ChatMessage, type EvidenceChunk } from '@/stores/session-store'
 import { api } from '@/api/client'
+import { SkeletonRows } from '@/components/states'
 import { ToolCallCard } from './ToolCallCard'
 import type { EvidenceFocus } from './EvidenceSheet'
 
@@ -160,6 +161,30 @@ export function ChatStream({ sessionId, onOpenEvidence }: { sessionId: string; o
   const runs = useSessionStore(s => s.runs)
   const bottomRef = useRef<HTMLDivElement>(null)
 
+  // S8 状态切片：历史基线加载中（宿主 GET /sessions/{id}/messages → seed）。基线等待窗口内
+  // messages 引用必跳两次：第 1 次=宿主 setActive 重置（恒空数组），第 2 次=seed 落库（空历史
+  // 亦为新引用）；内容非空也可直接判就绪。拉取失败由超时兜底退场（回原空流渲染，不阻塞输入）。
+  const [hydrating, setHydrating] = useState(false)
+  const baseline = useRef<{ sid: string; ref: ChatMessage[]; changes: number } | null>(null)
+  useEffect(() => {
+    // 基线取 store 当前快照（点击选会话的 setActive 重置已同步落 store）
+    baseline.current = { sid: sessionId, ref: useSessionStore.getState().messages, changes: 0 }
+    setHydrating(true)
+    const t = window.setTimeout(() => setHydrating(false), 10_000)
+    return () => window.clearTimeout(t)
+    // 仅在换会话时重挂基线；messages 为订阅快照，不作为依赖
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessionId])
+  useEffect(() => {
+    const b = baseline.current
+    if (!b || b.sid !== sessionId || messages === b.ref) return
+    b.changes += 1
+    if (b.changes >= 2 || messages.length > 0) {
+      baseline.current = null
+      setHydrating(false)
+    }
+  }, [messages, sessionId])
+
   useEffect(() => {
     // jsdom 无 scrollIntoView（可选调用兜底），浏览器端平滑滚到流底
     bottomRef.current?.scrollIntoView?.({ behavior: 'smooth' })
@@ -177,6 +202,7 @@ export function ChatStream({ sessionId, onOpenEvidence }: { sessionId: string; o
 
   return (
     <div className="msgs flex flex-1 flex-col gap-4 overflow-auto px-6 py-4">
+      {hydrating && messages.length === 0 && <SkeletonRows rows={3} rowHeight={40} className="pt-2" />}
       {messages.map(m =>
         m.role === 'user' ? (
           <div key={m.id} className="msg flex justify-end gap-2">

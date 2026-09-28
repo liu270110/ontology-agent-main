@@ -4,6 +4,9 @@ import { useQuery } from '@tanstack/react-query'
 import { ArrowRight, FileUp, Plus } from 'lucide-react'
 import { toast } from 'sonner'
 import { useAuthStore } from '@/stores/auth-store'
+import { ApiError } from '@/api/client'
+import { ErrorState, SkeletonCards } from '@/components/states'
+import { Tooltip } from '@/components/tooltip'
 import { listProjects, type OntoProject } from '../api'
 import { TierBadge, relativeTime } from '../components/shared'
 import { NewProjectWizard } from '../components/NewProjectWizard'
@@ -13,13 +16,21 @@ import { ImportTurtleDialog } from '../components/ImportTurtleDialog'
  *  项目卡网格（名称/三档方案徽标/命名空间 mono/版本/进入）+ IX-OL-01 新建向导
  *  + IX-OL-02 导入 Turtle。roles=ontologist/admin/curator（routes meta）。 */
 
+/** 三档方案一句话解释（TierBadge 悬停提示；代码三档 heavy/standard/light，
+ *  对齐任务口径：完整治理 → 精简 TBox → 术语层） */
+const TIER_TOOLTIP: Record<OntoProject['tier'], string> = {
+  heavy: '重型：完整 TBox + SHACL 全量治理（推理与规则引擎齐备）',
+  standard: '标准：精简 TBox（类/属性/公理按需 + 增量推理）',
+  light: '轻量：术语层（术语与实例为主，仅基础校验）',
+}
+
 export function ProjectListPage() {
   const navigate = useNavigate()
   const canWrite = useAuthStore(s => s.can('ontology:write'))
   const [wizardOpen, setWizardOpen] = useState(false)
   const [importProject, setImportProject] = useState<OntoProject | null>(null)
 
-  const { data, isLoading } = useQuery({ queryKey: ['ontology', 'projects'], queryFn: listProjects })
+  const { data, isLoading, isError, error, refetch } = useQuery({ queryKey: ['ontology', 'projects'], queryFn: listProjects })
   const projects = useMemo(() => data?.items ?? [], [data])
 
   return (
@@ -40,7 +51,10 @@ export function ProjectListPage() {
           <div key={p.id} className="card flex flex-col !p-4" data-testid={`project-card-${p.id}`}>
             <div className="flex items-center gap-2">
               <b className="truncate text-sm">{p.name}</b>
-              <TierBadge tier={p.tier} />
+              {/* S8 Tooltip：三档方案徽标悬停解释 */}
+              <Tooltip content={TIER_TOOLTIP[p.tier]}>
+                <TierBadge tier={p.tier} />
+              </Tooltip>
             </div>
             <div className="mono mt-1.5 truncate text-[11px] text-label-3" title={p.namespace}>
               {p.namespace}
@@ -70,8 +84,17 @@ export function ProjectListPage() {
         ))}
       </div>
 
-      {isLoading && <div className="empty mt-6"><div className="t">加载中…</div></div>}
-      {!isLoading && projects.length === 0 && (
+      {/* S8 状态切片：首载骨架卡 / 失败错误态（重试=refetch） */}
+      {isLoading && <SkeletonCards count={3} className="mt-4" />}
+      {!isLoading && isError && (
+        <ErrorState
+          className="mt-6"
+          message={error instanceof Error ? error.message : undefined}
+          code={error instanceof ApiError ? error.code : undefined}
+          onRetry={() => void refetch()}
+        />
+      )}
+      {!isLoading && !isError && projects.length === 0 && (
         <div className="empty mt-6">
           <div className="t">还没有本体项目</div>
           <div className="d">从「新建项目」开始，或先到知识库完成一次抽取。</div>

@@ -59,6 +59,7 @@ ignore_imports = [
     "services.platform.db.registry -> services.agent.data.orm",
     "services.platform.db.registry -> services.iam.data.orm",
     "services.platform.db.registry -> services.kb.data.orm",
+    "services.platform.db.registry -> services.kb.data.rule_orm",  # 规则候选草案表注册（规则抽取通道 v1）
     "services.platform.db.registry -> services.kb.data.connector_orm",
     "services.platform.db.registry -> services.kb.data.usage_orm",  # TODO(M5): 知识活性计数表注册随 kb-usage-counters（多源接入 §6.1）  # TODO(M5): 连接器两表注册随 kb-connector-v1（多源接入 §3）
     "services.platform.db.registry -> services.ontology.data.orm",

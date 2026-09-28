@@ -12,7 +12,6 @@ deny-by-default：空路径 / NUL 字节 / 绝对路径与盘符 / ``..`` 穿越
 
 from __future__ import annotations
 
-import os
 import re
 from pathlib import Path
 
@@ -41,8 +40,12 @@ class FsToolError(Exception):
 
 
 def default_workspace_root() -> Path:
-    """工作区根默认值：env ``OA_WORKSPACE_ROOT`` 优先，否则 ``./workspace``（组合根可注入覆盖）。"""
-    return Path(os.environ.get("OA_WORKSPACE_ROOT", "workspace"))
+    """工作区根默认值：统一配置层 ``Settings.workspace_root``（OA_WORKSPACE_ROOT 经
+    pydantic-settings 映射；07 边界契约 D1——能力层禁直读 os.environ），
+    缺省 ``./workspace``（组合根 gateway/app 显式注入为生产路径，本函数仅兜底）。"""
+    from services.platform.config import get_settings
+
+    return Path(get_settings().workspace_root or "workspace")
 
 
 def jail(root: Path, relative: str | Path) -> Path:

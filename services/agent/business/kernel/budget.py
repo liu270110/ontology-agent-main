@@ -15,16 +15,20 @@ from services.agent.domain.model.step_state import BudgetWatermark
 
 
 class Budget:
-    """三维运行预算（值语义，frozen）：0/None 语义——None=不限，正数为上限。"""
+    """三维运行预算（值语义，frozen）：0/None 语义——None=不限，正数为上限。
+
+    缺省一律 None（未声明=不限）：**上限的策略默认值属组合根职责**（Settings/
+    ChatPolicy 注入，07 边界契约 D2）——内核不藏数值策略；生产构造点
+    （chat_orchestrator/subagent）均显式传值。"""
 
     __slots__ = ("duration_s", "max_steps", "max_tokens")
 
     def __init__(
         self,
         *,
-        max_tokens: int | None = 100_000,
-        max_steps: int | None = 20,
-        duration_s: float | None = 60.0,
+        max_tokens: int | None = None,
+        max_steps: int | None = None,
+        duration_s: float | None = None,
     ) -> None:
         if max_tokens is not None and max_tokens <= 0:
             raise ValueError("max_tokens 须为正数或 None")

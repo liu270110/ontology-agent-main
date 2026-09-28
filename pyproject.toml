@@ -264,3 +264,10 @@ ignore_imports = [
     "services.memory.business.runtime -> services.memory.data.l1",
     "services.memory.business.runtime -> services.memory.data.repo_impl.fact_repo",
 ]
+
+# ── 边界契约（2026-09-28，docs/Agent/07 §5-1：内核↛能力层 import 纪律）──
+[[tool.importlinter.contracts]]
+name = "内核零能力依赖（agent kernel 禁 import capabilities，07 边界契约 T1~T4）"
+type = "forbidden"
+source_modules = ["services.agent.business.kernel"]
+forbidden_modules = ["services.agent.business.capabilities"]

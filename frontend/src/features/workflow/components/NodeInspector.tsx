@@ -87,7 +87,7 @@ export function NodeInspector({
 }) {
   if (!node) {
     return (
-      <aside className="w-[296px] flex-none overflow-y-auto border-l border-separator bg-surface p-3.5" data-testid="wf-inspector">
+      <aside className="hidden w-[256px] flex-none overflow-y-auto border-l border-separator bg-surface p-3.5 xl:block" data-testid="wf-inspector">
         <h4 className="text-[13px] font-bold">检查器</h4>
         <div className="fhint mt-2">选中画布或节点库中的节点后，在此编辑类型化参数（八类表单）。</div>
       </aside>
@@ -117,7 +117,7 @@ function InspectorBody({
   const patchParam = (patch: Record<string, unknown>) => onUpdate(node.id, { params: { ...params, ...patch } })
 
   return (
-    <aside className="w-[296px] flex-none overflow-y-auto border-l border-separator bg-surface p-3.5" data-testid="wf-inspector">
+    <aside className="hidden w-[256px] flex-none overflow-y-auto border-l border-separator bg-surface p-3.5 xl:block" data-testid="wf-inspector">
       <h4 className="flex items-center gap-1.5 text-[13px] font-bold">
         {node.kind === 'condition' && <GitBranch size={14} style={{ color: 'var(--accent)' }} aria-hidden />}
         {KIND_LABEL[node.kind]}节点

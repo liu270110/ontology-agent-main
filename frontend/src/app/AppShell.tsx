@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
-import { Bell, LogOut, PanelLeft, Search, Settings, ShieldCheck } from 'lucide-react'
+import { Bell, ChevronDown, LogOut, PanelLeft, Search, Settings, ShieldCheck } from 'lucide-react'
 import { useUiStore } from '@/stores/ui-store'
 import { useAuthStore } from '@/stores/auth-store'
 import { ThemeToggle } from '@/components/theme-toggle'
@@ -24,6 +24,8 @@ export function AppShell() {
   const hasAnyRole = useAuthStore(s => s.hasAnyRole)
   const logout = useAuthStore(s => s.logout)
   const collapsed = useUiStore(s => s.sidebarCollapsed)
+  const collapsedGroups = useUiStore(s => s.collapsedGroups)
+  const toggleGroup = useUiStore(s => s.toggleGroup)
   const toggleSidebar = useUiStore(s => s.toggleSidebar)
   const setCommandOpen = useUiStore(s => s.setCommandOpen)
 
@@ -58,10 +60,25 @@ export function AppShell() {
           {groups.map(g => {
             const items = visibleIn(g)
             if (items.length === 0) return null
+            // 分组折叠（S8 用户需求）：点标题开合；折叠组内若含当前活动路由则组自动保持展开
+            const folded = collapsedGroups.includes(g) && !items.some(r => location.pathname.startsWith(r.path) && r.path !== '/')
             return (
               <div key={g}>
-                <div className="px-4 py-1.5 text-2xs uppercase tracking-wide text-label-3">{g}</div>
-                {items.map(r => (
+                <button
+                  type="button"
+                  onClick={() => toggleGroup(g)}
+                  className="flex w-full items-center gap-1 px-4 py-1.5 text-2xs uppercase tracking-wide text-label-3 hover:text-label-2"
+                  aria-expanded={!folded}
+                  title={collapsed ? g : undefined}
+                >
+                  {!collapsed && (
+                    <>
+                      <span className="flex-1 truncate text-left">{g}</span>
+                      <ChevronDown size={11} className={`transition-transform ${folded ? '-rotate-90' : ''}`} aria-hidden />
+                    </>
+                  )}
+                </button>
+                {!folded && items.map(r => (
                   <NavLink
                     key={r.path}
                     to={r.path}

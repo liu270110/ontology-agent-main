@@ -1210,6 +1210,30 @@
         "title": "CollectionOut",
         "type": "object"
       },
+      "Conclusion": {
+        "description": "单条推理结论（N-Triples 风格原文三元组，结果可追溯，宪法 5）。",
+        "properties": {
+          "object": {
+            "title": "Object",
+            "type": "string"
+          },
+          "predicate": {
+            "title": "Predicate",
+            "type": "string"
+          },
+          "subject": {
+            "title": "Subject",
+            "type": "string"
+          }
+        },
+        "required": [
+          "subject",
+          "predicate",
+          "object"
+        ],
+        "title": "Conclusion",
+        "type": "object"
+      },
       "ConsolidateIn": {
         "description": "POST /memory/consolidate：触发指定会话 L1→L2 沉淀（202 受理，后台执行）。",
         "properties": {
@@ -1321,6 +1345,39 @@
           "complete"
         ],
         "title": "DecisionOut",
+        "type": "object"
+      },
+      "DiffEntryOut": {
+        "additionalProperties": false,
+        "properties": {
+          "changes": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Changes",
+            "type": "array"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label"
+          }
+        },
+        "required": [
+          "key"
+        ],
+        "title": "DiffEntryOut",
         "type": "object"
       },
       "DocumentCreateIn": {
@@ -1846,6 +1903,39 @@
           }
         },
         "title": "DocumentPipelineProgress",
+        "type": "object"
+      },
+      "ElementDiffOut": {
+        "additionalProperties": false,
+        "properties": {
+          "added": {
+            "items": {
+              "$ref": "#/components/schemas/DiffEntryOut"
+            },
+            "title": "Added",
+            "type": "array"
+          },
+          "modified": {
+            "items": {
+              "$ref": "#/components/schemas/DiffEntryOut"
+            },
+            "title": "Modified",
+            "type": "array"
+          },
+          "removed": {
+            "items": {
+              "$ref": "#/components/schemas/DiffEntryOut"
+            },
+            "title": "Removed",
+            "type": "array"
+          },
+          "unchanged": {
+            "default": 0,
+            "title": "Unchanged",
+            "type": "integer"
+          }
+        },
+        "title": "ElementDiffOut",
         "type": "object"
       },
       "FactCategory": {
@@ -3552,6 +3642,58 @@
         "title": "OntologyOut",
         "type": "object"
       },
+      "OntologySearchIn": {
+        "additionalProperties": false,
+        "description": "POST /ontologies/search：本体搜索（名称/描述/命名空间 IRI 片段匹配）。\n\n⚠ 口径注记（api/01 §5.3 search 行）：契约行用途为「语义检索类/属性/规则（Milvus 向量，\nontology §7.2）」；M2 检索面未接线，本实现为**最小闭环**——租户内本体级片段匹配\n（名称/描述/iri_base），语义元素级向量检索随 M3+ 替换请求/响应形状（登记偏离，2026-09-28）。",
+        "properties": {
+          "limit": {
+            "default": 20,
+            "maximum": 100.0,
+            "minimum": 1.0,
+            "title": "Limit",
+            "type": "integer"
+          },
+          "query": {
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Query",
+            "type": "string"
+          }
+        },
+        "required": [
+          "query"
+        ],
+        "title": "OntologySearchIn",
+        "type": "object"
+      },
+      "OntologySearchOut": {
+        "additionalProperties": false,
+        "description": "搜索命中清单（total=命中条数，已按 limit 截断；排序与列表同口径=created_at 降序）。",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/OntologyOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "limit": {
+            "title": "Limit",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "limit"
+        ],
+        "title": "OntologySearchOut",
+        "type": "object"
+      },
       "OntologyStatus": {
         "description": "本体状态（ck_ontologies_status：draft/published/deprecated；04 篇 §3：版本历史线性）。",
         "enum": [
@@ -3561,6 +3703,51 @@
         ],
         "title": "OntologyStatus",
         "type": "string"
+      },
+      "OntologyUpdateIn": {
+        "additionalProperties": false,
+        "description": "PUT /ontologies/{id}：元信息更新（api/01 §5.3，ontology §7.1 元信息行）。\n\n部分更新语义：仅 `model_fields_set` 中显式携带的字段生效（description 传 null 即清空）；\niri_base/scheme_tier 之外的生命周期面（status/head_version）不归本端点（弃用=DELETE 行，\n版本推进=publish 动词）。至少一个字段必须显式提供（空对象体=3001，路由层判）。",
+        "properties": {
+          "description": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "scheme_tier": {
+            "anyOf": [
+              {
+                "pattern": "^(glossary|light_graph|heavy)$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scheme Tier"
+          }
+        },
+        "title": "OntologyUpdateIn",
+        "type": "object"
       },
       "OntologyValidateIn": {
         "additionalProperties": false,
@@ -4065,6 +4252,50 @@
         "title": "PluginVersionOut",
         "type": "object"
       },
+      "ProjectionDiffOut": {
+        "additionalProperties": false,
+        "description": "GET /ontologies/{id}/diff：两版本读模型差异（类/属性/公理/规则增删改清单，§6.2 分组口径）。\n\n口径注记：base/target 均为**发布版本**（query 参数，缺省 target=head、base=head 前一版本）；\n三元组级规范化 diff（RDFC-1.0，§6.2 ①②）与 changeset 候选图 diff 随 rebase 机制细化（§11 待办）。",
+        "properties": {
+          "axioms": {
+            "$ref": "#/components/schemas/ElementDiffOut"
+          },
+          "base_version": {
+            "title": "Base Version",
+            "type": "string"
+          },
+          "classes": {
+            "$ref": "#/components/schemas/ElementDiffOut"
+          },
+          "properties": {
+            "$ref": "#/components/schemas/ElementDiffOut"
+          },
+          "rules": {
+            "$ref": "#/components/schemas/ElementDiffOut"
+          },
+          "summary": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Summary",
+            "type": "object"
+          },
+          "target_version": {
+            "title": "Target Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "base_version",
+          "target_version",
+          "classes",
+          "properties",
+          "axioms",
+          "rules",
+          "summary"
+        ],
+        "title": "ProjectionDiffOut",
+        "type": "object"
+      },
       "PromotionCreateRequest": {
         "properties": {
           "record_id": {
@@ -4248,6 +4479,168 @@
           "created_at"
         ],
         "title": "PromotionRecordOut",
+        "type": "object"
+      },
+      "ReasonIn": {
+        "additionalProperties": false,
+        "description": "POST /ontologies/{id}/reason：确定性推理面（api/01 §5.3；ontology §7.2 推理行）。\n\n推理分级宪法：`semantic`（LLM 语义判断）**不入此面**——确定性引擎之外的路由随候选审核链\n（宪法 3：LLM 产物一律进审核队列）；`input` 自定义数据图参数 M2 未实装（ABox 推理随\nNeo4j 物化 M3+，登记偏离）。",
+        "properties": {
+          "type": {
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type"
+        ],
+        "title": "ReasonIn",
+        "type": "object"
+      },
+      "ReasonOut": {
+        "additionalProperties": false,
+        "description": "推理结论报告（api/01 §5.3 reason 行；统一形状承载两类引擎：\n\n- consistency（engine=gate.v1）：门禁级一致性=lint 三路由 + SHACL 自校验（L3 复用）；\n- classification/entailment（engine=owl2_rl）：OWL 2 RL 确定性闭包（结论计数+封顶样本）。",
+        "properties": {
+          "conclusion_count": {
+            "default": 0,
+            "title": "Conclusion Count",
+            "type": "integer"
+          },
+          "conclusions": {
+            "items": {
+              "$ref": "#/components/schemas/Conclusion"
+            },
+            "title": "Conclusions",
+            "type": "array"
+          },
+          "conforms": {
+            "title": "Conforms",
+            "type": "boolean"
+          },
+          "counts": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Counts",
+            "type": "object"
+          },
+          "elapsed_ms": {
+            "title": "Elapsed Ms",
+            "type": "integer"
+          },
+          "engine": {
+            "title": "Engine",
+            "type": "string"
+          },
+          "lint_ok": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lint Ok"
+          },
+          "ontology_id": {
+            "title": "Ontology Id",
+            "type": "string"
+          },
+          "shacl_conforms": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Shacl Conforms"
+          },
+          "truncated": {
+            "default": false,
+            "title": "Truncated",
+            "type": "boolean"
+          },
+          "type": {
+            "title": "Type",
+            "type": "string"
+          },
+          "violations": {
+            "items": {
+              "$ref": "#/components/schemas/ReasonViolationOut"
+            },
+            "title": "Violations",
+            "type": "array"
+          }
+        },
+        "required": [
+          "ontology_id",
+          "type",
+          "engine",
+          "conforms",
+          "elapsed_ms"
+        ],
+        "title": "ReasonOut",
+        "type": "object"
+      },
+      "ReasonViolationOut": {
+        "additionalProperties": false,
+        "description": "一致性违规（stage=parse|lint|shacl，与变更单门禁 GateViolation 同构留痕）。",
+        "properties": {
+          "code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Code"
+          },
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message"
+          },
+          "path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Path"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source"
+          },
+          "stage": {
+            "title": "Stage",
+            "type": "string"
+          }
+        },
+        "required": [
+          "stage"
+        ],
+        "title": "ReasonViolationOut",
         "type": "object"
       },
       "RecordCreateRequest": {
@@ -5189,6 +5582,91 @@
           "session_id"
         ],
         "title": "SourceRefsIn",
+        "type": "object"
+      },
+      "SparqlQueryIn": {
+        "additionalProperties": false,
+        "description": "POST /ontologies/{id}/query：只读 SPARQL 查询（api/01 §5.3；ontology §7.2 查询面）。\n\n仅允许 SELECT / ASK（对当前发布版本制品图执行）；INSERT/DELETE/LOAD 等 SPARQL Update\n语法在 rdflib 查询解析层即被拒绝，CONSTRUCT/DESCRIBE 亦不支持（只读面收窄为 SELECT/ASK，\n2026-09-28 最小闭环裁决）。`timeout_ms` 为执行预算护栏（服务端 asyncio.wait_for 强制，\n上限 10s；超时按 422/3001 返回并提示调整查询或预算）。",
+        "properties": {
+          "sparql": {
+            "maxLength": 200000,
+            "minLength": 1,
+            "title": "Sparql",
+            "type": "string"
+          },
+          "timeout_ms": {
+            "default": 5000,
+            "maximum": 10000.0,
+            "minimum": 100.0,
+            "title": "Timeout Ms",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "sparql"
+        ],
+        "title": "SparqlQueryIn",
+        "type": "object"
+      },
+      "SparqlQueryOut": {
+        "additionalProperties": false,
+        "description": "查询结果：select=变量名+行（每格字符串化，行数封顶 truncated 标记）；ask=布尔。",
+        "properties": {
+          "boolean": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Boolean"
+          },
+          "elapsed_ms": {
+            "title": "Elapsed Ms",
+            "type": "integer"
+          },
+          "form": {
+            "pattern": "^(select|ask)$",
+            "title": "Form",
+            "type": "string"
+          },
+          "rows": {
+            "items": {
+              "additionalProperties": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "type": "object"
+            },
+            "title": "Rows",
+            "type": "array"
+          },
+          "truncated": {
+            "default": false,
+            "title": "Truncated",
+            "type": "boolean"
+          },
+          "variables": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Variables",
+            "type": "array"
+          }
+        },
+        "required": [
+          "form",
+          "elapsed_ms"
+        ],
+        "title": "SparqlQueryOut",
         "type": "object"
       },
       "SubmitIn": {
@@ -8923,6 +9401,48 @@
         ]
       }
     },
+    "/api/v1/ontologies/search": {
+      "post": {
+        "description": "租户内本体搜索（api/01 §5.3 search 行）。\n\n⚠ 口径注记：契约行用途为「语义检索类/属性/规则（Milvus 向量，ontology §7.2）」；M2 检索面\n未接线，本实现为最小闭环——本体级名称/描述/iri_base 不区分大小写片段匹配（ILIKE），\n元素级向量检索随 M3+ 替换请求/响应形状（登记偏离，2026-09-28）。",
+        "operationId": "search_ontologies_api_v1_ontologies_search_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OntologySearchIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OntologySearchOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "本体搜索（名称/描述/命名空间 IRI 片段匹配；M2 最小闭环）",
+        "tags": [
+          "ontology"
+        ]
+      }
+    },
     "/api/v1/ontologies/{ontology_id}": {
       "get": {
         "operationId": "get_ontology_api_v1_ontologies__ontology_id__get",
@@ -8961,6 +9481,58 @@
           }
         },
         "summary": "本体详情（版本不可变）",
+        "tags": [
+          "ontology"
+        ]
+      },
+      "put": {
+        "description": "元信息更新最小闭环（api/01 §5.3 PUT 行，ontology §7.1 元信息语义）。\n\n部分更新：仅显式携带字段生效（``model_fields_set`` 判定；description 传 null 即清空）；\niri_base/状态/版本指针不归本端点——发布后 IRI 不可变（4201，聚合拦截）、状态迁移走\n弃用（DELETE 行）/发布（publish 动词）。契约登记错误码 3003（乐观锁冲突）M2 未实装：\n聚合无版本列，登记待办（并发编辑由单活跃 changeset 裁决兜底，ontology §6.1）。",
+        "operationId": "update_ontology_api_v1_ontologies__ontology_id__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "ontology_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Ontology Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OntologyUpdateIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OntologyOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "元信息更新（名称/描述/建模档次；部分更新语义，api/01 §5.3）",
         "tags": [
           "ontology"
         ]
@@ -9319,6 +9891,192 @@
           }
         },
         "summary": "提交变更单进终审（预检门禁通过才可，ontology §6.1）",
+        "tags": [
+          "ontology"
+        ]
+      }
+    },
+    "/api/v1/ontologies/{ontology_id}/diff": {
+      "get": {
+        "description": "两版本读模型差异（api/01 §5.3 diff 行；ontology §6.2 语义分组口径）。\n\n口径（最小闭环裁决，2026-09-28）：base/target 均为**发布版本**，各自从版本制品重放\n解析→lint 路由→读模型投影（L5 project_tbox），再做类/属性/公理/规则增删改清单对比\n（L5 diff_projections，确定性排序，无 NL 解释）。三元组级 RDFC-1.0 规范化 diff 与\nchangeset 候选图 diff 随 rebase 机制细化（ontology §6.2/§11 待办，登记偏离）。",
+        "operationId": "diff_ontology_api_v1_ontologies__ontology_id__diff_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "ontology_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Ontology Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "base",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 32,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Base"
+            }
+          },
+          {
+            "in": "query",
+            "name": "target",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 32,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Target"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectionDiffOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "版本读模型差异（?base=&target=；缺省 target=head、base=head 前一版本）",
+        "tags": [
+          "ontology"
+        ]
+      }
+    },
+    "/api/v1/ontologies/{ontology_id}/query": {
+      "post": {
+        "description": "SPARQL 查询面（api/01 §5.3 query 行；本体核心设计 §7.2 查询面）。\n\n查询对象=当前 head 版本制品原图（TBox；不做 OWL RL 物化，ABox 联查随 Neo4j 物化 M3+，\nontology §7.2「可联 ABox 物化」的后半句登记待办）。\n只读护栏：语句类型在**执行前**经 rdflib 代数白名单校验（仅 SELECT/ASK；SPARQL Update 语法\n在 rdflib 查询文法即不可解析，CONSTRUCT/DESCRIBE 亦拒绝）——非法语句 422/3001，零副作用。\n超时护栏：执行在 to_thread 中跑，``asyncio.wait_for`` 按客户端 ``timeout_ms``（≤10s）强制\n预算，超时 422/3001（预算为请求参数，提示调整；口径与 4204 门禁超时区分，登记注记）。",
+        "operationId": "query_ontology_api_v1_ontologies__ontology_id__query_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "ontology_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Ontology Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SparqlQueryIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SparqlQueryOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "只读 SPARQL 查询面（仅 SELECT/ASK；对当前发布版本制品执行，api/01 §5.3）",
+        "tags": [
+          "ontology"
+        ]
+      }
+    },
+    "/api/v1/ontologies/{ontology_id}/reason": {
+      "post": {
+        "description": "确定性推理（api/01 §5.3 reason 行；本体核心设计 §5 推理分级）。\n\n推理分级宪法：LLM **不入此面**——`type=semantic` 显式 422/3001（低频语义判断走候选审核链，\n宪法 2/3）。引擎路由：\n- consistency：复用 L3 变更单硬门禁（lint 三路由 + SHACL 自校验，gate.v1）——门禁级一致性\n  口径（owlrl 不产可用矛盾检测，满语义一致性随外挂引擎 PoC① 接线，§5.1 登记）；\n- classification / entailment：L5 owlrl OWL 2 RL 确定性闭包（conforms=计算成功），\n  结论按制品声明术语过滤（core.reasoning 口径），输出结论计数+封顶样本+耗时。\n确定性引擎同步计算一律 to_thread + wait_for 预算（standards/01 异步纪律）。",
+        "operationId": "reason_ontology_api_v1_ontologies__ontology_id__reason_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "ontology_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Ontology Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReasonIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReasonOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "确定性推理面（consistency=lint+SHACL 门禁级；classification/entailment=OWL 2 RL 闭包）",
         "tags": [
           "ontology"
         ]

@@ -259,6 +259,7 @@ class Ontology(BaseModel):
     tenant_id: uuid.UUID
     iri_base: str = Field(min_length=8, max_length=256)  # 默认命名空间 http://ontology-agent.local/o/{tenant}/{slug}#
     name: str = Field(min_length=1, max_length=128)
+    description: str | None = Field(default=None, max_length=2_000)  # 元信息（PUT 更新面；DDL ontologies.description）
     scheme_tier: str = Field(default="light_graph", pattern="^(glossary|light_graph|heavy)$")
     status: OntologyStatus = OntologyStatus.DRAFT
     head_version: OntologyVersionRef | None = None  # 发布版本指针；None=draft 从未发布

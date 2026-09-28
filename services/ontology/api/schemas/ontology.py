@@ -11,8 +11,11 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from services.ontology.business.ontology_gate import GateReport
 from services.ontology.business.seed_service import SeedImportResult
 from services.ontology.core import ValidationReport
+from services.ontology.core.diff import ElementDiff
+from services.ontology.core.reasoning import Conclusion, ReasonReport
 from services.ontology.domain.model.ontology import Ontology, OntologyChangeset, OntologyStatus
 
 
@@ -22,6 +25,148 @@ class OntologyCreateIn(BaseModel):
     slug: str | None = Field(default=None, pattern="^[a-z0-9][a-z0-9-]{0,62}$")  # 缺省由 name 派生（非 ASCII 随机后缀）
     description: str | None = Field(default=None, max_length=2_000)
     scheme_tier: str = Field(default="light_graph", pattern="^(glossary|light_graph|heavy)$")
+
+
+class OntologyUpdateIn(BaseModel):
+    """PUT /ontologies/{id}：元信息更新（api/01 §5.3，ontology §7.1 元信息行）。
+
+    部分更新语义：仅 `model_fields_set` 中显式携带的字段生效（description 传 null 即清空）；
+    iri_base/scheme_tier 之外的生命周期面（status/head_version）不归本端点（弃用=DELETE 行，
+    版本推进=publish 动词）。至少一个字段必须显式提供（空对象体=3001，路由层判）。
+    """
+
+    model_config = ConfigDict(extra="forbid")
+    name: str | None = Field(default=None, min_length=1, max_length=128)
+    description: str | None = Field(default=None, max_length=2_000)
+    scheme_tier: str | None = Field(default=None, pattern="^(glossary|light_graph|heavy)$")
+
+
+class OntologySearchIn(BaseModel):
+    """POST /ontologies/search：本体搜索（名称/描述/命名空间 IRI 片段匹配）。
+
+    ⚠ 口径注记（api/01 §5.3 search 行）：契约行用途为「语义检索类/属性/规则（Milvus 向量，
+    ontology §7.2）」；M2 检索面未接线，本实现为**最小闭环**——租户内本体级片段匹配
+    （名称/描述/iri_base），语义元素级向量检索随 M3+ 替换请求/响应形状（登记偏离，2026-09-28）。
+    """
+
+    model_config = ConfigDict(extra="forbid")
+    query: str = Field(min_length=1, max_length=256)
+    limit: int = Field(default=20, ge=1, le=100)
+
+
+class OntologySearchOut(BaseModel):
+    """搜索命中清单（total=命中条数，已按 limit 截断；排序与列表同口径=created_at 降序）。"""
+
+    model_config = ConfigDict(extra="forbid")
+    items: list[OntologyOut]
+    total: int
+    limit: int
+
+
+class SparqlQueryIn(BaseModel):
+    """POST /ontologies/{id}/query：只读 SPARQL 查询（api/01 §5.3；ontology §7.2 查询面）。
+
+    仅允许 SELECT / ASK（对当前发布版本制品图执行）；INSERT/DELETE/LOAD 等 SPARQL Update
+    语法在 rdflib 查询解析层即被拒绝，CONSTRUCT/DESCRIBE 亦不支持（只读面收窄为 SELECT/ASK，
+    2026-09-28 最小闭环裁决）。`timeout_ms` 为执行预算护栏（服务端 asyncio.wait_for 强制，
+    上限 10s；超时按 422/3001 返回并提示调整查询或预算）。
+    """
+
+    model_config = ConfigDict(extra="forbid")
+    sparql: str = Field(min_length=1, max_length=200_000)
+    timeout_ms: int = Field(default=5_000, ge=100, le=10_000)
+
+
+class SparqlQueryOut(BaseModel):
+    """查询结果：select=变量名+行（每格字符串化，行数封顶 truncated 标记）；ask=布尔。"""
+
+    model_config = ConfigDict(extra="forbid")
+    form: str = Field(pattern="^(select|ask)$")
+    variables: list[str] = Field(default_factory=list)
+    rows: list[dict[str, str | None]] = Field(default_factory=list)
+    boolean: bool | None = None
+    truncated: bool = False
+    elapsed_ms: int
+
+
+_MAX_QUERY_ROWS = 200  # 行数封顶（防全量导出打爆响应面；分页/投影下推随 M3+ 检索面）
+
+
+class ReasonIn(BaseModel):
+    """POST /ontologies/{id}/reason：确定性推理面（api/01 §5.3；ontology §7.2 推理行）。
+
+    推理分级宪法：`semantic`（LLM 语义判断）**不入此面**——确定性引擎之外的路由随候选审核链
+    （宪法 3：LLM 产物一律进审核队列）；`input` 自定义数据图参数 M2 未实装（ABox 推理随
+    Neo4j 物化 M3+，登记偏离）。
+    """
+
+    model_config = ConfigDict(extra="forbid")
+    type: str  # consistency|classification|entailment；semantic 显式 422（路由层判，错误体带宪法注记）
+
+
+class ReasonViolationOut(BaseModel):
+    """一致性违规（stage=parse|lint|shacl，与变更单门禁 GateViolation 同构留痕）。"""
+
+    model_config = ConfigDict(extra="forbid")
+    stage: str
+    code: str | None = None
+    message: str | None = None
+    source: str | None = None
+    path: str | None = None
+
+
+class ReasonOut(BaseModel):
+    """推理结论报告（api/01 §5.3 reason 行；统一形状承载两类引擎：
+
+    - consistency（engine=gate.v1）：门禁级一致性=lint 三路由 + SHACL 自校验（L3 复用）；
+    - classification/entailment（engine=owl2_rl）：OWL 2 RL 确定性闭包（结论计数+封顶样本）。
+    """
+
+    model_config = ConfigDict(extra="forbid")
+    ontology_id: str
+    type: str
+    engine: str
+    conforms: bool
+    elapsed_ms: int
+    lint_ok: bool | None = None
+    shacl_conforms: bool | None = None
+    violations: list[ReasonViolationOut] = Field(default_factory=list)
+    conclusion_count: int = 0
+    counts: dict[str, int] = Field(default_factory=dict)
+    conclusions: list[Conclusion] = Field(default_factory=list)
+    truncated: bool = False
+
+
+class DiffEntryOut(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    key: str
+    label: str | None = None
+    changes: list[dict[str, Any]] = Field(default_factory=list)  # {field, before, after}
+
+
+class ElementDiffOut(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    added: list[DiffEntryOut] = Field(default_factory=list)
+    removed: list[DiffEntryOut] = Field(default_factory=list)
+    modified: list[DiffEntryOut] = Field(default_factory=list)
+    unchanged: int = 0
+
+
+class ProjectionDiffOut(BaseModel):
+    """GET /ontologies/{id}/diff：两版本读模型差异（类/属性/公理/规则增删改清单，§6.2 分组口径）。
+
+    口径注记：base/target 均为**发布版本**（query 参数，缺省 target=head、base=head 前一版本）；
+    三元组级规范化 diff（RDFC-1.0，§6.2 ①②）与 changeset 候选图 diff 随 rebase 机制细化（§11 待办）。
+    """
+
+    model_config = ConfigDict(extra="forbid")
+    base_version: str
+    target_version: str
+    classes: ElementDiffOut
+    properties: ElementDiffOut
+    axioms: ElementDiffOut
+    rules: ElementDiffOut
+    summary: dict[str, int]
 
 
 class HeadVersionOut(BaseModel):
@@ -188,6 +333,7 @@ def from_domain(ag: Ontology) -> OntologyOut:
         id=ag.id,
         iri_base=ag.iri_base,
         name=ag.name,
+        description=ag.description,
         scheme_tier=ag.scheme_tier,
         status=ag.status,
         head_version=head,
@@ -224,3 +370,64 @@ def seed_import_from_domain(result: SeedImportResult) -> SeedImportOut:
         ),
         seed_report=SeedReportOut(**result.report.model_dump()),
     )
+
+
+def diff_from_domain(diff: Any) -> ProjectionDiffOut:
+    """L5 core.diff.ProjectionDiff → L2 DTO（core 模型同形，逐组机械转换保持层界）。"""
+    return ProjectionDiffOut(
+        base_version=diff.base_version,
+        target_version=diff.target_version,
+        classes=_element_diff_from_domain(diff.classes),
+        properties=_element_diff_from_domain(diff.properties),
+        axioms=_element_diff_from_domain(diff.axioms),
+        rules=_element_diff_from_domain(diff.rules),
+        summary=diff.summary,
+    )
+
+
+def _element_diff_from_domain(group: ElementDiff) -> ElementDiffOut:
+    def _entries(entries: list) -> list[DiffEntryOut]:
+        return [
+            DiffEntryOut(
+                key=e.key,
+                label=e.label,
+                changes=[{"field": c.field, "before": c.before, "after": c.after} for c in e.changes],
+            )
+            for e in entries
+        ]
+
+    return ElementDiffOut(
+        added=_entries(group.added), removed=_entries(group.removed), modified=_entries(group.modified),
+        unchanged=group.unchanged,
+    )
+
+
+def reason_from_domain(ontology_id: str, rtype: str, report: Any, *, elapsed_ms: int) -> ReasonOut:
+    """推理报告 → L2 DTO：gate.v1（GateReport 形状）与 owl2_rl（ReasonReport 形状）统一承载。"""
+    if isinstance(report, GateReport):  # 一致性门禁级（L3 run_changeset_gate 产物）
+        return ReasonOut(
+            ontology_id=ontology_id,
+            type=rtype,
+            engine=report.gate_version,
+            conforms=report.conforms,
+            elapsed_ms=elapsed_ms,
+            lint_ok=report.lint_ok,
+            shacl_conforms=report.shacl_conforms,
+            violations=[
+                ReasonViolationOut(stage=v.stage, code=v.code, message=v.message, source=v.source, path=v.path)
+                for v in report.violations
+            ],
+        )
+    if isinstance(report, ReasonReport):  # OWL 2 RL 闭包级（L5 core.reasoning 产物）
+        return ReasonOut(
+            ontology_id=ontology_id,
+            type=rtype,
+            engine=report.engine,
+            conforms=report.conforms,
+            elapsed_ms=elapsed_ms,
+            conclusion_count=report.conclusion_count,
+            counts=report.counts,
+            conclusions=report.conclusions,
+            truncated=report.truncated,
+        )
+    raise TypeError(f"未知推理报告类型: {type(report).__name__}")

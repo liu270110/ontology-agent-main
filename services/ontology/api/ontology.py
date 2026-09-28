@@ -19,7 +19,9 @@ for_tenant()，登记 TODO），本路由经 SessionDep 请求级会话直接构
 
 from __future__ import annotations
 
+import asyncio
 import re
+import time
 import uuid
 from typing import Annotated
 
@@ -38,10 +40,20 @@ from services.ontology.api.schemas.ontology import (
     OntologyImportSeedIn,
     OntologyListOut,
     OntologyOut,
+    OntologySearchIn,
+    OntologySearchOut,
+    OntologyUpdateIn,
     OntologyValidateIn,
+    ProjectionDiffOut,
+    ReasonIn,
+    ReasonOut,
     SeedImportOut,
+    SparqlQueryIn,
+    SparqlQueryOut,
     changeset_from_domain,
+    diff_from_domain,
     from_domain,
+    reason_from_domain,
     report_from_domain,
     seed_import_from_domain,
 )
@@ -51,9 +63,23 @@ from services.ontology.business.changeset_service import (
 )
 from services.ontology.business.ontology_gate import GateReport, run_changeset_gate
 from services.ontology.business.seed_service import import_seed_as_project
-from services.ontology.core import default_namespace, load_turtle, validate
+from services.ontology.core import (
+    default_namespace,
+    diff_projections,
+    entail,
+    execute_readonly,
+    lint,
+    load_turtle,
+    prepare_readonly,
+    project_tbox,
+    validate,
+)
+from services.ontology.core.diff import ProjectionDiff
+from services.ontology.core.query import SparqlRejected
+from services.ontology.core.reasoning import ReasonReport
 from services.ontology.data.repo_impl.ontology_repo import PgOntologyRepository, VersionSummary
 from services.ontology.domain.model.ontology import DomainError, Ontology, OntologyStatus
+from services.ontology.domain.model.ontology_read_model import ReadModelProjection
 from services.platform.deps import Principal, SessionDep, domain_error, require_scope
 from services.platform.errors import GatewayError
 
@@ -66,6 +92,8 @@ OntologyApproveDep = Annotated[Principal, Depends(require_scope("review:approve:
 OntologyPublishDep = Annotated[Principal, Depends(require_scope("ontology:publish"))]
 
 _SLUG_ASCII = re.compile(r"[^a-z0-9]+")
+_CORE_BUDGET_SECONDS = 30.0  # 同步 rdflib 栈（解析/lint/投影/闭包）统一预算（gate 同款，§6.1 fail-closed）
+_REASON_TYPES = ("consistency", "classification", "entailment")  # semantic=LLM 面，不入此端点（宪法 2/3）
 
 
 def _repo(db: AsyncSession, tenant_id: uuid.UUID) -> PgOntologyRepository:
@@ -119,6 +147,7 @@ async def create_ontology(body: OntologyCreateIn, principal: OntologyWriteDep, d
         tenant_id=principal.tenant_id,
         iri_base=default_namespace(str(principal.tenant_id), slug),
         name=body.name,
+        description=body.description,
         scheme_tier=body.scheme_tier,
     )
     try:
@@ -143,6 +172,56 @@ async def list_ontologies(
 @router.get("/{ontology_id}", summary="本体详情（版本不可变）")
 async def get_ontology(ontology_id: uuid.UUID, principal: OntologyReadDep, db: SessionDep) -> OntologyOut:
     return from_domain(await _require_ontology(db, principal.tenant_id, ontology_id))
+
+
+@router.put("/{ontology_id}", summary="元信息更新（名称/描述/建模档次；部分更新语义，api/01 §5.3）")
+async def update_ontology(
+    ontology_id: uuid.UUID,
+    body: OntologyUpdateIn,
+    principal: OntologyWriteDep,
+    db: SessionDep,
+) -> OntologyOut:
+    """元信息更新最小闭环（api/01 §5.3 PUT 行，ontology §7.1 元信息语义）。
+
+    部分更新：仅显式携带字段生效（``model_fields_set`` 判定；description 传 null 即清空）；
+    iri_base/状态/版本指针不归本端点——发布后 IRI 不可变（4201，聚合拦截）、状态迁移走
+    弃用（DELETE 行）/发布（publish 动词）。契约登记错误码 3003（乐观锁冲突）M2 未实装：
+    聚合无版本列，登记待办（并发编辑由单活跃 changeset 裁决兜底，ontology §6.1）。
+    """
+    fields = body.model_fields_set
+    if not fields:
+        raise GatewayError(3001, "至少显式提供一个更新字段（name/description/scheme_tier）", status_code=422)
+    for required in ("name", "scheme_tier"):  # 非空字段：显式 null 亦拒绝（与 DTO 形状一致）
+        if required in fields and getattr(body, required) is None:
+            raise GatewayError(3001, f"{required} 不可为 null（清空请省略该字段）", status_code=422)
+    try:
+        ontology = await _require_ontology(db, principal.tenant_id, ontology_id)
+        if "name" in fields:
+            ontology.name = body.name
+        if "description" in fields:
+            ontology.description = body.description
+        if "scheme_tier" in fields:
+            ontology.scheme_tier = body.scheme_tier
+        await _repo(db, principal.tenant_id).save(ontology)
+    except DomainError as exc:
+        raise domain_error(exc, fallback_code=4201) from exc
+    return from_domain(ontology)
+
+
+@router.post("/search", summary="本体搜索（名称/描述/命名空间 IRI 片段匹配；M2 最小闭环）")
+async def search_ontologies(
+    body: OntologySearchIn,
+    principal: OntologyReadDep,
+    db: SessionDep,
+) -> OntologySearchOut:
+    """租户内本体搜索（api/01 §5.3 search 行）。
+
+    ⚠ 口径注记：契约行用途为「语义检索类/属性/规则（Milvus 向量，ontology §7.2）」；M2 检索面
+    未接线，本实现为最小闭环——本体级名称/描述/iri_base 不区分大小写片段匹配（ILIKE），
+    元素级向量检索随 M3+ 替换请求/响应形状（登记偏离，2026-09-28）。
+    """
+    items = await _repo(db, principal.tenant_id).search(body.query, limit=body.limit)
+    return OntologySearchOut(items=[from_domain(o) for o in items], total=len(items), limit=body.limit)
 
 
 @router.post(
@@ -358,6 +437,129 @@ async def validate_ontology(
     return report_from_domain(report).model_dump()
 
 
+@router.get("/{ontology_id}/diff", summary="版本读模型差异（?base=&target=；缺省 target=head、base=head 前一版本）")
+async def diff_ontology(
+    ontology_id: uuid.UUID,
+    principal: OntologyReadDep,
+    db: SessionDep,
+    base: Annotated[str | None, Query(max_length=32)] = None,
+    target: Annotated[str | None, Query(max_length=32)] = None,
+) -> ProjectionDiffOut:
+    """两版本读模型差异（api/01 §5.3 diff 行；ontology §6.2 语义分组口径）。
+
+    口径（最小闭环裁决，2026-09-28）：base/target 均为**发布版本**，各自从版本制品重放
+    解析→lint 路由→读模型投影（L5 project_tbox），再做类/属性/公理/规则增删改清单对比
+    （L5 diff_projections，确定性排序，无 NL 解释）。三元组级 RDFC-1.0 规范化 diff 与
+    changeset 候选图 diff 随 rebase 机制细化（ontology §6.2/§11 待办，登记偏离）。
+    """
+    repo = _repo(db, principal.tenant_id)
+    ontology = await _require_ontology(db, principal.tenant_id, ontology_id)
+    if ontology.head_version is None:
+        raise GatewayError(4201, "本体尚未发布，无可对比版本", status_code=409)
+    versions = await repo.list_versions(ontology.id)  # version_no 降序
+    target_ref = _resolve_version(versions, target, param="target")
+    if base is None:
+        base_ref = next((v for v in versions if v.version_no < target_ref.version_no), None)
+        if base_ref is None:
+            raise GatewayError(4201, "head 之前无更早版本可对比", status_code=409)
+    else:
+        base_ref = _resolve_version(versions, base, param="base")
+    diff: ProjectionDiff = await _project_version(repo, base_ref, target_ref)
+    return diff_from_domain(diff)
+
+
+@router.post(
+    "/{ontology_id}/query",
+    summary="只读 SPARQL 查询面（仅 SELECT/ASK；对当前发布版本制品执行，api/01 §5.3）",
+)
+async def query_ontology(
+    ontology_id: uuid.UUID,
+    body: SparqlQueryIn,
+    principal: OntologyReadDep,
+    db: SessionDep,
+) -> SparqlQueryOut:
+    """SPARQL 查询面（api/01 §5.3 query 行；本体核心设计 §7.2 查询面）。
+
+    查询对象=当前 head 版本制品原图（TBox；不做 OWL RL 物化，ABox 联查随 Neo4j 物化 M3+，
+    ontology §7.2「可联 ABox 物化」的后半句登记待办）。
+    只读护栏：语句类型在**执行前**经 rdflib 代数白名单校验（仅 SELECT/ASK；SPARQL Update 语法
+    在 rdflib 查询文法即不可解析，CONSTRUCT/DESCRIBE 亦拒绝）——非法语句 422/3001，零副作用。
+    超时护栏：执行在 to_thread 中跑，``asyncio.wait_for`` 按客户端 ``timeout_ms``（≤10s）强制
+    预算，超时 422/3001（预算为请求参数，提示调整；口径与 4204 门禁超时区分，登记注记）。
+    """
+    repo = _repo(db, principal.tenant_id)
+    ontology = await _require_ontology(db, principal.tenant_id, ontology_id)
+    if ontology.head_version is None:
+        raise GatewayError(4201, "本体尚未发布，无可查询制品", status_code=409)
+    graph = await _load_version_graph(_read_artifact(repo, ontology.head_version.artifact_key))
+    try:
+        prepared, form = prepare_readonly(body.sparql)
+    except SparqlRejected as exc:
+        raise GatewayError(3001, str(exc), status_code=422) from exc
+    started = time.perf_counter()
+    try:
+        result = await asyncio.wait_for(
+            asyncio.to_thread(execute_readonly, graph, prepared, form), body.timeout_ms / 1000
+        )
+    except TimeoutError as exc:
+        raise GatewayError(
+            3001, f"查询执行超时（预算 {body.timeout_ms}ms）——请缩小查询范围或提高 timeout_ms", status_code=422
+        ) from exc
+    except Exception as exc:  # rdflib 运行期求值异常（绑定类型错误等）按参数语义 3001 透出
+        raise GatewayError(3001, f"查询执行失败: {exc}", status_code=422) from exc
+    return SparqlQueryOut(
+        form=result.form,
+        variables=result.variables,
+        rows=result.rows,
+        boolean=result.boolean,
+        truncated=result.truncated,
+        elapsed_ms=int((time.perf_counter() - started) * 1000),
+    )
+
+
+@router.post(
+    "/{ontology_id}/reason",
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="确定性推理面（consistency=lint+SHACL 门禁级；classification/entailment=OWL 2 RL 闭包）",
+)
+async def reason_ontology(
+    ontology_id: uuid.UUID,
+    body: ReasonIn,
+    principal: OntologyReadDep,
+    db: SessionDep,
+) -> ReasonOut:
+    """确定性推理（api/01 §5.3 reason 行；本体核心设计 §5 推理分级）。
+
+    推理分级宪法：LLM **不入此面**——`type=semantic` 显式 422/3001（低频语义判断走候选审核链，
+    宪法 2/3）。引擎路由：
+    - consistency：复用 L3 变更单硬门禁（lint 三路由 + SHACL 自校验，gate.v1）——门禁级一致性
+      口径（owlrl 不产可用矛盾检测，满语义一致性随外挂引擎 PoC① 接线，§5.1 登记）；
+    - classification / entailment：L5 owlrl OWL 2 RL 确定性闭包（conforms=计算成功），
+      结论按制品声明术语过滤（core.reasoning 口径），输出结论计数+封顶样本+耗时。
+    确定性引擎同步计算一律 to_thread + wait_for 预算（standards/01 异步纪律）。
+    """
+    if body.type == "semantic":
+        raise GatewayError(
+            3001, "semantic 为 LLM 语义判断，不入确定性推理面（宪法 2/3：候选审核链承载）", status_code=422
+        )
+    if body.type not in _REASON_TYPES:
+        raise GatewayError(3001, f"type 必须为 {'|'.join(_REASON_TYPES)} 之一（semantic 不入此面）", status_code=422)
+    repo = _repo(db, principal.tenant_id)
+    ontology = await _require_ontology(db, principal.tenant_id, ontology_id)
+    if ontology.head_version is None:
+        raise GatewayError(4201, "本体尚未发布，无可推理制品", status_code=409)
+    content = _read_artifact(repo, ontology.head_version.artifact_key)
+    started = time.perf_counter()
+    if body.type == "consistency":
+        report: GateReport = await run_changeset_gate(content)  # L3 门禁复用：违规即 conforms=False
+    else:
+        graph = await _load_version_graph(content)
+        report = await _entail_with_budget(graph, body.type)
+    return reason_from_domain(
+        str(ontology.id), body.type, report, elapsed_ms=int((time.perf_counter() - started) * 1000)
+    )
+
+
 @router.post(
     "/import-seed",
     status_code=status.HTTP_201_CREATED,
@@ -419,3 +621,55 @@ def _read_artifact(repo: PgOntologyRepository, key: str) -> str:
         return repo.artifacts.get(key)
     except FileNotFoundError as exc:
         raise GatewayError(4201, f"制品缺失: {key}（checksum 三方巡检应已告警）", status_code=409) from exc
+
+
+def _resolve_version(versions: list[VersionSummary], name: str | None, *, param: str) -> VersionSummary:
+    """diff 版本参数解析：缺省=head（version_no 最大）；显式版本名未登记即 404/4201。"""
+    if not versions:  # head 指针存在而版本行缺失：checksum 三方巡检应已告警的不变式破坏
+        raise GatewayError(4201, "版本历史缺失（checksum 三方巡检应已告警）", status_code=409)
+    if name is None:
+        return versions[0]  # list_versions 按 version_no 降序，首条即 head
+    found = next((v for v in versions if v.version == name), None)
+    if found is None:
+        raise GatewayError(4201, f"版本不存在: {name}（{param} 参数）", status_code=404)
+    return found
+
+
+async def _load_version_graph(content: str):
+    """制品 Turtle → rdflib 图（to_thread + 预算；解析失败 3001/422，超时 4204/409 同门禁 fail-closed）。"""
+    try:
+        return await asyncio.wait_for(asyncio.to_thread(load_turtle, content), _CORE_BUDGET_SECONDS)
+    except ValueError as exc:
+        raise GatewayError(3001, str(exc), status_code=422) from exc
+    except TimeoutError as exc:
+        raise GatewayError(
+            4204, f"制品解析超时（>{_CORE_BUDGET_SECONDS:.0f}s，fail-closed，§6.1 同款预算）", status_code=409
+        ) from exc
+
+
+async def _project_version(
+    repo: PgOntologyRepository, base_ref: VersionSummary, target_ref: VersionSummary
+) -> ProjectionDiff:
+    """双版本制品 → 读模型差异（diff 专用只读重放：解析→lint 路由→投影，不写读模型四表）。"""
+    base_projection = await _project_single_version(repo, base_ref)
+    target_projection = await _project_single_version(repo, target_ref)
+    return diff_projections(
+        base_projection, target_projection, base_version=base_ref.version, target_version=target_ref.version
+    )
+
+
+async def _project_single_version(repo: PgOntologyRepository, ref: VersionSummary) -> ReadModelProjection:
+    """单版本制品 → 读模型投影（L5 纯函数链，同步计算 to_thread 包裹，standards/01 异步纪律）。"""
+    graph = await _load_version_graph(_read_artifact(repo, ref.artifact_key))
+    lint_report = await asyncio.wait_for(asyncio.to_thread(lint, graph), _CORE_BUDGET_SECONDS)
+    return await asyncio.wait_for(asyncio.to_thread(project_tbox, graph, lint_report.routes), _CORE_BUDGET_SECONDS)
+
+
+async def _entail_with_budget(graph, scope: str) -> ReasonReport:
+    """OWL 2 RL 确定性闭包（to_thread + 预算；超时 4204/409 同门禁 fail-closed 口径）。"""
+    try:
+        return await asyncio.wait_for(asyncio.to_thread(entail, graph, scope=scope), _CORE_BUDGET_SECONDS)
+    except TimeoutError as exc:
+        raise GatewayError(
+            4204, f"推理闭包超时（>{_CORE_BUDGET_SECONDS:.0f}s，fail-closed，§5.1 外挂引擎待办）", status_code=409
+        ) from exc

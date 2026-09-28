@@ -29,6 +29,10 @@ class OntologyRepository(Protocol):
         self, *, status: OntologyStatus | None = None, offset: int = 0, limit: int = 20
     ) -> list[Ontology]: ...
 
+    async def search(self, query: str, *, limit: int = 20) -> list[Ontology]:
+        """本体搜索（api/01 §5.3 search 行）：名称/描述/命名空间 IRI 片段匹配（M2 最小闭环口径）。"""
+        ...
+
     async def append_version(
         self,
         ontology_id: UUID,

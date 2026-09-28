@@ -137,14 +137,9 @@ class PgOntologyRepository:
             if version_row is not None:
                 head_ref = _version_ref(version_row)
         latest_changeset = await self._latest_changeset(ontology_id)
-        return Ontology(
-            id=row.id,
-            tenant_id=row.tenant_id,
-            iri_base=row.iri_base,
-            name=row.name,
-            scheme_tier=row.scheme_tier,
-            status=OntologyStatus(row.status),
-            head_version=head_ref,
+        return self._ontology_from_row(
+            row,
+            head_ref=head_ref,
             active_changeset=_changeset_to_domain(latest_changeset) if latest_changeset is not None else None,
         )
 
@@ -158,6 +153,7 @@ class PgOntologyRepository:
             raise ValueError("租户不匹配：拒绝写入他租户本体行")
         row.iri_base = ontology.iri_base
         row.name = ontology.name
+        row.description = ontology.description
         row.scheme_tier = ontology.scheme_tier
         row.status = ontology.status.value
         row.current_version_id = await self._version_row_id(ontology.id, ontology.head_version)
@@ -177,16 +173,35 @@ class PgOntologyRepository:
         head_map = await self._head_map(ids)
         changeset_map = await self._latest_changeset_map(ids)
         return [
-            Ontology(
-                id=r.id,
-                tenant_id=r.tenant_id,
-                iri_base=r.iri_base,
-                name=r.name,
-                scheme_tier=r.scheme_tier,
-                status=OntologyStatus(r.status),
-                head_version=head_map.get(r.id),
-                active_changeset=changeset_map.get(r.id),
+            self._ontology_from_row(r, head_ref=head_map.get(r.id), active_changeset=changeset_map.get(r.id))
+            for r in rows
+        ]
+
+    async def search(self, query: str, *, limit: int = 20) -> list[Ontology]:
+        """本体搜索（api/01 §5.3 search 行 M2 最小闭环）：名称/描述/命名空间 IRI 片段不区分大小写匹配。
+
+        语义检索（Milvus 向量，ontology §7.2）随 M3+ 检索面接入替换本实现，签名不变；
+        ILIKE 通配符转义（%/_）防片段语义被通配符旁路。
+        """
+        escaped = query.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        pattern = f"%{escaped}%"
+        stmt = (
+            select(OntologyORM)
+            .where(
+                OntologyORM.tenant_id == self._tenant_id,
+                (OntologyORM.name.ilike(pattern, escape="\\"))
+                | (OntologyORM.iri_base.ilike(pattern, escape="\\"))
+                | (OntologyORM.description.ilike(pattern, escape="\\")),
             )
+            .order_by(OntologyORM.created_at.desc(), OntologyORM.id.desc())
+            .limit(limit)
+        )
+        rows = (await self._db.execute(stmt)).scalars().all()
+        if not rows:
+            return []
+        head_map = await self._head_map([r.id for r in rows])
+        return [
+            self._ontology_from_row(r, head_ref=head_map.get(r.id), active_changeset=None)
             for r in rows
         ]
 
@@ -402,6 +417,26 @@ class PgOntologyRepository:
         for row in (await self._db.execute(stmt)).scalars():
             result.setdefault(row.ontology_id, _changeset_to_domain(row))  # 首条即最新（按时间降序遍历）
         return result
+
+    def _ontology_from_row(
+        self,
+        row: OntologyORM,
+        *,
+        head_ref: OntologyVersionRef | None,
+        active_changeset: OntologyChangeset | None,
+    ) -> Ontology:
+        """ORM 行 → 聚合（get/list/search 三站点单一映射源，防字段增删三处漂移）。"""
+        return Ontology(
+            id=row.id,
+            tenant_id=row.tenant_id,
+            iri_base=row.iri_base,
+            name=row.name,
+            description=row.description,
+            scheme_tier=row.scheme_tier,
+            status=OntologyStatus(row.status),
+            head_version=head_ref,
+            active_changeset=active_changeset,
+        )
 
     async def _head_map(self, ontology_ids: list[uuid.UUID]) -> dict[uuid.UUID, OntologyVersionRef]:
         stmt = select(OntologyORM.id, OntologyVersionORM).join(

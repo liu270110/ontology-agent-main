@@ -21,10 +21,16 @@ from services.rsi.whitelist import ImprovementType
 
 
 class TriggerTrack(StrEnum):
-    """双轨触发（09 §2；缺口轨=09 §13.4 随 M3 轨迹落账后启动，阶段 A 不含）。"""
+    """三轨触发（09 §2 双轨 + §13.4 缺口轨；GAP 枚举位随 B9 G0 批启用——新增轨=框架变更）。
+
+    - EXPERIENCE / METRIC：经 TriggerRegistry 注册分派（triggers.py）；
+    - GAP：缺口检测器产出（GapCollector 滑窗聚类达标后 submit 入池）——**不经触发注册面**：
+      缺口检测器=本体聚合巡检而非 handler 注册制，triggers.register 对 GAP 显式拒绝（§13.4）。
+    """
 
     EXPERIENCE = "experience"  # 经验轨：任务终态事件复盘（事件触发）
     METRIC = "metric"  # 指标轨：08 §7 三类基准退化（周期触发）
+    GAP = "gap"  # 缺口轨：结构信号（本体自检，零 LLM；09 §13.4，B9 G0 批启用）
 
 
 class ProposalStatus(StrEnum):
@@ -63,7 +69,7 @@ class Proposal:
     tenant_id: uuid.UUID
     type: ImprovementType
     target: str  # 载体标识 + 基线版本号（如 prompt_templates/extract_power@v3）
-    trigger: TriggerTrack  # 双轨来源（experience/metric）
+    trigger: TriggerTrack  # 来源轨（experience/metric/gap 三轨，09 §2 + §13.4）
     envelope: dict[str, Any]  # 统一信封（patch|content、expected_gain、risk_level、eval_plan）
     source_trace_ids: tuple[str, ...] = ()  # 证据链：来源轨迹（09 §7 逐环可回链的起点）
     id: uuid.UUID = field(default_factory=uuid.uuid4)

@@ -2,9 +2,14 @@
 
 - 走 L7 ModelPort（services/platform/ports/model_port.py）：审计/预算在组合根由
   AuditedModelPort 内建包裹（硬约束：勿绕过）；本适配器只组提示词与流式投影；
-- 流式形态：ModelPort.complete_structured 为一次性结构化产物（答案 JSON），delta 按
-  固定步长切片透传（与 claude 真 SSE 流式同构消费，SSE 投影无差别）；
-- 用量：平台用量上下文（llm/usage）回填后读取，FakeModelPort 不回填 → 记 0（显式口径）。
+- 流式形态（H-6 真流式批，2026-09-29）：端口具备 ``stream_complete`` 即走**真流式**
+  （HTTP SSE 逐段产出 text_delta，模型产出顺序透传，无攒齐再切）；端口仅有
+  complete_structured（Protocol 扩展前的旧实现/测试桩，及生产 AuditedModelPort 收口
+  流式面之前的过渡期）→ 回退「一次性结构化答案 + 固定步长切片」伪流式（规划回退路径
+  保留）。两路事件语义同构：TEXT_MESSAGE_CONTENT 的 delta 形态不变，SSE 投影无差别，
+  前端零感知；
+- 用量：平台用量上下文（llm/usage）回填后读取（真流式=末块 usage），FakeModelPort
+  不回填 → 记 0（显式口径）。
 """
 
 from __future__ import annotations
@@ -18,13 +23,13 @@ from services.agent.domain.model.kernel_context import ExtensionMeta, TenantCont
 from services.platform.llm.usage import get_last_usage
 from services.platform.ports.model_port import ModelPort
 
-# 答案抽取 Schema（推理分级宪法第 2 条：LLM 输出必过确定性校验才可用）
+# 答案抽取 Schema（推理分级宪法第 2 条：LLM 输出必过确定性校验才可用）——伪流式回退路径消费
 _ANSWER_SCHEMA: dict[str, Any] = {
     "type": "object",
     "required": ["answer"],
     "properties": {"answer": {"type": "string"}},
 }
-_DELTA_CHARS = 24  # 透传切片步长（示例值；SSE 投影粒度，非生成粒度）
+_DELTA_CHARS = 24  # 回退路径透传切片步长（示例值；SSE 投影粒度，非生成粒度）
 
 
 def _build_system_prompt(turn: ChatTurn) -> str:
@@ -46,8 +51,31 @@ def _build_user_prompt(turn: ChatTurn) -> str:
     return "\n".join(lines)
 
 
+def _build_messages(turn: ChatTurn) -> list[dict[str, Any]]:
+    """chat completions messages 形态（H-6）：system（角色约定+已标界上下文）+ user。"""
+    return [
+        {"role": "system", "content": _build_system_prompt(turn)},
+        {"role": "user", "content": _build_user_prompt(turn)},
+    ]
+
+
 def _chunk_text(text: str, size: int = _DELTA_CHARS) -> list[str]:
     return [text[i : i + size] for i in range(0, len(text), size)]
+
+
+def _finish_event() -> GenerationEvent:
+    """finish 终态：用量取平台上下文（真流式=末块 usage 回填；桩不回填记 0，显式口径）。"""
+    recorded = get_last_usage()
+    usage = (
+        {
+            "token_in": recorded.token_in,
+            "token_out": recorded.token_out,
+            "cache_read_tokens": recorded.cache_read_tokens,
+        }
+        if recorded is not None
+        else {}
+    )
+    return GenerationEvent(kind="finish", usage=usage, finish_reason="stop")
 
 
 class BuiltinAdapter(ChatAdapter):
@@ -66,6 +94,31 @@ class BuiltinAdapter(ChatAdapter):
     async def stream_chat(
         self, turn: ChatTurn, ctx: TenantContext, *, timeout_ms: int = 30_000
     ) -> AsyncIterator[GenerationEvent]:
+        """生成入口：端口有流式面走真流式，否则回退结构化切片（两路事件语义同构）。"""
+        stream_complete = getattr(self._model, "stream_complete", None)
+        if stream_complete is None:
+            # 回退（勿解包 AuditedModelPort._inner 走真流式——审计/预算硬约束不可绕过）
+            async for event in self._stream_structured_fallback(turn, ctx, timeout_ms=timeout_ms):
+                yield event
+            return
+        # 硬上限由内核单工具超时（asyncio.wait_for）钳制；传输层超时=timeout_s（端口内
+        # httpx 必设）——与 claude 直连通道同口径（docs/Agent §5：流式按传输层判超时）。
+        timeout_s = max(timeout_ms / 1000, 1.0)
+        async for piece in stream_complete(
+            _build_messages(turn),
+            temperature=None,  # 对话档：服务端缺省（complete_structured 的事实型 0.1 属抽取面，不沿用到闲聊面）
+            num_ctx=turn.num_ctx,
+            timeout_s=timeout_s,
+            trace_id=ctx.trace_id,
+        ):
+            if piece:
+                yield GenerationEvent(kind="text_delta", delta=piece)
+        yield _finish_event()
+
+    async def _stream_structured_fallback(
+        self, turn: ChatTurn, ctx: TenantContext, *, timeout_ms: int
+    ) -> AsyncIterator[GenerationEvent]:
+        """伪流式回退（H-6 前形态原样保留）：complete_structured 一次性答案 JSON → 固定步长切片。"""
         data: dict[str, Any] = await asyncio.wait_for(
             self._model.complete_structured(
                 system=_build_system_prompt(turn),
@@ -82,14 +135,4 @@ class BuiltinAdapter(ChatAdapter):
             answer = ""
         for piece in _chunk_text(answer):
             yield GenerationEvent(kind="text_delta", delta=piece)
-        recorded = get_last_usage()
-        usage = (
-            {
-                "token_in": recorded.token_in,
-                "token_out": recorded.token_out,
-                "cache_read_tokens": recorded.cache_read_tokens,
-            }
-            if recorded is not None
-            else {}
-        )
-        yield GenerationEvent(kind="finish", usage=usage, finish_reason="stop")
+        yield _finish_event()

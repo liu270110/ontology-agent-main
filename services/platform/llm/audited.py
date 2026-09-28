@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import logging
 import time
+from collections.abc import AsyncIterator
 from typing import Any
 from uuid import UUID
 
@@ -102,6 +103,107 @@ class AuditedModelPort:
             self._record_attempt("ok", started, trace_id, None)
             return data
         raise AssertionError("unreachable: 重试循环必然 return/raise")  # pragma: no cover
+
+    async def complete(
+        self,
+        messages: list[dict[str, Any]],
+        *,
+        temperature: float | None = None,
+        max_tokens: int | None = None,
+        num_ctx: int | None = None,
+        timeout_s: float | None = None,
+        tools: list[dict[str, Any]] | None = None,
+        tool_choice: str | dict[str, Any] | None = None,
+        trace_id: str | None = None,
+    ) -> str:
+        """裸对话补全的审计/预算装饰（H-6 主干面）：无输出校验重试（非 JSON 模式）。"""
+        acquire = getattr(self._budget, "acquire", None) if self._budget is not None else None
+        if acquire is not None:
+            tenant = tenant_id_ctx.get()
+            est = max(1, sum(len(str(m.get("content", ""))) for m in messages) // _EST_CHARS_PER_TOKEN)
+            await acquire(tenant, est)
+        started = time.perf_counter()
+        try:
+            reset_last_usage()
+            text = await self._inner.complete(
+                messages,
+                temperature=temperature,
+                max_tokens=max_tokens,
+                num_ctx=num_ctx,
+                timeout_s=timeout_s,
+                tools=tools,
+                tool_choice=tool_choice,
+                trace_id=trace_id,
+            )
+        except Exception as exc:
+            self._record_attempt("error", started, trace_id, exc)
+            raise
+        self._record_attempt("ok", started, trace_id, None)
+        return text
+
+    def stream_complete(
+        self,
+        messages: list[dict[str, Any]],
+        *,
+        temperature: float | None = None,
+        max_tokens: int | None = None,
+        num_ctx: int | None = None,
+        timeout_s: float | None = None,
+        tools: list[dict[str, Any]] | None = None,
+        tool_choice: str | dict[str, Any] | None = None,
+        trace_id: str | None = None,
+    ) -> AsyncIterator[str]:
+        """真流式补全的审计/预算装饰（H-6）：预算前置一次；审计行在流终（ok/error）落。
+
+        usage 口径：gateway 实现在末块回填 usage 上下文——流正常耗尽后 get_last_usage()
+        可取到本次用量；中途异常按已耗部分记账（实现未回填则记 0，与既有桩口径一致）。
+        """
+        return self._stream_complete_audited(
+            messages,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            num_ctx=num_ctx,
+            timeout_s=timeout_s,
+            tools=tools,
+            tool_choice=tool_choice,
+            trace_id=trace_id,
+        )
+
+    async def _stream_complete_audited(
+        self,
+        messages: list[dict[str, Any]],
+        *,
+        temperature: float | None,
+        max_tokens: int | None,
+        num_ctx: int | None,
+        timeout_s: float | None,
+        tools: list[dict[str, Any]] | None,
+        tool_choice: str | dict[str, Any] | None,
+        trace_id: str | None,
+    ) -> AsyncIterator[str]:
+        acquire = getattr(self._budget, "acquire", None) if self._budget is not None else None
+        if acquire is not None:
+            tenant = tenant_id_ctx.get()
+            est = max(1, sum(len(str(m.get("content", ""))) for m in messages) // _EST_CHARS_PER_TOKEN)
+            await acquire(tenant, est)
+        started = time.perf_counter()
+        try:
+            reset_last_usage()
+            async for piece in self._inner.stream_complete(
+                messages,
+                temperature=temperature,
+                max_tokens=max_tokens,
+                num_ctx=num_ctx,
+                timeout_s=timeout_s,
+                tools=tools,
+                tool_choice=tool_choice,
+                trace_id=trace_id,
+            ):
+                yield piece
+        except Exception as exc:
+            self._record_attempt("error", started, trace_id, exc)
+            raise
+        self._record_attempt("ok", started, trace_id, None)
 
     async def aclose(self) -> None:
         """透传停机回收（组合根停机序列：先 flush 审计、后关连接池）。"""

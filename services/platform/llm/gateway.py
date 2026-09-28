@@ -17,7 +17,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-from collections.abc import Callable, Mapping
+from collections.abc import AsyncIterator, Callable, Mapping
 
 import httpx
 
@@ -262,6 +262,152 @@ class OpenAICompatibleModelPort:
         logger.info("llm_call ok: model=%s trace_id=%s", self._model, trace_id)
         return data
 
+    # ── 对话生成面（H-6 模型协议主干批，2026-09-29：裸对话 + 真流式）──────────
+
+    def _resolve_timeout(self, timeout_s: float | None) -> float:
+        """每次调用超时归一：显式值优先，None=构造期默认（standards/01 §2.5：必设）。"""
+        return timeout_s if timeout_s is not None else self._timeout_s
+
+    def _chat_body(
+        self,
+        messages: list[dict],
+        *,
+        temperature: float | None,
+        max_tokens: int | None,
+        num_ctx: int | None,
+        tools: list[dict] | None,
+        tool_choice: str | dict | None,
+    ) -> dict:
+        """对话生成面请求体组装：None 参数不注入（服务端默认），tools 原样透传。
+
+        tools/tool_choice：ReAct 双模式前置件（docs/Agent/02 §11.3）——OpenAI 官方端点
+        按 tools 规范消费，Ollama 兼容层忽略不识别字段；本期平台无消费方，只保证透传。
+        """
+        body: dict = {"model": self._model, "messages": messages}
+        if temperature is not None:
+            body["temperature"] = temperature
+        if max_tokens is not None:
+            body["max_tokens"] = max_tokens
+        if num_ctx is not None:
+            body["num_ctx"] = num_ctx
+        if tools:
+            body["tools"] = tools
+        if tool_choice is not None:
+            body["tool_choice"] = tool_choice
+        return body
+
+    async def complete(
+        self,
+        messages: list[dict],
+        *,
+        temperature: float | None = None,
+        max_tokens: int | None = None,
+        num_ctx: int | None = None,
+        timeout_s: float | None = None,
+        tools: list[dict] | None = None,
+        tool_choice: str | dict | None = None,
+        trace_id: str | None = None,
+    ) -> str:
+        """裸对话补全（chat completions 文本生成，非 JSON 模式）→ 全文。
+
+        无 response_format（与 complete_structured 的 JSON 模式互斥）；不做 _extract_json/
+        Schema 校验（散文回答，语义收口在消费侧）；调用后回填用量上下文（同 structured）。
+        """
+        body = self._chat_body(
+            messages,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            num_ctx=num_ctx,
+            tools=tools,
+            tool_choice=tool_choice,
+        )
+        try:
+            resp = await self._client.post(
+                f"{self._base_url}/chat/completions", json=body, timeout=httpx.Timeout(self._resolve_timeout(timeout_s))
+            )
+        except httpx.TimeoutException as exc:
+            raise ModelGatewayTimeoutError(str(exc)) from exc
+        except httpx.HTTPError as exc:
+            raise ModelGatewayUnavailableError(f"模型服务不可达（{self._base_url}）: {exc}") from exc
+        if resp.status_code != 200:
+            raise ModelGatewayUnavailableError(f"模型服务返回 {resp.status_code}: {resp.text[:200]}")
+        try:
+            payload = resp.json()
+            content = payload["choices"][0]["message"]["content"]
+            if not isinstance(content, str):
+                raise KeyError("content")
+        except (KeyError, IndexError, TypeError, ValueError) as exc:
+            raise ModelGatewayUnavailableError(f"响应结构异常（缺 choices/message/content）: {exc}") from exc
+        self._capture_usage(payload)
+        logger.info("llm_call ok: model=%s trace_id=%s", self._model, trace_id)
+        return content
+
+    async def stream_complete(
+        self,
+        messages: list[dict],
+        *,
+        temperature: float | None = None,
+        max_tokens: int | None = None,
+        num_ctx: int | None = None,
+        timeout_s: float | None = None,
+        tools: list[dict] | None = None,
+        tool_choice: str | dict | None = None,
+        trace_id: str | None = None,
+    ) -> AsyncIterator[str]:
+        """真流式补全：HTTP stream=True + SSE 逐行解析，逐段 yield 文本增量。
+
+        - SSE 口径：``data: {…choices[0].delta.content…}`` 取增量，``data: [DONE]``
+          终止（OpenAI 兼容）；非 data 行 / 非 JSON 数据行（keep-alive 等）跳过不断流；
+        - usage 只可能出现在末块 ``usage`` 字段——该行为需 ``stream_options:
+          {"include_usage": true}`` 才保证，本期**不发**（部分兼容层对 stream_options
+          报错，最小够用）；上游主动携带时回填用量上下文；
+        - delta.content 缺失/空串不产出；choices 为空的 usage-only 末块安全跳过；
+        - 超时口径：timeout_s=传输层每次读的粒度（None=构造期默认，必设）；错误分类
+          同 complete_structured（TimeoutException→5001，HTTPError/非200/结构异常→5002）。
+        """
+        body = self._chat_body(
+            messages,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            num_ctx=num_ctx,
+            tools=tools,
+            tool_choice=tool_choice,
+        )
+        body["stream"] = True
+        try:
+            async with self._client.stream(
+                "POST",
+                f"{self._base_url}/chat/completions",
+                json=body,
+                timeout=httpx.Timeout(self._resolve_timeout(timeout_s)),
+            ) as resp:
+                if resp.status_code != 200:
+                    detail = (await resp.aread()).decode("utf-8", errors="replace")[:200]
+                    raise ModelGatewayUnavailableError(f"模型服务返回 {resp.status_code}: {detail}")
+                async for line in resp.aiter_lines():
+                    if not line.startswith("data:"):
+                        continue
+                    data_text = line[len("data:") :].strip()
+                    if data_text == "[DONE]":
+                        break
+                    try:
+                        payload = json.loads(data_text)
+                    except ValueError:
+                        continue
+                    if isinstance(payload.get("usage"), dict):
+                        self._capture_usage(payload)  # 末块用量（上游主动携带时）
+                    try:
+                        piece = payload["choices"][0]["delta"]["content"]
+                    except (KeyError, IndexError, TypeError):
+                        continue  # role 首块 / finish 块 / usage-only 块均无 content
+                    if isinstance(piece, str) and piece:
+                        yield piece
+        except httpx.TimeoutException as exc:
+            raise ModelGatewayTimeoutError(str(exc)) from exc
+        except httpx.HTTPError as exc:
+            raise ModelGatewayUnavailableError(f"模型服务不可达（{self._base_url}）: {exc}") from exc
+        logger.info("llm_stream ok: model=%s trace_id=%s", self._model, trace_id)
+
     def _capture_usage(self, payload: dict) -> None:
         """回填用量上下文（DeepSeek prompt_cache_hit_tokens / OpenAI prompt_tokens_details 双兼容）。"""
         usage = payload.get("usage")
@@ -354,3 +500,35 @@ class FakeModelPort:
             if keyword in body
         ]
         return {"candidates": candidates}
+
+    async def complete(
+        self,
+        messages: list[dict],
+        *,
+        temperature: float | None = None,
+        max_tokens: int | None = None,
+        num_ctx: int | None = None,
+        timeout_s: float | None = None,
+        tools: list[dict] | None = None,
+        tool_choice: str | dict | None = None,
+        trace_id: str | None = None,
+    ) -> str:
+        """确定性裸对话（H-6，与生产对话生成面口径一致）：拼接 user 角色正文，无网络。"""
+        return "\n".join(str(m.get("content", "")) for m in messages if m.get("role") == "user")
+
+    async def stream_complete(
+        self,
+        messages: list[dict],
+        *,
+        temperature: float | None = None,
+        max_tokens: int | None = None,
+        num_ctx: int | None = None,
+        timeout_s: float | None = None,
+        tools: list[dict] | None = None,
+        tool_choice: str | dict | None = None,
+        trace_id: str | None = None,
+    ) -> AsyncIterator[str]:
+        """确定性真流式（H-6）：complete 全文按 16 字符逐段产出（同输入恒同序列）。"""
+        text = await self.complete(messages)
+        for i in range(0, len(text), 16):
+            yield text[i : i + 16]

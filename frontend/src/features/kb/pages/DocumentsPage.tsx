@@ -8,7 +8,6 @@ import {
 } from '@tanstack/react-table'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Eye, Filter, RotateCcw, Search, Settings, Trash2, Upload } from 'lucide-react'
-import { toast } from 'sonner'
 import { ApiError } from '@/api/client'
 import { useAuthStore } from '@/stores/auth-store'
 import { ErrorState, SkeletonRows } from '@/components/states'
@@ -18,10 +17,12 @@ import { UploadDialog } from '../components/UploadDialog'
 import { ChunkPreviewSheet } from '../components/ChunkPreviewSheet'
 import { DeleteDocDialog } from '../components/DeleteDocDialog'
 import { RetryDialog } from '../components/RetryDialog'
+import { RecycleBinSheet } from '../components/RecycleBinSheet'
+import { CollectionSettingsSheet } from '../components/CollectionSettingsSheet'
 
 /** /kb 文档管理页（宿主画框 p-kb；26 篇 §5.1 IX-KB-01~04 + 30 篇 §2 S3-A）：
  *  规模统计带 + 文档表（@tanstack/react-table：名称/类型/大小/切片/流水线状态/更新/操作）
- *  + 筛选（类型/状态）+ 搜索；顶栏「库设置」「回收站」占位 Toast（F-12，随 X13 交付）。
+ *  + 筛选（类型/状态）+ 搜索；顶栏「库设置」「回收站」抽屉（B3-Q 占位转实）。
  *  轮询：存在 pending/extracting 行时 1.5s 刷新（IX-KB-01 行内流水线推进）。 */
 
 /** v9 新 API：features 静态声明（tableFeatures）+ helper 双泛型；模块级声明避免每帧重建 */
@@ -46,6 +47,8 @@ export function DocumentsPage() {
   const [previewDoc, setPreviewDoc] = useState<KbDocument | null>(null)
   const [deleteDoc, setDeleteDoc] = useState<KbDocument | null>(null)
   const [retryDoc, setRetryDoc] = useState<KbDocument | null>(null)
+  const [settingsOpen, setSettingsOpen] = useState(false)
+  const [recycleOpen, setRecycleOpen] = useState(false)
 
   const docsQuery = useQuery({
     queryKey: ['kb', 'documents'],
@@ -130,22 +133,14 @@ export function DocumentsPage() {
 
   return (
     <div className="mx-auto max-w-[1080px]">
-      {/* 页头（画板 page-h：标题 + 筛选/上传；F-12 库设置/回收站占位） */}
+      {/* 页头（画板 page-h：标题 + 筛选/上传；库设置/回收站抽屉，B3-Q 转实） */}
       <div className="flex flex-wrap items-center gap-2">
         <h1 className="text-lg font-bold">知识库文档</h1>
         <span className="ml-auto flex items-center gap-2">
-          <button
-            type="button"
-            className="btn btn-g btn-sm"
-            onClick={() => toast.info('库设置随 X13 文档预览服务一起交付（F-12 占位）')}
-          >
+          <button type="button" className="btn btn-g btn-sm" onClick={() => setSettingsOpen(true)}>
             <Settings size={12} aria-hidden /> 库设置
           </button>
-          <button
-            type="button"
-            className="btn btn-g btn-sm"
-            onClick={() => toast.info('回收站随 X13 文档预览服务一起交付（F-12 占位）')}
-          >
+          <button type="button" className="btn btn-g btn-sm" onClick={() => setRecycleOpen(true)}>
             <Trash2 size={12} aria-hidden /> 回收站
           </button>
         </span>
@@ -280,6 +275,12 @@ export function DocumentsPage() {
       <ChunkPreviewSheet doc={previewDoc} onClose={() => setPreviewDoc(null)} />
       <DeleteDocDialog doc={deleteDoc} onClose={() => setDeleteDoc(null)} onDeleted={() => void qc.invalidateQueries({ queryKey: ['kb', 'documents'] })} />
       <RetryDialog doc={retryDoc} onClose={() => setRetryDoc(null)} onQueued={() => void qc.invalidateQueries({ queryKey: ['kb', 'documents'] })} />
+      <RecycleBinSheet
+        open={recycleOpen}
+        onClose={() => setRecycleOpen(false)}
+        onChanged={() => void qc.invalidateQueries({ queryKey: ['kb', 'documents'] })}
+      />
+      <CollectionSettingsSheet open={settingsOpen} onClose={() => setSettingsOpen(false)} />
     </div>
   )
 }

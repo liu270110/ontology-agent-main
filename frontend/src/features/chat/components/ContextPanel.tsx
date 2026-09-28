@@ -1,13 +1,16 @@
 import { useState } from 'react'
 import { ArrowRight, ChevronDown, ChevronUp, Sparkles } from 'lucide-react'
 import { FloatingCard } from '@/components/popover'
+import { useSessionStore } from '@/stores/session-store'
 import type { EvidenceChunk } from '@/stores/session-store'
+import type { RunUsageEventData } from '@/sse/events'
 import type { EvidenceFocus } from './EvidenceSheet'
 
 /** 上下文面板（IX-CHT-04，右栏 240 可折叠）：本次回答的四类来源——
  *  召回记忆（L1/L2/L3）· GraphRAG 路径 · 规则命中（推理分级）· 引用文档；
  *  条目点击 → 溯源 Popover 320（类型徽标 + 摘要 + 命中得分 + 查看全部/跳转）。
- *  M1 期间为 mock 数据（api/01 §5.5 memory + §5.4 kb），M4 接 SSE usage/检索事件后换真数据。 */
+ *  数据源：会话内收到 `run.usage` 帧后按真事件渲染（session-store.usageGroups）；
+ *  无帧时退回下方 CTX_GROUPS 演示数据——M4 后 run.usage 随每轮回答常在，此回退仅兜底首帧前/异常态。 */
 
 type CtxKind = 'memory' | 'graph' | 'rule' | 'doc'
 
@@ -34,6 +37,8 @@ const BADGE_LEGEND: { t: string; cls?: string; style?: React.CSSProperties }[] =
   { t: '规则命中', cls: 'b-green' },
 ]
 
+/** 演示回退数据（与 mock 种子同源）：收到 run.usage 帧前/异常时兜底渲染。
+ *  M4 后真事件常在——每一轮回答完成前后端都会推 run.usage，此表仅保留作降级展示。 */
 const CTX_GROUPS: { title: string; items: CtxItem[] }[] = [
   {
     title: '召回记忆',
@@ -109,6 +114,77 @@ const CTX_GROUPS: { title: string; items: CtxItem[] }[] = [
   },
 ]
 
+// ---- run.usage 真数据 → 面板渲染模型（徽标映射：L1/L2/L3→灰/橙/紫 · Local/Global/Drift→teal · SHACL→绿 · LLM→橙 · 文档→蓝） ----
+
+type UsageGroups = RunUsageEventData['groups']
+
+const MEMORY_BADGE: Record<UsageGroups['memory'][number]['layer'], { badge: string; badgeCls: string; dotCls: string; label: string; layerMeta: string }> = {
+  L1: { badge: 'L1 记忆 · 工作', badgeCls: 'b-gray', dotCls: 'bg-separator', label: 'L1 工作', layerMeta: 'L1 · 工作记忆（会话内）' },
+  L2: { badge: 'L2 记忆 · 用户', badgeCls: 'b-orange', dotCls: 'bg-orange', label: 'L2 用户', layerMeta: 'L2 · 用户画像（已审核）' },
+  L3: { badge: 'L3 记忆 · 组织', badgeCls: 'b-purple', dotCls: 'bg-purple', label: 'L3 组织', layerMeta: 'L3 · 组织知识（已审核）' },
+}
+
+const GRAPH_MODE_DESC: Record<UsageGroups['graph'][number]['mode'], string> = {
+  Local: 'Local（实体邻域扩展）',
+  Global: 'Global（社区摘要全局）',
+  Drift: 'Drift（漂移检测）',
+}
+
+/** run.usage 四分组 → 分组渲染树；空分组整组隐藏，与演示回退同构 */
+export function usageToCtxGroups(u: UsageGroups): { title: string; items: CtxItem[] }[] {
+  const out: { title: string; items: CtxItem[] }[] = []
+  if (u.memory.length) {
+    out.push({
+      title: '召回记忆',
+      items: u.memory.map(m => {
+        const b = MEMORY_BADGE[m.layer]
+        const meta: [string, string][] = [['层级', b.layerMeta]]
+        if (m.updated_at) meta.push(['最近更新', m.updated_at])
+        if (m.reused != null) meta.push(['复用次数', `${m.reused} 次`])
+        return { id: m.id, kind: 'memory', badge: b.badge, badgeCls: b.badgeCls, dotCls: b.dotCls, label: b.label, summary: m.summary, score: m.score, meta }
+      }),
+    })
+  }
+  if (u.graph.length) {
+    out.push({
+      title: 'GraphRAG 路径',
+      items: u.graph.map(g => ({
+        id: g.id, kind: 'graph', badge: `GraphRAG · ${g.mode}`, badgeCls: 'badge-teal', dotCls: 'bg-teal',
+        label: `${g.mode} Search`,
+        summary: `${g.entities} 实体 / ${g.relations} 关系 / ${g.communities} 社区摘要`,
+        score: g.score,
+        meta: [['检索模式', GRAPH_MODE_DESC[g.mode]], ['耗时', `${g.latency_ms}ms · knowledge.search`]] as [string, string][],
+      })),
+    })
+  }
+  if (u.rules.length) {
+    out.push({
+      title: '规则命中',
+      items: u.rules.map(r => {
+        const shacl = r.kind === 'SHACL'
+        const meta: [string, string][] = [['推理分级', shacl ? '确定性高频逻辑 → 规则引擎（宪法 2）' : '低频语义判断 → LLM（宪法 2）']]
+        if (r.constraint) meta.push(['约束', r.constraint])
+        if (!shacl) meta.push(['校验', '输出过 SHACL 后才入答案（候选非成品）'])
+        return {
+          id: r.id, kind: 'rule', badge: shacl ? '规则命中 · SHACL' : 'LLM 判定', badgeCls: shacl ? 'b-green' : 'b-orange',
+          dotCls: shacl ? 'bg-green' : 'bg-orange', label: shacl ? '规则命中' : 'LLM 判定', summary: r.summary, score: r.score, meta,
+        }
+      }),
+    })
+  }
+  if (u.docs.length) {
+    out.push({
+      title: '引用文档',
+      items: u.docs.map(d => ({
+        id: d.id, kind: 'doc', badge: '引用文档', badgeCls: 'b-blue', dotCls: 'bg-accent',
+        label: d.label, summary: d.summary, score: d.score, chunk: d.chunk,
+        meta: [['来源文档', d.chunk.doc_id], ['分片', `${d.chunk.chunk_id}${d.chunk.page != null ? ` · 第 ${d.chunk.page} 页` : ''}`], ['命中得分', d.score.toFixed(2)]] as [string, string][],
+      })),
+    })
+  }
+  return out
+}
+
 /** 溯源 Popover 内容（IX-CHT-04：类型徽标 + 摘要 + 得分 + 元数据 + 徽标图例 + 动作） */
 function TracePopover({
   item,
@@ -173,6 +249,9 @@ function TracePopover({
 
 export function ContextPanel({ onOpenEvidence }: { onOpenEvidence: (f: EvidenceFocus) => void }) {
   const [trace, setTrace] = useState<{ item: CtxItem; anchor: DOMRect } | null>(null)
+  // run.usage 真数据源（会话级）：有帧按帧渲染，无帧退回演示回退（见 CTX_GROUPS 注）
+  const usageGroups = useSessionStore(s => s.usageGroups)
+  const groups = usageGroups ? usageToCtxGroups(usageGroups) : CTX_GROUPS
 
   return (
     <aside data-testid="ctx-panel" className="flex w-60 flex-none flex-col border-l border-separator bg-surface">
@@ -181,7 +260,7 @@ export function ContextPanel({ onOpenEvidence }: { onOpenEvidence: (f: EvidenceF
         <b className="text-xs">本次回答的上下文</b>
       </div>
       <div className="scroll-thin min-h-0 flex-1 overflow-y-auto px-3.5 pb-3">
-        {CTX_GROUPS.map(g => (
+        {groups.map(g => (
           <section key={g.title} className="mt-2.5">
             <div className="text-[11px] font-semibold text-label-3">{g.title}</div>
             <div className="mt-1 flex flex-col gap-1">

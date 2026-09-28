@@ -4,7 +4,8 @@ import { useQuery } from '@tanstack/react-query'
 import { CheckCheck } from 'lucide-react'
 import { ApiError } from '@/api/client'
 import { ErrorState, SkeletonRows } from '@/components/states'
-import { listReviews, type Approval } from '../api'
+import { Tooltip } from '@/components/tooltip'
+import { listReviews, type Approval, type ApprovalType } from '../api'
 import { ApprovalDetailModal, ApprovalTypeBadge } from '../components/ApprovalDetailModal'
 import { BatchApprovalModal } from '../components/BatchApprovalModal'
 import { relativeTime } from '@/lib/reltime'
@@ -18,6 +19,16 @@ const TABS = [
   { key: 'todo', label: '待办', status: 'pending' as const },
   { key: 'done', label: '已办', status: 'done' as const },
 ]
+
+/** 六类审批一句话说明（类型徽标 Tooltip；对齐 api 的 APPROVAL_TYPE 六枚举） */
+const APPROVAL_TYPE_HINT: Record<ApprovalType, string> = {
+  changeset_publish: '本体发布 · changeset 终审：本体变更集人工通过后才发布生效',
+  extraction_final: '知识入库 · 候选终审：抽取候选人工确认后才写入图谱',
+  plugin_install: '插件安装终审：scope 逐项授权，能力入库前把关',
+  mcp_access: 'MCP 开启 · 出口放行：外部 Server 纳管与工具开启终审',
+  memory_promotion: '记忆升级终审：候选记忆晋升为长期记忆',
+  permission_request: '权限申请终审：通过后开通目标资源访问权限',
+}
 
 export function ApprovalListPage() {
   const [params, setParams] = useSearchParams()
@@ -95,7 +106,9 @@ export function ApprovalListPage() {
             />
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-2">
-                <ApprovalTypeBadge type={a.type} />
+                <Tooltip content={APPROVAL_TYPE_HINT[a.type]}>
+                  <ApprovalTypeBadge type={a.type} />
+                </Tooltip>
                 <b className="truncate text-[13px]">{a.title}</b>
                 {a.high_risk && <span className="badge b-red">高危</span>}
                 {a.status !== 'pending' && (

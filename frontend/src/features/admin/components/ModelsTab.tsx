@@ -2,6 +2,8 @@ import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Check, Plus, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
+import { ApiError } from '@/api/client'
+import { ErrorState, SkeletonRows } from '@/components/states'
 import { Modal } from '@/components/modal'
 import {
   createModelChannel, deleteModelChannel, getModelImpact, listModels, testModelChannel,
@@ -23,7 +25,7 @@ const PROVIDERS = [
 export function ModelsTab() {
   const [addOpen, setAddOpen] = useState(false)
   const [deleting, setDeleting] = useState<ModelChannel | null>(null)
-  const { data, isLoading } = useQuery({ queryKey: ['admin', 'models'], queryFn: listModels })
+  const { data, isLoading, isError, error, refetch } = useQuery({ queryKey: ['admin', 'models'], queryFn: listModels })
   const channels = useMemo(() => data?.items ?? [], [data])
 
   return (
@@ -66,8 +68,23 @@ export function ModelsTab() {
             ))}
           </tbody>
         </table>
-        {isLoading && <div className="empty"><div className="t">加载中…</div></div>}
+        {/* S8 状态切片：加载骨架行 / 错误态在表格外（重试=refetch） */}
+        {isLoading && (
+          <div className="px-4 py-3">
+            <SkeletonRows rows={5} rowHeight={32} />
+          </div>
+        )}
       </div>
+
+      {isError && (
+        <div className="mt-3">
+          <ErrorState
+            message={error instanceof Error ? error.message : undefined}
+            code={error instanceof ApiError ? error.code : undefined}
+            onRetry={() => void refetch()}
+          />
+        </div>
+      )}
 
       {addOpen && <AddChannelModal onClose={() => setAddOpen(false)} />}
       {deleting && <DeleteChannelModal channel={deleting} onClose={() => setDeleting(null)} />}

@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom'
 import { Pencil, RefreshCw, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Sheet } from '@/components/sheet'
+import { Tooltip } from '@/components/tooltip'
 import { enableMcpTool, getServer, refreshServer, MCP_STATUS_LABEL, type McpServerRow } from '../api'
 
 /** IX-MCP-02 Server 详情抽屉（26 篇 §9.3；画板 ix-mcp-02）：480px——
@@ -143,18 +144,21 @@ export function ServerDetailSheet({
                 {t.read_only && <span className="badge b-gray">只读</span>}
                 {t.write && <span className="badge b-orange">写入 · 需审批</span>}
                 <span className="ml-auto flex items-center gap-2">
-                  <button
-                    type="button"
-                    role="switch"
-                    aria-checked={t.enabled}
-                    aria-label={`启停 ${t.name}`}
-                    data-testid={`mcp-switch-${t.name}`}
-                    className="relative h-5 w-9 rounded-full transition-colors"
-                    style={{ background: t.enabled ? 'var(--green)' : 'var(--surface-2)', border: '1px solid var(--separator)' }}
-                    onClick={() => toggle.mutate({ tool_id: t.tool_id, enabled: t.enabled })}
-                  >
-                    <span className="absolute top-0.5 h-3.5 w-3.5 rounded-full bg-white shadow transition-all" style={{ left: t.enabled ? 18 : 3 }} />
-                  </button>
+                  {/* S8 Tooltip 切片：启停动作影响面提示（审计留痕 + 沙箱白名单同步） */}
+                  <Tooltip content="启停会写审计日志并同步沙箱工具白名单">
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={t.enabled}
+                      aria-label={`启停 ${t.name}`}
+                      data-testid={`mcp-switch-${t.name}`}
+                      className="relative h-5 w-9 rounded-full transition-colors"
+                      style={{ background: t.enabled ? 'var(--green)' : 'var(--surface-2)', border: '1px solid var(--separator)' }}
+                      onClick={() => toggle.mutate({ tool_id: t.tool_id, enabled: t.enabled })}
+                    >
+                      <span className="absolute top-0.5 h-3.5 w-3.5 rounded-full bg-white shadow transition-all" style={{ left: t.enabled ? 18 : 3 }} />
+                    </button>
+                  </Tooltip>
                   <Link to="/console/tools" className="text-[11px] text-accent hover:underline" title="跳 IX-TLS-01 工具详情">
                     详情
                   </Link>

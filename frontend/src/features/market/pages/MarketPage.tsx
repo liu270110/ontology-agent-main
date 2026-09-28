@@ -1,6 +1,8 @@
 import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Download, Puzzle, Star, Upload } from 'lucide-react'
+import { ApiError } from '@/api/client'
+import { ErrorState, SkeletonCards } from '@/components/states'
 import { listPlugins, type MarketPlugin } from '../api'
 import { PluginDetailSheet } from '../components/PluginDetailSheet'
 import { InstallWizard } from '../components/InstallWizard'
@@ -20,7 +22,7 @@ export function MarketPage() {
   const [installPlugin, setInstallPlugin] = useState<MarketPlugin | null>(null)
   const [submitOpen, setSubmitOpen] = useState(false)
 
-  const { data, isLoading } = useQuery({ queryKey: ['market', 'list'], queryFn: listPlugins })
+  const { data, isLoading, isError, error, refetch } = useQuery({ queryKey: ['market', 'list'], queryFn: listPlugins })
   const plugins = useMemo(() => {
     let items = data?.items ?? []
     if (filter === '官方认证') items = items.filter(p => p.certified)
@@ -105,8 +107,18 @@ export function MarketPage() {
         ))}
       </div>
 
-      {isLoading && <div className="empty mt-6"><div className="t">加载中…</div></div>}
-      {!isLoading && plugins.length === 0 && (
+      {/* S8 状态切片：加载骨架卡 / 错误态（重试=refetch）；空态仅在成功后出现 */}
+      {isLoading && <SkeletonCards count={3} className="mt-4" />}
+      {isError && (
+        <div className="mt-4">
+          <ErrorState
+            message={error instanceof Error ? error.message : undefined}
+            code={error instanceof ApiError ? error.code : undefined}
+            onRetry={() => void refetch()}
+          />
+        </div>
+      )}
+      {!isLoading && !isError && plugins.length === 0 && (
         <div className="empty mt-6">
           <Puzzle size={28} aria-hidden />
           <div className="t">没有匹配的插件</div>

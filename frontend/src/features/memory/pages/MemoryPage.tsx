@@ -2,6 +2,8 @@ import { useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { Gavel, Lock } from 'lucide-react'
+import { ApiError } from '@/api/client'
+import { ErrorState, SkeletonCards, SkeletonRows } from '@/components/states'
 import { listFacts, listL1, listPromotions, type FactLayer, type MemoryFact } from '../api'
 import { LAYER_META } from '../api'
 import { FactStatusBadge, LayerBadge, TtlBar, relativeTime } from '../components/shared'
@@ -118,7 +120,17 @@ export function MemoryPage() {
               </div>
             ))}
           </div>
-          {l1Items.length === 0 && !l1Query.isLoading && (
+          {/* S8 状态切片：L1 首载骨架卡 / 失败错误态（重试=refetch） */}
+          {l1Query.isLoading && <SkeletonCards count={3} className="mt-3" />}
+          {!l1Query.isLoading && l1Query.isError && (
+            <ErrorState
+              className="mt-6"
+              message={l1Query.error instanceof Error ? l1Query.error.message : undefined}
+              code={l1Query.error instanceof ApiError ? l1Query.error.code : undefined}
+              onRetry={() => void l1Query.refetch()}
+            />
+          )}
+          {l1Items.length === 0 && !l1Query.isLoading && !l1Query.isError && (
             <div className="empty mt-6">
               <div className="t">当前没有活跃的 L1 工作记忆</div>
               <div className="d">L1 随会话创建，会话关闭时触发归档与 L2 沉淀。</div>
@@ -185,8 +197,17 @@ export function MemoryPage() {
             ))}
           </div>
 
-          {factsQuery.isLoading && <div className="empty mt-6"><div className="t">加载中…</div></div>}
-          {!factsQuery.isLoading && facts.length === 0 && (
+          {/* S8 状态切片：facts 列表首载骨架 / 失败错误态（重试=refetch） */}
+          {factsQuery.isLoading && <SkeletonRows rows={4} rowHeight={56} className="mt-4" />}
+          {!factsQuery.isLoading && factsQuery.isError && (
+            <ErrorState
+              className="mt-6"
+              message={factsQuery.error instanceof Error ? factsQuery.error.message : undefined}
+              code={factsQuery.error instanceof ApiError ? factsQuery.error.code : undefined}
+              onRetry={() => void factsQuery.refetch()}
+            />
+          )}
+          {!factsQuery.isLoading && !factsQuery.isError && facts.length === 0 && (
             <div className="empty mt-6">
               <div className="t">该层级暂无记忆条目</div>
               <div className="d">L2 候选来自会话关闭时的 consolidate 沉淀；L3 需升级终审通过。</div>

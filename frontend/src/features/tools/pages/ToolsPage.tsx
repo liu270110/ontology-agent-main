@@ -2,6 +2,8 @@ import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ArrowUpRight, Plus, Wrench } from 'lucide-react'
 import { toast } from 'sonner'
+import { ApiError } from '@/api/client'
+import { ErrorState, SkeletonCards, SkeletonRows } from '@/components/states'
 import { listSkills, listTools, setToolEnabled, TOOL_SOURCE_LABEL, type SkillRow, type ToolRow } from '../api'
 import { ToolDetailSheet } from '../components/ToolDetailSheet'
 import { RegisterToolModal } from '../components/RegisterToolModal'
@@ -108,7 +110,22 @@ export function ToolsPage() {
               ))}
             </tbody>
           </table>
-          {tools.isLoading && <div className="empty"><div className="t">加载中…</div></div>}
+          {/* S8 状态切片：加载骨架行（行数≈mock 工具量）/ 错误态（重试=refetch） */}
+          {tools.isLoading && (
+            <div className="!p-4">
+              <SkeletonRows rows={5} />
+            </div>
+          )}
+        </div>
+      )}
+
+      {view === 'tools' && tools.isError && (
+        <div className="mt-3">
+          <ErrorState
+            message={tools.error instanceof Error ? tools.error.message : undefined}
+            code={tools.error instanceof ApiError ? tools.error.code : undefined}
+            onRetry={() => void tools.refetch()}
+          />
         </div>
       )}
 
@@ -136,7 +153,17 @@ export function ToolsPage() {
               </div>
             </button>
           ))}
-          {skills.isLoading && <div className="empty"><div className="t">加载中…</div></div>}
+          {/* S8 状态切片：加载骨架卡 / 错误态（重试=refetch） */}
+          {skills.isLoading && <SkeletonCards count={3} />}
+          {skills.isError && (
+            <div className="col-span-full">
+              <ErrorState
+                message={skills.error instanceof Error ? skills.error.message : undefined}
+                code={skills.error instanceof ApiError ? skills.error.code : undefined}
+                onRetry={() => void skills.refetch()}
+              />
+            </div>
+          )}
         </div>
       )}
 

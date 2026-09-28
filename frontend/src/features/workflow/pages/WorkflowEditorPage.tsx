@@ -4,6 +4,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { toast } from 'sonner'
 import { Bot, GitBranch, History, Merge, Play, Plus, Search, Shield, Shuffle, Wrench } from 'lucide-react'
 import { ApiError } from '@/api/client'
+import { ErrorState, SkeletonRows } from '@/components/states'
 import {
   getWorkflow,
   getRun,
@@ -192,9 +193,26 @@ export function WorkflowEditorPage() {
         <span className="ml-auto text-[11px] text-label-3">点击 Tab 过滤节点库 · 循环子图 v2 另议</span>
       </div>
 
-      {/* 三栏 */}
-      <div className="relative flex min-h-0 flex-1">
-        <aside className="w-[240px] flex-none overflow-y-auto border-r border-separator p-2.5" style={{ background: 'var(--surface-2)' }} data-testid="wf-library">
+      {/* 三栏（S8 状态切片：仅门控顶层定义加载——加载 → 骨架行 / 失败 → 错误态重试；画布本体不动） */}
+      {detailQ.isLoading && (
+        <div className="flex min-h-0 flex-1 items-center justify-center p-6">
+          <div className="w-full max-w-[560px]">
+            <SkeletonRows rows={6} rowHeight={36} />
+          </div>
+        </div>
+      )}
+      {detailQ.isError && (
+        <div className="flex min-h-0 flex-1 items-center justify-center p-6">
+          <ErrorState
+            message={detailQ.error instanceof Error ? detailQ.error.message : undefined}
+            code={detailQ.error instanceof ApiError ? detailQ.error.code : undefined}
+            onRetry={() => void detailQ.refetch()}
+          />
+        </div>
+      )}
+      <div className={`relative flex min-h-0 flex-1 ${detailQ.isLoading || detailQ.isError ? 'hidden' : ''}`}>
+        {/* 节点库（03 篇 §2.6：lg 档收窄 240→180，xl 恢复基准宽） */}
+        <aside className="w-[180px] flex-none overflow-y-auto border-r border-separator p-2.5 xl:w-[240px]" style={{ background: 'var(--surface-2)' }} data-testid="wf-library">
           <div className="px-1.5 pb-2 text-2xs font-bold tracking-wide text-label-3">节点库（点击加入画布）</div>
           {NODE_KINDS.filter(k => !kindFilter || k.kind === kindFilter).map(k => (
             <button

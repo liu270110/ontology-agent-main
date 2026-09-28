@@ -3,6 +3,8 @@ import { useNavigate } from 'react-router-dom'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { ChevronDown, ChevronRight, Copy, Download } from 'lucide-react'
 import { toast } from 'sonner'
+import { ApiError } from '@/api/client'
+import { ErrorState, SkeletonRows } from '@/components/states'
 import { Modal } from '@/components/modal'
 import { exportAuditLogs, getTrace, listAuditLogs, type AuditRow } from '../api'
 
@@ -22,7 +24,7 @@ export function AuditTab() {
   const [expanded, setExpanded] = useState<string | null>(null)
   const [exportOpen, setExportOpen] = useState(false)
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['admin', 'audit', operator, q],
     queryFn: () => listAuditLogs({ operator, q }),
   })
@@ -88,8 +90,23 @@ export function AuditTab() {
             ))}
           </tbody>
         </table>
-        {isLoading && <div className="empty"><div className="t">加载中…</div></div>}
+        {/* S8 状态切片：加载骨架行 / 错误态在表格外（重试=refetch） */}
+        {isLoading && (
+          <div className="px-4 py-3">
+            <SkeletonRows rows={5} rowHeight={32} />
+          </div>
+        )}
       </div>
+
+      {isError && (
+        <div className="mt-3">
+          <ErrorState
+            message={error instanceof Error ? error.message : undefined}
+            code={error instanceof ApiError ? error.code : undefined}
+            onRetry={() => void refetch()}
+          />
+        </div>
+      )}
 
       {exportOpen && <ExportModal filters={filters} onClose={() => setExportOpen(false)} />}
     </div>

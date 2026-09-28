@@ -15,6 +15,7 @@ import {
 import { api, ApiError } from '@/api/client'
 import { qk } from '@/lib/qk'
 import { useSessionStore } from '@/stores/session-store'
+import { ErrorState, SkeletonRows } from '@/components/states'
 
 interface SessionItem {
   id: string
@@ -48,7 +49,7 @@ export function SessionList({ onPicked }: { onPicked?: (id: string) => void }) {
   const active = useSessionStore(s => s.activeSessionId)
   const setActive = useSessionStore(s => s.setActiveSession)
   const qc = useQueryClient()
-  const { data } = useQuery({
+  const { data, isPending, isError, error, refetch } = useQuery({
     queryKey: qk.session.list(),
     queryFn: () => api.get<{ items: SessionItem[]; next_cursor: null }>('/sessions'),
   })
@@ -107,6 +108,16 @@ export function SessionList({ onPicked }: { onPicked?: (id: string) => void }) {
         </label>
       </div>
       <div className="scroll-thin min-h-0 flex-1 overflow-y-auto">
+        {/* S8 状态切片：首载骨架行 / 失败错误态（重试=refetch）；成功路径渲染不变 */}
+        {isPending && <SkeletonRows rows={4} rowHeight={44} className="px-3 pt-2" />}
+        {isError && (
+          <ErrorState
+            className="mx-2 mt-2"
+            message={error instanceof Error ? error.message : undefined}
+            code={error instanceof ApiError ? error.code : undefined}
+            onRetry={() => void refetch()}
+          />
+        )}
         {items.map(s =>
           renamingId === s.id ? (
             // 重命名行内输入态（CHT-01：↵ 确认 · Esc 取消）
@@ -262,7 +273,9 @@ export function SessionList({ onPicked }: { onPicked?: (id: string) => void }) {
             </div>
           ),
         )}
-        {items.length === 0 && <div className="px-4 py-6 text-center text-[11px] text-label-3">无匹配会话</div>}
+        {!isPending && !isError && items.length === 0 && (
+          <div className="px-4 py-6 text-center text-[11px] text-label-3">无匹配会话</div>
+        )}
       </div>
     </div>
   )

@@ -2244,6 +2244,28 @@
         "title": "FactWrittenOut",
         "type": "object"
       },
+      "FewShotIn": {
+        "additionalProperties": false,
+        "description": "few-shot 样例（input/output 对；上限与聚合同源——DTO 先拒，聚合兜底）。",
+        "properties": {
+          "input": {
+            "maxLength": 4096,
+            "title": "Input",
+            "type": "string"
+          },
+          "output": {
+            "maxLength": 4096,
+            "title": "Output",
+            "type": "string"
+          }
+        },
+        "required": [
+          "input",
+          "output"
+        ],
+        "title": "FewShotIn",
+        "type": "object"
+      },
       "GroupMemberIn": {
         "additionalProperties": false,
         "description": "群成员入参（27 篇 X15：成员=Agent 插槽实例）。",
@@ -4527,6 +4549,152 @@
         "title": "PromotionRecordOut",
         "type": "object"
       },
+      "PromptCreateIn": {
+        "additionalProperties": false,
+        "description": "POST /prompts：创建（含首版本 v1）；scope 两级=personal|tenant（api/01 §5.10 F-08/X12）。",
+        "properties": {
+          "few_shot": {
+            "items": {
+              "$ref": "#/components/schemas/FewShotIn"
+            },
+            "maxItems": 8,
+            "title": "Few Shot",
+            "type": "array"
+          },
+          "name": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "scope": {
+            "pattern": "^(personal|tenant)$",
+            "title": "Scope",
+            "type": "string"
+          },
+          "slug": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[a-z0-9][a-z0-9._-]{0,127}$",
+            "title": "Slug",
+            "type": "string"
+          },
+          "system_prompt": {
+            "anyOf": [
+              {
+                "maxLength": 32768,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "System Prompt"
+          },
+          "template": {
+            "anyOf": [
+              {
+                "maxLength": 32768,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Template"
+          },
+          "variables": {
+            "items": {
+              "$ref": "#/components/schemas/VariableIn"
+            },
+            "maxItems": 32,
+            "title": "Variables",
+            "type": "array"
+          }
+        },
+        "required": [
+          "scope",
+          "slug",
+          "name"
+        ],
+        "title": "PromptCreateIn",
+        "type": "object"
+      },
+      "PromptUpdateIn": {
+        "additionalProperties": false,
+        "description": "PUT /prompts/{id}：语义=追加新版本（api/01 §5.10）——名字/内容任一变更都落新版本。\n\nNone=承接 head 同字段（部分更新）；few_shot/variables 给定即整组替换。",
+        "properties": {
+          "few_shot": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FewShotIn"
+                },
+                "maxItems": 8,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Few Shot"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "system_prompt": {
+            "anyOf": [
+              {
+                "maxLength": 32768,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "System Prompt"
+          },
+          "template": {
+            "anyOf": [
+              {
+                "maxLength": 32768,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Template"
+          },
+          "variables": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/VariableIn"
+                },
+                "maxItems": 32,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Variables"
+          }
+        },
+        "title": "PromptUpdateIn",
+        "type": "object"
+      },
       "ReasonIn": {
         "additionalProperties": false,
         "description": "POST /ontologies/{id}/reason：确定性推理面（api/01 §5.3；ontology §7.2 推理行）。\n\n推理分级宪法：`semantic`（LLM 语义判断）**不入此面**——确定性引擎之外的路由随候选审核链\n（宪法 3：LLM 产物一律进审核队列）；`input` 自定义数据图参数 M2 未实装（ABox 推理随\nNeo4j 物化 M3+，登记偏离）。",
@@ -6062,6 +6230,41 @@
           "type"
         ],
         "title": "ValidationError",
+        "type": "object"
+      },
+      "VariableIn": {
+        "additionalProperties": false,
+        "description": "变量声明项（template 槽位契约）。",
+        "properties": {
+          "description": {
+            "anyOf": [
+              {
+                "maxLength": 512,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "name": {
+            "maxLength": 64,
+            "minLength": 1,
+            "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+            "title": "Name",
+            "type": "string"
+          },
+          "required": {
+            "default": true,
+            "title": "Required",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "VariableIn",
         "type": "object"
       },
       "WindowMessage": {
@@ -11020,6 +11223,271 @@
         "summary": "新增版本（版本管理）",
         "tags": [
           "plugins"
+        ]
+      }
+    },
+    "/api/v1/prompts": {
+      "get": {
+        "operationId": "list_prompts_api_v1_prompts_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "scope",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "pattern": "^(personal|tenant)$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Scope"
+            }
+          },
+          {
+            "in": "query",
+            "name": "name",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 128,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Name"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response List Prompts Api V1 Prompts Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "提示词模板列表（scope/name 过滤+分页；personal 仅 owner 可见）",
+        "tags": [
+          "prompts"
+        ]
+      },
+      "post": {
+        "operationId": "create_prompt_api_v1_prompts_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PromptCreateIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Create Prompt Api V1 Prompts Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "新建提示词模板（含首版本 v1）",
+        "tags": [
+          "prompts"
+        ]
+      }
+    },
+    "/api/v1/prompts/{template_id}": {
+      "delete": {
+        "operationId": "archive_prompt_api_v1_prompts__template_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "template_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Template Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "归档软删（archive 终态，版本链保留可追溯；幂等）",
+        "tags": [
+          "prompts"
+        ]
+      },
+      "get": {
+        "operationId": "get_prompt_api_v1_prompts__template_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "template_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Template Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Get Prompt Api V1 Prompts  Template Id  Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "模板详情（含版本树：内容/checksum/溯源）",
+        "tags": [
+          "prompts"
+        ]
+      },
+      "put": {
+        "operationId": "update_prompt_api_v1_prompts__template_id__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "template_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Template Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PromptUpdateIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Update Prompt Api V1 Prompts  Template Id  Put",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "追加新版本（名字/内容变更都产新版本——版本化红线；200 返回新版本号）",
+        "tags": [
+          "prompts"
         ]
       }
     },

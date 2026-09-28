@@ -170,3 +170,34 @@ class SessionMember(Base, PkMixin, TenantMixin):  # 群聊成员（27 篇 X15；
         UniqueConstraint("session_id", "agent_id", name="uk_session_members_session_agent"),
         CheckConstraint("routing_role IN ('coordinator','speaker','observer')", name="ck_session_members_role"),
     )
+
+
+# H-1 提示词工程治理批（api/01 §5.10 F-08/X12；standards/01 §5.1 版本化资产）：模板头表 + 版本表。
+# 版本表 append-only（content JSONB + checksum），DDL 权威=本批迁移 20260929（06 篇表清单随文档批回填）。
+class PromptTemplate(Base, PkMixin, TenantMixin, TimestampMixin):
+    __tablename__ = "prompt_templates"
+    owner_user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False)
+    scope: Mapped[str] = mapped_column(String(16), nullable=False)  # personal|tenant（两级作用域）
+    slug: Mapped[str] = mapped_column(String(128), nullable=False)  # 机器可引用名（租户+作用域内唯一）
+    name: Mapped[str] = mapped_column(String(128), nullable=False)
+    status: Mapped[str] = mapped_column(String(16), default="active", nullable=False)  # active|archived（软删）
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "scope", "slug", name="uk_prompt_templates_tenant_scope_slug"),
+        CheckConstraint("scope IN ('personal','tenant')", name="ck_prompt_templates_scope"),
+        CheckConstraint("status IN ('active','archived')", name="ck_prompt_templates_status"),
+        Index("ix_prompt_templates_tenant_scope_status", "tenant_id", "scope", "status"),
+    )
+
+
+class PromptVersion(Base, PkMixin, TenantMixin):  # 只追加（版本不可变红线）；checksum=运行时钉死回执
+    __tablename__ = "prompt_versions"
+    template_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("prompt_templates.id"), nullable=False, index=True)
+    version: Mapped[int] = mapped_column(Integer, nullable=False)  # 严格递增，1 起
+    content: Mapped[dict] = mapped_column(JSONB, nullable=False)  # {system_prompt,template,few_shot[],variables[]}
+    checksum: Mapped[str] = mapped_column(String(64), nullable=False)  # sha256 前 16 hex（聚合同口径）
+    created_by: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    __table_args__ = (
+        UniqueConstraint("template_id", "version", name="uk_prompt_versions_template_version"),
+        CheckConstraint("version >= 1", name="ck_prompt_versions_version"),
+    )

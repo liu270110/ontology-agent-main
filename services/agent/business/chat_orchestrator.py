@@ -412,7 +412,12 @@ def build_chat_orchestrator(
 
     adapters: dict[str, ChatAdapter] = {}
     if model_port is not None:
-        adapters["builtin"] = BuiltinAdapter(model_port)
+        from services.agent.business.prompts.prompt_service import build_tenant_ctx_prompt_resolver
+
+        # H-1 接线：prompt:{id}@{version} 钉死引用的运行时解析器（租户迟绑定，无 ctx fail-closed 5002）
+        adapters["builtin"] = BuiltinAdapter(
+            model_port, prompt_resolver=build_tenant_ctx_prompt_resolver(session_factory)
+        )
     adapters["claude"] = claude_adapter or ClaudeAdapter()
     if policy is None:
         from services.platform.config import get_settings

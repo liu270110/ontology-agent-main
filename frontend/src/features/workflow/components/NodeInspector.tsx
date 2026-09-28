@@ -1,12 +1,15 @@
 import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { AlertTriangle, Check, GitBranch } from 'lucide-react'
+import { AlertTriangle, Check, GitBranch, X } from 'lucide-react'
 import { KIND_LABEL, listToolRegistry, toolScopeLabel, type WfNode, type WfEdge, type WfAgentSlot, type WfToolRow } from '../api'
 
-/** IX-GRP-07 节点参数检查器（右栏面板态）：八类类型化表单——Agent=绑插槽实例（继承群聊成员
- *  参数）/ 工具=注册表选取 + scope 徽标 / 知识检索=GraphRAG 三模式 / 条件=确定性表达式编辑器
- *  （mono + 模板 + 就地试算；禁裸 LLM 分支警示条，宪法 2）/ 审批=模板选择。表单底座按 29 篇
- *  降级预案：八类字段形态简单，直接 RHF 自建（.field/.input 令牌类），不引 RJSF。 */
+/** IX-GRP-07 节点参数检查器（B5-C 布局切片：右栏面板 → 右上浮层卡）：悬浮于全幅画布之上
+ *  （absolute right-3 top-3，玻璃卡 + shadow-float），未选中节点不渲染（画布完全敞开）；
+ *  <1280px 宽 288px，xl 档 320px，标题栏带关闭钮（取消选中）。八类类型化表单——Agent=绑
+ *  插槽实例（继承群聊成员参数）/ 工具=注册表选取 + scope 徽标 / 知识检索=GraphRAG 三模式 /
+ *  条件=确定性表达式编辑器（mono + 模板 + 就地试算；禁裸 LLM 分支警示条，宪法 2）/
+ *  审批=模板选择。表单底座按 29 篇降级预案：八类字段形态简单，直接 RHF 自建
+ *  （.field/.input 令牌类），不引 RJSF。 */
 
 /** 最终回退清单：工具下拉改拉 GET /tools 注册表（B3-P 转实）；仅当注册表请求失败时
  *  作为最后回退仍可选取（语境与 mocks/platform-handlers.ts 一致的 3 条），成功路径不使用。 */
@@ -81,22 +84,18 @@ export function NodeInspector({
   slots,
   onUpdate,
   onDelete,
+  onClose,
 }: {
   node: WfNode | null
   edges: WfEdge[]
   slots: WfAgentSlot[]
   onUpdate: (id: string, patch: Partial<WfNode>) => void
   onDelete: (id: string) => void
+  onClose: () => void
 }) {
-  if (!node) {
-    return (
-      <aside className="hidden w-[256px] flex-none overflow-y-auto border-l border-separator bg-surface p-3.5 xl:block" data-testid="wf-inspector">
-        <h4 className="text-[13px] font-bold">检查器</h4>
-        <div className="fhint mt-2">选中画布或节点库中的节点后，在此编辑类型化参数（八类表单）。</div>
-      </aside>
-    )
-  }
-  return <InspectorBody key={node.id} node={node} edges={edges} slots={slots} onUpdate={onUpdate} onDelete={onDelete} />
+  // 未选中节点不渲染（浮层语义：画布完全敞开，不再保留占位栏）
+  if (!node) return null
+  return <InspectorBody key={node.id} node={node} edges={edges} slots={slots} onUpdate={onUpdate} onDelete={onDelete} onClose={onClose} />
 }
 
 function InspectorBody({
@@ -105,12 +104,14 @@ function InspectorBody({
   slots,
   onUpdate,
   onDelete,
+  onClose,
 }: {
   node: WfNode
   edges: WfEdge[]
   slots: WfAgentSlot[]
   onUpdate: (id: string, patch: Partial<WfNode>) => void
   onDelete: (id: string) => void
+  onClose: () => void
 }) {
   const params = node.params ?? {}
   const [expr, setExpr] = useState<string>(String(params.expression ?? ''))
@@ -128,12 +129,29 @@ function InspectorBody({
   const patchParam = (patch: Record<string, unknown>) => onUpdate(node.id, { params: { ...params, ...patch } })
 
   return (
-    <aside className="hidden w-[256px] flex-none overflow-y-auto border-l border-separator bg-surface p-3.5 xl:block" data-testid="wf-inspector">
-      <h4 className="flex items-center gap-1.5 text-[13px] font-bold">
+    <aside
+      className="glass-clear absolute right-3 top-3 z-10 flex max-h-[calc(100%-24px)] w-[288px] flex-col overflow-hidden rounded-xl xl:w-[320px]"
+      style={{ boxShadow: 'var(--sh-float)' }}
+      data-testid="wf-inspector"
+      aria-label="节点参数检查器"
+    >
+      {/* 浮层卡标题栏（带关闭钮 = 取消选中） */}
+      <div className="flex flex-none items-center gap-1.5 border-b border-separator px-3.5 py-2.5">
         {node.kind === 'condition' && <GitBranch size={14} style={{ color: 'var(--accent)' }} aria-hidden />}
-        {KIND_LABEL[node.kind]}节点
-      </h4>
-      <div className="mono mt-0.5 text-[11px] text-label-3">node:{node.id} · 选中态</div>
+        <h4 className="truncate text-[13px] font-bold">{KIND_LABEL[node.kind]}节点</h4>
+        <button
+          type="button"
+          className="ml-auto flex h-6 w-6 flex-none items-center justify-center rounded-lg text-label-3 hover:bg-black/5 dark:hover:bg-white/[.07]"
+          data-testid="wf-inspector-close"
+          title="关闭检查器（取消选中）"
+          aria-label="关闭检查器"
+          onClick={onClose}
+        >
+          <X size={14} aria-hidden />
+        </button>
+      </div>
+      <div className="min-h-0 flex-1 overflow-y-auto p-3.5">
+      <div className="mono pb-1 text-[11px] text-label-3">node:{node.id} · 选中态</div>
 
       <div className="field mt-3">
         <label className="field-label">节点名称</label>
@@ -329,7 +347,7 @@ function InspectorBody({
           删除节点
         </button>
       )}
+      </div>
     </aside>
   )
 }
-

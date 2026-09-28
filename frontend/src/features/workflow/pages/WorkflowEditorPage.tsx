@@ -2,14 +2,14 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate, useParams } from 'react-router-dom'
 import { toast } from 'sonner'
-import { Bot, GitBranch, History, Merge, Play, Plus, Search, Shield, Shuffle, Wrench } from 'lucide-react'
+import { ArrowLeft, History, Play, Workflow } from 'lucide-react'
 import { ApiError } from '@/api/client'
 import { ErrorState, SkeletonRows } from '@/components/states'
+import { useUiStore } from '@/stores/ui-store'
 import {
   getWorkflow,
   getRun,
   KIND_LABEL,
-  NODE_KINDS,
   abortRun,
   saveWorkflow,
   testWorkflow,
@@ -20,23 +20,15 @@ import {
 } from '../api'
 import { WorkflowCanvas } from '../components/WorkflowCanvas'
 import { NodeInspector } from '../components/NodeInspector'
+import { NodePalette } from '../components/NodePalette'
 import { TestRunPanel } from '../components/TestRunPanel'
 import { PublishDialog, ResumeDialog, VersionDialog } from '../components/WfDialogs'
 
-/** /workflows/:id 编辑器（27 篇 P15 / 画框 29）：版本操作栏（草稿 ▾ | 保存 | 试运行 |
- *  提交发布 | 对比）+ 三栏 = 节点库 240px（八类）｜WorkflowCanvas｜检查器（GRP-07）+
- *  底部试运行 Drawer（GRP-08）与断点续跑（GRP-09）/发布（GRP-10）/版本对比（GRP-11）。 */
-
-const KIND_ICON: Record<WfNodeKind, React.ReactNode> = {
-  start_end: <Play size={13} aria-hidden />,
-  agent: <Bot size={13} aria-hidden />,
-  tool: <Wrench size={13} aria-hidden />,
-  retrieval: <Search size={13} aria-hidden />,
-  condition: <GitBranch size={13} aria-hidden />,
-  parallel: <Merge size={13} aria-hidden />,
-  approval: <Shield size={13} aria-hidden />,
-  template: <Shuffle size={13} aria-hidden />,
-}
+/** /workflows/:id 编辑器（27 篇 P15 / 画框 29；B5-C 画布布局切片改 Dify 布局语言）：
+ *  48px 工具栏（返回 | 名称/版本态 | 保存 | 试运行 | 提交发布 | 对比）+ 画布全幅编辑区
+ *  （ReactFlow absolute inset-0，UI 全部悬浮其上）= 左上节点库悬浮薄栏（NodePalette，收起
+ *  48px/展开 280px，过滤 chips 内置）+ 右上节点检查器浮层卡（NodeInspector，未选中不渲染）
+ *  + 底部试运行 Drawer（GRP-08）+ 空画布引导浮层。聚焦模式：挂载收起主侧边栏、卸载恢复。 */
 
 export function WorkflowEditorPage() {
   const { id } = useParams<{ id: string }>()
@@ -58,6 +50,18 @@ export function WorkflowEditorPage() {
   const [publishOpen, setPublishOpen] = useState(false)
   const [versionOpen, setVersionOpen] = useState(false)
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  // 聚焦模式（B5-C）：挂载收起主侧边栏（只调 ui-store 既有 toggleSidebar action），
+  // 卸载恢复进入前状态；StrictMode 双挂载下 effect/cleanup 对称，终态仍为收起
+  const prevCollapsedRef = useRef<boolean | null>(null)
+  useEffect(() => {
+    const ui = useUiStore.getState()
+    prevCollapsedRef.current = ui.sidebarCollapsed
+    if (!ui.sidebarCollapsed) ui.toggleSidebar()
+    return () => {
+      if (prevCollapsedRef.current === false) useUiStore.getState().toggleSidebar()
+    }
+  }, [])
 
   // 载入草稿（仅初载覆盖本地；此后本地为唯一编辑态）
   useEffect(() => {
@@ -151,9 +155,25 @@ export function WorkflowEditorPage() {
   for (const s of run?.steps ?? []) runStates[s.node] = s.state
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col" data-testid="wf-editor-page">
-      {/* 版本操作栏 */}
-      <header className="flex h-12 flex-none items-center gap-3 border-b border-separator bg-surface px-5">
+    /* 全幅出逃：抵消壳层 main 的 p-6（负 margin + 高宽各 +48px），编辑器铺满 main 内容区，
+       画布获得最大可读面积；overflow-hidden 兜悬浮件裁切 */
+    <div
+      className="relative -m-6 flex h-[calc(100%+48px)] w-[calc(100%+48px)] flex-col overflow-hidden"
+      data-testid="wf-editor-page"
+    >
+      {/* 48px 工具栏（唯一一条，无第二行工具条） */}
+      <header className="flex h-12 flex-none items-center gap-3 border-b border-separator bg-surface px-4">
+        <button
+          type="button"
+          className="btn btn-g btn-sm flex-none"
+          data-testid="wf-back"
+          title="返回工作流列表"
+          aria-label="返回工作流列表"
+          onClick={() => navigate('/workflows')}
+        >
+          <ArrowLeft size={13} aria-hidden />
+          返回
+        </button>
         <b className="max-w-[280px] truncate text-sm">{detail?.name ?? '工作流'}</b>
         <span className="badge b-orange">草稿 {detail?.draft_version ?? '—'}</span>
         {dirty && <span className="badge b-gray">未保存修改</span>}
@@ -171,29 +191,7 @@ export function WorkflowEditorPage() {
         </div>
       </header>
 
-      {/* 八类节点 Tab（过滤节点库） */}
-      <div className="flex flex-none flex-wrap items-center gap-1.5 border-b border-separator bg-surface-2 px-3.5 py-1.5">
-        <span className="mr-1 text-2xs font-bold tracking-wide text-label-3">八类节点</span>
-        {NODE_KINDS.map(k => (
-          <button
-            key={k.kind}
-            type="button"
-            className="rounded-full px-2.5 py-0.5 text-[11px]"
-            style={
-              kindFilter === k.kind
-                ? { color: 'var(--accent)', border: '1.5px solid var(--accent)', background: 'var(--accent-soft)', fontWeight: 700 }
-                : { color: 'var(--label-2)', border: '1px solid var(--separator)', background: 'var(--surface)' }
-            }
-            data-testid={`wf-tab-${k.kind}`}
-            onClick={() => setKindFilter(f => (f === k.kind ? null : k.kind))}
-          >
-            {k.label}
-          </button>
-        ))}
-        <span className="ml-auto text-[11px] text-label-3">点击 Tab 过滤节点库 · 循环子图 v2 另议</span>
-      </div>
-
-      {/* 三栏（S8 状态切片：仅门控顶层定义加载——加载 → 骨架行 / 失败 → 错误态重试；画布本体不动） */}
+      {/* 顶层定义加载态（S8 状态切片：骨架行 / 错误态重试；画布本体不动） */}
       {detailQ.isLoading && (
         <div className="flex min-h-0 flex-1 items-center justify-center p-6">
           <div className="w-full max-w-[560px]">
@@ -210,29 +208,12 @@ export function WorkflowEditorPage() {
           />
         </div>
       )}
-      <div className={`relative flex min-h-0 flex-1 ${detailQ.isLoading || detailQ.isError ? 'hidden' : ''}`}>
-        {/* 节点库（03 篇 §2.6：lg 档收窄 240→180，xl 恢复基准宽） */}
-        <aside className="w-[180px] flex-none overflow-y-auto border-r border-separator p-2.5 xl:w-[240px]" style={{ background: 'var(--surface-2)' }} data-testid="wf-library">
-          <div className="px-1.5 pb-2 text-2xs font-bold tracking-wide text-label-3">节点库（点击加入画布）</div>
-          {NODE_KINDS.filter(k => !kindFilter || k.kind === kindFilter).map(k => (
-            <button
-              key={k.kind}
-              type="button"
-              className="flex h-[30px] w-full items-center gap-2 rounded-lg px-2 text-left text-xs text-label-2 hover:bg-surface"
-              data-testid={`wf-add-${k.kind}`}
-              onClick={() => addNode(k.kind)}
-            >
-              {KIND_ICON[k.kind]}
-              {k.label}
-              {k.badge && <span className="badge b-orange ml-auto" style={{ fontSize: 8.5, padding: '0 5px' }}>{k.badge}</span>}
-              <Plus size={11} className={k.badge ? '' : 'ml-auto'} aria-hidden />
-            </button>
-          ))}
-          <div className="fhint px-1.5 pt-2">Agent 节点绑插槽实例并继承群聊成员参数；编排不提权（ACL 约束）。</div>
-        </aside>
 
-        <div className="relative min-w-0 flex-1">
+      {/* 画布全幅编辑区：ReactFlow absolute inset-0 铺满，节点库 / 检查器 / 试运行 Drawer 全部悬浮其上 */}
+      {!detailQ.isLoading && !detailQ.isError && (
+        <div className="relative min-h-0 flex-1">
           <WorkflowCanvas
+            className="absolute inset-0"
             nodes={nodes}
             edges={edges}
             selectedId={selected}
@@ -241,21 +222,45 @@ export function WorkflowEditorPage() {
             onConnect={c => mutate(() => setEdges(prev => [...prev, { source: c.source, target: c.target }]))}
             onMove={(nid, x, y) => setNodes(prev => prev.map(n => (n.id === nid ? { ...n, x, y } : n)))}
           />
+
+          {/* 空画布引导（悬浮不挡操作：pointer-events-none，画布照常可拖拽缩放） */}
+          {nodes.length === 0 && (
+            <div className="pointer-events-none absolute inset-0 z-[5] flex items-center justify-center" data-testid="wf-canvas-empty">
+              <div className="glass rounded-xl" style={{ boxShadow: 'var(--sh-float)' }}>
+                <div className="empty">
+                  <Workflow aria-hidden />
+                  <div className="t">从左侧添加第一个节点</div>
+                  <div className="d">点击左上角节点库薄栏展开面板，点击条目即加入画布；拖拽节点卡边缘连线编排。</div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* 节点库悬浮薄栏（收起 48px / 展开 280px；过滤 chips 内置） */}
+          <NodePalette onAdd={addNode} kindFilter={kindFilter} onFilterChange={setKindFilter} />
+
+          {/* 节点检查器浮层卡（右上悬浮；未选中节点时不渲染，画布完全敞开） */}
+          <NodeInspector
+            node={selectedNode}
+            edges={edges}
+            slots={detail?.agent_slots ?? []}
+            onUpdate={updateNode}
+            onDelete={deleteNode}
+            onClose={() => setSelected(null)}
+          />
+
+          {/* IX-GRP-08 试运行面板（底部 Drawer） */}
+          <TestRunPanel
+            run={run}
+            totalNodes={nodes.length}
+            onResume={() => setResumeOpen(true)}
+            onAbort={() => {
+              if (run) void abortRun(id!, run.id).then(() => setRun(r => (r ? { ...r, status: 'aborted' } : r)))
+            }}
+            onTrace={() => navigate(`/tasks?job=${runTaskId ?? ''}`)}
+          />
         </div>
-
-        <NodeInspector node={selectedNode} edges={edges} slots={detail?.agent_slots ?? []} onUpdate={updateNode} onDelete={deleteNode} />
-
-        {/* IX-GRP-08 试运行面板（底部 Drawer） */}
-        <TestRunPanel
-          run={run}
-          totalNodes={nodes.length}
-          onResume={() => setResumeOpen(true)}
-          onAbort={() => {
-            if (run) void abortRun(id!, run.id).then(() => setRun(r => (r ? { ...r, status: 'aborted' } : r)))
-          }}
-          onTrace={() => navigate(`/tasks?job=${runTaskId ?? ''}`)}
-        />
-      </div>
+      )}
 
       {/* GRP-09 / GRP-10 / GRP-11 */}
       <ResumeDialog open={resumeOpen} onClose={() => setResumeOpen(false)} workflowId={id!} run={run} onResumed={newRunId => setRun({ id: newRunId, workflow_id: id!, status: 'running', branch: 1, resumed_from: run?.id ?? null, steps: [] })} />

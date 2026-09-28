@@ -77,6 +77,7 @@ class Settings(BaseSettings):
     memory_l2_confidence_threshold: float = 0.65  # ≥ 阈值静默写，低于进待复核
     memory_observation_min_proof: int = 2  # 观察固化最少独立事实数
     memory_task_deadline_hours: int = 24  # 空闲任务 deadline，超期升级在线
+    memory_vector_enabled: bool = False  # 向量投影开关（嵌入模型接入后开启；关闭=NullProjection 降级）
     llm_timeout_seconds: float = 60.0
     idle_off_peak_start_hour: int = 1  # 低峰直通时段 [start, end)
     idle_off_peak_end_hour: int = 7

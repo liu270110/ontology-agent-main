@@ -41,9 +41,11 @@ class Agent(Base, PkMixin, TenantMixin, TimestampMixin):
     adapter_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("agent_adapters.id"), nullable=False)
     config: Mapped[dict] = mapped_column(JSONB, default=dict, nullable=False)  # 模型 profile/工具白名单
     status: Mapped[str] = mapped_column(String(16), default="enabled", nullable=False)
+    # H-0c ③（2026-09-29 迁移）：适配器探活连续失败计数（≥阈值→degraded，成功清零）
+    adapter_failure_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     __table_args__ = (
         UniqueConstraint("tenant_id", "name", name="uk_agents_tenant_id_name"),
-        CheckConstraint("status IN ('enabled','disabled')", name="ck_agents_status"),
+        CheckConstraint("status IN ('enabled','disabled','degraded')", name="ck_agents_status"),
     )
 
 

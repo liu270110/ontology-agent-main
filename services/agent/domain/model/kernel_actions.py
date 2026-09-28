@@ -9,6 +9,7 @@
 from __future__ import annotations
 
 import uuid
+from datetime import datetime
 from enum import StrEnum
 from typing import Any
 
@@ -51,13 +52,18 @@ class ToolCall(BaseModel):
 
 
 class ApprovalTicket(BaseModel):
-    """审批回执（值对象 frozen，B5 放行凭证）：参数哈希绑定，防审批后换参重放。"""
+    """审批回执（值对象 frozen，B5 放行凭证）：参数哈希绑定，防审批后换参重放。
+
+    expires_at（H-0b 2026-09-29 补）：运行中审批票时效；执行侧重放并入内核 approvals
+    前校验（过期视同无回执，走 B5 默认拒绝）。缺省 None=不限时（预授权注入的既有形态）。
+    """
 
     model_config = ConfigDict(frozen=True)
 
     ticket_id: uuid.UUID = Field(default_factory=uuid.uuid4)
     param_hash: str  # 必须与 ToolCall.param_hash 一致，不一致即拒绝
     approved_by: uuid.UUID | None = None
+    expires_at: datetime | None = None
 
 
 class ToolResult(BaseModel):

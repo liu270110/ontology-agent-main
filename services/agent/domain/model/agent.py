@@ -3,7 +3,8 @@
 不变式（Agent 服务设计 §2，落到本仓 ORM 形态）：
 - 一条 Agent 只绑定一种适配器类型：``agent_tool`` 单值列（结构上成立），聚合注册时再断言合法枚举；
 - 适配器绑定必须指向已注册适配器行（``adapter_id`` FK；聚合只持有 id，存在性由仓储/端点保证）；
-- **disabled 不得被新会话引用**（:meth:`Agent.ensure_usable_for_new_session`，创建会话端点调用）；
+- **disabled/degraded 不得被新会话引用**（:meth:`Agent.ensure_usable_for_new_session`，创建会话端点调用；
+  degraded=探活连续失败降级，04 §10 裁决，存量 Run 跑完不中断）；
 - 同一租户内 ``name`` 唯一（DB 唯一约束 uk_agents_tenant_id_name 兜底，聚合断言非空与长度）；
 - 改适配器类型（agent_tool）视为重建：聚合实例不提供该变更通道（PATCH DTO 不携带）。
 
@@ -33,8 +34,23 @@ class AgentError(Exception):
 
 
 class AgentStatus(StrEnum):
+    """三态（04 篇 §10 degraded 裁决，2026-09-26 补；H-0c ③ 代码化 2026-09-29）：
+
+    enabled⇄degraded 双向（探活失败 N 次→degraded，成功自愈回 enabled）；
+    disabled 终态语义不变（仅 enable() 可离终态）；degraded=新会话拒绑、存量跑完。
+    """
+
     ENABLED = "enabled"
+    DEGRADED = "degraded"
     DISABLED = "disabled"
+
+
+# 状态机：enabled⇄degraded 双向；disabled 仅 enable() 出口（终态语义不变）
+_VALID_AGENT_TRANSITIONS: dict[AgentStatus, frozenset[AgentStatus]] = {
+    AgentStatus.ENABLED: frozenset({AgentStatus.DISABLED, AgentStatus.DEGRADED}),
+    AgentStatus.DEGRADED: frozenset({AgentStatus.ENABLED, AgentStatus.DISABLED}),
+    AgentStatus.DISABLED: frozenset({AgentStatus.ENABLED}),
+}
 
 
 class AgentAdapterInfo(BaseModel):
@@ -83,6 +99,9 @@ class Agent(BaseModel):
     system_prompt: str | None = None
     config: dict[str, Any] = Field(default_factory=dict)
     status: AgentStatus = AgentStatus.ENABLED
+    # 适配器探活连续失败计数（H-0c ③；DDL=agents.adapter_failure_count，2026-09-29 迁移）：
+    # 失败 +1、成功清零；≥阈值（Settings.agent_degrade_threshold）→ degrade()
+    adapter_failure_count: int = 0
     created_at: datetime | None = None  # 仓储回填，聚合内不消费
 
     def __eq__(self, other: object) -> bool:
@@ -142,12 +161,41 @@ class Agent(BaseModel):
         self.config = {**self.config, "tool_whitelist": list(seen)}
 
     def disable(self) -> None:
-        self.status = AgentStatus.DISABLED
+        self._transition(AgentStatus.DISABLED)
 
     def enable(self) -> None:
-        self.status = AgentStatus.ENABLED
+        self._transition(AgentStatus.ENABLED)
+
+    def degrade(self) -> None:
+        """适配器降级（enabled→degraded，04 §10 裁决）：新会话拒绑、存量 Run 跑完不中断。"""
+        self._transition(AgentStatus.DEGRADED)
+
+    def record_adapter_health(self, *, healthy: bool, degrade_threshold: int = 3) -> None:
+        """health-check 结果记账（H-0c ③，探活端点驱动）：
+
+        - 失败：``adapter_failure_count`` +1；连续失败 ≥ 阈值且当前 enabled → degrade()；
+        - 成功：计数清零；degraded 自愈回 enabled（04 篇 §3「degraded→recovered，
+          health-check 端点驱动」）；disabled 不受探活结果影响（终态语义不变）。
+        """
+        if healthy:
+            self.adapter_failure_count = 0
+            if self.status is AgentStatus.DEGRADED:
+                self.enable()  # 自愈（degraded→enabled）
+            return
+        self.adapter_failure_count += 1
+        if self.adapter_failure_count >= degrade_threshold and self.status is AgentStatus.ENABLED:
+            self.degrade()
 
     def ensure_usable_for_new_session(self) -> None:
-        """不变式：disabled 不得被新会话引用（Agent 服务设计 §2；创建会话端点强制）。"""
+        """不变式：disabled/degraded 不得被新会话引用（Agent 服务设计 §2 + 04 §10 degraded
+        裁决；创建会话端点强制，AgentError→409）。存量 Run 不经此校验（跑完不中断）。
+        """
         if self.status is AgentStatus.DISABLED:
             raise AgentError("AGENT_DISABLED: agent 已禁用，禁止创建新会话")
+        if self.status is AgentStatus.DEGRADED:
+            raise AgentError("AGENT_DEGRADED: 适配器探活连续失败已降级，禁止创建新会话（存量 Run 不受影响）")
+
+    def _transition(self, to: AgentStatus) -> None:
+        if to not in _VALID_AGENT_TRANSITIONS[self.status]:
+            raise AgentError(f"非法状态迁移 {self.status} → {to}（agent 状态机：enabled⇄degraded，disabled 终态）")
+        self.status = to

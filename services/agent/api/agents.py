@@ -26,6 +26,7 @@ from services.agent.api.schemas.agent import (
     agent_detail_from_domain,
     agent_from_domain,
 )
+from services.agent.business.agent_health import record_adapter_health_outcome
 from services.agent.domain.model.agent import Agent, AgentError
 from services.platform.deps import Principal, require_scope
 from services.platform.errors import GatewayError
@@ -140,6 +141,8 @@ async def health_check(agent_id: uuid.UUID, principal: AgentReadDep, uow: UowDep
         # 注册面保证 adapter_id 恒有绑定行；防御性兜底按目标不可用上报（api/01 §5.1：5003）
         raise GatewayError(5003, "适配器绑定行缺失", status_code=503)
     if adapter.health_endpoint is None:
+        # 进程内适配器恒健康（builtin/claude）：按成功口径清零计数（H-0c ③ 端点接线）
+        await record_adapter_health_outcome(uow, tenant_id=principal.tenant_id, agent_id=agent_id, healthy=True)
         return AgentHealthOut(status="inprocess", latency_ms=None)  # builtin/claude：进程内，无独立探活端点
     started = time.monotonic()
     try:
@@ -147,5 +150,7 @@ async def health_check(agent_id: uuid.UUID, principal: AgentReadDep, uow: UowDep
             response = await client.get(adapter.health_endpoint)
         response.raise_for_status()
     except httpx.HTTPError as exc:
+        await record_adapter_health_outcome(uow, tenant_id=principal.tenant_id, agent_id=agent_id, healthy=False)
         raise GatewayError(5003, f"适配器探活失败: {exc}", status_code=503) from exc
+    await record_adapter_health_outcome(uow, tenant_id=principal.tenant_id, agent_id=agent_id, healthy=True)
     return AgentHealthOut(status="ok", latency_ms=int((time.monotonic() - started) * 1000))

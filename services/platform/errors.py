@@ -41,6 +41,8 @@ class ErrorCode(IntEnum):
     MCP_TARGET_UNAVAILABLE = 5003
     STORAGE_UNAVAILABLE = 5004
     RETRY_BUDGET_EXHAUSTED = 5005  # 2026-09-26 缺口核查修复补登记（5xxx 段）
+    # 2026-09-29 H-0c 批登记（孤儿 Run 回收：running 悬挂超时→对账回收；02 §7 表格回填随文档批）
+    ORPHAN_RUN_RECOVERED = 5006
     INTERNAL_ERROR = 5999
 
 

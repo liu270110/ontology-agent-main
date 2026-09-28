@@ -305,7 +305,14 @@ class ChatOrchestrator:
             duration_s=self._policy.total_budget_s,
             max_tokens=None,
         )
-        return await kernel.run(task, ctx, budget=budget, ledger_sink=ledger_sink, spill_store=self._spill_store)
+        return await kernel.run(
+            task,
+            ctx,
+            budget=budget,
+            ledger_sink=ledger_sink,
+            spill_store=self._spill_store,
+            approvals=tuple(command.approvals or ()),  # H-0b：运行中审批票随重放并入内核（B5 回执核验）
+        )
 
     # ── 收尾与映射 ────────────────────────────────────────────────────────
     @staticmethod

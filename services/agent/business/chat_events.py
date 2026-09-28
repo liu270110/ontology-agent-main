@@ -72,6 +72,7 @@ class ChatCommand(BaseModel):
     adapter: str = "builtin"  # 适配器路由键（builtin | claude，Agent 服务设计 §3.2）
     member_system_prompt: str | None = None  # 群聊成员人格（27 篇；单 agent 会话 None）
     retrieval_top_k: int | None = None  # 覆盖 ChatPolicy.retrieval_top_k（缺省用策略值）
+    approvals: tuple[Any, ...] = ()  # 运行中审批票（H-0b：worker 携票重放并入内核 approvals；预授权/审批回执两源）
 
 
 class ChatOutcome(BaseModel):

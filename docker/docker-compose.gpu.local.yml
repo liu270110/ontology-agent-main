@@ -1,0 +1,29 @@
+# 本地 override（不入库：适配本机环境，2026-09-27）
+# 背景：①本机 8000~8003 被另一套容器栈长期占用（apiserver=8000/placement=8001/watcher=8002/iam=8003，
+#       实测端口串线），GPU 体挪 18001/18002（P2 rerank 预留 18003）；
+#       ②容器内连不上 hf-mirror（DNS 间歇故障 + Rust 下载器 etag 兼容问题），模型改由主机预下载：
+#         E:\learn-agnet-project\oa-models\{qwen3-4b-awq,bge-m3}（huggingface_hub snapshot，HF_ENDPOINT=hf-mirror）
+#       ③SWR 转存的 vllm latest 停在 2024-10（v0.6.1.dev，不支持 Qwen3 架构），pin 到新 tag。
+# 用法：cd docker && docker compose -f docker-compose.gpu.yml -f docker-compose.gpu.local.yml up -d
+# 渠道切换：根 .env 放开 OA_LLM_BASE_URL=http://127.0.0.1:18001/v1（注意非 8001）、OA_LLM_MODEL=local-main
+
+services:
+  vllm:
+    image: vllm/vllm-openai:pinned
+    ports: !override
+      - "127.0.0.1:18001:8000"
+    volumes:
+      - E:/learn-agnet-project/oa-models/qwen3-4b-awq:/models/qwen3-4b-awq:ro
+    command: >
+      --model /models/qwen3-4b-awq
+      --served-model-name local-main
+      --max-model-len 16384
+      --gpu-memory-utilization 0.80
+      --enable-prefix-caching
+
+  tei-embed:
+    ports: !override
+      - "127.0.0.1:18002:80"
+    volumes:
+      - E:/learn-agnet-project/oa-models/bge-m3:/models/bge-m3:ro
+    command: --model-id /models/bge-m3 --max-client-batch-size 32

@@ -13,8 +13,10 @@ export interface AuthUser {
   id: string
   /** 登录邮箱（不来自 claims——登录表单已知，随会话保存；R13 建议后端入 claim） */
   email: string
-  /** 展示名 = 邮箱前缀（R13：待后端提供 name claim / me 端点后切真名） */
+  /** 展示名：claims.name 权威（R13 已扩展），缺失回退邮箱前缀——**非业务 ID 不外露** */
   displayName: string
+  /** 租户显示名（claims.tenant_name，R13 扩展）；缺失回退「默认租户」 */
+  tenantName?: string
   tenantId: string
   roles: string[]
   scopes: string[]
@@ -78,8 +80,9 @@ function userFromClaims(email: string, accessToken: string): AuthUser | null {
   return {
     id: claims.sub,
     email,
-    // R 需求（R13）：claims 无显示名字段，暂以邮箱前缀代展示名
-    displayName: email.split('@')[0] ?? email,
+    // R13：claims.name 为权威显示名（mock/后端扩展均已带）；缺失回退邮箱前缀
+    displayName: claims.name ?? email.split('@')[0] ?? email,
+    tenantName: claims.tenant_name,
     tenantId: claims.tenant_id,
     roles: claims.roles,
     scopes: claims.scopes,

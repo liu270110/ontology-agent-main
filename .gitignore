@@ -46,3 +46,8 @@ docs/
 .backup_module_axis/
 
 .qa_*
+# 会话与临时产物（2026-09-28）
+.zcode/
+node_modules/
+_patch_*.py
+.pytest_cache/

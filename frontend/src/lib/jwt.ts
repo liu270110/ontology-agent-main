@@ -6,6 +6,9 @@
 export interface AccessClaims {
   sub: string
   tenant_id: string
+  /** 显示名（R13：后端 claims 扩展预登记；缺失时前端回退邮箱前缀） */
+  name?: string
+  tenant_name?: string
   roles: string[]
   scopes: string[]
   typ: string

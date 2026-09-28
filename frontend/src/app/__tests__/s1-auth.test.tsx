@@ -28,7 +28,7 @@ describe('S1 登录与基座', () => {
   it('① admin 登录成功 → 进入 AppShell（工作台）', async () => {
     render(<App />)
     await fillLogin('admin@example.com', 'password123')
-    expect(await screen.findByRole('heading', { name: /，admin$/ })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: /，刘以在$/ })).toBeInTheDocument()
     expect(screen.getByRole('navigation', { name: '主导航' })).toBeInTheDocument()
     // claims 权威：roles 来自 JWT（admin@example.com → ['admin']），localStorage 持久化
     expect(useAuthStore.getState().user?.roles).toEqual(['admin'])
@@ -44,7 +44,7 @@ describe('S1 登录与基座', () => {
     // OTP 六位：粘贴式整段输入（input-otp 单隐藏 input 分发）
     fireEvent.change(screen.getByLabelText('六位动态验证码'), { target: { value: '123456' } })
     fireEvent.click(screen.getByRole('button', { name: /验证并登录/ }))
-    expect(await screen.findByRole('heading', { name: /，mfa$/ })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: /，双因子用户$/ })).toBeInTheDocument()
   })
 
   it('③ locked@example.com → 1002 统一文案「邮箱或密码错误」（防枚举）', async () => {
@@ -58,7 +58,7 @@ describe('S1 登录与基座', () => {
   it('⑤ member 登录后侧栏无「系统管理」（治理组按角色过滤）', async () => {
     render(<App />)
     await fillLogin('member@example.com', 'password123')
-    await screen.findByRole('heading', { name: /，member$/ })
+    await screen.findByRole('heading', { name: /，成员样例$/ })
     expect(screen.queryByText('系统管理')).not.toBeInTheDocument()
     expect(screen.queryByText('治理')).not.toBeInTheDocument()
     // member 可见项仍在

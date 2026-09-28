@@ -168,6 +168,33 @@ export function resumeRun(id: string, rid: string, body: { edits: { node_id: str
   return api.post<{ run_id: string; status: string; mode: string; edits: unknown[] }>(`/workflows/${id}/runs/${rid}/resume`, body)
 }
 
+// ---- 工具注册表（IX-GRP-07 工具节点「注册表选取」取数源） ----
+
+/** 工具注册表行（结构与 features/tools 的 ToolRow 同源——按 tests/architecture 域边界
+ *  纪律在域内声明，不横向 import；仅取下拉选取所需字段子集） */
+export interface WfToolRow {
+  id: string
+  name: string
+  desc: string
+  source: 'builtin' | 'plugin' | 'mcp' | 'http'
+  scopes: string[]
+  danger: boolean
+  enabled: boolean
+}
+
+/** scope 徽标口径：danger=true → high-risk（高危，橙色徽标）；否则取首个 scope；
+ *  无 scope 声明 → read（与旧静态注册表口径一致） */
+export function toolScopeLabel(t: Pick<WfToolRow, 'danger' | 'scopes'>): string {
+  if (t.danger) return 'high-risk'
+  return t.scopes[0] ?? 'read'
+}
+
+/** GET /tools —— 工具注册中心目录（契约=api/01 §5.6：名称+摘要；与 features/tools
+ *  的 listTools 同端点同 mock，域内声明仅因横向 import 禁令） */
+export function listToolRegistry() {
+  return api.get<{ items: WfToolRow[] }>('/tools')
+}
+
 export function abortRun(id: string, rid: string) {
   return api.post<{ run_id: string; status: string }>(`/workflows/${id}/runs/${rid}/abort`)
 }

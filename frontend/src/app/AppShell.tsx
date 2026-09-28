@@ -4,6 +4,7 @@ import { Bell, PanelLeft, Search, Settings, ShieldCheck } from 'lucide-react'
 import { useUiStore } from '@/stores/ui-store'
 import { useAuthStore } from '@/stores/auth-store'
 import { ThemeToggle } from '@/components/theme-toggle'
+import { ROLE_LABEL } from '@/lib/invite'
 import { CommandMenu } from '@/components/command-menu/command-menu'
 import { SidebarGroups } from './sidebar/SidebarGroups'
 import { UserMenu } from './UserMenu'
@@ -65,7 +66,7 @@ export function AppShell() {
           {!collapsed && (
             <small className="min-w-0 text-[11px] leading-4 text-label-3">
               <b className="block truncate text-label">{user?.displayName}</b>
-              {user?.roles?.[0] ?? '成员'} · {user?.tenantId ?? '默认租户'}
+              {ROLE_LABEL[user?.roles?.[0] ?? ''] ?? '成员'} · {user?.tenantName ?? '默认租户'}
             </small>
           )}
           {/* 双区 IA：管理类入口收进管理控制台（独立窗口心智） */}

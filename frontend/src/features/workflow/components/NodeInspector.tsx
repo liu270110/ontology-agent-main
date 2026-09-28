@@ -1,16 +1,19 @@
 import { useMemo, useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { AlertTriangle, Check, GitBranch } from 'lucide-react'
-import { KIND_LABEL, type WfNode, type WfEdge, type WfAgentSlot } from '../api'
+import { KIND_LABEL, listToolRegistry, toolScopeLabel, type WfNode, type WfEdge, type WfAgentSlot, type WfToolRow } from '../api'
 
 /** IX-GRP-07 节点参数检查器（右栏面板态）：八类类型化表单——Agent=绑插槽实例（继承群聊成员
  *  参数）/ 工具=注册表选取 + scope 徽标 / 知识检索=GraphRAG 三模式 / 条件=确定性表达式编辑器
  *  （mono + 模板 + 就地试算；禁裸 LLM 分支警示条，宪法 2）/ 审批=模板选择。表单底座按 29 篇
  *  降级预案：八类字段形态简单，直接 RHF 自建（.field/.input 令牌类），不引 RJSF。 */
 
-const TOOL_REGISTRY = [
-  { id: 'scada.query', name: 'scada.query', scope: 'read', desc: 'SCADA 遥测实时查询' },
-  { id: 'grid.write', name: 'grid.write', scope: 'high-risk', desc: '电网回写（高危 scope，运行期审计）' },
-  { id: 'kb.search', name: 'kb.search', scope: 'read', desc: 'GraphRAG 知识检索' },
+/** 最终回退清单：工具下拉改拉 GET /tools 注册表（B3-P 转实）；仅当注册表请求失败时
+ *  作为最后回退仍可选取（语境与 mocks/platform-handlers.ts 一致的 3 条），成功路径不使用。 */
+const TOOL_REGISTRY_FALLBACK: WfToolRow[] = [
+  { id: 'tool-scada-query', name: 'scada.query', desc: 'SCADA 遥测实时查询', source: 'http', scopes: [], danger: false, enabled: true },
+  { id: 'tool-grid-write', name: 'grid.write', desc: '电网回写（高危 scope，运行期审计）', source: 'http', scopes: ['grid:write'], danger: true, enabled: true },
+  { id: 'tool-kb-search', name: 'kb.search', desc: 'GraphRAG 知识检索', source: 'builtin', scopes: ['kb.read'], danger: false, enabled: true },
 ]
 
 const EXPR_TEMPLATES = [
@@ -113,6 +116,14 @@ function InspectorBody({
   const [expr, setExpr] = useState<string>(String(params.expression ?? ''))
   const [evalResult, setEvalResult] = useState<{ ok: boolean; value?: boolean; error?: string } | null>(null)
 
+  // 工具注册表（B3-P 转实）：工具节点下拉改拉 GET /tools；失败回退 TOOL_REGISTRY_FALLBACK
+  const toolsQuery = useQuery({ queryKey: ['tools', 'registry'], queryFn: listToolRegistry, enabled: node.kind === 'tool' })
+  const registry = toolsQuery.data?.items ?? TOOL_REGISTRY_FALLBACK
+  const curTool = String(params.tool ?? '')
+  // 历史工作流引用已下架工具：当前值在注册表（含回退清单）中解析不到 → 下拉头部插入「（已下架）」保留原值不丢数据
+  const curEntry = registry.find(t => t.name === curTool || t.id === curTool)
+  const curDelisted = curTool !== '' && !curEntry
+
   const outgoing = useMemo(() => edges.filter(e => e.source === node.id), [edges, node.id])
   const patchParam = (patch: Record<string, unknown>) => onUpdate(node.id, { params: { ...params, ...patch } })
 
@@ -145,19 +156,53 @@ function InspectorBody({
       {node.kind === 'tool' && (
         <div className="field">
           <label className="field-label">注册表选取</label>
-          <select className="input" data-testid="wf-param-tool" value={String(params.tool ?? '')} onChange={e => { patchParam({ tool: e.target.value }); onUpdate(node.id, { sub: `scope: ${TOOL_REGISTRY.find(t => t.id === e.target.value)?.scope ?? 'read'}`, label: `工具 · ${e.target.value}` }) }}>
-            <option value="">未选择</option>
-            {TOOL_REGISTRY.map(t => (
-              <option key={t.id} value={t.id}>{t.name} · {t.desc}</option>
-            ))}
+          <select
+            className="input"
+            data-testid="wf-param-tool"
+            value={toolsQuery.isPending ? '__loading' : curTool}
+            disabled={toolsQuery.isPending}
+            onChange={e => {
+              const v = e.target.value
+              if (v === '__retry') { void toolsQuery.refetch(); return }
+              const t = registry.find(x => x.name === v || x.id === v)
+              patchParam({ tool: v })
+              onUpdate(node.id, { sub: `scope: ${t ? toolScopeLabel(t) : 'read'}`, label: `工具 · ${v}` })
+            }}
+          >
+            {toolsQuery.isPending ? (
+              <option value="__loading">加载工具注册表…</option>
+            ) : (
+              <>
+                {toolsQuery.isError ? (
+                  <option value="__retry">加载失败，点击重试</option>
+                ) : (
+                  <option value="">未选择</option>
+                )}
+                {curDelisted && <option value={curTool}>{curTool}（已下架）</option>}
+                {registry.map(t => (
+                  <option key={t.id} value={t.name} title={t.desc}>
+                    {t.name} · {toolScopeLabel(t)}
+                  </option>
+                ))}
+              </>
+            )}
           </select>
-          {typeof params.tool === 'string' && params.tool && (
+          {typeof params.tool === 'string' && params.tool && !toolsQuery.isPending && (
             <div className="mt-1.5">
-              <span className={`badge ${TOOL_REGISTRY.find(t => t.id === params.tool)?.scope === 'high-risk' ? 'b-orange' : 'b-gray'}`}>
-                scope: {TOOL_REGISTRY.find(t => t.id === params.tool)?.scope}
-              </span>
+              {curEntry ? (
+                <div data-testid="wf-param-tool-scope">
+                  <span className={`badge ${toolScopeLabel(curEntry) === 'high-risk' ? 'b-orange' : 'b-gray'}`}>
+                    scope: {toolScopeLabel(curEntry)}
+                  </span>
+                </div>
+              ) : (
+                <div data-testid="wf-param-tool-delisted">
+                  <span className="badge b-orange">已下架 · 历史引用 {params.tool}</span>
+                </div>
+              )}
             </div>
           )}
+          {toolsQuery.isError && !toolsQuery.data && <div className="fhint">注册表暂不可用，以下为内置回退清单。</div>}
         </div>
       )}
 

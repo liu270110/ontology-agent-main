@@ -90,8 +90,17 @@ export function SessionList({ onPicked }: { onPicked?: (id: string) => void }) {
     <div className="session-col flex w-60 flex-none flex-col border-r border-separator bg-surface">
       <div className="sc-head flex items-center justify-between px-4 pb-1 pt-3">
         <b className="text-sm">会话</b>
-        <span className="icobtn cursor-pointer rounded-md border border-separator px-1.5 text-label-2" aria-label="新建会话">
-          <Plus size={12} aria-hidden />
+        {/* 会话创建尚未实现（契约无 POST /sessions，见 api/01 §5.2 会话域）：诚实禁用而非死按钮。
+            title 挂外层 span——disabled 按钮不接收指针事件，tooltip 挂按钮上永不出现 */}
+        <span title="新建会话（即将开放）">
+          <button
+            type="button"
+            className="icobtn rounded-md border border-separator px-1.5 text-label-3 btn-dis"
+            disabled
+            aria-label="新建会话（即将开放）"
+          >
+            <Plus size={12} aria-hidden />
+          </button>
         </span>
       </div>
       {/* 会话搜索（F-04）：按标题过滤 */}

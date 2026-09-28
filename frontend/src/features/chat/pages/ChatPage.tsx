@@ -10,14 +10,10 @@ import { useSessionStore } from '@/stores/session-store'
 import { useSessionStream } from '@/sse/useSessionStream'
 import { api } from '@/api/client'
 import type { ChatMessage } from '@/stores/session-store'
+import { CONN_STATE_TEXT } from '@/lib/conn-label'
 
-/** 连接状态中文化（IX 顶栏状态徽标）：running 优先，其余按 SSE 连接态映射 */
-const CONNECTION_TEXT: Record<string, string> = {
-  open: '已连接',
-  connecting: '连接中',
-  reconnecting: '重连中',
-  offline: '已断开',
-}
+/** 连接状态中文化（IX 顶栏状态徽标）：running 优先，其余按 SSE 连接态映射（单源=lib/conn-label） */
+const CONNECTION_TEXT = CONN_STATE_TEXT
 
 /** 对话页（画框03 / 16 篇 §5.2 增量批次）：三栏=会话列表｜消息流｜上下文面板（可折叠）。
  *  数据流（16 篇 §3.2）：选会话 → GET messages 拉历史基线 → 开 SSE → 事件经 session-store.apply 归约；

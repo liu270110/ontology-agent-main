@@ -137,7 +137,7 @@ export function FactDetailSheet({
         {/* 全生命周期时间线 */}
         <div className="mt-4">
           <div className="text-[11px] font-semibold text-label-3">
-            全生命周期时间线 <span className="mono">（api/01 §5.5 facts/{fact.id}/timeline）</span>
+            全生命周期时间线
           </div>
           <div className="mt-2">
             {events.length === 0 ? (

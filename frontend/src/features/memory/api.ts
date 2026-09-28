@@ -10,7 +10,7 @@ export type FactStatus = 'candidate' | 'active' | 'invalidated'
 export const LAYER_META: Record<FactLayer, { label: string; desc: string }> = {
   L1: { label: 'L1 会话', desc: '工作记忆：会话内临时块 / 滑动窗口 / 任务草稿' },
   L2: { label: 'L2 用户', desc: '会话沉淀的候选事实与摘要（审核队列入口）' },
-  L3: { label: 'L3 组织', desc: '组织共享记忆图谱（升终审通过后写入）' },
+  L3: { label: 'L3 组织', desc: '组织共享记忆图谱（经终审通过后写入）' },
   L4: { label: 'L4 知识', desc: '长期知识与标准条款（随知识库同步）' },
 }
 

@@ -270,7 +270,7 @@ export function ExplorePage() {
           </button>
         </div>
         <p className="pointer-events-none absolute bottom-2 left-3 text-[11px] text-label-3">
-          单击开实体抽屉 · 双击展开邻域 · ⚙ 过滤关系类型与深度
+          单击打开实体抽屉 · 双击展开邻域 · ⚙ 过滤关系类型与深度
         </p>
       </div>
 

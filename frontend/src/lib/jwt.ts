@@ -30,7 +30,10 @@ export interface TokenPair {
 function base64UrlDecode(segment: string): string {
   const normalized = segment.replace(/-/g, '+').replace(/_/g, '/')
   const padded = normalized + '='.repeat((4 - (normalized.length % 4)) % 4)
-  return atob(padded)
+  // atob 产出是 Latin1 串：中文等多字节 claims（name/tenant_name，R13）必须按 UTF-8
+  // 字节序还原，否则 JSON.parse 后即乱码（问候语/侧栏用户卡显示「åˆ˜ä»¥åœ¨」类噪点）
+  const bytes = Uint8Array.from(atob(padded), c => c.charCodeAt(0))
+  return new TextDecoder('utf-8').decode(bytes)
 }
 
 /** 解 JWT payload；格式非法返回 null（不抛错——展示层容错）。 */

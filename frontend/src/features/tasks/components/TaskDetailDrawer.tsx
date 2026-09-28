@@ -114,7 +114,7 @@ export function TaskDetailDrawer({ task, onClose, onChanged }: {
               {task.trace_id && (
                 <div className="flex gap-2 py-1.5">
                   <dt className="w-20 flex-none text-label-3">trace_id</dt>
-                  <dd className="mono">{task.trace_id} <span className="text-[11px] text-label-3">→ /admin?tab=audit 可查全链路</span></dd>
+                  <dd className="mono">{task.trace_id} <span className="text-[11px] text-label-3">完整链路可在管理控制台 · 审计日志查询</span></dd>
                 </div>
               )}
             </dl>
@@ -143,7 +143,7 @@ export function TaskDetailDrawer({ task, onClose, onChanged }: {
             )}
           </div>
           <p className="mt-2 text-[11px] text-label-3">
-            操作区按状态 contextual：失败 → 重试 / 运行中 → 取消 · 查看日志 / 完成 → 去审核（/kb/review?job=）。
+            按任务状态提供操作：失败可重试，运行中可取消或查看日志，完成可去审核台归档。
           </p>
         </div>
       </Sheet>

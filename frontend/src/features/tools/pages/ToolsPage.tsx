@@ -174,7 +174,7 @@ export function ToolsPage() {
       {view === 'tools' && (
         <div className="mt-3 flex items-center gap-2 text-[11px] text-label-3">
           <Wrench size={12} aria-hidden />
-          工具目录供 Agent ToolPicker 勾选（api/01 §5.6）；MCP 来源工具经 L7 网关调用并逐次审计。
+          工具目录供 Agent 挑选引用；MCP 来源工具统一经平台网关调用并逐次审计。
         </div>
       )}
     </div>

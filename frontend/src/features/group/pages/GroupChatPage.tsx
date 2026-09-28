@@ -7,6 +7,8 @@ import { ErrorState, SkeletonRows } from '@/components/states'
 import { getGroupSession, listGroupSessions, type GroupMessageRow, type GroupSessionDetail, type RoutingMode } from '../api'
 import { useGroupStreamStore } from '../group-store'
 import { useGroupStream } from '../useGroupStream'
+import { CONN_STATE_TEXT, type ConnState } from '@/lib/conn-label'
+
 import { RoutingModePicker } from '../components/RoutingModePicker'
 import { MemberPickerDialog } from '../components/MemberPickerDialog'
 import { MemberPanel } from '../components/MemberPanel'
@@ -148,18 +150,31 @@ export function GroupChatPage() {
           <span className="badge b-gray">{members.length} 人</span>
           {sessionId && !missing && <RoutingModePicker sessionId={sessionId} routing={routing} onChange={setRouting} />}
           <div className="ml-auto flex items-center gap-2">
-            <span className="flex items-center gap-1 text-[11px] text-label-3">
-              <span className={`dot ${conn === 'open' ? 'd-green' : 'd-orange'}`} style={{ width: 6, height: 6 }} />
-              {running ? '运行中' : conn}
-            </span>
+            {/* 连接徽标只在选中会话后有意义（未选会话时流未建立，恒显 connecting 是假状态）；
+                状态文案中文化（connecting/open/reconnecting/offline 为流内部枚举） */}
+            {sessionId && !missing && (
+              <span className="flex items-center gap-1 text-[11px] text-label-3">
+                <span className={`dot ${conn === 'open' ? 'd-green' : 'd-orange'}`} style={{ width: 6, height: 6 }} />
+                {running ? '运行中' : CONN_STATE_TEXT[conn as ConnState] ?? '连接中'}
+              </span>
+            )}
             {session && (
               <button type="button" data-testid="grp-add-member" aria-label="添加成员" title="添加成员（GRP-01）" className="icobtn flex h-8 w-8 items-center justify-center rounded-lg border border-separator text-label-2" onClick={() => setPickerOpen(true)}>
                 <Users size={14} />
               </button>
             )}
-            <button type="button" aria-label="分享群聊" title="分享（F-10 资源 ACL 复用）" className="icobtn flex h-8 w-8 items-center justify-center rounded-lg border border-separator text-label-2">
-              <Share2 size={14} />
-            </button>
+            {/* 分享（F-10 资源 ACL 复用）未实现：诚实禁用而非死按钮。
+                title 挂外层 span——disabled 按钮不接收指针事件，tooltip 挂按钮上永不出现 */}
+            <span title="分享（即将开放）">
+              <button
+                type="button"
+                aria-label="分享群聊（即将开放）"
+                disabled
+                className="icobtn flex h-8 w-8 items-center justify-center rounded-lg border border-separator text-label-3 btn-dis"
+              >
+                <Share2 size={14} />
+              </button>
+            </span>
           </div>
         </header>
         {sessionId && session ? (

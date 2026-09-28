@@ -19,7 +19,7 @@ export function WorkflowListPage() {
       <div className="mb-4 flex items-center gap-3">
         <div>
           <h1 className="text-lg font-bold">工作流编排</h1>
-          <p className="mt-0.5 text-xs text-label-3">把 Agent 插槽、工具、知识检索、审批编排为可版本化、可试运行的有向图（27 篇 P15）。</p>
+          <p className="mt-0.5 text-xs text-label-3">把 Agent 插槽、工具、知识检索、审批编排为可版本化、可试运行的有向图。</p>
         </div>
         <button type="button" className="btn btn-p ml-auto" data-testid="wf-new-open" onClick={() => setNewOpen(true)}>
           <Plus size={13} aria-hidden />
@@ -102,7 +102,7 @@ export function WorkflowListPage() {
 
       <div className="mt-4 flex items-center gap-2 text-[11px] text-label-3">
         <History size={12} aria-hidden />
-        运行历史 → /workflows/:id 运行 Tab（任务中心 type=workflow_run 过滤）；发布生成不可变版本（候选非成品，宪法 3）。
+        运行历史可在任务中心按类型筛选查看，试运行轨迹见编辑器底部试运行面板；发布后版本不可变更，改动走新版本评审。
       </div>
 
       <NewWorkflowDialog open={newOpen} onClose={() => setNewOpen(false)} />

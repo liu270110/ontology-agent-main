@@ -28,7 +28,7 @@ export function AdminPage() {
     <div className="mx-auto max-w-[1180px]">
       <div className="flex flex-wrap items-center gap-2">
         <h1 className="text-lg font-bold">系统管理</h1>
-        <span className="text-xs text-label-3">权威鉴权在网关 deny-by-default，前端仅展示过滤</span>
+        <span className="text-xs text-label-3">实际权限以服务端鉴权为准，此处仅做展示过滤</span>
       </div>
 
       {/* Tab 条（?tab= 深链还原） */}

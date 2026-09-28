@@ -117,7 +117,7 @@ export function RoutingModePicker({
         {errMsg && <div className="field-err">{errMsg}</div>}
         <div className="mt-2 flex items-start gap-1.5 border-t border-separator pt-2 text-[11px] leading-relaxed text-label-3">
           <Shield size={12} className="mt-0.5 flex-none" style={{ color: 'var(--green)' }} aria-hidden />
-          <span>宪法 2 落法：仅协调者模式消耗路由 LLM 判定，其余三种确定性路由零 Token；切换即写入会话记忆并即时生效（api/01 §5.2 PATCH routing）。</span>
+          <span>仅协调者模式消耗一次路由判定，其余三种确定性路由零额外消耗；切换即写入会话记忆并即时生效。</span>
         </div>
       </FloatingCard>
     </>

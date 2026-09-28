@@ -233,7 +233,7 @@ export function MemberPickerDialog({
       </div>
       {errMsg && <div className="field-err mt-2">{errMsg}</div>}
       <div className="hairline-t mt-4 flex items-center gap-2 pt-3">
-        <span className="mr-auto text-[11px] text-label-3">成员角色随会话保存 · api/01 §5.2 members（X15）</span>
+        <span className="mr-auto text-[11px] text-label-3">成员角色随会话保存</span>
         <button type="button" className="btn btn-g" onClick={onClose}>取消</button>
         <button type="button" data-testid="grp-picker-submit" className="btn btn-p" disabled={disabled} onClick={() => void submit()}>
           <Users size={13} aria-hidden />

@@ -35,16 +35,25 @@ export interface WfCanvasNodeData extends Record<string, unknown> {
 }
 
 /** 类型色（仅令牌；画板 ix-09 GRP-07 同款） */
-const KIND_COLOR: Record<WfNode['kind'], string> = {
-  start_end: 'var(--label-3)',
-  agent: 'var(--purple)',
-  tool: 'var(--green)',
-  retrieval: 'var(--teal)',
-  condition: 'var(--accent)',
-  parallel: 'var(--teal)',
-  approval: 'var(--red)',
-  template: 'var(--indigo)',
+/** kind 调色板唯一源：token 用于画布节点卡（CSS 上下文），hex 供 MiniMap SVG fill——
+ *  SVG 属性语境不解析 var(--*)，两份映射由同一源派生防止悄然失配。 */
+const KIND_PALETTE: Record<WfNode['kind'], { token: string; hex: string }> = {
+  start_end: { token: 'var(--label-3)', hex: '#aeaeb2' },
+  agent: { token: 'var(--purple)', hex: '#af52de' },
+  tool: { token: 'var(--green)', hex: '#34c759' },
+  retrieval: { token: 'var(--teal)', hex: '#30b0c7' },
+  condition: { token: 'var(--accent)', hex: '#0071e3' },
+  parallel: { token: 'var(--teal)', hex: '#30b0c7' },
+  approval: { token: 'var(--red)', hex: '#ff3b30' },
+  template: { token: 'var(--indigo)', hex: '#5856d6' },
 }
+
+const pickColor = (sel: (c: { token: string; hex: string }) => string) =>
+  Object.fromEntries(Object.entries(KIND_PALETTE).map(([k, c]) => [k, sel(c)])) as Record<WfNode['kind'], string>
+const KIND_COLOR = pickColor(c => c.token)
+const MINIMAP_COLOR = pickColor(c => c.hex)
+/** minimap 节点兜底色（data.kind 缺失/未知时仍可见），与 start_end 同为默认灰 */
+const MINIMAP_FALLBACK = '#aeaeb2'
 
 const RUN_BADGE: Record<NonNullable<WfCanvasNodeData['runState']>, { txt: string; color: string } | null> = {
   queued: { txt: '排队', color: 'var(--label-3)' },
@@ -140,6 +149,11 @@ function InnerCanvas({ nodes, edges, selectedId, runStates, onSelect, onConnect,
         type: 'wf',
         position: { x: n.x, y: n.y },
         selected: n.id === selectedId,
+        // 占位尺寸：本组件按 selectedId/runStates 重建节点对象（身份更换），RF 实测的
+        // measured 随旧对象被丢弃，MiniMap 按 userNode 尺寸过滤会全量跳过 → 空白迷你图。
+        // initialWidth/Height 提供 RF 官方占位口径（画布渲染仍以实测为准），迷你图恒有节点块。
+        initialWidth: 140,
+        initialHeight: 52,
         data: { label: n.label, kind: n.kind, sub: n.sub, breakpoint: n.breakpoint, runState: runStates?.[n.id] },
       })),
     [nodes, selectedId, runStates],
@@ -195,7 +209,7 @@ function InnerCanvas({ nodes, edges, selectedId, runStates, onSelect, onConnect,
           pannable
           zoomable
           style={{ background: 'var(--surface)', border: '1px solid var(--separator)', borderRadius: 10 }}
-          nodeColor={n => KIND_COLOR[(n.data as WfCanvasNodeData).kind]}
+          nodeColor={n => MINIMAP_COLOR[(n.data as WfCanvasNodeData)?.kind] ?? MINIMAP_FALLBACK}
           maskColor="rgba(0,0,0,.08)"
         />
       </ReactFlow>

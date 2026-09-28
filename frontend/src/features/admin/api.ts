@@ -30,7 +30,10 @@ export const listUsers = () => api.get<{ items: AdminUser[]; next_cursor: null }
 export function inviteUsers(emails: string[], role: string, note?: string) {
   return api.post<{ invited: number; existing: { email: string; name: string }[] }>('/admin/users', { emails, role, note })
 }
-export function updateUser(id: string, body: { roles?: string[]; department?: string; display_name?: string }) {
+/** PATCH /admin/users/{id} 请求体（api/01 §5.8；mock 与真实调用共用此类型，防两处漂移） */
+export type AdminUserPatch = { roles?: string[]; department?: string; display_name?: string; status?: 'active' | 'disabled' }
+
+export function updateUser(id: string, body: AdminUserPatch) {
   return api.patch<AdminUser>(`/admin/users/${id}`, body)
 }
 export const disableUser = (id: string) => api.delete<void>(`/admin/users/${id}`)

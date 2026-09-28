@@ -30,7 +30,7 @@ export function SettingsPage() {
     <div className="mx-auto max-w-[920px]">
       <div className="flex flex-wrap items-center gap-2">
         <h1 className="text-lg font-bold">个人设置</h1>
-        <span className="text-xs text-label-3">账号自助域（28 篇）；密钥与凭据只展示一次或前缀</span>
+        <span className="text-xs text-label-3">密钥与凭据只在签发时完整展示一次，其余场合仅显示前缀</span>
       </div>
 
       <div className="card mt-3 flex !p-0">
@@ -50,7 +50,7 @@ export function SettingsPage() {
             </button>
           ))}
           <div className="menu-sep my-2" />
-          <Link to="/console/approvals" className="sn text-label-2">← 返回审批中心</Link>
+          <Link to="/" className="sn text-label-2">← 返回主页</Link>
         </nav>
 
         {/* 内容层 */}

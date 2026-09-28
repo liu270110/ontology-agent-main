@@ -72,6 +72,25 @@ class FakeRecordsRepo:
         }
         return promo_id
 
+    async def list_open_promotions(self, tenant_id: uuid.UUID, *, record_id: uuid.UUID) -> list[dict]:
+        rows = [
+            row
+            for row in self.promotions.values()
+            if row["tenant_id"] == tenant_id
+            and row["record_id"] == record_id
+            and row["state"] in ("submitted", "reviewing", "approved")
+        ]
+        return [
+            {
+                "id": r["id"],
+                "record_id": r["record_id"],
+                "state": r["state"],
+                "approval_id": r["approval_id"],
+                "created_at": r["created_at"],
+            }
+            for r in sorted(rows, key=lambda r: r["created_at"])
+        ]
+
     async def get_promotion(self, tenant_id: uuid.UUID, promotion_id: uuid.UUID) -> dict | None:
         row = self.promotions.get(promotion_id)
         if row is None or row["tenant_id"] != tenant_id:
@@ -284,6 +303,46 @@ async def test_submit_unknown_record_raises() -> None:
     assert review.submitted == []
 
 
+async def test_submit_non_l2_record_raises_value_error() -> None:
+    """layer 预检：仅 L2 记录可发起升级（06 篇 §5.4，API 映射 422）。"""
+    svc, repo, review, _ = _svc()
+    rid = repo.seed_record(TENANT, layer=3)  # 已在 L3
+    with pytest.raises(ValueError, match="仅 L2 记录可发起升级"):
+        await svc.submit(tenant_id=TENANT, record_id=rid, to_layer=3)
+    assert review.submitted == []  # 未建升级单/工单
+    assert repo.promotions == {}
+
+
+async def test_submit_open_promotion_returns_existing_idempotent() -> None:
+    """同记录已有 open 升级单 → 幂等返回既有（duplicate=true），不重复建单/建工单。"""
+    svc, repo, review, _ = _svc()
+    rid = repo.seed_record(TENANT, layer=2)
+    first = await svc.submit(tenant_id=TENANT, record_id=rid, to_layer=3)
+    assert first["duplicate"] is False
+
+    again = await svc.submit(tenant_id=TENANT, record_id=rid, to_layer=3)
+
+    assert again["duplicate"] is True
+    assert again["id"] == first["id"]  # 既有 promo_id
+    assert again["approval_id"] == first["approval_id"]  # 既有 ticket_id
+    assert again["state"] == "submitted"
+    assert len(review.submitted) == 1  # 不重复建工单
+    assert len(repo.promotions) == 1  # 不重复建升级单
+
+
+async def test_submit_after_terminal_promotion_creates_new() -> None:
+    """终态（rejected/applied）升级单不在幂等窗口：驳回/已生效后可重新发起（06 篇 §5.4）。"""
+    svc, repo, review, _ = _svc()
+    rid = repo.seed_record(TENANT, layer=2)
+    first = await svc.submit(tenant_id=TENANT, record_id=rid, to_layer=3)
+    repo.promotions[first["id"]]["state"] = "rejected"  # 驳回终态
+
+    again = await svc.submit(tenant_id=TENANT, record_id=rid, to_layer=3)
+
+    assert again["duplicate"] is False and again["id"] != first["id"]
+    assert len(review.submitted) == 2  # 新工单（uk_review_one_open：旧单已终态不冲突）
+
+
 # ---------------------------------------------------------------- 服务编排：decide 决议回调
 
 
@@ -335,7 +394,7 @@ async def test_decide_incomplete_signatures_keeps_promotion_submitted() -> None:
 
 async def test_decide_catch_up_when_ticket_already_approved() -> None:
     """幂等补齐（plugin 先例）：决策已落（ticket approved）联动中断后重入续走生效。"""
-    svc, repo, review, _ = _svc()
+    svc, repo, review, approvals = _svc()
     rid = repo.seed_record(TENANT, layer=2)
     out = await svc.submit(tenant_id=TENANT, record_id=rid, to_layer=3)
     review.tickets[out["approval_id"]]["status"] = "approved"  # 决策已落、联动未跑
@@ -345,11 +404,12 @@ async def test_decide_catch_up_when_ticket_already_approved() -> None:
     assert result["applied"] is True
     assert result["ticket_status"] == "published"
     assert repo.records[rid]["layer"] == 3
+    assert approvals.calls == []  # catch-up 不重复签名（决策已落，重入只续走联动）
 
 
-async def test_decide_reapply_after_settle_is_replay_safe() -> None:
-    """全链完成后再收到 approve：apply 幂等 False、promotion 不再动、工单复走 published 不炸。"""
-    svc, repo, review, _ = _svc()
+async def test_decide_catch_up_resumes_applied_promotion() -> None:
+    """全链完成后再收到 approve（catch-up 分支）：apply 幂等 False、不重复签名、工单复走 published 不炸。"""
+    svc, repo, review, approvals = _svc()
     rid = repo.seed_record(TENANT, layer=2)
     out = await svc.submit(tenant_id=TENANT, record_id=rid, to_layer=3)
     await svc.decide(tenant_id=TENANT, promotion_id=out["id"], action="approve", approver_id=APPROVER)
@@ -360,6 +420,7 @@ async def test_decide_reapply_after_settle_is_replay_safe() -> None:
     assert result["applied"] is False  # 已 applied，二次 apply 幂等拒绝
     assert result["promotion_state"] == "applied"
     assert repo.records[rid]["layer"] == 3
+    assert len(approvals.calls) == 1  # 全程只有首轮一次真实签名
 
 
 async def test_decide_unknown_promotion_and_missing_ticket() -> None:

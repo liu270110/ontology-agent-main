@@ -650,7 +650,8 @@ async def create_record_promotion(
     x_user_id: Annotated[str | None, Header(alias="X-User-Id")] = None,
 ) -> dict:
     """记录升级申请（权威实现）：同请求两写——memory_promotions(state=submitted) + 审批中心工单
-    （target_type=memory_l2_upgrade）+ approval_id 回填；record 存在性+归属双校验封跨租户引用；
+    （target_type=memory_l2_upgrade）+ approval_id 回填；仅 L2 记录可发起（422）；同记录已有
+    open 升级单幂等返回既有（duplicate=true，200）；record 存在性+归属双校验封跨租户引用；
     v1 无跨服务事务（一致性靠状态机幂等 + 对账巡检，TODO(M5) 巡检缝）；M3 过渡的 fact 版申请单
     见 POST /memory/facts/{fact_id}/promotions（用户裁决 2026-09-28）。"""
     _pipeline, repo = pipe
@@ -665,8 +666,15 @@ async def create_record_promotion(
         )
     except LookupError as exc:  # record 存在性+归属双校验（顺带封跨租户引用）
         raise HTTPException(status_code=404, detail="record not found") from exc
+    except ValueError as exc:  # 非 L2 记录预检（submit 入口，06 篇 §5.4）
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
     return {
         "code": 0,
         "message": "ok",
-        "data": {"id": str(data["id"]), "state": data["state"], "approval_id": str(data["approval_id"])},
+        "data": {
+            "id": str(data["id"]),
+            "state": data["state"],
+            "approval_id": str(data["approval_id"]) if data["approval_id"] else None,
+            "duplicate": data["duplicate"],  # 幂等返回：同记录已有 open 升级单（200 语义）
+        },
     }

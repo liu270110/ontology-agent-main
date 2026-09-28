@@ -69,6 +69,11 @@ class MemoryRepository(Protocol):
         self, tenant_id: uuid.UUID, *, record_id: uuid.UUID, reason: str, detail: dict
     ) -> None: ...
     async def add_promotion(self, tenant_id: uuid.UUID, *, record_id: uuid.UUID, to_layer: int) -> uuid.UUID: ...
+    async def list_open_promotions(self, tenant_id: uuid.UUID, *, record_id: uuid.UUID) -> list[dict]:
+        """该记录未终态（submitted/reviewing/approved）的升级单（M4P3-T5 幂等预检）：轻量 dict
+        {id, record_id, state, approval_id, created_at}，created_at 升序；租户过滤。"""
+        ...
+
     async def get_promotion(self, tenant_id: uuid.UUID, promotion_id: uuid.UUID) -> dict | None:
         """升级单只读视图（M4P3-T5）：{id, record_id, from_layer, to_layer, state, approval_id,
         payload, created_at}；租户过滤，无单/跨租户返回 None。"""
@@ -253,6 +258,30 @@ class PgMemoryRepository(MemoryRepository):
             s.add(row)
             await s.flush()
             return row.id
+
+    async def list_open_promotions(self, tenant_id: uuid.UUID, *, record_id: uuid.UUID) -> list[dict]:
+        stmt = (
+            select(MemoryPromotionORM)
+            .where(
+                MemoryPromotionORM.tenant_id == tenant_id,
+                MemoryPromotionORM.record_id == record_id,
+                # 未终态 = 幂等窗口（applied/rejected 终态放行重新发起，06 篇 §5.4 驳回可重提）
+                MemoryPromotionORM.state.in_(("submitted", "reviewing", "approved")),
+            )
+            .order_by(MemoryPromotionORM.created_at)
+        )
+        async with self._sm() as s:
+            rows = (await s.scalars(stmt)).all()
+            return [
+                {
+                    "id": r.id,
+                    "record_id": r.record_id,
+                    "state": r.state,
+                    "approval_id": r.approval_id,
+                    "created_at": r.created_at,
+                }
+                for r in rows
+            ]
 
     async def get_promotion(self, tenant_id: uuid.UUID, promotion_id: uuid.UUID) -> dict | None:
         async with self._sm() as s:

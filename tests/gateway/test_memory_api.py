@@ -55,6 +55,7 @@ class StubRepo:
     def __init__(self) -> None:
         self._keys: set[str] = set()
         self.known_record_id = uuid.uuid4()  # 预置"存在"的记录（promotions 存在性校验用）
+        self.known_l3_record_id = uuid.uuid4()  # 预置"L3 记录"（非 L2 升级 422 用）
         self.promotions: dict[uuid.UUID, dict] = {}  # M4P3-T5：promotion_id → 行（approval_id 回填断言用）
 
     async def list_pending_reviews(self, tenant_id, *, limit):
@@ -71,8 +72,21 @@ class StubRepo:
 
     async def add_promotion(self, tenant_id, *, record_id, to_layer):
         promo_id = uuid.uuid4()
-        self.promotions[promo_id] = {"record_id": record_id, "to_layer": to_layer, "approval_id": None}
+        self.promotions[promo_id] = {
+            "id": promo_id,
+            "record_id": record_id,
+            "to_layer": to_layer,
+            "state": "submitted",
+            "approval_id": None,
+        }
         return promo_id
+
+    async def list_open_promotions(self, tenant_id, *, record_id):
+        return [
+            {"id": pid, "record_id": r["record_id"], "state": r["state"], "approval_id": r["approval_id"]}
+            for pid, r in self.promotions.items()
+            if r["record_id"] == record_id and r["state"] in ("submitted", "reviewing", "approved")
+        ]
 
     async def set_promotion_approval(self, tenant_id, promotion_id, *, approval_id):
         if promotion_id in self.promotions:
@@ -85,12 +99,16 @@ class StubRepo:
         return True
 
     async def get(self, tenant_id, record_id):
-        if record_id != self.known_record_id:
+        if record_id == self.known_record_id:
+            layer = 2
+        elif record_id == self.known_l3_record_id:
+            layer = 3  # 已在 L3（非 L2 升级 422 用）
+        else:
             return None
         return MemoryRecord(
             id=record_id,
             tenant_id=tenant_id,
-            layer=2,
+            layer=layer,
             record_type=MemoryType.FACT_CLAIM,
             content="stub",
             created_at=NOW,
@@ -253,6 +271,7 @@ def test_create_promotion_200(wired):
     assert resp.status_code == 200
     body = resp.json()
     assert body["code"] == 0 and body["data"]["id"] and body["data"]["state"] == "submitted"
+    assert body["data"]["duplicate"] is False  # 首次发起（幂等窗口外）
     # 审批中心工单行存在（同请求两写）
     assert len(review_port.submitted) == 1
     ticket = review_port.submitted[0]
@@ -265,6 +284,36 @@ def test_create_promotion_200(wired):
     promo_row = repo.promotions[uuid.UUID(body["data"]["id"])]
     assert promo_row["approval_id"] == ticket["id"]
     assert body["data"]["approval_id"] == str(ticket["id"])
+
+
+def test_create_promotion_duplicate_idempotent_200(wired):
+    """同记录已有 open 升级单 → 幂等返回既有（duplicate=true），不重复建单/建工单。"""
+    client, _pipeline, repo, review_port = wired
+    h = _h()
+    r1 = client.post(
+        "/api/v1/memory/promotions", headers=h, json={"record_id": str(repo.known_record_id), "to_layer": 3}
+    )
+    assert r1.status_code == 200 and r1.json()["data"]["duplicate"] is False
+    r2 = client.post(
+        "/api/v1/memory/promotions", headers=h, json={"record_id": str(repo.known_record_id), "to_layer": 3}
+    )
+    assert r2.status_code == 200
+    body = r2.json()["data"]
+    assert body["duplicate"] is True
+    assert body["id"] == r1.json()["data"]["id"]  # 既有 promo_id
+    assert body["approval_id"] == r1.json()["data"]["approval_id"]  # 既有 ticket_id
+    assert len(review_port.submitted) == 1  # 不重复建工单
+    assert len(repo.promotions) == 1  # 不重复建升级单
+
+
+def test_create_promotion_non_l2_record_422(wired):
+    """仅 L2 记录可发起升级（06 篇 §5.4）：L3 记录 → 422。"""
+    client, _pipeline, repo, review_port = wired
+    resp = client.post(
+        "/api/v1/memory/promotions", headers=_h(), json={"record_id": str(repo.known_l3_record_id), "to_layer": 3}
+    )
+    assert resp.status_code == 422
+    assert review_port.submitted == []  # 未建工单
 
 
 def test_create_promotion_ports_not_wired_503():

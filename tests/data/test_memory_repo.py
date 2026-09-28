@@ -130,8 +130,16 @@ async def test_promotion_state_machine_apply_reject() -> None:
         assert await repo.reject_promotion(tenant, uuid.uuid4()) is False
         assert await repo.get_promotion(tenant, uuid.uuid4()) is None
 
+        # list_open_promotions：幂等预检面——仅未终态（submitted/reviewing/approved）入窗、按记录过滤
+        pid4 = await repo.add_promotion(tenant, record_id=rec.id, to_layer=3)  # open（submitted）
+        open_rows = await repo.list_open_promotions(tenant, record_id=rec.id)
+        # pid 已 applied（终态出窗）、pid2 rejected 且属他记录、pid3 属他记录 → 仅 pid4 入窗
+        assert [r["id"] for r in open_rows] == [pid4]
+        assert all(r["state"] in ("submitted", "reviewing", "approved") for r in open_rows)
+        assert await repo.list_open_promotions(uuid.uuid4(), record_id=rec.id) == []  # 跨租户
+        assert await repo.list_open_promotions(tenant, record_id=uuid.uuid4()) == []  # 未知记录
+
         # approval_id 回填
-        pid4 = await repo.add_promotion(tenant, record_id=rec.id, to_layer=3)
         assert (await repo.get_promotion(tenant, pid4))["approval_id"] is None
         ticket = uuid.uuid4()
         await repo.set_promotion_approval(tenant, pid4, approval_id=ticket)

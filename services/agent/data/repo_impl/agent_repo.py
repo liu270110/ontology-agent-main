@@ -28,6 +28,7 @@ def _agent_to_domain(row: AgentORM) -> Agent:
         system_prompt=row.system_prompt,
         config=row.config or {},
         status=AgentStatus(row.status),
+        adapter_failure_count=row.adapter_failure_count,
         created_at=row.created_at,
     )
 
@@ -64,6 +65,7 @@ class PgAgentRepository:
                 system_prompt=agent.system_prompt,
                 config=agent.config,
                 status=agent.status.value,
+                adapter_failure_count=agent.adapter_failure_count,
             )
         )
         await self._db.flush()
@@ -78,6 +80,7 @@ class PgAgentRepository:
         row.system_prompt = agent.system_prompt
         row.config = agent.config
         row.status = agent.status.value
+        row.adapter_failure_count = agent.adapter_failure_count
         await self._db.flush()
 
     async def delete(self, agent_id: uuid.UUID) -> None:

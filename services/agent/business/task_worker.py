@@ -9,6 +9,15 @@
   退避（base 5s × 2ⁿ cap 60s jitter ±20%）后 ``task.start_retry_run()`` 建新 Run 重放；
   attempt≤3 耗尽 → ``task.fail()``（running→failed，04 §3「Run failed 且重试耗尽」）+
   RUN_ERROR 5005（RETRY_BUDGET_EXHAUSTED）先落库事件；
+- **孤儿回收 sweep**（H-0c ①，2026-09-29 批）：常驻同进程节拍扫描 running 悬挂超阈值
+  （``updated_at`` 超过 task_orphan_running_timeout_s 未刷新）的 Run → run.fail(5006
+  ORPHAN_RUN_RECOVERED) + run.orphan_recovered 审计行 → attempt<3 交既有重试监督自然
+  重试（不另建通道）。watchdog 分工就此收敛：**进程死=孤儿回收 sweep 兜底**（本批）；
+  **运行中 hang=duration_s 预算兜底**（内核 A4 总预算耗尽→5001，步级租约心跳随 D4）。
+- **对账续跑 v1**（H-0c ②）：重放路径重建 ChatCommand 时，若前序 Run 存在
+  kernel.step_validated 投影（task_events），注入 continuation 系统注记「以下步骤前次
+  已完成并验证，勿重做」，锚点摘要同步写 task.payload（可观测）。内核级步跳过
+  （计划对账后真跳过执行）登记遗留（需 kernel 计划对账，独立批）；
 - **常驻形态**：OutboxRelay 同款——组合根 asyncio.create_task(run(stop))，stop 触发后
   完成当前工作项退出；轮询失败结构化转义不致死（fail-soft，下轮重试）。
 
@@ -22,15 +31,55 @@ from __future__ import annotations
 import asyncio
 import logging
 import random
+import uuid
 from collections.abc import Callable
+from datetime import UTC, datetime
 from typing import Any, Protocol
 
 from services.agent.business.chat_events import ChatCommand, ChatEventName, ChatOutcome
-from services.agent.domain.model.task import TaskEvent, TaskStatus
+from services.agent.domain.model.kernel_actions import ApprovalTicket
+from services.agent.domain.model.task import RunStatus, TaskEvent, TaskStatus
+from services.platform.errors import ErrorCode
 
 logger = logging.getLogger(__name__)
 
 _MAX_ATTEMPTS = 3  # ≤3 含首次（与 domain/model/task.py._MAX_TASK_ATTEMPTS 同口径）
+
+# H-0c ②：kernel loop 观察阶段 emit 的 validated 步锚点事件（载荷：step_seq/action_iri/
+# trust_level/claimed_trust_level/stage + 投影 sink 注入的 run_id；loop.py _stage_observation）
+_STEP_VALIDATED_EVENT = "kernel.step_validated"
+_CONTINUATION_MAX_STEPS = 20  # 注记锚点上限（防超长上下文；超出截断留可观测）
+
+
+def _utcnow() -> datetime:
+    return datetime.now(tz=UTC)
+
+
+def _parse_dt(value: Any) -> datetime | None:
+    """票时效字段解析（ISO 字符串→datetime；空/畸形返回 None=不限时口径）。"""
+    if isinstance(value, datetime):
+        return value if value.tzinfo else value.replace(tzinfo=UTC)
+    if isinstance(value, str) and value:
+        try:
+            parsed = datetime.fromisoformat(value)
+            return parsed if parsed.tzinfo else parsed.replace(tzinfo=UTC)
+        except ValueError:
+            return None
+    return None
+
+
+def _ticket_expired(row: dict[str, Any], now: datetime) -> bool:
+    expires = _parse_dt(row.get("expires_at"))
+    return expires is not None and expires < now
+
+
+def _continuation_note(anchors: list[dict[str, Any]]) -> str:
+    """对账续跑系统注记（注入重放消息尾部；幂等工具可据此跳过 validated 步）。"""
+    lines = "\n".join(f"- 步骤 {a['step_seq']}: {a['action_iri']}（已完成后验校验）" for a in anchors)
+    return (
+        "[系统注记｜对账续跑] 以下步骤在前次执行尝试中已完成并通过后验校验，"
+        f"本次续跑请勿重做，直接基于其结论继续后续步骤：\n{lines}"
+    )
 
 
 class ChatOrchestratorProtocol(Protocol):
@@ -51,25 +100,50 @@ class TaskRunWorker:
         orchestrator_provider: Callable[[], ChatOrchestratorProtocol | None],
         policy: Any = None,  # RunRetryPolicy
         poll_interval_s: float = 1.0,
+        orphan_sweep_interval_s: float | None = None,  # None=取 Settings（组合根未传时的回填）
+        orphan_running_timeout_s: float | None = None,
         rng: Callable[[], float] = random.random,
     ) -> None:
         if policy is None:
             from services.agent.domain.model.task import RunRetryPolicy
 
             policy = RunRetryPolicy()
+        if orphan_sweep_interval_s is None or orphan_running_timeout_s is None:
+            # 惰性取平台配置（chat_orchestrator 同款先例）：组合根不必显式接线即吃 OA_* 覆盖
+            from services.platform.config import get_settings
+
+            settings = get_settings()
+            orphan_sweep_interval_s = (
+                settings.task_orphan_sweep_interval_s if orphan_sweep_interval_s is None else orphan_sweep_interval_s
+            )
+            orphan_running_timeout_s = (
+                settings.task_orphan_running_timeout_s if orphan_running_timeout_s is None else orphan_running_timeout_s
+            )
         self._uow = uow
         self._poller = poller
         self._orchestrator_provider = orchestrator_provider
         self._policy = policy
         self._poll_interval_s = poll_interval_s
+        self._orphan_sweep_interval_s = float(orphan_sweep_interval_s)
+        self._orphan_running_timeout_s = float(orphan_running_timeout_s)
         self._rng = rng
         self._backoff_s = 0.0  # 重试退避节流（排空后 sleep，防止新 Run 早于退避到期被执行）
 
     async def run(self, stop: asyncio.Event) -> None:
-        """常驻循环（组合根 create_task 调用）：stop 触发后完成当前工作项退出。"""
+        """常驻循环（组合根 create_task 调用）：stop 触发后完成当前工作项退出。
+
+        孤儿回收 sweep 与轮询同进程常驻（H-0c ①）：按 wall-clock 节拍（非空转计数），
+        认领执行持续满载时 sweep 仍按期触发；单轮失败 fail-soft 下轮重扫。
+        """
         logger.info(
-            "task worker started: poll_interval=%ss policy=%s", self._poll_interval_s, type(self._policy).__name__
+            "task worker started: poll_interval=%ss policy=%s orphan_sweep=%ss orphan_timeout=%ss",
+            self._poll_interval_s,
+            type(self._policy).__name__,
+            self._orphan_sweep_interval_s,
+            self._orphan_running_timeout_s,
         )
+        loop = asyncio.get_running_loop()
+        next_sweep_at = loop.time() + self._orphan_sweep_interval_s
         while not stop.is_set():
             try:
                 worked = await self.poll_once()
@@ -78,6 +152,12 @@ class TaskRunWorker:
                 worked = False
             delay = self._backoff_s if self._backoff_s > 0 else (0.0 if worked else self._poll_interval_s)
             self._backoff_s = 0.0
+            if loop.time() >= next_sweep_at:  # wall-clock 到点（busy 循环也不饿死 sweep）
+                try:
+                    await self.sweep_once()
+                except Exception:  # noqa: BLE001 ——fail-soft：sweep 失败不致死（下轮重扫）
+                    logger.exception("task worker 孤儿回收 sweep 失败（跳过，下轮重扫）")
+                next_sweep_at = loop.time() + self._orphan_sweep_interval_s
             try:
                 await asyncio.wait_for(stop.wait(), timeout=delay)
             except TimeoutError:
@@ -91,10 +171,89 @@ class TaskRunWorker:
             return False
         if claim.kind == "queued":
             return await self._execute_claimed(claim)
+        if claim.kind == "resume":
+            return await self._execute_resume(claim)
         if claim.kind == "retry":
             return await self._supervise_retry(claim)
         logger.warning("task worker 未知工作项类型: %s", claim.kind)
         return False
+
+    # ── 孤儿回收 sweep（H-0c ①）──────────────────────────────────────────
+    async def sweep_once(self) -> int:
+        """孤儿 running Run 回收一轮：悬挂超阈值 → run.fail(5006) + 审计行 + 重试衔接。
+
+        幂等护栏在 ``_recover_orphan``（状态机为准：run 非 running / task 非 RUNNING
+        即跳过）；单个回收失败 fail-soft 不影响同批其余项。返回本轮回收数。
+        """
+        finder = getattr(self._poller, "find_orphans", None)
+        if finder is None:  # 轮询器未提供孤儿探测面（测试桩/旧形态）：no-op
+            return 0
+        claims = await finder(older_than_s=self._orphan_running_timeout_s)
+        recovered = 0
+        for claim in claims:
+            if claim.kind != "orphan":
+                continue
+            try:
+                if await self._recover_orphan(claim):
+                    recovered += 1
+            except Exception:  # noqa: BLE001 ——fail-soft：单项失败不拖累整批（下轮重扫）
+                logger.exception("task worker 孤儿回收失败（run=%s，跳过，下轮重扫）", claim.run_id)
+        if recovered:
+            logger.warning(
+                "孤儿 Run 回收完成：%d 个（timeout=%ss，进程死=本 sweep；运行中 hang=duration_s 预算兜底）",
+                recovered,
+                self._orphan_running_timeout_s,
+            )
+        return recovered
+
+    async def _recover_orphan(self, claim: Any) -> bool:
+        """单个孤儿 Run 对账回收：聚合 fail 路径 + 审计行；attempt<3 保持 task RUNNING
+        （既有重试监督分支自然衔接退避重建，不另建通道）；耗尽 → task.fail() 同构
+        finalize_outcome_on_task 口径。"""
+        async with self._uow.for_tenant(claim.tenant_id) as tx:
+            task = await tx.tasks.get(claim.task_id)
+            if task is None or task.status is not TaskStatus.RUNNING or task.active_run_id != claim.run_id:
+                return False  # 已终局/被取消/被重试替换：跳过（状态机为准）
+            run = next((r for r in task.runs if r.id == claim.run_id), None)
+            if run is None or run.status is not RunStatus.RUNNING:
+                return False  # 幂等护栏：已被接管或已终态（含 waiting_tool 合法长等，不在回收面）
+            hang_s = float(getattr(claim, "hang_s", 0.0) or 0.0)
+            run.fail(
+                {
+                    "code": int(ErrorCode.ORPHAN_RUN_RECOVERED),
+                    "message": (
+                        f"孤儿 Run 回收：running 悬挂 {hang_s:.0f}s ≥ 阈值 "
+                        f"{self._orphan_running_timeout_s:.0f}s（执行方疑似崩溃/失联，无租约 v1 以悬挂时长兜底）"
+                    ),
+                    "retryable": True,
+                }
+            )
+            will_retry = task.attempt_count < _MAX_ATTEMPTS
+            if not will_retry:
+                task.fail()  # 耗尽终局（04 §3「Run failed 且重试耗尽」同构；5006 事件即终局凭证）
+            await tx.tasks.save(task)
+            await tx.tasks.append_event(
+                task.id,
+                TaskEvent(
+                    task_id=task.id,
+                    event_type="run.orphan_recovered",
+                    data={
+                        "run_id": str(claim.run_id),
+                        "code": int(ErrorCode.ORPHAN_RUN_RECOVERED),
+                        "message": "孤儿 running Run 超时回收（H-0c ①）",
+                        "retryable": True,
+                        "orphan_recovery": True,
+                        "hang_s": hang_s,
+                        "timeout_s": self._orphan_running_timeout_s,
+                        "attempt_count": task.attempt_count,
+                        "will_retry": will_retry,
+                    },
+                ),
+            )
+        logger.warning(
+            "孤儿 Run 已回收：task=%s run=%s hang=%.0fs will_retry=%s", claim.task_id, claim.run_id, hang_s, will_retry
+        )
+        return True
 
     # ── 认领执行 ──────────────────────────────────────────────────────────
     async def _execute_claimed(self, claim: Any) -> bool:
@@ -122,6 +281,16 @@ class TaskRunWorker:
                 task.fail()
                 await tx.tasks.save(task)
                 return True
+            # H-0c ② 对账续跑 v1：重试/恢复重放时取前序 Run 的 validated 步锚点（task_events
+            # 投影），注入 continuation 系统注记；锚点摘要写 task.payload（可观测）。
+            anchors = await self._prior_validated_anchors(tx, task, run)
+            message_content = message.content
+            if anchors:
+                message_content = f"{message.content}\n\n{_continuation_note(anchors)}"
+                task.payload = {
+                    **(task.payload or {}),
+                    "resumable_anchors": {"run_id": str(run.id), "steps": anchors},
+                }
             await tx.tasks.save(task)
 
         command = ChatCommand(
@@ -131,12 +300,131 @@ class TaskRunWorker:
             task_id=task.id,
             run_id=run.id,
             agent_id=session.agent_id,
-            message=message.content,
+            message=message_content,
             trace_id=f"worker-{run.id}",
             adapter="builtin",
         )
         await self._drain_orchestrator(command)
         return True
+
+    # ── 运行中审批携票重放（H-0b 接线 B：消费 task.payload["approvals"] 票仓）────
+    async def _execute_resume(self, claim: Any) -> bool:
+        """审批回执后的 resume：票即标记——核验→取票（事务内移除防双消费）→携票重放。
+
+        at-least-once 语义：票在重放构造前同事务移除；移除后 drain 前崩溃由孤儿回收
+        sweep 兜底（running 悬挂→fail→既有重试），不产生双执行窗口外的重复副作用。
+        过期票（expires_at<now）视同无回执：移除 + run.fail(2001 B5 默认拒绝同码)。
+        """
+        async with self._uow.for_tenant(claim.tenant_id) as tx:
+            task = await tx.tasks.get(claim.task_id)
+            if task is None or task.active_run_id != claim.run_id:
+                return False  # 活跃指针已替换（重试/取消）：票随任务终局失效
+            run = next((r for r in task.runs if r.id == claim.run_id), None)
+            if run is None:
+                return False
+            rows = [r for r in (task.payload or {}).get("approvals") or [] if isinstance(r, dict)]
+            mine = [r for r in rows if r.get("run_id") == str(run.id)]
+            now = _utcnow()
+            expired = [r for r in mine if _ticket_expired(r, now)]
+            fresh = [r for r in mine if not _ticket_expired(r, now)]
+            if not mine:
+                # 票属其他 run/已被消费：清仓一致性由审批侧保证，此处幂等跳过
+                return False
+            payload = dict(task.payload or {})
+            payload["approvals"] = [r for r in rows if r not in mine]
+            task.payload = payload
+            if fresh:
+                session = await tx.sessions.get(task.session_id) if task.session_id else None
+                if session is None or run.status.value != "running":
+                    # run 已终态：票清理即可（重放无意义）；会话缺失同 queued 认领失败口径
+                    if session is None:
+                        run.fail({"code": 5004, "message": "会话不存在（resume 失败）", "retryable": False})
+                        task.fail()
+                    await tx.tasks.save(task)
+                    return True
+                tickets = tuple(
+                    ApprovalTicket(
+                        param_hash=str(r["param_hash"]),
+                        approved_by=uuid.UUID(str(r["approved_by"])) if r.get("approved_by") else None,
+                        expires_at=_parse_dt(r.get("expires_at")),
+                        ticket_id=uuid.UUID(str(r["ticket_id"])) if r.get("ticket_id") else uuid.uuid4(),
+                    )
+                    for r in fresh
+                )
+                message = None
+                seq = (task.payload or {}).get("message_seq")
+                if isinstance(seq, int):
+                    message = await tx.sessions.get_message_by_seq(task.session_id, seq)
+                if message is None:
+                    run.fail({"code": 3001, "message": "触发消息缺失（resume 重放失败）", "retryable": False})
+                    task.fail()
+                    await tx.tasks.save(task)
+                    return True
+                message_content = message.content
+                anchors = await self._prior_validated_anchors(tx, task, run)
+                if anchors:
+                    message_content = f"{message_content}\n\n{_continuation_note(anchors)}"
+                await tx.tasks.save(task)
+            else:
+                # 全部过期：视同无回执（B5 默认拒绝）
+                run.fail({"code": 2001, "message": "运行中审批票已过期（视同无回执，B5）", "retryable": False})
+                task.fail()
+                await tx.tasks.save(task)
+                await tx.tasks.append_event(
+                    task.id,
+                    TaskEvent(
+                        task_id=task.id,
+                        event_type="run.approval_expired",
+                        data={"run_id": str(run.id), "count": len(expired)},
+                    ),
+                )
+                return True
+        command = ChatCommand(
+            tenant_id=claim.tenant_id,
+            user_id=session.user_id,
+            session_id=task.session_id,
+            task_id=task.id,
+            run_id=run.id,
+            agent_id=session.agent_id,
+            message=message_content,
+            trace_id=f"worker-resume-{run.id}",
+            adapter="builtin",
+            approvals=tickets,
+        )
+        await self._drain_orchestrator(command)
+        return True
+
+    async def _prior_validated_anchors(self, tx: Any, task: Any, run: Any) -> list[dict[str, Any]]:
+        """前序 Run 的 validated 步锚点投影（kernel.step_validated，C1 sink 落 task_events）。
+
+        只在重放（attempt>1）时查询；只取**前序 Run** 的事件（data.run_id ≠ 当前 run；
+        缺 run_id 的历史事件视为前序）。锚点查询失败 fail-soft（退化为整轮重放，不阻断）。
+        """
+        if task.attempt_count <= 1:
+            return []
+        try:
+            events = await tx.tasks.list_events(task.id, limit=500)
+        except Exception:  # noqa: BLE001 ——锚点缺失只损失续跑效率，不阻断重放
+            logger.warning("对账续跑锚点查询失败（task=%s，退化为整轮重放）", task.id)
+            return []
+        seen: set[tuple[int, str]] = set()
+        anchors: list[dict[str, Any]] = []
+        for event in events:
+            if event.event_type != _STEP_VALIDATED_EVENT:
+                continue
+            data = event.data or {}
+            if str(data.get("run_id") or "") == str(run.id):  # 当前 Run 自身的事件不进锚点
+                continue
+            step_seq, action_iri = data.get("step_seq"), data.get("action_iri")
+            if not isinstance(step_seq, int) or not isinstance(action_iri, str) or not action_iri:
+                continue
+            key = (step_seq, action_iri)
+            if key in seen:
+                continue
+            seen.add(key)
+            anchors.append({"step_seq": step_seq, "action_iri": action_iri})
+        anchors.sort(key=lambda a: a["step_seq"])
+        return anchors[:_CONTINUATION_MAX_STEPS]
 
     async def _drain_orchestrator(self, command: ChatCommand) -> dict[str, Any] | None:
         """消费事件流：非终态事件逐条落 task_events（先落库后推送，04 §2；时间线端点取数口）。
@@ -221,8 +509,6 @@ def finalize_outcome_on_task(task: Any, outcome: ChatOutcome) -> None:
     - 失败：run.fail/timeout（error 结构化）；task 侧——**retryable 且 attempt<3 保持
       RUNNING**（04 §3：重试期间不落 failed，监督者将继续），否则 task.fail()。
     """
-    from services.agent.domain.model.task import RunStatus
-
     run = next((r for r in task.runs if r.id == outcome.run_id), None)
     if run is not None and run.is_active:
         if run.status is RunStatus.QUEUED:

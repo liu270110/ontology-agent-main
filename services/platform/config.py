@@ -65,6 +65,13 @@ class Settings(BaseSettings):
     task_worker_enabled: bool = True  # False=回到「queued 挂起等人工/外部消费」旧行为
     task_worker_poll_interval_s: float = 1.0  # 空转轮询间隔（OutboxRelay 同款 1s）
     task_spill_dir: str | None = None  # 工具结果 spill 存储目录（None=spill 关闭；M4 切 MinIO）
+    # H-0c ①（2026-09-29 批，评审行 19/20）：孤儿 running Run 超时回收——worker 进程崩溃后
+    # running 悬挂无租约/心跳，靠 updated_at 悬挂时长兜底回收（租约制随多副本 D4）。
+    task_orphan_sweep_interval_s: float = 30.0  # sweep 扫描周期（与轮询同进程常驻）
+    task_orphan_running_timeout_s: float = 300.0  # running 悬挂判定阈值（对齐 hermes TTL 300s 口径）
+    # H-0c ③：适配器 degraded 态阈值（04 §10 裁决：探活连续失败 N 次→degraded，
+    # 新会话拒绑、存量 Run 跑完；成功清零自愈）
+    agent_degrade_threshold: int = 3
 
     # 记忆域（06 篇 §4/§5.2/§5.5；计划 1 仅 L1 与检索参数）
     memory_l1_ttl_seconds: int = 24 * 3600  # L1 会话记忆块 TTL（会话活跃期）

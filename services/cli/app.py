@@ -26,9 +26,9 @@ from urllib.parse import quote
 
 import httpx
 
-from cli.client import ApiClient, ApiError
-from cli.config import ENV_PASSWORD, CliConfig, load_config, save_tokens
-from cli.sse import TrunkEventRenderer, truncate
+from services.cli.client import ApiClient, ApiError
+from services.cli.config import ENV_PASSWORD, CliConfig, load_config, save_tokens
+from services.cli.sse import TrunkEventRenderer, truncate
 
 PROG = "onto"
 

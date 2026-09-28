@@ -7,8 +7,8 @@ from typing import Any
 import httpx
 import pytest
 
-from cli.client import ApiClient, ApiError, build_timeout, unwrap_envelope
-from cli.config import CliConfig
+from services.cli.client import ApiClient, ApiError, build_timeout, unwrap_envelope
+from services.cli.config import CliConfig
 
 ENDPOINT = "http://gw.test/api/v1"
 

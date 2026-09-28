@@ -8,7 +8,7 @@
 
 **ontology-agent**：以本体（Ontology）为语义基座的智能体平台。向上托管多种 agent 工具，中间以 graphrag-ontology 知识库 + 本体推理核心为语义中枢，向下以 MCP 为能力出口打通业务闭环（含业务回写 writeback 一等模块与 Agent 内核/能力层划分）。
 
-**技术栈定稿**：后端 FastAPI 模块化单体**七层**（锚点：[docs/architecture/01](docs/architecture/01-总体架构与分层.md)），PG+Neo4j+Milvus+MinIO+Redis，部署 lite/full 双档；前端 **React + Tailwind + shadcn/ui**（Apple 液态玻璃，设计系统=[docs/架构设计/03](docs/架构设计/03-前端架构与UI设计规范.md)）。**目录轴=模块（services/<模块>/{api,domain,business,data}+全局 gateway/platform，2026-09-27 用户裁决，锚点 01 §4 已同步）**。
+**技术栈定稿**：后端 FastAPI 模块化单体**七层**（锚点：[docs/architecture/01](docs/architecture/01-总体架构与分层.md)），PG+Neo4j+Milvus+MinIO+Redis，部署 lite/full 双档；前端 **React + Tailwind + shadcn/ui**（Apple 液态玻璃，设计系统=[docs/架构设计/03](docs/架构设计/03-前端架构与UI设计规范.md)）。**目录轴=模块（services/<模块>/{api,domain,business,data}+全局 gateway/platform，2026-09-27 用户裁决，锚点 01 §4 已同步）**。**后端全部开发在 services/ 路径下（含平台 CLI=services/cli）——仓库根不设后端目录（2026-09-29 用户指令，锚点 01 §4 已同步）**。
 
 ## 设计宪法（全仓库强制，违反即返工）
 

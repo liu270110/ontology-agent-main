@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import io
 
-from cli.sse import SseFrameParser, TrunkEventRenderer, iter_frames
+from services.cli.sse import SseFrameParser, TrunkEventRenderer, iter_frames
 
 TWO_FRAMES = (
     b"id: 1740\n"

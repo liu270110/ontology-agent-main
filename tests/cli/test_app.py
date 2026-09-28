@@ -16,7 +16,7 @@ from typing import Any
 import httpx
 import pytest
 
-from cli.app import (
+from services.cli.app import (
     EXIT_AUTH,
     EXIT_FORBIDDEN,
     EXIT_GENERIC,
@@ -28,7 +28,7 @@ from cli.app import (
     decode_jwt_claims,
     main,
 )
-from cli.client import ApiError
+from services.cli.client import ApiError
 
 ENDPOINT = "http://gw.test/api/v1"
 

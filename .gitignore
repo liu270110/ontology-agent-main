@@ -51,3 +51,6 @@ docs/
 node_modules/
 _patch_*.py
 .pytest_cache/
+
+# ORSI G0 缺口轨本地留痕（B9 批：JSONL 事件/工单文件态，PG rsi_proposals 随改表流程批次）
+.orsi-g0/

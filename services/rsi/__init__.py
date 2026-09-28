@@ -4,6 +4,12 @@
 骨架（0 级真跑 + ①②③ M5+ 演练位）、候选状态机、apply 恒拒红线、全动作审计——
 框架层与最小闭环，不实现自改进重逻辑（LLM 归因/起草、沙箱/金标/灰度评估、审核工单、
 PG 候选池、/api/v1/rsi/* 端点均随阶段 B/M5+，边界清单见 service.py 模块 docstring）。
+
+B9 G0 批（2026-09-29，09 §13.3/§13.4）追加：进化面注册表（surfaces.py，封闭八面）、
+缺口轨 G0 核心（gap.py：四型缺口事件/场景指纹 v1/GapStore/滑窗聚类达标开单，全确定性
+零 LLM）、缺口轨信号汇（sinks.py：台账 FAILED→execution_failure、dispatcher resolve-miss
+→unbound_action）与 TriggerTrack.GAP 枚举位。**sinks.py 因依赖 writeback 台账域模型不进
+包根命名空间**（防包根 import 拉起跨模块边）——直 ``from services.rsi.sinks import …``。
 """
 
 from __future__ import annotations
@@ -16,6 +22,19 @@ from services.rsi.audit import (
     LoggingAuditTrail,
     RsiAuditRecord,
 )
+from services.rsi.gap import (
+    GAP_FINGERPRINT_VERSION,
+    GapClusterSummary,
+    GapCollector,
+    GapEvaluation,
+    GapEvent,
+    GapKind,
+    GapProposalRecord,
+    GapStore,
+    InMemoryGapStore,
+    JsonlGapStore,
+    scenario_fingerprint,
+)
 from services.rsi.gates import GateResult, evaluate_chain
 from services.rsi.proposal import (
     ENVELOPE_REQUIRED_KEYS,
@@ -25,6 +44,7 @@ from services.rsi.proposal import (
     TriggerTrack,
 )
 from services.rsi.service import APPLY_ENABLED_STAGE, RsiApplyForbiddenError, RsiService
+from services.rsi.surfaces import REGISTRY, EvolutionSurface, SurfaceMeta, surface_of
 from services.rsi.triggers import TriggerEvent, TriggerRegistry
 from services.rsi.whitelist import (
     FORBIDDEN_TARGET_MARKERS,
@@ -39,21 +59,36 @@ __all__ = [
     "ACTION_WHITELIST_VIOLATION",
     "ENVELOPE_REQUIRED_KEYS",
     "FORBIDDEN_TARGET_MARKERS",
+    "GAP_FINGERPRINT_VERSION",
     "AuditTrail",
+    "EvolutionSurface",
     "GateResult",
+    "GapClusterSummary",
+    "GapCollector",
+    "GapEvent",
+    "GapEvaluation",
+    "GapKind",
+    "GapProposalRecord",
+    "GapStore",
     "ImprovementType",
     "InMemoryAuditTrail",
+    "InMemoryGapStore",
+    "JsonlGapStore",
     "LoggingAuditTrail",
+    "REGISTRY",
     "Proposal",
     "ProposalError",
     "ProposalStatus",
     "RsiApplyForbiddenError",
     "RsiAuditRecord",
     "RsiService",
+    "SurfaceMeta",
     "TriggerEvent",
     "TriggerRegistry",
     "TriggerTrack",
     "WhitelistViolation",
     "evaluate_chain",
+    "scenario_fingerprint",
+    "surface_of",
     "validate_improvement",
 ]

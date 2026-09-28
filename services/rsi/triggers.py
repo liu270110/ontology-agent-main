@@ -5,7 +5,9 @@
   ``fire``；执行挂后台空闲队列（低优先级、预算分账 module=rsi）随 M5+ 调度接线；
 - 指标轨：08 §7 三类基准周期跑分，主指标退化超阈值（初始 -2%）→ 开改进提案——注册面
   携带 ``interval_s``，``due_metric_triggers`` 输出到期名（周期调度器随 M5+ 挂载）；
-- 缺口轨（09 §13.4 第三轨）随 M3 轨迹落账后启动，本面 Track 枚举不含——新增轨=框架变更。
+- 缺口轨（09 §13.4 第三轨）B9 G0 批启用枚举位（TriggerTrack.GAP）：缺口工单经
+  GapCollector 滑窗聚类达标后 RsiService.submit 入池（零 LLM 结构信号）——缺口检测器
+  是聚合巡检非注册制，本注册面对 GAP 显式拒绝（register 内守卫），新增轨=框架变更。
 
 kill switch（09 §6 红线 6）：平台级 RSI 开关，关闭即停止起草（fire 不再产出候选）；
 已 rolled_out 项需人工回滚（阶段 A 无 rolled_out 项，本红线只影响 fire）。
@@ -59,7 +61,13 @@ class TriggerRegistry:
         *,
         interval_s: float | None = None,
     ) -> None:
-        """注册触发器：经验轨 interval_s 必须为 None（事件驱动）；指标轨必须为正数（周期驱动）。"""
+        """注册触发器：经验轨 interval_s 必须为 None（事件驱动）；指标轨必须为正数（周期驱动）。
+
+        缺口轨（GAP，09 §13.4）显式拒绝注册：缺口检测器=本体聚合巡检（GapCollector 承载），
+        非 handler 注册制——注册面对 GAP 保持封闭（新增轨=框架变更，§13.4 三轨汇合同一候选池）。
+        """
+        if track is TriggerTrack.GAP:
+            raise ValueError("缺口轨不经触发注册面驱动（09 §13.4：缺口检测器=聚合巡检，GapCollector 承载）")
         if track is TriggerTrack.EXPERIENCE and interval_s is not None:
             raise ValueError("经验轨为事件触发，不得携带 interval_s（09 §2）")
         if track is TriggerTrack.METRIC and (interval_s is None or interval_s <= 0):

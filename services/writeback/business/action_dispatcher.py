@@ -20,6 +20,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from services.platform.errors import ErrorCode
+from services.rsi.gap import GapEvent, GapKind  # ORSI 缺口轨值对象（B9 G0；仅值依赖，见 gap_sink 说明）
 from services.writeback.adapters.base import (
     AdapterError,
     BizStatusResult,
@@ -94,6 +95,11 @@ class ActionDispatcher:
     装配双形态（memory provider 同款）：
     - 运行期：``session_factory``（PG 台账仓储短事务即用即弃，组合根绑定）；
     - 直注（测试）：``ledger_repo`` 单实例（进程内 Fake 仓储）。
+
+    可选 ``gap_sink``（B9 G0，ORSI 缺口轨信号出口，09 §13.4）：行动类未绑定连接器
+    （resolve-miss → ``unbound_action`` 缺口事件）时回调 ``GapEvent`` 单参函数——默认 None
+    零侵入（不上报，既有错误语义不变）；只 emit 不改任何投递/状态机行为，本模块对
+    rsi 仅此值对象依赖（依赖倒置：rsi 逻辑不经此边进入 writeback）。
     """
 
     def __init__(
@@ -105,6 +111,7 @@ class ActionDispatcher:
         ledger_repo: Any = None,
         sleeper: Callable[[float], Awaitable[None]] | None = None,
         clock: Callable[[], datetime] | None = None,
+        gap_sink: Callable[[GapEvent], None] | None = None,
     ) -> None:
         self._connectors = connectors
         self._policy = policy or WritebackPolicy()
@@ -112,6 +119,7 @@ class ActionDispatcher:
         self._ledger_repo = ledger_repo
         self._sleeper = sleeper or asyncio.sleep
         self._now = clock or _utcnow
+        self._gap_sink = gap_sink
 
     # ---------------------------------------------------------------- 装配
 
@@ -145,6 +153,7 @@ class ActionDispatcher:
             raise WritebackError(ErrorCode.PARAM_INVALID, "params 为必填（行动类参数对象）")
         binding = self._connectors.resolve(action_iri)
         if binding is None:
+            self._emit_unbound_action(tenant_id=tenant_id, action_iri=action_iri, trace_id=trace_id)
             raise WritebackError(
                 ErrorCode.MCP_TARGET_UNAVAILABLE, f"行动类未绑定连接器: {action_iri}（连接器注册随组合根）"
             )
@@ -663,6 +672,27 @@ class ActionDispatcher:
         if binding is None:
             raise WritebackError(ErrorCode.MCP_TARGET_UNAVAILABLE, f"连接器未注册: {connector_id}（组合根装配缺位）")
         return binding
+
+    def _emit_unbound_action(self, *, tenant_id: uuid.UUID, action_iri: str, trace_id: str | None) -> None:
+        """resolve-miss → ORSI 缺口轨 ``unbound_action`` 事件（09 §13.4；gap_sink 未装配则零操作）。
+
+        emit 点选在 ``invoke_action`` 的 ``connectors.resolve`` 未命中处（行动类存在但无实现
+        绑定的真实发生位，§13.2 O1 触发信号）；``_require_binding`` 是既有台账行按 connector_id
+        的重查（无 action_iri 上下文，语义属装配缺位），不在其上发缺口事件。只上报不改变
+        既有错误语义（仍抛 MCP_TARGET_UNAVAILABLE）。
+        """
+        if self._gap_sink is None:
+            return
+        self._gap_sink(
+            GapEvent(
+                tenant_id=tenant_id,
+                kind=GapKind.UNBOUND_ACTION,
+                action_iri=action_iri,
+                occurred_at=self._now(),
+                source="writeback.dispatcher.resolve_miss",
+                trace_ids=(trace_id,) if trace_id else (),
+            )
+        )
 
     async def _save(self, tenant_id: uuid.UUID, entry: WritebackLedger, *, commit: bool = False) -> None:
         """台账状态持久化（独立短事务；外部调用间隙崩溃=台账留在上一稳定态，重启可续）。"""

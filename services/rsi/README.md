@@ -32,3 +32,22 @@ M5+ 启动（权威=architecture/09）。
   首跑实录=docs/rsi/G0-首次运行-2026-09-29.md，本地文档）；
 - `TriggerTrack` 增 `GAP` 枚举位（三轨，09 §13.4）；触发注册面对 GAP 显式拒绝
   （缺口检测器=聚合巡检非注册制）；候选生命周期迁移仍必经 `Proposal.transition`。
+
+## G1 起草（2026-09-29 B10 批交付，权威=architecture/09 §13.3 G1 + §13.2 分界铁律）
+
+- 起草引擎 `drafter.py`（因依赖 ontology.core.tbox/platform.ports **不进包根命名空间**）：
+  三级降路径 **L1 组合既有工具**（确定性零 LLM：种子行动类 ∪ ConnectorRegistry 注入 IRIs
+  中按同命名空间组合为计划模板，落 **O5**）→ **L2 市场能力包检索**（PluginMarketService
+  list_market/get_detail 结构子集 Protocol，语义标注精确 > 关键词全命中；**plugin 侧只读
+  不装**——只产候选包引用，安装走既有审核；落 **O1**）→ **L3 LLM 起草**（本链唯一 agent
+  环节：ModelPort.complete_structured 受约束生成 + **确定性校验**——action_iri 必落种子
+  行动类集/execution_mode 枚举合法/description 非空，越界即拒、重试预算硬上限 1+2 次，
+  耗尽=该工单本轮失败；落 **O1**）；
+- `DraftArtifact`（path/surface/content/action_iri/execution_mode/confidence/rationale）：
+  产物写回 `envelope["draft_artifact"]`（JSONB 整体重赋值），**候选状态保持 draft**——
+  迁移唯一入口仍为 RsiService/Proposal.transition（G2/G3 本批不做不 stub）；
+- 种子行动类装载 `load_seed_actions`（seeds/power_seed.ttl 的 ob2:Action 子类闭包，
+  复用 ontology.core.tbox 装载器，只读）；
+- 运行入口 `tools/orsi/run_g1.py`（`--demo` 合成两簇演示三级命中/降级 / `--live` OA_
+  配置骨架；Markdown 报告含逐级尝试留痕；首跑实录=docs/rsi/G1-首次运行-2026-09-29.md，
+  本地文档；store 口径：G0=.orsi-g0、G1=.orsi-g1，同一 GapStore JSONL 格式）。

@@ -147,7 +147,12 @@ def _load_settings() -> Any:
 
 
 def _open_ledger_repo(settings: Any, tenant_id: uuid.UUID):  # type: ignore[no-untyped-def]
-    """PG 台账仓储上下文工厂（短事务即用即弃；OA_ 配置 → async engine）。"""
+    """PG 台账仓储上下文**工厂**（零参可重复调用；短事务即用即弃；OA_ 配置 → async engine）。
+
+    LedgerFailureSink.open_repo 契约是工厂（drain 内 ``async with self._open_repo()`` 每次
+    调用取新上下文）——返回 ``_ctx`` 本体；返回 ``_ctx()`` 实例则上下文管理器不可再调用，
+    drain 进入即 TypeError（B10 批 ocr 评审 ① 同款修复，run_g1 已同修）。
+    """
     from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
     from services.writeback.data.repo_impl.writeback_repo import PgWritebackLedgerRepository
@@ -160,7 +165,7 @@ def _open_ledger_repo(settings: Any, tenant_id: uuid.UUID):  # type: ignore[no-u
         async with factory() as db:
             yield PgWritebackLedgerRepository(db, tenant_id)
 
-    return _ctx()
+    return _ctx
 
 
 def _render_report(args: argparse.Namespace, now: datetime, events: list[GapEvent], evaluation: Any) -> str:

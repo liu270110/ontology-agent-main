@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Download, ShieldCheck, ShieldOff } from 'lucide-react'
 import { toast } from 'sonner'
+import { renderSVG } from 'uqr'
 import { Modal } from '@/components/modal'
 import { OtpGroup, OtpInput, OtpSeparator, OtpSlot } from '@/components/otp-input'
 import { getPreferences, totpBackupCodes, totpDisable, totpEnable, totpSetup } from '../api'
@@ -53,6 +54,43 @@ export function SecurityTab() {
           onDone={() => { setDisableOpen(false); setEnabled(false) }}
         />
       )}
+    </div>
+  )
+}
+
+/** otpauth URI → SVG 二维码（uqr renderSVG，零依赖 ~10KB）：白底圆角卡内 128px，
+ *  quiet zone 2 模块（border=2），SVG 注入固定 width/height（viewBox 等比缩放）。
+ *  URI 过长或编码失败（catch）→ 降级为等宽 URI 文本 + 复制按钮。
+ *  dangerouslySetInnerHTML 内容为自家 totp/setup 端点签发的 otpauth URI 编码产物，非用户输入。 */
+function TotpQrCode({ uri }: { uri: string }) {
+  let svg: string | null = null
+  try {
+    svg = renderSVG(uri, { border: 2, pixelSize: 1 }).replace('<svg ', '<svg width="128" height="128" ')
+  } catch {
+    svg = null
+  }
+  if (!svg) {
+    return (
+      <div className="w-40 flex-none">
+        <div className="keymask max-h-32 overflow-y-auto break-all rounded-xl bg-surface-2 p-2 text-2xs" data-testid="set-2fa-uri-fallback">{uri}</div>
+        <button
+          type="button"
+          className="btn btn-g btn-sm mt-2 w-full"
+          data-testid="set-2fa-uri-copy"
+          onClick={() => { void navigator.clipboard?.writeText(uri).catch(() => {}); toast.success('添加链接已复制') }}
+        >
+          复制链接
+        </button>
+        <div className="mt-1 text-center text-2xs text-label-3">使用验证器 App 扫码添加</div>
+      </div>
+    )
+  }
+  return (
+    <div className="flex-none">
+      <div className="rounded-xl bg-white p-2" data-testid="set-2fa-qr">
+        <div className="[&>svg]:block" aria-hidden dangerouslySetInnerHTML={{ __html: svg }} />
+      </div>
+      <div className="mt-1 text-center text-2xs text-label-3">使用验证器 App 扫码添加</div>
     </div>
   )
 }
@@ -136,10 +174,7 @@ function EnableWizard({ onClose, onDone }: { onClose: () => void; onDone: () => 
       {step === 1 && setup && (
         <div>
           <div className="flex gap-4">
-            {/* 二维码占位（qr 渲染随 28 篇接入；otpauth URI 已可手抄/扫码枪） */}
-            <div className="flex h-32 w-32 flex-none items-center justify-center rounded-xl border border-dashed border-separator bg-surface-2 text-2xs text-label-3" aria-label="二维码占位">
-              二维码占位
-            </div>
+            <TotpQrCode uri={setup.otpauth_uri} />
             <div className="min-w-0">
               <div className="field-label">无法扫码？手动输入密钥</div>
               <div className="keymask break-all" data-testid="set-2fa-secret">{setup.secret}</div>

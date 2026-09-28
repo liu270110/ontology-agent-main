@@ -1,12 +1,14 @@
 import { useEffect } from 'react'
 import { Outlet, useLocation, useNavigate } from 'react-router-dom'
-import { Bell, PanelLeft, Search, Settings, ShieldCheck } from 'lucide-react'
+import { PanelLeft, Search, Settings, ShieldCheck } from 'lucide-react'
 import { useUiStore } from '@/stores/ui-store'
 import { useAuthStore } from '@/stores/auth-store'
 import { ThemeToggle } from '@/components/theme-toggle'
+import { NotificationBell } from '@/components/notification-bell'
 import { ROLE_LABEL } from '@/lib/invite'
 import { CommandMenu } from '@/components/command-menu/command-menu'
 import { SidebarGroups } from './sidebar/SidebarGroups'
+import { SidebarResizer } from './SidebarResizer'
 import { UserMenu } from './UserMenu'
 
 /** 应用壳（16 篇 §5.2 / 03 篇 AppLayout）：液态玻璃壳层——根容器挂 .app-stage 静态双光斑底
@@ -25,6 +27,7 @@ export function AppShell() {
   const user = useAuthStore(s => s.user)
   const logout = useAuthStore(s => s.logout)
   const collapsed = useUiStore(s => s.sidebarCollapsed)
+  const width = useUiStore(s => s.sidebarWidth)
   const toggleSidebar = useUiStore(s => s.toggleSidebar)
   const setCommandOpen = useUiStore(s => s.setCommandOpen)
 
@@ -45,7 +48,10 @@ export function AppShell() {
 
   return (
     <div className="app-stage flex h-screen bg-bg text-label">
-      <aside className={`glass-side flex flex-col py-4 transition-all ${collapsed ? 'w-16' : 'w-60'}`}>
+      <aside
+        className={`glass-side flex flex-col flex-none py-4 transition-[background,box-shadow] ${collapsed ? 'w-16' : ''}`}
+        style={{ width: collapsed ? 64 : undefined, flexBasis: collapsed ? 64 : width }}
+      >
         <div className="flex items-center gap-2 px-4 pb-4">
           <button
             type="button"
@@ -93,6 +99,7 @@ export function AppShell() {
           </div>
         </div>
       </aside>
+      <SidebarResizer />
 
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="material-bar flex h-12 flex-none items-center gap-2 border-b border-separator px-3 sm:gap-3 sm:px-5">
@@ -118,16 +125,8 @@ export function AppShell() {
             <kbd className="hidden rounded border border-separator px-1 font-mono text-2xs xl:inline">⌘K</kbd>
           </button>
           <ThemeToggle />
-          <button
-            type="button"
-            aria-label="通知"
-            className="relative flex h-8 w-8 items-center justify-center rounded-lg text-label-2 hover:bg-black/5 dark:hover:bg-white/[.08]"
-          >
-            <Bell size={15} aria-hidden />
-            <span className="absolute right-1.5 top-1.5 flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-red px-1 text-2xs font-semibold text-white">
-              4
-            </span>
-          </button>
+          {/* 通知铃铛（S9 转实：徽标聚合+下拉两分组，见 components/notification-bell.tsx） */}
+          <NotificationBell />
           <UserMenu displayName={user?.displayName} email={user?.email} onLogout={() => void onLogout()} />
         </header>
         <main className={location.pathname === '/chat' ? 'min-h-0 flex-1 overflow-hidden' : 'min-h-0 flex-1 overflow-auto p-6'}>

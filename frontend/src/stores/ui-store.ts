@@ -6,6 +6,9 @@ import { persist } from 'zustand/middleware'
 interface UiState {
   sidebarCollapsed: boolean
   commandOpen: boolean
+  /** 侧栏宽度（S8 用户需求：边界线可拖拽拓展）；持久化记忆，范围 200~360px */
+  sidebarWidth: number
+  setSidebarWidth: (w: number) => void
   /** 已折叠的导航分组（S8 用户需求：一级菜单折叠）；持久化记忆 */
   collapsedGroups: string[]
   toggleSidebar: () => void
@@ -18,6 +21,8 @@ export const useUiStore = create<UiState>()(
     set => ({
       sidebarCollapsed: false,
       commandOpen: false,
+      sidebarWidth: 240,
+      setSidebarWidth: w => set({ sidebarWidth: Math.min(360, Math.max(200, Math.round(w))) }),
       collapsedGroups: [],
       toggleSidebar: () => set(s => ({ sidebarCollapsed: !s.sidebarCollapsed })),
       setCommandOpen: v => set({ commandOpen: v }),

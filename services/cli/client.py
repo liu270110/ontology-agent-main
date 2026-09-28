@@ -15,8 +15,8 @@ from typing import Any
 
 import httpx
 
-from cli.config import CliConfig
-from cli.sse import SseFrame, SseFrameParser
+from services.cli.config import CliConfig
+from services.cli.sse import SseFrame, SseFrameParser
 
 SSE_MEDIA_TYPE = "text/event-stream"
 

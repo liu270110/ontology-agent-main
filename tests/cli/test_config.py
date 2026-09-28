@@ -10,7 +10,7 @@ from typing import Any
 
 import pytest
 
-from cli.config import config_path, load_config, save_tokens
+from services.cli.config import config_path, load_config, save_tokens
 
 ENV_KEYS = ("OA_CLI_ENDPOINT", "OA_CLI_TOKEN", "OA_CLI_OUTPUT", "OA_CLI_TIMEOUT", "OA_CLI_CONFIG", "OA_CLI_PASSWORD")
 

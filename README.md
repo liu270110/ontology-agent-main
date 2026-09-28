@@ -40,7 +40,7 @@ python main.py                    # M0 后改为 uvicorn 启动 gateway
 .
 ├── frontend/            # 前端（design-system 样式库；React 工程随 M5 搭建）
 ├── services/             # L2~L7 后端模块化单体（gateway/business/domain/semantic/data/infra）
-├── cli/                 # 平台 CLI（onto 命令）
+│   └── cli/             # 平台 CLI（onto 命令；后端含 CLI 一律在 services/ 内）
 ├── deploy/              # docker-compose（lite/full 双档）与初始化脚本
 ├── docs/                # 全部文档（architecture=后端权威；架构设计=前端视觉权威；详见 docs/README）
 ├── skills/              # 前端开发技能（SKILL.md，与平台 Skills 服务同构）

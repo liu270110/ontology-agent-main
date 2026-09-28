@@ -19,6 +19,7 @@ import re
 from collections.abc import Callable
 from typing import Any
 
+from services.agent.business.kernel.compaction import CompactionStrategy
 from services.agent.business.kernel.errors import KernelContractError
 from services.agent.business.kernel.extensions import (
     AgentSlot,
@@ -74,6 +75,7 @@ class ExtensionDispatcher:
         self._pre_gates: list[PreGate] = []
         self._post_gates: list[PostGate] = []
         self._context_providers: list[ContextProvider] = []
+        self._compaction_strategy: CompactionStrategy | None = None
         self._planning_strategy: PlanningStrategy | None = None
         self._reasoning_engines: dict[str, ReasoningEngine] = {}
         self._memory_policies: dict[str, MemoryPolicy] = {}
@@ -112,6 +114,20 @@ class ExtensionDispatcher:
         meta = _require_meta(provider, point="ContextProvider")
         _check_loop_versions(loop_versions, extension_name=meta.name)
         self._context_providers.append(provider)
+
+    def register_compaction_strategy(
+        self, strategy: CompactionStrategy, *, loop_versions: tuple[str, ...] = (LOOP_CONTRACT_VERSION,)
+    ) -> None:
+        """注册上下文压缩策略（H-2 D3 接缝，07 边界契约 D-7：策略=能力层）。
+
+        策略唯一（一次运行一个压缩策略；无注册=内核确定性兜底截断，宁截勿编）。
+        内置 L3 策略本批不交付（摘要须过裁判，随 07 §11 压缩设计批）。
+        """
+        meta = _require_meta(strategy, point="CompactionStrategy")
+        _check_loop_versions(loop_versions, extension_name=meta.name)
+        if self._compaction_strategy is not None:
+            raise KernelContractError("CompactionStrategy 已注册，禁重复（一次运行一个压缩策略）")
+        self._compaction_strategy = strategy
 
     def register_planning_strategy(
         self, strategy: PlanningStrategy, *, loop_versions: tuple[str, ...] = (LOOP_CONTRACT_VERSION,)
@@ -188,6 +204,11 @@ class ExtensionDispatcher:
     @property
     def planning_strategy(self) -> PlanningStrategy | None:
         return self._planning_strategy
+
+    @property
+    def compaction_strategy(self) -> CompactionStrategy | None:
+        """压缩策略取用面（H-2 D3）：None=内核确定性兜底截断（宁截勿编）。"""
+        return self._compaction_strategy
 
     @property
     def context_providers(self) -> list[ContextProvider]:

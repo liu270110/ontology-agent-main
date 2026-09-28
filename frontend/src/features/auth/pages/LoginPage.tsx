@@ -116,7 +116,7 @@ export function LoginPage() {
           )}
         </div>
       )}
-      <form onSubmit={onSubmit} className="login-card glass glass-sheen-loop w-[360px] rounded-3xl p-8">
+      <form onSubmit={onSubmit} className="login-card glass glass-sheen-loop w-[360px] max-w-[92vw] rounded-3xl p-8">
         <div className="login-logo flex h-10 w-10 items-center justify-center rounded-xl bg-accent-soft text-accent">◆</div>
         <h1 className="mt-4 text-lg font-bold">ontology-agent</h1>
         <p className="lsub mb-5 text-xs text-label-3">以本体为语义基座的智能体平台</p>

@@ -67,7 +67,7 @@ export function MfaStepCard({ email, onBackToPassword, onSuccess }: MfaStepCardP
         e.preventDefault()
         void submit()
       }}
-      className="glass w-[360px] rounded-3xl p-8"
+      className="glass w-[360px] max-w-[92vw] rounded-3xl p-8"
       aria-label="两步验证"
     >
       <div className="flex flex-col items-center text-center">

@@ -124,8 +124,8 @@ export function TestRunPanel({
             >
               {STEP_ICON[s.state]}
             </span>
-            <b className="w-[148px] flex-none truncate text-xs" style={s.state === 'paused' ? { color: 'var(--orange)' } : undefined}>{s.label}</b>
-            <span className="mono w-[120px] flex-none truncate text-[11px] text-label-3">
+            <b className="w-[108px] flex-none truncate text-xs xl:w-[148px]" style={s.state === 'paused' ? { color: 'var(--orange)' } : undefined}>{s.label}</b>
+            <span className="mono w-[80px] flex-none truncate text-[11px] text-label-3 xl:w-[120px]">
               {s.breakpoint ? '确定性表达式 / 断点' : s.node.startsWith('agent') ? 'glm-4.7' : '—'}
             </span>
             <span className="flex-1 truncate text-[11px] text-label-2">
@@ -138,7 +138,7 @@ export function TestRunPanel({
             </span>
             {s.breakpoint && s.state === 'paused' && <span className="badge b-orange"><Flag size={9} aria-hidden />断点 BP-1</span>}
             <span className={`badge ${STEP_BADGE[s.state]?.cls}`}>{STEP_BADGE[s.state]?.txt}</span>
-            <span className="mono w-[96px] flex-none text-right text-[11px] text-label-3">{s.dur}</span>
+            <span className="mono w-[64px] flex-none text-right text-[11px] text-label-3 xl:w-[96px]">{s.dur}</span>
           </div>
         ))}
       </div>

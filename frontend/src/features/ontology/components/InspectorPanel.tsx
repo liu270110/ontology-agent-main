@@ -79,7 +79,7 @@ export function InspectorPanel({ projectId, cls }: { projectId: string; cls: Ont
 
   if (!cls) {
     return (
-      <aside className="flex w-[300px] flex-none flex-col rounded-xl border border-separator bg-surface" data-testid="onto-inspector">
+      <aside className="flex w-[260px] flex-none xl:w-[300px] flex-col rounded-xl border border-separator bg-surface" data-testid="onto-inspector">
         <div className="empty flex-1 !justify-center">
           <div className="t text-[13px]">未选中节点</div>
           <div className="d px-6 text-[11px]">点击画布节点或左侧类树，在此编辑 GB/T 48000.3 八项元数据。</div>
@@ -92,7 +92,7 @@ export function InspectorPanel({ projectId, cls }: { projectId: string; cls: Ont
     fieldErr[k] ? <div className="field-err">zod：{fieldErr[k]}</div> : null
 
   return (
-    <aside className="scroll-thin flex w-[300px] flex-none flex-col overflow-y-auto rounded-xl border border-separator bg-surface" data-testid="onto-inspector">
+    <aside className="scroll-thin flex w-[260px] flex-none xl:w-[300px] flex-col overflow-y-auto rounded-xl border border-separator bg-surface" data-testid="onto-inspector">
       {/* 头：选中节点 + 脏态徽标 */}
       <div className="flex-none px-4 pt-4">
         <div className="flex items-center gap-1.5">

@@ -33,6 +33,8 @@ pwr:OutageEvent a owl:Class ; rdfs:label "停电事件"@zh .
 pwr:ScheduledOutage a owl:Class ; rdfs:subClassOf pwr:OutageEvent ; rdfs:label "计划停运事件"@zh .
 pwr:FaultOutage a owl:Class ; rdfs:subClassOf pwr:OutageEvent ; rdfs:label "故障停运事件"@zh .
 pwr:OutageArea a owl:Class ; rdfs:label "停电区域"@zh .
+pwr:PlannedMaintenance a owl:Class ; rdfs:label "计划检修"@zh .
+pwr:MaintenanceWindow a owl:Class ; rdfs:label "检修窗口"@zh .
 pwr:WorkTicket a owl:Class ; rdfs:label "停电工单"@zh .
 pwr:RepairCrew a owl:Class ; rdfs:label "抢修班"@zh .
 pwr:RestorationPlan a owl:Class ; rdfs:label "复电方案"@zh .

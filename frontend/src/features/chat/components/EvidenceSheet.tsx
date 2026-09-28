@@ -1,10 +1,15 @@
 import { ArrowRight, Box, FileText } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
 import { Sheet } from '@/components/sheet'
 import type { EvidenceChunk } from '@/stores/session-store'
 
 /** 证据原文抽屉（IX-CHT-03，Drawer 480）：消息流内证据 chip / 上下文面板引用文档条目点击滑出。
  *  命中句高亮 + 出处三元组（mono）+ 置信度徽标 + 来源文档元数据；「在图谱中查看」
- *  占位下钻 /kb/explore?focus={entity_iri}（F-08 图谱浏览就绪后换真实路由跳转）。 */
+ *  深链跳转 /kb/explore/{kbId}?focus={entity_iri}（IX-EX-04：目标实体 pulse 高亮 + 画布居中）。 */
+
+/** mock 主知识库 id（kb-handlers collections 按名发号 col-N，首个即主库；ExplorePage 的
+ *  mock 图谱查询与 kbId 解耦——任意 kbId 均可渲染，真实实现按会话挂载库路由） */
+const EXPLORE_KB_ID = 'col-1'
 
 export interface EvidenceFocus {
   chunk: EvidenceChunk
@@ -27,7 +32,14 @@ function HighlightedQuote({ quote, highlight }: { quote: string; highlight?: str
 }
 
 export function EvidenceSheet({ focus, onClose }: { focus: EvidenceFocus | null; onClose: () => void }) {
+  const navigate = useNavigate()
   const { chunk, graph_paths } = focus ?? { chunk: undefined, graph_paths: [] as EvidenceFocus['graph_paths'] }
+
+  /** IX-EX-04 图谱下钻：关闭抽屉后跳图谱浏览，focus= 实体 IRI（encodeURIComponent 保 # 等保留字） */
+  function goExplore() {
+    onClose()
+    navigate(`/kb/explore/${EXPLORE_KB_ID}?focus=${encodeURIComponent(chunk?.entity ?? '')}`)
+  }
   return (
     <Sheet open={!!focus} onClose={onClose} title="证据原文" width={480}>
       {chunk && (
@@ -89,16 +101,11 @@ export function EvidenceSheet({ focus, onClose }: { focus: EvidenceFocus | null;
             {graph_paths.length === 0 && <div className="text-[11px] text-label-3">（该证据无图谱路径）</div>}
           </div>
 
-          {/* 底部动作：在图谱中查看（占位链接）+ 关闭 */}
+          {/* 底部动作：在图谱中查看（?focus 深链，IX-EX-04）+ 关闭 */}
           <div className="mt-5 flex gap-2 border-t border-separator pt-3">
-            <a
-              className="btn btn-p btn-sm"
-              href={`/kb/explore?focus=${encodeURIComponent(chunk.entity ?? '')}`}
-              onClick={onClose}
-              data-testid="ev-explore"
-            >
+            <button type="button" className="btn btn-p btn-sm" onClick={goExplore} data-testid="ev-explore">
               <Box size={13} aria-hidden /> 在图谱中查看
-            </a>
+            </button>
             <button type="button" className="btn btn-g btn-sm" onClick={onClose}>
               关闭
             </button>
@@ -107,7 +114,7 @@ export function EvidenceSheet({ focus, onClose }: { focus: EvidenceFocus | null;
             </span>
           </div>
           <div className="mt-2 flex items-center gap-1 text-[11px] text-label-3">
-            <ArrowRight size={11} aria-hidden /> 图谱浏览（F-08）就绪前为占位链接
+            <ArrowRight size={11} aria-hidden /> 跳转图谱浏览，目标实体自动 pulse 定位（IX-EX-04 ?focus 深链）
           </div>
         </div>
       )}

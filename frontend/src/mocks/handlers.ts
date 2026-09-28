@@ -1,4 +1,5 @@
 import { http, HttpResponse } from 'msw'
+import type { RunUsageEventData } from '@/sse/events'
 import { groupHandlers } from './group-handlers'
 import { kbHandlers } from './kb-handlers'
 import { ontologyHandlers } from './ontology-handlers'
@@ -207,6 +208,38 @@ function ensurePing() {
   if (!pingTimer) pingTimer = setInterval(() => broadcast(': ping\n\n'), 15_000)
 }
 
+/** run.usage 帧载荷（api/02 M4 扩展）：数据对齐现有种子——L2/L3 记忆 · GraphRAG Local ·
+ *  SHACL 规则命中 · 两条引用文档；latency_ms 用 687（非回退演示值 612）以区分真帧与演示回退。 */
+const USAGE_GROUPS: RunUsageEventData['groups'] = {
+  memory: [
+    { id: 'fact_0287', layer: 'L2', summary: '城区配网抢修视角，偏好设备→馈线→用户顺序', score: 0.87, updated_at: '刚刚 · 本次会话召回', reused: 6 },
+    { id: 'fact_0104', layer: 'L3', summary: '团队正做配网停电本体试点（v1.4）', score: 0.74, updated_at: '1 周前 · 治理后台批量入库', reused: 12 },
+  ],
+  graph: [{ id: 'path_local', mode: 'Local', entities: 6, relations: 4, communities: 2, latency_ms: 687, score: 0.91 }],
+  rules: [
+    { id: 'rule_cl014', kind: 'SHACL', label: '规则命中', summary: '停役联络 = 短时倒供（唯一解）', score: 1.0, constraint: 'CL-014 · 3 条 SHACL 全通过' },
+    { id: 'llm_judge', kind: 'LLM', label: 'LLM 判定', summary: '影响归纳（输出已过 SHACL 校验）', score: 0.88 },
+  ],
+  docs: [
+    {
+      id: 'doc_gf042', label: '配网检修规程 §4.2', summary: '10kV 馈线停役挂牌与恢复送电条款', score: 0.92,
+      chunk: {
+        doc_id: '配网检修规程（2024 修订）', chunk_id: 'chunk_042', page: 3, score: 0.92, entity: 'power-ont#馈线F12',
+        quote: '其 10kV 馈线 F12 应转入检修状态，并在操作把手上悬挂「禁止合闸，线路有人工作」标示牌；恢复送电前应核对接地线已全部拆除。',
+        highlight: '10kV 馈线 F12 应转入检修状态',
+      },
+    },
+    {
+      id: 'doc_gbt', label: 'GB/T 36276 · 循环寿命', summary: '1000 次循环后容量保持率 ≥80%', score: 0.83,
+      chunk: {
+        doc_id: 'GB/T 36276', chunk_id: 'chunk_017', page: 3, score: 0.83, entity: 'power-ont#电池簇',
+        quote: '电池簇经 1000 次循环后容量保持率应不低于 80%，且不应出现漏液、外壳破裂等异常。',
+        highlight: '1000 次循环后容量保持率应不低于 80%',
+      },
+    },
+  ],
+}
+
 function scriptFor(sessionId: string, question: string): { frames: string[]; ids: { run_id: string; task_id: string } } {
   const ids = { run_id: `r_${Date.now()}`, task_id: `t_${Date.now()}` }
   const steps: [string, unknown][] = [
@@ -219,6 +252,8 @@ function scriptFor(sessionId: string, question: string): { frames: string[]; ids
     ['TOOL_CALL_RESULT', { tool_call_id: 'pending-args', ok: true, summary: '命中 6 实体 / 2 社区', cost_ms: 612 }],
     ['RETRIEVAL_EVIDENCE', { chunks: [{ doc_id: 'GB/T 36276', chunk_id: 'c_017', quote: '1000 次循环后容量保持率 ≥80%', score: 0.83 }], graph_paths: [{ nodes: ['OutageEvent', 'Feeder'], edges: ['locatedOn'] }], degraded: false }],
     ['TEXT_MESSAGE_CONTENT', { message_id: 'pending', delta: '检索完成。两条标准的核心差异：测试对象与循环次数要求不同。' }],
+    // run.usage：助手回答完成前推本次上下文用量四分组（api/02 M4 扩展，IX-CHT-04 真数据源）
+    ['run.usage', { run_id: 'pending-run', groups: USAGE_GROUPS }],
     ['TEXT_MESSAGE_END', { message_id: 'pending', finish_reason: 'stop' }],
     ['RUN_FINISHED', { run_id: ids.run_id, usage: { tokens: 218, cost: 0.0042 } }],
   ]
@@ -234,7 +269,7 @@ function scriptFor(sessionId: string, question: string): { frames: string[]; ids
       if (name === 'TOOL_CALL_START') { tcid = `tc_${Date.now()}`; d.tool_call_id = tcid }
       if (name === 'TOOL_CALL_ARGS' || name === 'TOOL_CALL_END' || name === 'TOOL_CALL_RESULT') d.tool_call_id = tcid
       if (name === 'RUN_STARTED') { rid = String(d.run_id) }
-      if (name === 'RUN_FINISHED') d.run_id = rid
+      if (name === 'run.usage' || name === 'RUN_FINISHED') d.run_id = rid
       return frame(name, d)
     })
     return { frames, ids }
@@ -337,10 +372,19 @@ export const handlers = [
 
   // POST /sessions/:id/cancel（api/01 §5.2：取消运行中任务——IX-CHT-06 停止生成）
   http.post('*/api/v1/sessions/:id/cancel', async ({ request }) => {
-    const body = (await request.json().catch(() => ({}))) as { run_id?: string }
+    const body = (await request.json()) as { run_id?: string }
     if (body.run_id) cancelledRuns.add(body.run_id)
     return HttpResponse.json({ code: 0, message: 'ok', data: { run_id: body.run_id ?? null } }, { status: 202 })
   }),
+
+  // POST /sessions/:id/compact（api/01 §5.2 compact 登记行：上下文压缩——08 篇 compaction。
+  // 折叠历史至摘要；compacted_before_seq=当前 maxSeq 一半、summary_tokens 固定 4200，前端以之重置 meter）
+  http.post('*/api/v1/sessions/:id/compact', () =>
+    HttpResponse.json(
+      { code: 0, message: 'ok', data: { compacted_before_seq: Math.floor(seq / 2), summary_tokens: 4200 } },
+      { status: 202 },
+    ),
+  ),
 
   http.get('*/api/v1/sessions/:id/messages', ({ params }) =>
     HttpResponse.json({

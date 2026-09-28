@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { SseEvent } from '@/sse/events'
+import type { RunUsageEventData, SseEvent } from '@/sse/events'
 
 /** 会话域全局态（16 篇 §2.2 session-store）+ 事件归约（§3.3）+ seq 对账（§3.2）。
  *  敏感且体积大，不持久化。 */
@@ -95,8 +95,14 @@ interface SessionState {
   terminalLines: TerminalLine[]
   /** @引用 → 输入框草稿插入信号队列（MessageInput 按游标消费） */
   draftInserts: DraftInsert[]
+  /** run.usage 归约：本次回答上下文用量四分组（IX-CHT-04 真数据源；无帧时面板走演示回退） */
+  usageGroups: RunUsageEventData['groups'] | null
+  /** 上下文压缩回写（POST /sessions/{id}/compact 成功后 ContextMeter 以此覆盖 token 用量显示） */
+  usageTokens: number | null
   /** 资源行「@引用」动作入口：入队 @文件名（不直接触碰输入框） */
   pushDraftInsert: (text: string) => void
+  /** 压缩成功回写 summary_tokens（api/01 §5.2 compact 预登记口径） */
+  compactUsage: (tokens: number) => void
 
   setActiveSession: (id: string | null) => void
   /** 历史基线（订阅前 GET /sessions/{id}/messages，§3.2），对齐 lastSeq */
@@ -122,12 +128,16 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   workspaceVersion: 0,
   terminalLines: [],
   draftInserts: [],
+  usageGroups: null,
+  usageTokens: null,
 
   setActiveSession: id =>
     set({
       activeSessionId: id, messages: [], toolCalls: {}, runs: {}, lastSeq: 0, evidence: null, running: false, activeRunId: null,
-      workspaceEvents: [], workspaceVersion: 0, terminalLines: [], draftInserts: [],
+      workspaceEvents: [], workspaceVersion: 0, terminalLines: [], draftInserts: [], usageGroups: null, usageTokens: null,
     }),
+
+  compactUsage: tokens => set({ usageTokens: tokens }),
 
   pushDraftInsert: text =>
     set(s => ({ draftInserts: [...s.draftInserts, { text, seq: ++draftSeq }].slice(-20) })),
@@ -177,6 +187,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       lines?: unknown[]
       stream?: string
       text?: string
+      groups?: RunUsageEventData['groups']
     }
 
     switch (evt.name) {
@@ -278,6 +289,11 @@ export const useSessionStore = create<SessionState>((set, get) => ({
         const lines = raw.map(l => ({ text: String(l), stream: d.stream === 'stderr' ? ('stderr' as const) : ('stdout' as const) }))
         if (lines.length === 0) break
         set(s => ({ terminalLines: [...s.terminalLines, ...lines].slice(-200) }))
+        break
+      }
+      case 'run.usage': {
+        // api/02 M4 扩展：本次回答上下文用量四分组（会话级，随 setActiveSession 重置）
+        if (d.groups) set({ usageGroups: d.groups })
         break
       }
       default:

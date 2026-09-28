@@ -1,11 +1,40 @@
-import { useMemo } from 'react'
+import { useState } from 'react'
+import { toast } from 'sonner'
+import { ApiError, api } from '@/api/client'
+import { useSessionStore } from '@/stores/session-store'
 
 /** 上下文窗口指示器（03 篇 §3.1 / 24 篇 §4.14）：
  *  输入栏上方细条，实时反映 token 消耗占上下文窗口的比例；
- *  >80% orange（可压缩）、>95% red（必须压缩）；压缩按钮触发 08 篇 compaction。 */
+ *  >80% orange（可压缩）、>95% red（必须压缩）；压缩按钮 → POST /sessions/{id}/compact
+ *  （api/01 §5.2 登记行，202 成功后以 summary_tokens 重置 meter 用量，sonner 轻提示）。 */
 export function ContextMeter({ used, limit }: { used: number; limit: number }) {
-  const pct = Math.min(Math.round((used / limit) * 100), 100)
+  // 压缩回写（store usageTokens）：成功后覆盖 props 用量显示（setActiveSession 时重置）
+  const usageTokens = useSessionStore(s => s.usageTokens)
+  const compactUsage = useSessionStore(s => s.compactUsage)
+  const activeSessionId = useSessionStore(s => s.activeSessionId)
+  const [compacting, setCompacting] = useState(false)
+
+  const effUsed = usageTokens ?? used
+  const pct = Math.min(Math.round((effUsed / limit) * 100), 100)
   const fmt = (n: number) => (n >= 1000 ? `${(n / 1000).toFixed(0)}K` : `${n}`)
+
+  /** 压缩（api/01 §5.2 compact）：202 → summary_tokens 回写 store；失败 toast 错误文案 */
+  async function compact() {
+    if (!activeSessionId || compacting) return
+    setCompacting(true)
+    try {
+      const r = await api.post<{ compacted_before_seq: number; summary_tokens: number }>(
+        `/sessions/${activeSessionId}/compact`,
+        {},
+      )
+      compactUsage(r.summary_tokens)
+      toast.success(`上下文已压缩：seq < ${r.compacted_before_seq} 的历史已折叠为摘要（约 ${r.summary_tokens} tokens）`)
+    } catch (e) {
+      toast.error(e instanceof ApiError ? `压缩失败：${e.message}` : '压缩失败，请稍后重试')
+    } finally {
+      setCompacting(false)
+    }
+  }
 
   return (
     <div className="flex items-center gap-2 px-5 pb-1" data-testid="ctx-meter">
@@ -18,15 +47,17 @@ export function ContextMeter({ used, limit }: { used: number; limit: number }) {
         />
       </div>
       <span className="whitespace-nowrap font-mono text-2xs text-label-3">
-        {fmt(used)} / {fmt(limit)} · {pct}%
+        {fmt(effUsed)} / {fmt(limit)} · {pct}%
       </span>
       {pct > 80 && (
         <button
           type="button"
-          className="rounded-full border border-separator px-2 py-0.5 text-2xs text-label-2 hover:text-accent"
-          onClick={() => {/* TODO: POST /sessions/{id}/compact */}}
+          data-testid="ctx-compact"
+          className="rounded-full border border-separator px-2 py-0.5 text-2xs text-label-2 hover:text-accent disabled:opacity-40"
+          disabled={compacting}
+          onClick={() => void compact()}
         >
-          压缩
+          {compacting ? '压缩中…' : '压缩'}
         </button>
       )}
     </div>
@@ -35,8 +66,5 @@ export function ContextMeter({ used, limit }: { used: number; limit: number }) {
 
 /** hook：从 session-store 派生 token 用量（M4 接 SSE usage 事件后替换 mock 值） */
 export function useContextTokens(sessionId: string | null) {
-  return useMemo(
-    () => ({ used: sessionId ? 62_000 : 0, limit: 128_000 }),
-    [sessionId],
-  )
+  return { used: sessionId ? 62_000 : 0, limit: 128_000 }
 }

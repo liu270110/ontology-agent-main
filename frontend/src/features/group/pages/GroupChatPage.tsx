@@ -17,6 +17,14 @@ import { GroupInput } from '../components/GroupInput'
  *  三栏 = 群会话列表｜消息流（归属着色 + 协调者系统行 + ResponseGroup + 高风险确认）｜
  *  MemberPanel 240px。数据流同单聊（16 篇 §3.2）：GET messages 历史基线（lastSeq 对齐）→
  *  SSE 订阅 → features/group 轻量包装归约（X15：MESSAGE_* 带 agent_id / ROUTING_DECISION）。 */
+/** SSE 连接态 → 展示文案（useGroupStream 枚举；不直接暴露英文内部值给用户） */
+const CONN_LABEL: Record<string, string> = {
+  connecting: '连接中',
+  open: '已连接',
+  reconnecting: '重连中',
+  offline: '离线',
+}
+
 export function GroupChatPage() {
   const { sessionId } = useParams<{ sessionId: string }>()
   const navigate = useNavigate()
@@ -148,16 +156,27 @@ export function GroupChatPage() {
           <span className="badge b-gray">{members.length} 人</span>
           {sessionId && !missing && <RoutingModePicker sessionId={sessionId} routing={routing} onChange={setRouting} />}
           <div className="ml-auto flex items-center gap-2">
-            <span className="flex items-center gap-1 text-[11px] text-label-3">
-              <span className={`dot ${conn === 'open' ? 'd-green' : 'd-orange'}`} style={{ width: 6, height: 6 }} />
-              {running ? '运行中' : conn}
-            </span>
+            {/* 连接徽标只在选中会话后有意义（未选会话时流未建立，恒显 connecting 是假状态）；
+                状态文案中文化（connecting/open/reconnecting/offline 为流内部枚举） */}
+            {sessionId && !missing && (
+              <span className="flex items-center gap-1 text-[11px] text-label-3">
+                <span className={`dot ${conn === 'open' ? 'd-green' : 'd-orange'}`} style={{ width: 6, height: 6 }} />
+                {running ? '运行中' : CONN_LABEL[conn] ?? '连接中'}
+              </span>
+            )}
             {session && (
               <button type="button" data-testid="grp-add-member" aria-label="添加成员" title="添加成员（GRP-01）" className="icobtn flex h-8 w-8 items-center justify-center rounded-lg border border-separator text-label-2" onClick={() => setPickerOpen(true)}>
                 <Users size={14} />
               </button>
             )}
-            <button type="button" aria-label="分享群聊" title="分享（F-10 资源 ACL 复用）" className="icobtn flex h-8 w-8 items-center justify-center rounded-lg border border-separator text-label-2">
+            {/* 分享（F-10 资源 ACL 复用）未实现：诚实禁用而非死按钮 */}
+            <button
+              type="button"
+              aria-label="分享群聊（即将开放）"
+              title="分享（即将开放）"
+              disabled
+              className="icobtn flex h-8 w-8 items-center justify-center rounded-lg border border-separator text-label-3 btn-dis"
+            >
               <Share2 size={14} />
             </button>
           </div>

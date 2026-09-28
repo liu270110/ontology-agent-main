@@ -34,6 +34,16 @@ export function UsersTab() {
   const { data, isLoading, isError, error, refetch } = useQuery({ queryKey: ['admin', 'users'], queryFn: listUsers })
   const users = useMemo(() => data?.items ?? [], [data])
 
+  // 启用（PATCH status=active；api/01 §5.8 PATCH 字段扩展，软禁用的可逆出口）
+  const setStatus = useMutation({
+    mutationFn: (v: { id: string; status: 'active' | 'disabled' }) => updateUser(v.id, { status: v.status }),
+    onSuccess: (_, v) => {
+      toast.success(v.status === 'active' ? '已启用，该成员可重新登录' : '已停用')
+      void qc.invalidateQueries({ queryKey: ['admin', 'users'] })
+    },
+    onError: e => toast.error(e.message),
+  })
+
   return (
     <div>
       <div className="flex items-center gap-2">
@@ -77,12 +87,26 @@ export function UsersTab() {
                 </td>
                 <td className="px-4 py-2.5 text-label-2">{u.last_login_at ? relativeTime(u.last_login_at) : '—'}</td>
                 <td className="px-4 py-2.5 text-right">
-                  {u.status !== 'disabled' && (
-                    <span className="flex justify-end gap-1.5">
-                      <button type="button" className="btn btn-g btn-sm" data-testid={`adm-user-edit-${u.id}`} onClick={() => setEditing(u)}>编辑</button>
-                      <button type="button" className="btn btn-d btn-sm" data-testid={`adm-user-disable-${u.id}`} onClick={() => setDisabling(u)}>停用</button>
-                    </span>
-                  )}
+                  <span className="flex justify-end gap-1.5">
+                    {/* 已停用 → 启用（PATCH status，恢复可登录）；否则 编辑 + 停用。
+                        停用不可恢复属治理死角（全程可追溯前提下的可逆操作） */}
+                    {u.status === 'disabled' ? (
+                      <button
+                        type="button"
+                        className="btn btn-s btn-sm"
+                        data-testid={`adm-user-enable-${u.id}`}
+                        disabled={setStatus.isPending}
+                        onClick={() => setStatus.mutate({ id: u.id, status: 'active' })}
+                      >
+                        启用
+                      </button>
+                    ) : (
+                      <>
+                        <button type="button" className="btn btn-g btn-sm" data-testid={`adm-user-edit-${u.id}`} onClick={() => setEditing(u)}>编辑</button>
+                        <button type="button" className="btn btn-d btn-sm" data-testid={`adm-user-disable-${u.id}`} onClick={() => setDisabling(u)}>停用</button>
+                      </>
+                    )}
+                  </span>
                 </td>
               </tr>
             ))}

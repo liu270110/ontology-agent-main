@@ -578,10 +578,12 @@ export const adminHandlers = [
   http.patch('*/api/v1/admin/users/:id', async ({ request, params }) => {
     const u = USERS.find(x => x.id === String(params.id))
     if (!u) return err(4041, '用户不存在', 404)
-    const body = (await request.json()) as { roles?: string[]; department?: string; display_name?: string }
+    const body = (await request.json()) as { roles?: string[]; department?: string; display_name?: string; status?: 'active' | 'disabled' }
     if (body.roles) u.roles = body.roles
     if (body.department !== undefined) u.department = body.department
     if (body.display_name) u.display_name = body.display_name
+    // status 扩展（api/01 §5.8 PATCH 登记）：软禁用（DELETE）的可逆出口——启用回 active
+    if (body.status) u.status = body.status
     return ok(u)
   }),
 

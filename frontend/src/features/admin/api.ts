@@ -30,7 +30,7 @@ export const listUsers = () => api.get<{ items: AdminUser[]; next_cursor: null }
 export function inviteUsers(emails: string[], role: string, note?: string) {
   return api.post<{ invited: number; existing: { email: string; name: string }[] }>('/admin/users', { emails, role, note })
 }
-export function updateUser(id: string, body: { roles?: string[]; department?: string; display_name?: string }) {
+export function updateUser(id: string, body: { roles?: string[]; department?: string; display_name?: string; status?: 'active' | 'disabled' }) {
   return api.patch<AdminUser>(`/admin/users/${id}`, body)
 }
 export const disableUser = (id: string) => api.delete<void>(`/admin/users/${id}`)

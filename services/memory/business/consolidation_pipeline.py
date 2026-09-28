@@ -1,12 +1,14 @@
 """沉淀管线（06 篇 §5.1：抽取→对齐→冲突→分级写入；v1 规则版，LLM 裁断 plan3 接缝）。
 
-抽取 schema v1 为静态常量（对齐 mem 七类）；TODO(plan3): 从 TBox 生成（本体驱动最低验收线）。
+抽取 schema 从 mem TBox 生成（generate_extraction_schema，模块导入期一次——本体驱动最低
+验收线：枚举与类注释均来自 services/ontology/turtle/mem.ttl，静态串已废）。
 对齐 v1 直接采信 LLM 给出的 subject_iri（术语表归一 TODO(plan3) terminology）。
 分级写入（ADR-13）：高置信静默写；低置信/冲突候选进待复核队列；DUPLICATE 跳过。
 """
 
 from __future__ import annotations
 
+import json
 import uuid
 from dataclasses import dataclass
 from datetime import datetime
@@ -15,13 +17,11 @@ from pydantic import BaseModel, Field
 
 from services.memory.domain.model.consolidation import ConflictVerdict, VerdictKind, detect_conflicts
 from services.memory.domain.model.memory import MemoryLayer, MemoryRecord, MemoryScope, MemoryType
+from services.ontology.core.mem_tbox import generate_extraction_schema
 from services.platform.llm.ollama_json import LlmClient
 
-EXTRACTION_SCHEMA_HINT = (
-    '{"records": [{"record_type": "mem:Preference|mem:FactClaim|mem:Episode|mem:Decision|mem:Goal|mem:ProcedureRef", '
-    '"subject_iri": "实体 IRI 或 null", "content": "一句话事实", '
-    '"structured": {"attribute": "属性名", "value": "值"}, "confidence": 0.0~1.0}]}'
-)
+# 抽取 schema hint = TBox 生成的 JSON（六类枚举 + 抽取要点注释）；模块导入期一次，运行零开销
+EXTRACTION_SCHEMA_HINT = json.dumps(generate_extraction_schema(), ensure_ascii=False)
 
 SETTLE_SYSTEM_PROMPT = (
     "你是记忆抽取器。从会话内容中抽取值得跨会话保留的事实/偏好/决策/目标，"
@@ -68,6 +68,7 @@ class ConsolidationPipeline:
         transcript: str,
         now: datetime,
         idempotency_key: str | None = None,
+        owner_user_id: uuid.UUID | None = None,
     ) -> SettleResult:
         """会话沉淀入口；幂等键命中时短路（不调 LLM），登记由调用方负责。"""
         if idempotency_key and await self._repo.idempotent_hit(tenant_id, idempotency_key):
@@ -91,6 +92,7 @@ class ConsolidationPipeline:
             rec = MemoryRecord(
                 id=uuid.uuid4(),
                 tenant_id=tenant_id,
+                owner_user_id=owner_user_id,  # 归属用户（§9.2-5 债务偿还；None=租户级无主记录）
                 layer=MemoryLayer.USER,
                 record_type=c.record_type,
                 subject_iri=c.subject_iri,

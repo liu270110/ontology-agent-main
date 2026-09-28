@@ -45,17 +45,30 @@ class FakeRepo:
             hits = [r for r in hits if r.layer == layer]
         return hits[:limit]
 
-    async def list_recent(self, tenant_id, *, subject_user_layer, limit):
-        hits = sorted(
-            (
-                r
-                for r in self.rows.values()
-                if r.tenant_id == tenant_id and r.layer == subject_user_layer and r.state == "active"
-            ),
+    async def list_recent(self, tenant_id, *, subject_user_layer, limit, owner_user_id=None):
+        hits = [
+            r
+            for r in self.rows.values()
+            if r.tenant_id == tenant_id and r.layer == subject_user_layer and r.state == "active"
+        ]
+        if owner_user_id is not None:  # owner 过滤已生效（c3d5e7f9a1b3）：参数化 WHERE，None 不过滤
+            hits = [r for r in hits if r.owner_user_id == owner_user_id]
+        return sorted(
+            hits,
             key=lambda r: (r.confidence, r.created_at),  # confidence 主排序，同分新者先（对齐 Pg 仓储）
             reverse=True,
-        )
-        return hits[:limit]
+        )[:limit]
+
+    async def list_profile_records(self, tenant_id, *, owner_user_id, limit):
+        hits = [
+            r
+            for r in self.rows.values()
+            if r.tenant_id == tenant_id
+            and r.owner_user_id == owner_user_id
+            and r.layer == MemoryLayer.USER
+            and r.state == "active"
+        ]
+        return sorted(hits, key=lambda r: (r.confidence, r.created_at), reverse=True)[:limit]
 
     async def list_by_subject(self, tenant_id, subject_iri, *, states=("active",)):
         return [
@@ -143,20 +156,100 @@ async def test_search_rrf_and_freshness(svc):
 
 
 async def test_warmup_prefills_l1(svc):
+    uid = uuid.uuid4()
     sid = uuid.uuid4()
-    await svc.upsert_record(
-        RecordUpsert(
+    await svc.repo.insert(
+        MemoryRecord(
+            id=uuid.uuid4(),
             tenant_id=TENANT,
             layer=MemoryLayer.USER,
             record_type=MemoryType.PREFERENCE,
             content="用户要求回答附出处",
+            owner_user_id=uid,
             confidence=0.9,
-        ),
-        now=NOW,
+            created_at=NOW,
+        )
     )
-    n = await svc.warmup(tenant_id=TENANT, user_id=uuid.uuid4(), session_id=sid)
+    n = await svc.warmup(tenant_id=TENANT, user_id=uid, session_id=sid)
     assert n >= 1
     assert "用户要求回答附出处" in (await svc.get_l1(sid))["user_profile"]
+
+
+async def test_warmup_filters_by_owner(svc):
+    """warmup 的 user_id 参数生效（§9.2-5 债务闭环）：只预热本人记录，不串他人。"""
+    uid, other = uuid.uuid4(), uuid.uuid4()
+    await svc.repo.insert(
+        MemoryRecord(
+            id=uuid.uuid4(),
+            tenant_id=TENANT,
+            layer=MemoryLayer.USER,
+            record_type=MemoryType.PREFERENCE,
+            content="我的偏好",
+            owner_user_id=uid,
+            confidence=0.9,
+            created_at=NOW,
+        )
+    )
+    await svc.repo.insert(
+        MemoryRecord(
+            id=uuid.uuid4(),
+            tenant_id=TENANT,
+            layer=MemoryLayer.USER,
+            record_type=MemoryType.PREFERENCE,
+            content="他人偏好",
+            owner_user_id=other,
+            confidence=0.9,
+            created_at=NOW,
+        )
+    )
+    sid = uuid.uuid4()
+    n = await svc.warmup(tenant_id=TENANT, user_id=uid, session_id=sid)
+    assert n == 1
+    profile = (await svc.get_l1(sid))["user_profile"]
+    assert "我的偏好" in profile and "他人偏好" not in profile
+
+
+async def test_profile_groups_by_type_with_top_truncation(svc):
+    """画像聚合（§5.2）：按 mem: 类型分组、类型内 top 置信截断，只读投影。"""
+    uid = uuid.uuid4()
+    for rec in (
+        MemoryRecord(
+            id=uuid.uuid4(),
+            tenant_id=TENANT,
+            layer=MemoryLayer.USER,
+            record_type=MemoryType.PREFERENCE,
+            content="高置信偏好",
+            owner_user_id=uid,
+            confidence=0.9,
+            created_at=NOW,
+        ),
+        MemoryRecord(
+            id=uuid.uuid4(),
+            tenant_id=TENANT,
+            layer=MemoryLayer.USER,
+            record_type=MemoryType.PREFERENCE,
+            content="低置信偏好",
+            owner_user_id=uid,
+            confidence=0.7,
+            created_at=NOW,
+        ),
+        MemoryRecord(
+            id=uuid.uuid4(),
+            tenant_id=TENANT,
+            layer=MemoryLayer.USER,
+            record_type=MemoryType.FACT_CLAIM,
+            content="事实一条",
+            owner_user_id=uid,
+            confidence=0.8,
+            created_at=NOW,
+        ),
+    ):
+        await svc.repo.insert(rec)
+    data = await svc.profile(tenant_id=TENANT, user_id=uid, per_type_limit=1)
+    assert set(data) == {"mem:Preference", "mem:FactClaim"}
+    assert [x["content"] for x in data["mem:Preference"]] == ["高置信偏好"]  # 置信降序 top 截断
+    assert data["mem:FactClaim"][0]["content"] == "事实一条"
+    assert data["mem:FactClaim"][0]["confidence"] == 0.8
 
 
 async def test_archive_l1_creates_episode(svc):

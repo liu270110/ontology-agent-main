@@ -50,17 +50,25 @@ class Deps:
 
 
 async def settle_session_task(
-    deps: Deps, *, tenant_id: uuid.UUID, session_id: uuid.UUID, transcript: str, idempotency_key: str, now=None
+    deps: Deps,
+    *,
+    tenant_id: uuid.UUID,
+    session_id: uuid.UUID,
+    transcript: str,
+    idempotency_key: str,
+    now=None,
+    owner_user_id: uuid.UUID | None = None,
 ) -> dict:
     """会话沉淀（空闲队列）：登记幂等闸门在管线之前；命中即短路不调 LLM。"""
     now = now or datetime.now(UTC)
-    registered = await deps.repo.register_task(
-        tenant_id, idempotency_key, payload={"session_id": str(session_id), "transcript": transcript}
-    )
+    payload: dict = {"session_id": str(session_id), "transcript": transcript}
+    if owner_user_id is not None:  # 归属用户随任务 payload 持久化（escalate 兜底重跑同源取回）
+        payload["owner_user_id"] = str(owner_user_id)
+    registered = await deps.repo.register_task(tenant_id, idempotency_key, payload=payload)
     if not registered:
         return {"added": 0, "duplicates": 0, "to_review": 0, "skipped": "idempotent"}
     result = await deps.pipeline.settle_session(
-        tenant_id=tenant_id, session_id=session_id, transcript=transcript, now=now
+        tenant_id=tenant_id, session_id=session_id, transcript=transcript, now=now, owner_user_id=owner_user_id
     )
     return {"added": result.added, "duplicates": result.duplicates, "to_review": result.to_review}
 
@@ -126,12 +134,14 @@ async def escalate_deadlined_task(deps: Deps, *, now=None) -> dict:
     for t in stale:
         await deps.repo.mark_task(t["id"], status="running")
         payload = t.get("payload") or {}
+        owner_raw = payload.get("owner_user_id")
         try:
             await deps.pipeline.settle_session(
                 tenant_id=t["tenant_id"],
                 session_id=uuid.UUID(payload["session_id"]),
                 transcript=payload["transcript"],
                 now=now,
+                owner_user_id=uuid.UUID(owner_raw) if owner_raw else None,
             )
         except BaseException as exc:
             # 取消/崩溃同样标 failed（僵尸行回收扫描依赖终态）；CancelledError 标记后继续上抛
@@ -189,10 +199,21 @@ def build_dependencies() -> Deps:
 
 
 async def _settle_bridge(
-    ctx: dict, *, tenant_id: uuid.UUID, session_id: uuid.UUID, transcript: str, idempotency_key: str
+    ctx: dict,
+    *,
+    tenant_id: uuid.UUID,
+    session_id: uuid.UUID,
+    transcript: str,
+    idempotency_key: str,
+    owner_user_id: uuid.UUID | None = None,
 ):
     return await settle_session_task(
-        ctx["deps"], tenant_id=tenant_id, session_id=session_id, transcript=transcript, idempotency_key=idempotency_key
+        ctx["deps"],
+        tenant_id=tenant_id,
+        session_id=session_id,
+        transcript=transcript,
+        idempotency_key=idempotency_key,
+        owner_user_id=owner_user_id,
     )
 
 

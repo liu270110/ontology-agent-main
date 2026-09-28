@@ -62,6 +62,7 @@ class MemoryRecord(BaseModel):
 
     id: uuid.UUID
     tenant_id: uuid.UUID
+    owner_user_id: uuid.UUID | None = None  # 归属用户；L2 画像/预热维度（§9.2-5，c3d5e7f9a1b3）
     layer: MemoryLayer
     record_type: MemoryType
     subject_iri: str | None = None  # 术语对齐产物；对不齐置空（规格 §5.1）

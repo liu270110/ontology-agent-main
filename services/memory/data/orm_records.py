@@ -26,6 +26,7 @@ class MemoryRecordORM(Base, PkMixin, TenantMixin, TimestampMixin):
     __tablename__ = "memory_records"
 
     layer: Mapped[int] = mapped_column(SmallInteger, nullable=False)
+    owner_user_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), index=False)  # 索引走复合索引
     record_type: Mapped[str] = mapped_column(String(64), nullable=False)
     subject_iri: Mapped[str | None] = mapped_column(String(512))
     content: Mapped[str] = mapped_column(Text, nullable=False)
@@ -53,6 +54,7 @@ class MemoryRecordORM(Base, PkMixin, TenantMixin, TimestampMixin):
         Index("ix_memory_records_layer_subject_state", "layer", "subject_iri", "state"),
         Index("ix_memory_records_tenant_decay", "tenant_id", "decay_at"),
         Index("ix_memory_records_tenant_subject_created", "tenant_id", "subject_iri", "created_at"),
+        Index("ix_memory_records_tenant_owner_layer", "tenant_id", "owner_user_id", "layer"),
         Index("ix_memory_records_tenant_type_state", "tenant_id", "record_type", "state"),
     )
 

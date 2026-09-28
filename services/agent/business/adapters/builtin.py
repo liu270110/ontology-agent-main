@@ -9,7 +9,13 @@
   保留）。两路事件语义同构：TEXT_MESSAGE_CONTENT 的 delta 形态不变，SSE 投影无差别，
   前端零感知；
 - 用量：平台用量上下文（llm/usage）回填后读取（真流式=末块 usage），FakeModelPort
-  不回填 → 记 0（显式口径）。
+  不回填 → 记 0（显式口径）；
+- **H-1 钉死引用接入（2026-09-29，一处最小接入）**：``turn.system_prompt`` 若为
+  ``prompt:{id}@{version|head}`` 钉死引用 → 经注入的 ``prompt_resolver``（PromptResolver
+  端口，组合根 build_db_prompt_resolver 装配）消解为确定版本内容（回执 id@version+checksum
+  落 prompt.ref_resolved 事件）；未装配 resolver 时 fail-closed（5002，宁拒不错载）。
+  非 ``prompt:`` 前缀的行为不变（平台缺省角色约定——成员 persona 字面量消费是独立缺口，
+  随 chat 编排批另行登记）。
 """
 
 from __future__ import annotations
@@ -19,9 +25,10 @@ from collections.abc import AsyncIterator
 from typing import Any
 
 from services.agent.business.adapters.base import CHAT_ACTION_IRI, ChatAdapter, ChatTurn, GenerationEvent
+from services.agent.business.prompts.resolver import PromptResolver, is_prompt_ref, persona_text
 from services.agent.domain.model.kernel_context import ExtensionMeta, TenantContext
 from services.platform.llm.usage import get_last_usage
-from services.platform.ports.model_port import ModelPort
+from services.platform.ports.model_port import ModelPort, ModelUnavailableError
 
 # 答案抽取 Schema（推理分级宪法第 2 条：LLM 输出必过确定性校验才可用）——伪流式回退路径消费
 _ANSWER_SCHEMA: dict[str, Any] = {
@@ -51,10 +58,13 @@ def _build_user_prompt(turn: ChatTurn) -> str:
     return "\n".join(lines)
 
 
-def _build_messages(turn: ChatTurn) -> list[dict[str, Any]]:
-    """chat completions messages 形态（H-6）：system（角色约定+已标界上下文）+ user。"""
+def _build_messages(turn: ChatTurn, persona: str | None = None) -> list[dict[str, Any]]:
+    """chat completions messages 形态（H-6）：system（角色约定+已标界上下文）+ user。
+
+    persona 非 None=钉死引用已消解的人格文本（H-1，覆盖缺省角色约定）。
+    """
     return [
-        {"role": "system", "content": _build_system_prompt(turn)},
+        {"role": "system", "content": persona if persona is not None else _build_system_prompt(turn)},
         {"role": "user", "content": _build_user_prompt(turn)},
     ]
 
@@ -88,24 +98,38 @@ class BuiltinAdapter(ChatAdapter):
     )
     adapter_name = "builtin"
 
-    def __init__(self, model: ModelPort) -> None:
+    def __init__(self, model: ModelPort, *, prompt_resolver: PromptResolver | None = None) -> None:
         self._model = model
+        self._prompt_resolver = prompt_resolver
+
+    async def _persona_prompt(self, turn: ChatTurn) -> str:
+        """人格面板：``prompt:`` 钉死引用 → 运行时消解（H-1）；其余=平台缺省角色约定。"""
+        if is_prompt_ref(turn.system_prompt):
+            if self._prompt_resolver is None:
+                # fail-closed：引用语法在但解析器未装配（组合根接线遗留），宁拒不错载
+                raise ModelUnavailableError(
+                    f"prompt: 钉死引用未接线解析器（5002）: {turn.system_prompt}"
+                )
+            resolved = await self._prompt_resolver(turn.system_prompt)
+            return persona_text(resolved)
+        return _build_system_prompt(turn)
 
     async def stream_chat(
         self, turn: ChatTurn, ctx: TenantContext, *, timeout_ms: int = 30_000
     ) -> AsyncIterator[GenerationEvent]:
         """生成入口：端口有流式面走真流式，否则回退结构化切片（两路事件语义同构）。"""
+        persona = await self._persona_prompt(turn)
         stream_complete = getattr(self._model, "stream_complete", None)
         if stream_complete is None:
             # 回退（勿解包 AuditedModelPort._inner 走真流式——审计/预算硬约束不可绕过）
-            async for event in self._stream_structured_fallback(turn, ctx, timeout_ms=timeout_ms):
+            async for event in self._stream_structured_fallback(turn, ctx, timeout_ms=timeout_ms, persona=persona):
                 yield event
             return
         # 硬上限由内核单工具超时（asyncio.wait_for）钳制；传输层超时=timeout_s（端口内
         # httpx 必设）——与 claude 直连通道同口径（docs/Agent §5：流式按传输层判超时）。
         timeout_s = max(timeout_ms / 1000, 1.0)
         async for piece in stream_complete(
-            _build_messages(turn),
+            _build_messages(turn, persona),
             temperature=None,  # 对话档：服务端缺省（complete_structured 的事实型 0.1 属抽取面，不沿用到闲聊面）
             num_ctx=turn.num_ctx,
             timeout_s=timeout_s,
@@ -116,12 +140,12 @@ class BuiltinAdapter(ChatAdapter):
         yield _finish_event()
 
     async def _stream_structured_fallback(
-        self, turn: ChatTurn, ctx: TenantContext, *, timeout_ms: int
+        self, turn: ChatTurn, ctx: TenantContext, *, timeout_ms: int, persona: str
     ) -> AsyncIterator[GenerationEvent]:
         """伪流式回退（H-6 前形态原样保留）：complete_structured 一次性答案 JSON → 固定步长切片。"""
         data: dict[str, Any] = await asyncio.wait_for(
             self._model.complete_structured(
-                system=_build_system_prompt(turn),
+                system=persona,
                 user=_build_user_prompt(turn),
                 json_schema=_ANSWER_SCHEMA,
                 timeout_s=max(timeout_ms / 1000, 1.0),

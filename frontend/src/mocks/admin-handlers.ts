@@ -1,4 +1,5 @@
 import { http, HttpResponse } from 'msw'
+import type { AdminUserPatch } from '@/features/admin/api'
 
 /** S6 治理域 mock（30 篇 §2 S6；契约=api/01 §5.8 admin 与 writeback 台账 + §6.5 回写台账
  *  + §5.2 tasks 组 + §5.9 auth（totp 三端点）+ §5.13 me）。独立文件注册，经 handlers.ts 展开。
@@ -578,7 +579,7 @@ export const adminHandlers = [
   http.patch('*/api/v1/admin/users/:id', async ({ request, params }) => {
     const u = USERS.find(x => x.id === String(params.id))
     if (!u) return err(4041, '用户不存在', 404)
-    const body = (await request.json()) as { roles?: string[]; department?: string; display_name?: string; status?: 'active' | 'disabled' }
+    const body = (await request.json()) as AdminUserPatch
     if (body.roles) u.roles = body.roles
     if (body.department !== undefined) u.department = body.department
     if (body.display_name) u.display_name = body.display_name

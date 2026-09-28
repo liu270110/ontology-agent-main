@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { useAuthStore } from '@/stores/auth-store'
+import type { ConnState } from '@/lib/conn-label'
 
 /** 群聊 SSE 流：useSessionStream（src/sse/）同款模式轻量复制——具名事件监听 + 断线指数退避
  *  重连。重连续传对齐 2026-09-27 对账 §8 裁决：常规断线走 EventSource 原生 Last-Event-ID
@@ -10,7 +11,7 @@ import { useAuthStore } from '@/stores/auth-store'
 export interface GroupStreamOptions {
   sessionId: string | null
   onEvent: (name: string, seq: number, data: Record<string, unknown>) => 'gap' | void
-  onStateChange?: (state: 'connecting' | 'open' | 'reconnecting' | 'offline') => void
+  onStateChange?: (state: ConnState) => void
 }
 
 /** 监听集合 = 主干波 11 事件 + 快照 + 群聊扩展（X15） */

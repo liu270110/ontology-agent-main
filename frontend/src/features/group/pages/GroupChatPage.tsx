@@ -7,6 +7,8 @@ import { ErrorState, SkeletonRows } from '@/components/states'
 import { getGroupSession, listGroupSessions, type GroupMessageRow, type GroupSessionDetail, type RoutingMode } from '../api'
 import { useGroupStreamStore } from '../group-store'
 import { useGroupStream } from '../useGroupStream'
+import { CONN_STATE_TEXT, type ConnState } from '@/lib/conn-label'
+
 import { RoutingModePicker } from '../components/RoutingModePicker'
 import { MemberPickerDialog } from '../components/MemberPickerDialog'
 import { MemberPanel } from '../components/MemberPanel'
@@ -17,14 +19,6 @@ import { GroupInput } from '../components/GroupInput'
  *  三栏 = 群会话列表｜消息流（归属着色 + 协调者系统行 + ResponseGroup + 高风险确认）｜
  *  MemberPanel 240px。数据流同单聊（16 篇 §3.2）：GET messages 历史基线（lastSeq 对齐）→
  *  SSE 订阅 → features/group 轻量包装归约（X15：MESSAGE_* 带 agent_id / ROUTING_DECISION）。 */
-/** SSE 连接态 → 展示文案（useGroupStream 枚举；不直接暴露英文内部值给用户） */
-const CONN_LABEL: Record<string, string> = {
-  connecting: '连接中',
-  open: '已连接',
-  reconnecting: '重连中',
-  offline: '离线',
-}
-
 export function GroupChatPage() {
   const { sessionId } = useParams<{ sessionId: string }>()
   const navigate = useNavigate()
@@ -161,7 +155,7 @@ export function GroupChatPage() {
             {sessionId && !missing && (
               <span className="flex items-center gap-1 text-[11px] text-label-3">
                 <span className={`dot ${conn === 'open' ? 'd-green' : 'd-orange'}`} style={{ width: 6, height: 6 }} />
-                {running ? '运行中' : CONN_LABEL[conn] ?? '连接中'}
+                {running ? '运行中' : CONN_STATE_TEXT[conn as ConnState] ?? '连接中'}
               </span>
             )}
             {session && (
@@ -169,16 +163,18 @@ export function GroupChatPage() {
                 <Users size={14} />
               </button>
             )}
-            {/* 分享（F-10 资源 ACL 复用）未实现：诚实禁用而非死按钮 */}
-            <button
-              type="button"
-              aria-label="分享群聊（即将开放）"
-              title="分享（即将开放）"
-              disabled
-              className="icobtn flex h-8 w-8 items-center justify-center rounded-lg border border-separator text-label-3 btn-dis"
-            >
-              <Share2 size={14} />
-            </button>
+            {/* 分享（F-10 资源 ACL 复用）未实现：诚实禁用而非死按钮。
+                title 挂外层 span——disabled 按钮不接收指针事件，tooltip 挂按钮上永不出现 */}
+            <span title="分享（即将开放）">
+              <button
+                type="button"
+                aria-label="分享群聊（即将开放）"
+                disabled
+                className="icobtn flex h-8 w-8 items-center justify-center rounded-lg border border-separator text-label-3 btn-dis"
+              >
+                <Share2 size={14} />
+              </button>
+            </span>
           </div>
         </header>
         {sessionId && session ? (

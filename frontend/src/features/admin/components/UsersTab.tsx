@@ -34,11 +34,12 @@ export function UsersTab() {
   const { data, isLoading, isError, error, refetch } = useQuery({ queryKey: ['admin', 'users'], queryFn: listUsers })
   const users = useMemo(() => data?.items ?? [], [data])
 
-  // 启用（PATCH status=active；api/01 §5.8 PATCH 字段扩展，软禁用的可逆出口）
+  // 启用（PATCH status=active；api/01 §5.8 PATCH 字段扩展，软禁用的可逆出口）。
+  // 停用走 DisableUserModal → DELETE，不经过本 mutation，故变量只收 { id }
   const setStatus = useMutation({
-    mutationFn: (v: { id: string; status: 'active' | 'disabled' }) => updateUser(v.id, { status: v.status }),
-    onSuccess: (_, v) => {
-      toast.success(v.status === 'active' ? '已启用，该成员可重新登录' : '已停用')
+    mutationFn: (v: { id: string }) => updateUser(v.id, { status: 'active' }),
+    onSuccess: () => {
+      toast.success('已启用，该成员可重新登录')
       void qc.invalidateQueries({ queryKey: ['admin', 'users'] })
     },
     onError: e => toast.error(e.message),
@@ -95,8 +96,8 @@ export function UsersTab() {
                         type="button"
                         className="btn btn-s btn-sm"
                         data-testid={`adm-user-enable-${u.id}`}
-                        disabled={setStatus.isPending}
-                        onClick={() => setStatus.mutate({ id: u.id, status: 'active' })}
+                        disabled={setStatus.isPending && setStatus.variables?.id === u.id}
+                        onClick={() => setStatus.mutate({ id: u.id })}
                       >
                         启用
                       </button>

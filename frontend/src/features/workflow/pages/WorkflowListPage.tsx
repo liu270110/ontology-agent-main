@@ -102,7 +102,7 @@ export function WorkflowListPage() {
 
       <div className="mt-4 flex items-center gap-2 text-[11px] text-label-3">
         <History size={12} aria-hidden />
-        运行历史见工作流详情的「运行」页签，也可在任务中心按类型筛选；发布后版本不可变更，改动走新版本评审。
+        运行历史可在任务中心按类型筛选查看，试运行轨迹见编辑器底部试运行面板；发布后版本不可变更，改动走新版本评审。
       </div>
 
       <NewWorkflowDialog open={newOpen} onClose={() => setNewOpen(false)} />

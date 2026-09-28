@@ -26,6 +26,7 @@ from services.kb.data.connector_orm import (  # noqa: F401  连接器游标/登�
     KbConnectorEvent,
 )
 from services.kb.data.governance_orm import KbConflict, KbFactRelation  # noqa: F401  知识治理两表（OntRAG §8.1/8.2 lite）
+from services.kb.data.rule_orm import KbRuleCandidate  # noqa: F401  规则候选草案表（规则抽取通道 v1）
 from services.kb.data.orm import (  # noqa: F401
     Document,
     DocumentChunk,

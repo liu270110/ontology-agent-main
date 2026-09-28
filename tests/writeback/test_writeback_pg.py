@@ -272,6 +272,44 @@ async def test_Pg台账list_page_租户过滤_分页total_admin面口径(wb_pg):
         assert rows == [] and total == 0
 
 
+async def test_Pg台账get_for_update_行锁阻塞第二读者_租户过滤(wb_pg):
+    """B8.1 修复①：dispose「标记+落库」单事务的行锁原语——SELECT…FOR UPDATE 串行化并发
+    写者（锁持有期内另一会话同行读取阻塞），租户过滤与防御性双保险同 list_page 口径。"""
+    import asyncio
+
+    entry = _entry(
+        WritebackAction.instantiate(
+            tenant_id=TENANT_ID,
+            action_iri="http://ontology-agent.local/o/power#CreateOutageRepairOrder",
+            params={"a": 1},
+            risk_level="medium",
+            connector_id=uuid.uuid4(),
+        )
+    )
+    async with wb_pg() as db:
+        repo = PgWritebackLedgerRepository(db, TENANT_ID)
+        await repo.add(entry)
+        await db.commit()
+
+    async with wb_pg() as db_a:  # 会话 A：行锁持有
+        repo_a = PgWritebackLedgerRepository(db_a, TENANT_ID)
+        locked = await repo_a.get_for_update(TENANT_ID, entry.id)
+        assert locked is not None and locked.id == entry.id
+        with pytest.raises(WritebackError) as exc:  # 入参租户 ≠ 构造期绑定 → 拒绝
+            await repo_a.get_for_update(uuid.uuid4(), entry.id)
+        assert "租户不匹配" in exc.value.message
+
+        async with wb_pg() as db_b:  # 会话 B（独立连接）：同行 FOR UPDATE 被行锁阻塞
+            repo_b = PgWritebackLedgerRepository(db_b, TENANT_ID)
+            with pytest.raises(asyncio.TimeoutError):
+                await asyncio.wait_for(repo_b.get_for_update(TENANT_ID, entry.id), timeout=0.5)
+        await db_a.commit()  # 释放行锁（dispose 标记段在此提交落库）
+
+    async with wb_pg() as db:  # 锁释放后行可正常读取（事务链未受损）
+        repo = PgWritebackLedgerRepository(db, TENANT_ID)
+        assert await repo.get(entry.id) is not None
+
+
 def _entry(action: WritebackAction) -> WritebackLedger:
     from datetime import UTC, datetime
 

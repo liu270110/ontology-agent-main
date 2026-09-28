@@ -22,7 +22,7 @@ from httpx import ASGITransport, AsyncClient
 from services.writeback.adapters.base import AdapterError, BizStatusResult
 from services.writeback.adapters.mock_power_ticket import ACTION_IRI_CREATE_ORDER, MockPowerTicketAdapter
 from services.writeback.domain.model import LedgerStatus, WritebackAction, WritebackError, WritebackLedger
-from tests.writeback.conftest import NOW, TENANT_ID, ScriptedAdapter, _receipt, make_dispatcher
+from tests.writeback.conftest import NOW, TENANT_ID, FakeLedgerRepo, ScriptedAdapter, _receipt, make_dispatcher
 
 if sys.platform == "win32":
     import asyncio
@@ -110,6 +110,27 @@ def _succeeded_row(connector_id: uuid.UUID) -> WritebackLedger:
     return entry
 
 
+class CopyingLedgerRepo(FakeLedgerRepo):
+    """get/get_for_update/save_state 均以聚合副本进出的 Fake（模拟 PG 行→聚合的真实语义）。
+
+    B8 内存 Fake 的 get 返回同对象（别名），掩盖了 dispose 投影内存旧快照的缺陷；
+    副本语义下投影若不重取仓储即暴露陈旧——修复②的回归测试基座。
+    """
+
+    async def get(self, entry_id: uuid.UUID) -> WritebackLedger | None:
+        row = self.rows.get(entry_id)
+        return row.model_copy(deep=True) if row is not None else None
+
+    async def get_for_update(self, tenant_id: uuid.UUID, entry_id: uuid.UUID) -> WritebackLedger | None:
+        row = self.rows.get(entry_id)
+        if row is None or row.tenant_id != tenant_id:
+            return None
+        return row.model_copy(deep=True)
+
+    async def save_state(self, entry: WritebackLedger) -> None:
+        self.rows[entry.id] = entry.model_copy(deep=True)  # 落库存副本（与 PG 行存储同形）
+
+
 # ---------------------------------------------------------------- list_ledger（§8 查询面）
 
 
@@ -187,10 +208,10 @@ async def test_台账分页_非法status_3001():
     assert exc.value.code == 3001
 
 
-# ---------------------------------------------------------------- dispose·redispatch（§3.3 重发）
+# ------------------------------------------------- dispose·redispatch（§3.3 重发；B8.1 两段式）
 
 
-async def test_dispose_redispatch_failed态_同键新attempt_业务侧不重复创建():
+async def test_dispose_redispatch_failed态_202受理pending_投递后台完成():
     adapter = MockPowerTicketAdapter()
     dispatcher, ledger = make_dispatcher(adapter)
     adapter.inject_dirty(times=1)  # 首发：业务侧 4xx 脏数据语义（不可重试 → failed）
@@ -205,14 +226,23 @@ async def test_dispose_redispatch_failed态_同键新attempt_业务侧不重复�
         actor_id=ADMIN_ID,
     )
 
-    assert disposed["status"] == "accepted"  # 成功落新状态
-    assert disposed["attempts"] == 2  # 同幂等键新 attempt 计数（保留不抹）
-    assert adapter.order_count == 1  # 同键业务侧只此一单（§2.2 幂等，无重复创建）
+    assert disposed["status"] == "pending"  # 202 受理即返：仅标记段落库（投递未开始，B8.1 修复③）
+    assert disposed["needs_human"] is False  # needs_human 清位（重开投递窗口）
     assert len(ledger.rows) == 1  # 台账无重复行（重发不换键）
-    row = ledger.by_key(result["idempotency_key"])
-    assert row is not None and row.status == LedgerStatus.ACCEPTED and row.needs_human is False
-    assert "REDISPATCH: 上游修正参数后重发" in (row.last_error or "")  # note 追加留痕
-    assert f"by={ADMIN_ID}" in (row.last_error or "")  # 处置人留痕（§3.3 全部留审计）
+    marked = ledger.by_key(result["idempotency_key"])
+    assert marked is not None and marked.status == LedgerStatus.PENDING
+    assert "REDISPATCH: 上游修正参数后重发" in (marked.last_error or "")  # note 追加留痕
+    assert f"by={ADMIN_ID}" in (marked.last_error or "")  # 处置人留痕（§3.3 全部留审计）
+
+    delivered = await dispatcher.run_redispatch_delivery(
+        tenant_id=TENANT_ID, ledger_id=uuid.UUID(result["ledger_id"])
+    )
+
+    assert delivered["status"] == "accepted"  # 投递段：成功落新状态
+    assert delivered["attempts"] == 2  # 同幂等键新 attempt 计数（保留不抹）
+    assert adapter.order_count == 1  # 同键业务侧只此一单（§2.2 幂等，无重复创建）
+    stored = ledger.by_key(result["idempotency_key"])
+    assert stored is not None and stored.status == LedgerStatus.ACCEPTED and stored.needs_human is False
 
 
 async def test_dispose_redispatch_重发两_attempt均携同幂等键():
@@ -231,12 +261,16 @@ async def test_dispose_redispatch_重发两_attempt均携同幂等键():
     await dispatcher.dispose(
         tenant_id=TENANT_ID, ledger_id=uuid.UUID(result["ledger_id"]), action="redispatch", actor_id=ADMIN_ID
     )
+    delivered = await dispatcher.run_redispatch_delivery(
+        tenant_id=TENANT_ID, ledger_id=uuid.UUID(result["ledger_id"])
+    )
 
+    assert delivered["status"] == "accepted"
     assert len(seen_keys) == 2 and len(set(seen_keys)) == 1  # 两次投递同幂等键（业务去重依据）
     assert len(ledger.rows) == 1
 
 
-async def test_dispose_redispatch_unknown态_重发后受理_needs_human清位():
+async def test_dispose_redispatch_unknown态_投递后受理_needs_human清位():
     calls = {"n": 0}
 
     def lost_then_ok(req):
@@ -257,13 +291,17 @@ async def test_dispose_redispatch_unknown态_重发后受理_needs_human清位()
     disposed = await dispatcher.dispose(
         tenant_id=TENANT_ID, ledger_id=uuid.UUID(result["ledger_id"]), action="redispatch", note="人工核实后重发"
     )
+    assert disposed["status"] == "pending" and disposed["needs_human"] is False  # unknown → pending 重开窗口
 
-    assert disposed["status"] == "accepted"  # unknown → pending 重开窗口 → 受理
+    delivered = await dispatcher.run_redispatch_delivery(
+        tenant_id=TENANT_ID, ledger_id=uuid.UUID(result["ledger_id"])
+    )
+    assert delivered["status"] == "accepted"  # 投递段受理
     row = ledger.by_key(result["idempotency_key"])
     assert row is not None and row.needs_human is False  # needs_human 清位（回到自动管线）
 
 
-async def test_dispose_redispatch_挂人工位的pending可重开投递窗口():
+async def test_dispose_redispatch_挂人工位的pending_投递后受理():
     dispatcher, ledger = make_dispatcher(ScriptedAdapter())
     binding = dispatcher._connectors.bindings()[0]  # noqa: SLF001
     row = _entry(connector_id=binding.meta.connector_id)
@@ -271,8 +309,26 @@ async def test_dispose_redispatch_挂人工位的pending可重开投递窗口():
     ledger.rows[row.id] = row
 
     disposed = await dispatcher.dispose(tenant_id=TENANT_ID, ledger_id=row.id, action="redispatch", actor_id=ADMIN_ID)
+    assert disposed["status"] == "pending" and disposed["needs_human"] is False
 
-    assert disposed["status"] == "accepted" and disposed["attempts"] == 1
+    delivered = await dispatcher.run_redispatch_delivery(tenant_id=TENANT_ID, ledger_id=row.id)
+    assert delivered["status"] == "accepted" and delivered["attempts"] == 1
+
+
+async def test_run_redispatch_delivery_行已被并发推进_幂等空转不投递():
+    dispatcher, ledger = make_dispatcher(ScriptedAdapter())
+    binding = dispatcher._connectors.bindings()[0]  # noqa: SLF001
+    adapter = dispatcher._connectors.bindings()[0].adapter  # noqa: SLF001
+    row = _unknown_row(binding.meta.connector_id, needs_human=True)
+    ledger.rows[row.id] = row
+    await dispatcher.dispose(tenant_id=TENANT_ID, ledger_id=row.id, action="redispatch", actor_id=ADMIN_ID)
+    assert ledger.rows[row.id].status == LedgerStatus.PENDING
+
+    ledger.rows[row.id].mark_accepted({"accepted": True, "receipt_no": "RACE-1"}, NOW)  # 模拟并发写者推进
+
+    result = await dispatcher.run_redispatch_delivery(tenant_id=TENANT_ID, ledger_id=row.id)
+    assert result["status"] == "accepted"  # 守卫不满足（非 pending）：返回当前投影
+    assert adapter.execute_calls == 0  # 幂等空转不投递（后台任务不覆盖并发写者，B8.1 修复③）
 
 
 async def test_dispose_redispatch_终态与accepted不可重发_409语义():
@@ -286,7 +342,7 @@ async def test_dispose_redispatch_终态与accepted不可重发_409语义():
     for target in (done, accepted):
         with pytest.raises(WritebackError) as exc:
             await dispatcher.dispose(tenant_id=TENANT_ID, ledger_id=target.id, action="redispatch")
-        assert exc.value.code == 3003  # REST 409（终态/accepted 处置走冲正或关闭）
+        assert exc.value.code == 3003  # REST 409（终态/accepted 处置走冲正或关闭；守卫在行锁事务内复核）
 
 
 # ---------------------------------------------------------------- dispose·mark_compensated（§3.3 标记冲正）
@@ -333,6 +389,27 @@ async def test_dispose_mark_compensated_无凭证_显式人工标记_note必填(
     stored = ledger.rows[row.id]
     assert stored.receipt is not None and stored.receipt["manual"] is True  # 人工标记收据落 receipt 审计位
     assert stored.receipt["note"] == "已线下与业务方对平" and stored.receipt["marked_by"] == ADMIN_ID
+
+
+async def test_dispose_mark_compensated_返回投影以DB为准_非内存旧快照():
+    """B8.1 修复②回归：副本语义仓储下，compensate 委托路径在自建会话写库，
+    投影内存旧快照会把已冲正行答成 accepted——dispose 必须重取仓储最新行投影。"""
+    dispatcher, ledger = make_dispatcher(ScriptedAdapter(), repo=CopyingLedgerRepo())
+    result = await dispatcher.invoke_action(tenant_id=TENANT_ID, action_iri=ACTION_IRI, params={"feeder": "F9"})
+    assert result["status"] == "accepted"
+
+    disposed = await dispatcher.dispose(
+        tenant_id=TENANT_ID,
+        ledger_id=uuid.UUID(result["ledger_id"]),
+        action="mark_compensated",
+        note="客户来电撤单",
+        actor_id=ADMIN_ID,
+    )
+
+    assert disposed["status"] == "compensated"  # 以 DB 为准（旧实现投影内存快照会得 accepted）
+    assert disposed["receipt"]["receipt_no"] == "COMP-1"  # 冲正凭证与落库行一致（Scripted 冲正收据）
+    stored = ledger.by_key(result["idempotency_key"])
+    assert stored is not None and stored.status == LedgerStatus.COMPENSATED
 
 
 # ---------------------------------------------------------------- dispose·close（§3.3 关闭附理由）
@@ -436,7 +513,7 @@ async def test_REST_台账列表_scope不足_403_2001(monkeypatch: pytest.Monkey
     assert body["detail"]["required"] == "admin:read"
 
 
-async def test_REST_dispose_202_落账投影(monkeypatch: pytest.MonkeyPatch):
+async def test_REST_dispose_close_202_同步落账投影(monkeypatch: pytest.MonkeyPatch):
     dispatcher, ledger = make_dispatcher(ScriptedAdapter())
     binding = dispatcher._connectors.bindings()[0]  # noqa: SLF001
     row = _unknown_row(binding.meta.connector_id, needs_human=True)
@@ -452,9 +529,29 @@ async def test_REST_dispose_202_落账投影(monkeypatch: pytest.MonkeyPatch):
 
     assert resp.status_code == 202, resp.text
     body = resp.json()
-    assert body["status"] == "failed" and body["needs_human"] is False
+    assert body["status"] == "failed" and body["needs_human"] is False  # close 同步完成：响应体即终态
     assert "CLOSED: 确认无法核实" in (body["last_error"] or "")
     assert ledger.rows[row.id].status == LedgerStatus.FAILED  # 落账（dispatcher 同仓单口径）
+
+
+async def test_REST_dispose_redispatch_202受理即返_后台投递落账(monkeypatch: pytest.MonkeyPatch):
+    """B8.1 修复③：redispatch 202 响应体=pending（投递未开始）；BackgroundTasks 在响应后
+    执行（httpx ASGITransport 同 ASGI 生命周期），请求返回后投递已落账。"""
+    dispatcher, ledger = make_dispatcher(ScriptedAdapter())
+    binding = dispatcher._connectors.bindings()[0]  # noqa: SLF001
+    row = _failed_row(binding.meta.connector_id)
+    ledger.rows[row.id] = row
+    client = _make_client(monkeypatch, _principal(["admin:write"]), dispatcher=dispatcher)
+    try:
+        resp = await client.post(f"/admin/writeback/ledger/{row.id}/dispose", json={"action": "redispatch"})
+    finally:
+        await client.aclose()
+
+    assert resp.status_code == 202, resp.text
+    assert resp.json()["status"] == "pending"  # 受理即返：响应体为标记段投影（非投递终态）
+    delivered = ledger.rows[row.id]
+    assert delivered.status == LedgerStatus.ACCEPTED  # 后台投递已完成并落账
+    assert delivered.attempts == 1 and delivered.needs_human is False
 
 
 async def test_REST_dispose_scope不足_403_2001(monkeypatch: pytest.MonkeyPatch):

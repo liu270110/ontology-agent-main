@@ -78,8 +78,9 @@ function TaskRow({ task: t }: { task: DashTask }) {
         <div className="text-[11px] text-label-3">{t.created_at ?? ''}</div>
       </div>
       {typeof t.progress === 'number' ? (
-        <span className="meter w-16 flex-none" role="progressbar" aria-valuenow={t.progress} aria-valuemin={0} aria-valuemax={100}>
-          <i style={{ width: `${t.progress}%` }} className={failed ? 'bad' : undefined} />
+        // bad 挂容器（patterns.css .meter.bad i，与 .meter.warn 同约定），挂内层 i 不生效
+        <span className={`meter w-16 flex-none ${failed ? 'bad' : ''}`} role="progressbar" aria-valuenow={t.progress} aria-valuemin={0} aria-valuemax={100}>
+          <i style={{ width: `${t.progress}%` }} />
         </span>
       ) : (
         <span className="flex-none font-mono text-[11px] text-label-3">—</span>

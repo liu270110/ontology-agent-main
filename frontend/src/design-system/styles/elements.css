@@ -4,7 +4,7 @@
    ============================================================= */
 /* ---- 按钮 ---- */
 .btn{display:inline-flex;align-items:center;gap:6px;font-family:var(--font);
-  font-size:13px;font-weight:600;border:none;cursor:pointer;
+  font-size:13px;font-weight:600;border:none;cursor:pointer;white-space:nowrap;
   border-radius:var(--r-pill);padding:7px 16px;letter-spacing:0;
   transition:transform var(--dur-1) var(--ease),box-shadow var(--dur-1) var(--ease)}
 .btn:hover{transform:translateY(-1px);box-shadow:var(--sh-card)}

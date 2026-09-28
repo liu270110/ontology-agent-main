@@ -1,0 +1,48 @@
+{
+  "batch": "KB-E1",
+  "ran_at": "2026-09-28T22:59:42.524754+00:00",
+  "top_k": 8,
+  "embedder": "TEI@http://127.0.0.1:18002(bge-m3,1024) via shim",
+  "corpus_docs": 18,
+  "ingest_seconds": 75.3,
+  "rrf_current": {
+    "golden_version": "power-golden-30@v1",
+    "top_k": 8,
+    "n_cases": 30,
+    "n_evaluated": 30,
+    "n_skipped": 0,
+    "hit_at_k": 0.9667,
+    "mrr": 0.7956,
+    "citation_coverage": 1.0,
+    "by_mode": {
+      "drift": {
+        "n": 8,
+        "hit_at_k": 1.0,
+        "mrr": 0.875
+      },
+      "global": {
+        "n": 10,
+        "hit_at_k": 1.0,
+        "mrr": 0.9333
+      },
+      "local": {
+        "n": 12,
+        "hit_at_k": 0.9167,
+        "mrr": 0.6278
+      }
+    }
+  },
+  "citation_rate_30": 1.0,
+  "ablation_bm25": {
+    "hit_at_8": 0.0,
+    "mrr": 0.0,
+    "n": 30
+  },
+  "ablation_vector": {
+    "hit_at_8": 0.9667,
+    "mrr": 0.7956,
+    "n": 30
+  },
+  "incremental_reindex_seconds": 3.07,
+  "incremental_gate_5min": true
+}

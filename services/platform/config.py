@@ -110,6 +110,13 @@ class Settings(BaseSettings):
     # 一级精确/包含未命中的候选名 × 种子类表层全量嵌入，余弦 ≥ 阈值即对齐；嵌入不可用整级跳过（降级不失败）。
     align_embed_threshold: float = Field(default=0.92, ge=0.0, le=1.0)
 
+    # kb nightly 例程（OntRAG §8.4 v1 收缩范围，KB-G1b）：预算三项的 v1 合并简化 + 调度互斥参数。
+    # max_items_per_run = 单次运行硬上限（补嵌 chunk 数与归档动作数同源预算；超限顺延次夜记 stats.deferred）；
+    # token_budget = 记录用（v1 不硬停：随 kb_maintenance_runs.stats 落账供成本对账，§8.4 纪律 1 的记账面）。
+    kb_nightly_max_items_per_run: int = Field(default=5000, gt=0)
+    kb_nightly_token_budget: int = Field(default=1_000_000, ge=0)
+    kb_nightly_lock_ttl_seconds: int = Field(default=900, gt=0)  # Redis 锁 lock:kb_nightly TTL（心跳续期周期=TTL/3）
+
     # 在线忠实度抽检（docs/architecture/10 §2 缺口②，落点 08 §7.4）：对话完成路径按采样率
     # 抽中后记录 faithfulness 检查任务占位（LLM-as-judge 判定本体随评估批次接入）。
     # 默认开、采样率 1%（10 篇口径）；确定性采样（run_id 哈希桶，可复现可追溯）。

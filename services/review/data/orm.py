@@ -34,8 +34,10 @@ class ReviewTicket(Base, PkMixin, TenantMixin, TimestampMixin):
     sla_deadline: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     __table_args__ = (
         CheckConstraint(
+            # conflict = KB-G1a 冲突分诊 T2 工单（OntRAG §8.1「对齐现行 review_workflow 状态机」：
+            # conflict 标记即工单入口；枚举扩展随 20260929 迁移，database/01 §3.5 同步）
             "target_type IN ('ontology_candidate','knowledge_instance','memory_l2_upgrade',"
-            "'plugin_listing','writeback_incident')",
+            "'plugin_listing','writeback_incident','conflict')",
             name="target_type",
         ),
         CheckConstraint(

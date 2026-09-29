@@ -12,12 +12,14 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 # 与 review_tickets CheckConstraint 同词汇表（database/01 DDL 权威；ORM=services/review/data/orm.py）
+# conflict = KB-G1a 冲突分诊 T2 工单（OntRAG §8.1 冲突分诊四型；KB-G1a 批扩展）
 TargetTypeFilter = Literal[
     "ontology_candidate",
     "knowledge_instance",
     "memory_l2_upgrade",
     "plugin_listing",
     "writeback_incident",
+    "conflict",
 ]
 StatusFilter = Literal["draft", "pending_review", "approved", "rejected", "published", "cancelled"]
 

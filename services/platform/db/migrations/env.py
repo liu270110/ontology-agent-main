@@ -20,10 +20,11 @@ target_metadata = Base.metadata
 
 
 def _include_object(obj: object, name: str, type_: str, reflected: bool, compare_to: object) -> bool:  # noqa: ANN001
-    """document_chunks.embedding / 其 ivfflat 索引由迁移 add_kb_vector_embedding 按扩展可用性
-    条件管理（ORM 不映射、raw-SQL 读写，见 services/semantic/knowledge/embed.py）——
-    从 autogenerate 对比中排除，保证 pgvector 有/无两种环境下生成的迁移一致。"""
-    if type_ == "column" and name == "embedding":
+    """document_chunks.embedding / backup_embedding 及其 ivfflat 索引由迁移按 pgvector
+    可用性条件管理（ORM 不映射、raw-SQL 读写，见 services/kb/retrieval/embed.py 与
+    services/kb/business/reembed.py）——从 autogenerate 对比中排除，保证 pgvector 有/无
+    两种环境下生成的迁移一致。"""
+    if type_ == "column" and name in ("embedding", "backup_embedding"):
         return False
     if type_ == "index" and name == "ix_document_chunks_embedding":
         return False

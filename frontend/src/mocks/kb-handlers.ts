@@ -243,6 +243,22 @@ export const kbHandlers = [
     HttpResponse.json({ code: 0, message: 'ok', data: { items: KB_DOCS, next_cursor: null } }),
   ),
 
+  // ---- KB 抽取任务深链（S-EF 切片，纯追加）：失败文档 d-105 行「日志」→ /tasks?job=job-190
+  //      （IX-TSK-01 深链直达详情抽屉）。定径 = 仅命中 /tasks/job-190 这一条 URL，其余
+  //      /tasks/* 一律落空放行 admin-handlers 既有任务中心口径（kb 注册序在 admin 之前）。
+  http.get('*/api/v1/tasks/job-190', () =>
+    HttpResponse.json({
+      code: 0, message: 'ok',
+      data: {
+        id: 'job-190', name: '旧版抢修工单模板.pdf 抽取', type: 'kb_extract', status: 'failed',
+        progress: 62, created_at: '2026-09-22 08:30', created_by: '王工',
+        target: '旧版抢修工单模板.pdf · 380 分片', cost: '¥0.96 · tokens 61k', trace_id: 'tr-190a62',
+        current_step: 4,
+        error: { code: 5003, message: '解析超时（>120s）', target: '旧版抢修工单模板.pdf · chunk_241', trace_id: 'tr-190a62' },
+      },
+    }),
+  ),
+
   // 知识库集合（S8 live 对账补齐：live POST /kb/collections → 201 裸 CollectionOut，同名 409；
   // 后端无 GET 列表端点（R53），前端 ensureCollectionId 按名创建+缓存 → mock 按名稳定发号）
   http.post('*/api/v1/kb/collections', async ({ request }) => {

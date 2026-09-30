@@ -68,6 +68,10 @@ export interface GroupSession {
   member_count: number
   routing: RoutingMode
   updated_at: string
+  /** 成员容量上限（会话配置；v1 全档=5，容量核算待定——前端缺省回落同值常量） */
+  max_members?: number
+  /** 共享上下文占用 0-1（设计稿 p-group L2342「上下文 62%」；纯追加字段） */
+  context_usage?: number
 }
 
 export interface GroupMessageRow {
@@ -116,9 +120,9 @@ const MEMBERS: Record<string, GroupMember[]> = {
 }
 
 const SESSIONS: Record<string, GroupSession> = {
-  'g-1107': { id: 'g-1107', title: '停电分析群', type: 'group', member_count: 4, routing: 'orchestrator', updated_at: '2026-09-27T10:24:00Z' },
-  'g-0814': { id: 'g-0814', title: '负荷会商群', type: 'group', member_count: 5, routing: 'all', updated_at: '2026-09-26T16:00:00Z' },
-  'g-0902': { id: 'g-0902', title: '检修协调群', type: 'group', member_count: 3, routing: 'round_robin', updated_at: '2026-09-26T09:00:00Z' },
+  'g-1107': { id: 'g-1107', title: '停电分析群', type: 'group', member_count: 4, routing: 'orchestrator', updated_at: '2026-09-27T10:24:00Z', max_members: 5, context_usage: 0.62 },
+  'g-0814': { id: 'g-0814', title: '负荷会商群', type: 'group', member_count: 5, routing: 'all', updated_at: '2026-09-26T16:00:00Z', max_members: 5, context_usage: 0.62 },
+  'g-0902': { id: 'g-0902', title: '检修协调群', type: 'group', member_count: 3, routing: 'round_robin', updated_at: '2026-09-26T09:00:00Z', max_members: 5, context_usage: 0.62 },
 }
 
 const HISTORY: Record<string, GroupMessageRow[]> = {

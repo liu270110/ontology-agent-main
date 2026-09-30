@@ -1,6 +1,6 @@
 import '@testing-library/jest-dom/vitest'
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
-import { afterEach, beforeAll, afterAll, describe, expect, it } from 'vitest'
+import { afterEach, beforeAll, describe, expect, it } from 'vitest'
 import { http, HttpResponse } from 'msw'
 import { App } from '@/app/App'
 import { server } from '@/mocks/node'
@@ -24,7 +24,6 @@ beforeAll(() => {
     }
   }
   ;(globalThis as unknown as { DOMMatrixReadOnly: unknown }).DOMMatrixReadOnly ??= DOMMatrixReadOnlyMock
-  server.listen({ onUnhandledRequest: 'bypass' })
 })
 afterEach(() => {
   server.resetHandlers()
@@ -32,7 +31,6 @@ afterEach(() => {
   localStorage.clear()
   useAuthStore.getState().clearSession()
 })
-afterAll(() => server.close())
 
 /** S4 本体域（30 篇 §2 S4 / 26 篇 §6~7 矩阵 DoD-4）：MSW 演练关键交互。
  *  ①IX-OL-01 新建向导：zod IRI 校验阻断 → 修正通过 → 建项目（POST /ontologies 载荷断言）

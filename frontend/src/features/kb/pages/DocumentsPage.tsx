@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import {
   createColumnHelper,
   flexRender,
@@ -39,6 +39,7 @@ const STATUS_FILTERS = [
 
 export function DocumentsPage() {
   const qc = useQueryClient()
+  const navigate = useNavigate()
   const can = useAuthStore(s => s.can)
   const [search, setSearch] = useState('')
   const [typeFilter, setTypeFilter] = useState('all')
@@ -94,6 +95,18 @@ export function DocumentsPage() {
           {row.original.chunk_count > 0 && (
             <button type="button" className="btn btn-g btn-sm" aria-label={`预览 ${row.original.name}`} onClick={() => setPreviewDoc(row.original)}>
               <Eye size={12} aria-hidden /> 预览
+            </button>
+          )}
+          {/* 失败行「日志」入口：job_id 关联任务中心深链（/tasks?job=，IX-TSK-01 导出闭环同参直达） */}
+          {row.original.status === 'failed' && row.original.job_id && (
+            <button
+              type="button"
+              className="btn btn-g btn-sm"
+              aria-label={`日志 ${row.original.name}`}
+              data-testid={`kb-doc-log-${row.original.id}`}
+              onClick={() => navigate(`/tasks?job=${row.original.job_id}`)}
+            >
+              日志
             </button>
           )}
           {(row.original.status === 'pending' || row.original.status === 'failed') && (
@@ -152,10 +165,12 @@ export function DocumentsPage() {
         {[
           { num: String(stats.docs), label: '文档' },
           { num: stats.chunks.toLocaleString(), label: '切片' },
-          { num: stats.chunks.toLocaleString(), label: '向量（Milvus）' },
+          // S-EF（口径诚实）：向量数暂无独立聚合（≈切片 1:1 估算），title 注明口径——待 X13
+          // 向量统计真实聚合端点登记后替换（api/01 R 单跟踪）
+          { num: stats.chunks.toLocaleString(), label: '向量（≈切片）', title: '向量数≈切片数 1:1 估算口径；Milvus 真实聚合待 X13 统计端点登记后接入' },
           { num: `+${stats.today}`, label: '今日入库', accent: true },
         ].map(s => (
-          <div key={s.label} className="card px-4 py-3" style={s.accent ? { border: '1.5px solid var(--accent)' } : undefined}>
+          <div key={s.label} className="card px-4 py-3" style={s.accent ? { border: '1.5px solid var(--accent)' } : undefined} title={s.title}>
             <div className={`text-2xl font-bold ${s.accent ? 'text-accent' : ''}`}>{s.num}</div>
             <div className="mt-0.5 text-[11px] text-label-3">{s.label}</div>
           </div>

@@ -19,7 +19,9 @@ import { FactDetailSheet } from '../components/FactDetailSheet'
  *  层级查询 ?layer=L1..L4（26 篇 §11 路由表）。
  *  B3-P 转实：⌘F 搜索 / 导出为纯客户端能力——搜索=当前层内按标题/内容客户端过滤
  *  （react-query 数据 useMemo filter，无检索端点）；导出=当前层清单 JSON 下载
- *  （Blob + a.download，文件名 memory-export-<layer>-<YYYYMMDD>.json，无新端点）。 */
+ *  （Blob + a.download，文件名 memory-export-<layer>-<YYYYMMDD>.json，无新端点）。
+ *  S-EF 切片：分层容量卡（L1-L4 四行 meter，各层计数并行 query）+
+ *  「含已失效」开关（mock 默认已返回 invalidated 项，开关为纯前端过滤切换）。 */
 
 const LAYERS: FactLayer[] = ['L1', 'L2', 'L3', 'L4']
 
@@ -32,6 +34,9 @@ export function MemoryPage() {
   const [searchOpen, setSearchOpen] = useState(false)
   const [kw, setKw] = useState('')
   const searchRef = useRef<HTMLInputElement>(null)
+  // 「含已失效」开关：默认开（mock /memory/facts 本就返回 invalidated 项，保持既有行为零回归）；
+  // 关=纯前端过滤掉 invalidated（墓碑式软删不物理删除，失效条目随时可切回查看）
+  const [includeInvalid, setIncludeInvalid] = useState(true)
 
   function switchLayer(l: FactLayer) {
     setSp(prev => {
@@ -54,6 +59,24 @@ export function MemoryPage() {
   })
 
   const facts = useMemo(() => factsQuery.data?.items ?? [], [factsQuery])
+
+  // ---- S-EF 分层容量卡：四层计数并行 query（mock 按层过滤，无全量端点；L1 计会话数）。
+  //      与现有 factsQuery / l1Query 同 queryKey → 命中同一缓存，不重复请求。
+  const l1CountQuery = useQuery({ queryKey: ['memory', 'l1'], queryFn: listL1 })
+  const l2CountQuery = useQuery({ queryKey: ['memory', 'facts', 'L2'], queryFn: () => listFacts({ layer: 'L2' }) })
+  const l3CountQuery = useQuery({ queryKey: ['memory', 'facts', 'L3'], queryFn: () => listFacts({ layer: 'L3' }) })
+  const l4CountQuery = useQuery({ queryKey: ['memory', 'facts', 'L4'], queryFn: () => listFacts({ layer: 'L4' }) })
+  const layerStats = useMemo(() => {
+    const rows: { layer: FactLayer; count: number }[] = [
+      { layer: 'L1', count: l1CountQuery.data?.items.length ?? 0 },
+      { layer: 'L2', count: l2CountQuery.data?.items.length ?? 0 },
+      { layer: 'L3', count: l3CountQuery.data?.items.length ?? 0 },
+      { layer: 'L4', count: l4CountQuery.data?.items.length ?? 0 },
+    ]
+    const max = Math.max(1, ...rows.map(r => r.count))
+    return rows.map(r => ({ ...r, pct: Math.round((r.count / max) * 100) }))
+  }, [l1CountQuery.data, l2CountQuery.data, l3CountQuery.data, l4CountQuery.data])
+
   const pendingPromotions = useMemo(
     () => (promotionsQuery.data?.items ?? []).filter(p => p.status === 'pending'),
     [promotionsQuery],
@@ -69,11 +92,16 @@ export function MemoryPage() {
   )
   const activeL1 = l1Items.length
 
-  // ---- B3-P：客户端搜索（当前层内过滤；口径=L2/L4 按标题+内容，L1 按会话标题+块 key/value） ----
+  // ---- B3-P：客户端搜索（当前层内过滤；口径=L2/L4 按标题+内容，L1 按会话标题+块 key/value）
+  //      + S-EF「含已失效」开关：关=前端过滤 invalidated（mock 已返回失效项，无新参数）
   const q = kw.trim().toLowerCase()
+  const invalidFiltered = useMemo(
+    () => (includeInvalid ? facts : facts.filter(f => f.status !== 'invalidated')),
+    [facts, includeInvalid],
+  )
   const visibleFacts = useMemo(
-    () => (q ? facts.filter(f => f.title.toLowerCase().includes(q) || f.content.toLowerCase().includes(q)) : facts),
-    [facts, q],
+    () => (q ? invalidFiltered.filter(f => f.title.toLowerCase().includes(q) || f.content.toLowerCase().includes(q)) : invalidFiltered),
+    [invalidFiltered, q],
   )
   const visibleL1 = useMemo(
     () =>
@@ -125,7 +153,24 @@ export function MemoryPage() {
       <div className="flex flex-wrap items-center gap-2">
         <h1 className="text-lg font-bold">记忆管理</h1>
         <span className="text-xs text-label-3">L1 会话 → L2 摘要 → L3 组织图谱 → L4 长期知识 · 遗忘=墓碑式软删</span>
-        {layer === 'L1' && activeL1 > 0 && <span className="badge b-blue ml-auto">活跃会话 {activeL1}</span>}
+        {layer === 'L1' && activeL1 > 0 && <span className="badge b-blue">活跃会话 {activeL1}</span>}
+        {/* S-EF：含已失效开关（L2-L4 事实层；L1 无状态概念不渲染）。默认开=失效条目照常显示 */}
+        {layer !== 'L1' && (
+          <label
+            className="ml-auto flex cursor-pointer items-center gap-1.5 text-[11px] text-label-2"
+            data-testid="mem-include-invalid"
+            title="墓碑式软删：失效条目保留可追溯（FR-MEM-06），关闭仅隐藏当前层列表"
+          >
+            <input
+              type="checkbox"
+              className="h-3.5 w-3.5 accent-[var(--accent)]"
+              checked={includeInvalid}
+              onChange={e => setIncludeInvalid(e.target.checked)}
+              data-testid="mem-include-invalid-input"
+            />
+            含已失效
+          </label>
+        )}
       </div>
 
       {/* LayerTabs（seg 分段；26 篇画板同源） */}
@@ -143,6 +188,32 @@ export function MemoryPage() {
             {LAYER_META[l].label}
           </button>
         ))}
+      </div>
+
+      {/* S-EF 分层容量卡：L1-L4 四行 meter（label + 条 + 条数；行点击切层）。
+          条长=该层条目数 / 四层最大值（无总量配额端点，相对口径） */}
+      <div className="card mt-3 !p-4" data-testid="mem-capacity-card">
+        <div className="flex flex-wrap items-center gap-2">
+          <b className="text-xs">分层容量</b>
+          <span className="text-[11px] text-label-3">各层条目数（含已失效）· 相对四层最大值</span>
+        </div>
+        <div className="mt-2.5 space-y-2">
+          {layerStats.map(r => (
+            <button
+              key={r.layer}
+              type="button"
+              className="flex w-full items-center gap-2.5 rounded-lg text-left hover:bg-surface-2"
+              data-testid={`mem-cap-${r.layer}`}
+              onClick={() => switchLayer(r.layer)}
+            >
+              <span className="w-14 flex-none text-[11px] text-label-2">{LAYER_META[r.layer].label}</span>
+              <span className="meter flex-1" role="progressbar" aria-valuenow={r.count} aria-valuemin={0} aria-valuemax={Math.max(1, ...layerStats.map(x => x.count))}>
+                <i style={{ width: `${r.pct}%` }} />
+              </span>
+              <span className="mono w-12 flex-none text-right text-[11px] text-label-2">{r.count} 条</span>
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* 页面级搜索（B3-P 转实 IX-ACC-08）：⌘F / 抽屉「搜索我的记忆」打开；当前层内客户端过滤 */}

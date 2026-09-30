@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate, useParams } from 'react-router-dom'
-import { Plus, Search, Share2, Users, Zap } from 'lucide-react'
+import { Plus, Search, Share2, Users, X, Zap } from 'lucide-react'
 import { api, ApiError } from '@/api/client'
 import { ErrorState, SkeletonRows } from '@/components/states'
 import { getGroupSession, listGroupSessions, type GroupMessageRow, type GroupSessionDetail, type RoutingMode } from '../api'
@@ -27,6 +27,8 @@ export function GroupChatPage() {
   const [conn, setConn] = useState<string>('connecting')
   const [mentionCount, setMentionCount] = useState(0)
   const [missing, setMissing] = useState(false)
+  // 左栏「过滤群聊」客户端过滤（设计稿 p-group sc-col 搜索框；纯前端，无检索端点）
+  const [listFilter, setListFilter] = useState('')
 
   const seed = useGroupStreamStore(s => s.seed)
   const reset = useGroupStreamStore(s => s.reset)
@@ -78,6 +80,14 @@ export function GroupChatPage() {
 
   const session = sessionQ.data as GroupSessionDetail | undefined
   const members = session?.members ?? []
+  const sessionItems = listQ.data?.items ?? []
+  const filteredSessions = useMemo(
+    () =>
+      listFilter.trim()
+        ? sessionItems.filter(s => s.title.toLowerCase().includes(listFilter.trim().toLowerCase()))
+        : sessionItems,
+    [sessionItems, listFilter],
+  )
 
   async function refresh() {
     await sessionQ.refetch()
@@ -104,7 +114,24 @@ export function GroupChatPage() {
         <div className="px-3 pb-2">
           <div className="flex items-center gap-1.5 rounded-lg border border-separator bg-surface-2 px-2 py-1.5 text-label-3">
             <Search size={12} aria-hidden />
-            <input className="w-full bg-transparent text-xs outline-none" placeholder="过滤群聊" aria-label="过滤群聊" />
+            <input
+              className="w-full bg-transparent text-xs outline-none"
+              placeholder="过滤群聊"
+              aria-label="过滤群聊"
+              data-testid="grp-session-filter"
+              value={listFilter}
+              onChange={e => setListFilter(e.target.value)}
+            />
+            {listFilter && (
+              <button
+                type="button"
+                aria-label="清除过滤"
+                className="flex-none text-label-3 hover:text-label"
+                onClick={() => setListFilter('')}
+              >
+                <X size={11} aria-hidden />
+              </button>
+            )}
           </div>
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto">
@@ -118,7 +145,7 @@ export function GroupChatPage() {
               onRetry={() => void listQ.refetch()}
             />
           )}
-          {(listQ.data?.items ?? []).map(s => (
+          {filteredSessions.map(s => (
             <button
               key={s.id}
               type="button"
@@ -136,8 +163,10 @@ export function GroupChatPage() {
               </div>
             </button>
           ))}
-          {!listQ.isPending && !listQ.isError && (listQ.data?.items.length ?? 0) === 0 && (
-            <div className="px-4 py-6 text-center text-xs text-label-3">暂无群聊 · 点 ＋ 新建</div>
+          {!listQ.isPending && !listQ.isError && filteredSessions.length === 0 && (
+            <div className="px-4 py-6 text-center text-xs text-label-3">
+              {sessionItems.length === 0 ? '暂无群聊 · 点 ＋ 新建' : '无匹配群聊'}
+            </div>
           )}
         </div>
       </aside>
@@ -219,6 +248,8 @@ export function GroupChatPage() {
           members={members}
           routing={routing}
           mentionTarget={mentionCount}
+          memberCap={session.max_members}
+          contextUsage={session.context_usage}
           onChanged={() => void refresh()}
         />
       )}

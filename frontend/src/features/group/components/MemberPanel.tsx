@@ -3,12 +3,23 @@ import { Crown, Eye, MoreHorizontal, Pause, Play, Trash2, Users } from 'lucide-r
 import { FloatingCard } from '@/components/popover'
 import { Modal } from '@/components/modal'
 import { ApiError } from '@/api/client'
-import { ROLE_LABEL, patchMember, removeMember, type GroupMember, type MemberRole, type RoutingMode } from '../api'
+import { GROUP_MEMBER_CAP, ROLE_LABEL, patchMember, removeMember, type GroupMember, type MemberRole, type RoutingMode } from '../api'
 import { AgentAvatar, RoleBadge } from './shared'
 
 /** MemberPanel（右栏 240px，27 篇 P14）：成员 Agent 状态徽标 + 暂停/角色 + routing 说明 +
  *  本轮预算「N/M 成员参与」。成员行「⋯」= IX-GRP-05 Menu：暂停（可恢复）/ 移除（危险确认，
- *  历史消息保留归属）/ 角色调整（协调者唯一性由后端 members 端点校验 409，前端仅即时提示）。 */
+ *  历史消息保留归属）/ 角色调整（协调者唯一性由后端 members 端点校验 409，前端仅即时提示）。
+ *  成员分组（设计稿 p-group L2331/2335）：Agent 成员（N）/ 人类成员（N）两组，按 member.human
+ *  判别（DTO 无 kind 字段，human=true 即人类成员）。 */
+
+/** 分组头（设计稿 ctx-t 同款：10px 加粗 label-3 + 字距） */
+function GroupHeader({ children, testid }: { children: React.ReactNode; testid: string }) {
+  return (
+    <div className="mb-[7px] mt-3.5 text-[10px] font-bold tracking-[0.5px] text-label-3 first:mt-0" data-testid={testid}>
+      {children}
+    </div>
+  )
+}
 
 const ROUTING_NOTE: Record<RoutingMode, string> = {
   orchestrator: '每轮由协调者选择应答成员；原因摘要与 trace 见消息流系统行。切换路由见 GRP-02。',
@@ -22,6 +33,8 @@ export function MemberPanel({
   members,
   routing,
   mentionTarget,
+  memberCap,
+  contextUsage,
   onChanged,
 }: {
   sessionId: string
@@ -29,6 +42,10 @@ export function MemberPanel({
   routing: RoutingMode
   /** @点名模式下本轮已点名成员数（预算 N/M） */
   mentionTarget: number
+  /** 成员容量上限（会话配置 max_members；缺省回落 GROUP_MEMBER_CAP=5） */
+  memberCap?: number
+  /** 共享上下文占用 0-1（会话详情 context_usage；缺省不渲染该行） */
+  contextUsage?: number
   onChanged: () => void
 }) {
   const [menuFor, setMenuFor] = useState<{ mid: string; anchor: DOMRect } | null>(null)
@@ -36,6 +53,10 @@ export function MemberPanel({
   const [errMsg, setErrMsg] = useState<string | null>(null)
   const speakers = members.filter(m => !m.human && m.routing_role !== 'observer' && !m.paused).length
   const joined = routing === 'mention' ? Math.min(mentionTarget, speakers) : speakers
+  // 设计稿 L2331/2335：Agent 成员 / 人类成员 两组（DTO 无 kind 字段，按 human 判别）
+  const agentMembers = members.filter(m => !m.human)
+  const humanMembers = members.filter(m => m.human)
+  const cap = memberCap ?? GROUP_MEMBER_CAP
 
   async function act(fn: () => Promise<unknown>) {
     setErrMsg(null)
@@ -57,42 +78,20 @@ export function MemberPanel({
       <h4 className="mb-1 flex items-center gap-2 text-[13px] font-bold">
         <Users size={14} aria-hidden />
         成员
-        <span className="badge b-gray ml-auto">{members.length}/{5}</span>
+        <span className="badge b-gray ml-auto" data-testid="grp-member-count">{members.length}/{cap}</span>
       </h4>
-      {members.map(m => (
-        <div
-          key={m.id}
-          data-testid={`grp-member-row-${m.id}`}
-          className="flex items-center gap-2 border-b border-separator py-2 last:border-b-0"
-        >
-          {m.human ? (
-            <span className="flex h-[26px] w-[26px] flex-none items-center justify-center rounded-full bg-accent-soft text-2xs font-semibold text-accent">刘</span>
-          ) : (
-            <AgentAvatar name={m.name} color={m.color} size={26} />
-          )}
-          <div className="min-w-0 flex-1">
-            <b className="block truncate text-xs">{m.name}</b>
-            <div className="truncate text-2xs text-label-3">{m.human ? '创建者' : m.model}</div>
-          </div>
-          {!m.human && <RoleBadge role={m.routing_role} />}
-          {m.paused && <span className="badge b-orange">已暂停</span>}
-          <span className={`dot ${m.status === 'running' ? 'd-green' : 'd-gray'}`} title={m.human ? '在线' : m.status === 'running' ? '运行中' : '空闲'} />
-          {!m.human && (
-            <button
-              type="button"
-              aria-label={`${m.name} 成员菜单`}
-              data-testid={`grp-member-menu-${m.id}`}
-              className="flex h-6 w-6 flex-none items-center justify-center rounded-md text-label-3 hover:bg-surface-2"
-              onClick={e => {
-                setErrMsg(null)
-                setMenuFor({ mid: m.id, anchor: e.currentTarget.getBoundingClientRect() })
-              }}
-            >
-              <MoreHorizontal size={13} />
-            </button>
-          )}
-        </div>
+      <GroupHeader testid="grp-member-group-agents">Agent 成员（{agentMembers.length}）</GroupHeader>
+      {agentMembers.map(m => (
+        <MemberRow key={m.id} m={m} setMenuFor={setMenuFor} setErrMsg={setErrMsg} />
       ))}
+      {humanMembers.length > 0 && (
+        <>
+          <GroupHeader testid="grp-member-group-humans">人类成员（{humanMembers.length}）</GroupHeader>
+          {humanMembers.map(m => (
+            <MemberRow key={m.id} m={m} setMenuFor={setMenuFor} setErrMsg={setErrMsg} />
+          ))}
+        </>
+      )}
 
       {errMsg && (
         <div className="mt-2 rounded-lg px-2 py-1.5 text-[11px] leading-relaxed" style={{ background: 'var(--red-soft)', color: 'var(--red)' }} data-testid="grp-member-error" role="alert">
@@ -111,6 +110,13 @@ export function MemberPanel({
       <div className="mt-3 rounded-[11px] px-2.5 py-2 text-[11px] text-label-2" style={{ background: 'var(--accent-soft)', color: 'var(--accent)' }} data-testid="grp-budget-line">
         本轮预算：{joined}/{speakers} 成员参与{routing === 'mention' ? '（@点名未选中不注入上下文）' : ''}
       </div>
+      {contextUsage != null && (
+        // 设计稿 p-group L2341-2342：「● 上下文 62% · 共享会话草稿」
+        <div className="mt-1.5 flex items-center gap-1.5 px-0.5 text-[11px] text-label-2" data-testid="grp-context-usage">
+          <span className={`dot ${contextUsage >= 0.8 ? 'd-orange' : 'd-green'}`} style={{ width: 6, height: 6 }} aria-hidden />
+          上下文 {Math.round(contextUsage * 100)}%<span className="text-label-3">· 共享会话草稿</span>
+        </div>
+      )}
       <div className="fhint mt-2.5">消息均带 agent_id + trace_id（宪法 5）；L2 候选记忆标注 participants[]，个性化 L1 不从群聊写入（防串味）。</div>
 
       {/* IX-GRP-05 成员菜单 */}
@@ -179,4 +185,49 @@ export function MemberPanel({
 
 function routingLabel(r: RoutingMode): string {
   return { mention: '@点名', round_robin: '轮询', all: '多答对比', orchestrator: '协调者' }[r]
+}
+
+/** 成员行（Agent/人类同款行内布局；人类成员无菜单按钮） */
+function MemberRow({
+  m,
+  setMenuFor,
+  setErrMsg,
+}: {
+  m: GroupMember
+  setMenuFor: (v: { mid: string; anchor: DOMRect } | null) => void
+  setErrMsg: (v: string | null) => void
+}) {
+  return (
+    <div
+      data-testid={`grp-member-row-${m.id}`}
+      className="flex items-center gap-2 border-b border-separator py-2 last:border-b-0"
+    >
+      {m.human ? (
+        <span className="flex h-[26px] w-[26px] flex-none items-center justify-center rounded-full bg-accent-soft text-2xs font-semibold text-accent">刘</span>
+      ) : (
+        <AgentAvatar name={m.name} color={m.color} size={26} />
+      )}
+      <div className="min-w-0 flex-1">
+        <b className="block truncate text-xs">{m.name}</b>
+        <div className="truncate text-2xs text-label-3">{m.human ? '创建者' : m.model}</div>
+      </div>
+      {!m.human && <RoleBadge role={m.routing_role} />}
+      {m.paused && <span className="badge b-orange">已暂停</span>}
+      <span className={`dot ${m.status === 'running' ? 'd-green' : 'd-gray'}`} title={m.human ? '在线' : m.status === 'running' ? '运行中' : '空闲'} />
+      {!m.human && (
+        <button
+          type="button"
+          aria-label={`${m.name} 成员菜单`}
+          data-testid={`grp-member-menu-${m.id}`}
+          className="flex h-6 w-6 flex-none items-center justify-center rounded-md text-label-3 hover:bg-surface-2"
+          onClick={e => {
+            setErrMsg(null)
+            setMenuFor({ mid: m.id, anchor: e.currentTarget.getBoundingClientRect() })
+          }}
+        >
+          <MoreHorizontal size={13} />
+        </button>
+      )}
+    </div>
+  )
 }

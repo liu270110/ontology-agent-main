@@ -223,7 +223,7 @@ export function GroupStream({ members }: { members: GroupMember[] }) {
                       高风险动作确认 · {m.pending_action.scope}
                     </h5>
                     <p className="mt-1.5 text-xs leading-relaxed text-label-2">{m.pending_action.label}</p>
-                    <div className="mt-2.5 flex items-center gap-2">
+                    <div className="mt-2.5 flex flex-wrap items-center gap-2">
                       {m.action_rejected ? (
                         // 本地终态：已拒绝灰态（动作不执行，决定写审计）
                         <span className="badge b-gray" data-testid="grp-action-rejected">已拒绝 · 动作终止（本地终态）</span>
@@ -265,8 +265,11 @@ export function GroupStream({ members }: { members: GroupMember[] }) {
                       ) : (
                         <span className="badge b-purple">enterprise 档转审批</span>
                       )}
-                      {!m.action_rejected && <span className="text-[11px] text-label-3">IX-G-04 语义复用 · 确认写审计</span>}
                     </div>
+                    {/* 注记独立行：与按钮同行会在窄列被挤成一字宽（视觉竖排），judge 复检实锤 */}
+                    {!m.action_rejected && (
+                      <div className="mt-1.5 text-[11px] text-label-3">IX-G-04 语义复用 · 确认写审计</div>
+                    )}
                   </div>
                 )}
                 {m.action_rejected && (

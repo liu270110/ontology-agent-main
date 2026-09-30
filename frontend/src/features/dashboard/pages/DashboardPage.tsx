@@ -48,8 +48,10 @@ export function DashboardPage() {
     subLine,
   } = useDashboardQueries()
 
-  // 新手引导三步判定（live 数据非空即完成；三路都成功才渲染，防加载中误判）
-  const onboardingReady = !sessionsQ.isPending && !sessionsQ.isError && !ontoQ.isPending && !ontoQ.isError && !docsQ.isPending && !docsQ.isError
+  // 新手引导三步判定（live 数据非空即完成）。ready 只看加载态不看错误态：
+  // member 等角色对 /ontologies 会 403——若 isError 阻塞 ready，引导卡对该角色永不渲染；
+  // 错误路径把对应步骤显示为未完成（确实没做过），链接照常给出。
+  const onboardingReady = !sessionsQ.isPending && !ontoQ.isPending && !docsQ.isPending
   const onboardingChatDone = sessions.length > 0
   const onboardingProjectDone = (ontoQ.data ?? 0) > 0
   const onboardingDocsDone = (docsQ.data ?? 0) > 0

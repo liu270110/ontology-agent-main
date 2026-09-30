@@ -6507,7 +6507,8 @@
                     "knowledge_instance",
                     "memory_l2_upgrade",
                     "plugin_listing",
-                    "writeback_incident"
+                    "writeback_incident",
+                    "conflict"
                   ],
                   "type": "string"
                 },

@@ -7,7 +7,16 @@ import asyncio
 import uuid
 
 import pytest
-from conftest import (
+
+from services.agent.business.kernel import cancellation as cancellation_module
+from services.agent.business.kernel.budget import Budget
+from services.agent.business.kernel.cancellation import CancellationCoordinator
+from services.agent.business.kernel.gate_baseline import canonical_param_hash
+from services.agent.business.kernel.ledger import KernelLedger
+from services.agent.business.kernel.loop import AgentKernel
+from services.agent.domain.model.kernel_actions import ApprovalTicket, ExecutionMode
+from services.agent.domain.model.step_state import StepStatus
+from tests.agent.conftest import (
     CODE_ACTION_IRI,
     FakeBackend,
     FakePlanner,
@@ -18,15 +27,6 @@ from conftest import (
     make_task,
     make_tool_dispatcher,
 )
-
-from services.agent.business.kernel import cancellation as cancellation_module
-from services.agent.business.kernel.budget import Budget
-from services.agent.business.kernel.cancellation import CancellationCoordinator
-from services.agent.business.kernel.gate_baseline import canonical_param_hash
-from services.agent.business.kernel.ledger import KernelLedger
-from services.agent.business.kernel.loop import AgentKernel
-from services.agent.domain.model.kernel_actions import ApprovalTicket, ExecutionMode
-from services.agent.domain.model.step_state import StepStatus
 
 _CODE_SCHEMA = {"properties": {"code": {"type": "string"}}}
 

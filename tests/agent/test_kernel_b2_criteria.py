@@ -3,7 +3,13 @@
 
 from __future__ import annotations
 
-from conftest import (
+from services.agent.business.kernel.budget import Budget
+from services.agent.business.kernel.criteria import CriterionEvaluator
+from services.agent.business.kernel.ledger import KernelLedger
+from services.agent.business.kernel.loop import AgentKernel
+from services.agent.domain.model.kernel_planning import SuccessCriterion
+from services.agent.domain.model.task import RunStatus
+from tests.agent.conftest import (
     FakePlanner,
     FakeTool,
     make_candidate,
@@ -12,13 +18,6 @@ from conftest import (
     make_task,
     make_tool_dispatcher,
 )
-
-from services.agent.business.kernel.budget import Budget
-from services.agent.business.kernel.criteria import CriterionEvaluator
-from services.agent.business.kernel.ledger import KernelLedger
-from services.agent.business.kernel.loop import AgentKernel
-from services.agent.domain.model.kernel_planning import SuccessCriterion
-from services.agent.domain.model.task import RunStatus
 
 _CRITERION = SuccessCriterion(
     criterion_id="c1",

@@ -6,7 +6,12 @@ from __future__ import annotations
 import uuid
 
 import pytest
-from conftest import (
+
+from services.agent.business.kernel.budget import Budget
+from services.agent.business.kernel.errors import KernelContractError
+from services.agent.business.kernel.loop import AgentKernel
+from services.agent.domain.model.task import RunStatus
+from tests.agent.conftest import (
     FakePlanner,
     FakeProvider,
     FakeTool,
@@ -16,11 +21,6 @@ from conftest import (
     make_task,
     make_tool_dispatcher,
 )
-
-from services.agent.business.kernel.budget import Budget
-from services.agent.business.kernel.errors import KernelContractError
-from services.agent.business.kernel.loop import AgentKernel
-from services.agent.domain.model.task import RunStatus
 
 
 async def test_供给器收到的上下文即内核注入上下文_插件不得自取():

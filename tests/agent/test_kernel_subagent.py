@@ -9,16 +9,6 @@ from typing import Any
 
 import pydantic
 import pytest
-from conftest import (
-    ACTION_IRI,
-    FakePlanner,
-    FakeTool,
-    make_candidate,
-    make_ctx,
-    make_step,
-    make_task,
-    make_tool_dispatcher,
-)
 
 from services.agent.business.kernel.budget import Budget, BudgetTracker
 from services.agent.business.kernel.cancellation import CancellationCoordinator
@@ -36,6 +26,16 @@ from services.agent.business.kernel.subagent import (
 from services.agent.domain.model.kernel_actions import ToolResult
 from services.agent.domain.model.kernel_context import ExtensionMeta, TenantContext, TrustLevel
 from services.agent.domain.model.kernel_gates import RunOutcome
+from tests.agent.conftest import (
+    ACTION_IRI,
+    FakePlanner,
+    FakeTool,
+    make_candidate,
+    make_ctx,
+    make_step,
+    make_task,
+    make_tool_dispatcher,
+)
 
 _OBJECT_SCHEMA = {"type": "object", "required": ["summary"], "properties": {"summary": {"type": "string"}}}
 

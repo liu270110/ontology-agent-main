@@ -8,7 +8,13 @@
 
 from __future__ import annotations
 
-from conftest import (
+from services.agent.business.kernel.budget import Budget
+from services.agent.business.kernel.execution import ExecutionStage
+from services.agent.business.kernel.loop import AgentKernel
+from services.agent.domain.model.kernel_actions import StepResult, ToolResult
+from services.agent.domain.model.kernel_context import ExtensionMeta, TenantContext
+from services.agent.domain.model.kernel_gates import ValidationReport
+from tests.agent.conftest import (
     FakePlanner,
     FakeTool,
     make_candidate,
@@ -17,13 +23,6 @@ from conftest import (
     make_task,
     make_tool_dispatcher,
 )
-
-from services.agent.business.kernel.budget import Budget
-from services.agent.business.kernel.execution import ExecutionStage
-from services.agent.business.kernel.loop import AgentKernel
-from services.agent.domain.model.kernel_actions import StepResult, ToolResult
-from services.agent.domain.model.kernel_context import ExtensionMeta, TenantContext
-from services.agent.domain.model.kernel_gates import ValidationReport
 
 _BUDGET = Budget(max_tokens=10_000, max_steps=5, duration_s=30.0)
 

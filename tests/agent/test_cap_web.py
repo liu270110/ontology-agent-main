@@ -13,7 +13,6 @@ from pathlib import Path
 from typing import Any
 
 import httpx
-from conftest import make_ctx
 
 from services.agent.business.capabilities.web import (
     BODY_PREVIEW_CHARS,
@@ -32,6 +31,7 @@ from services.agent.business.kernel.spill import SpillStore
 from services.agent.domain.model.kernel_actions import ToolCall
 from services.agent.domain.model.kernel_context import TenantContext, TrustLevel
 from services.platform.errors import ErrorCode
+from tests.agent.conftest import make_ctx
 
 # ── 夹具与桩 ─────────────────────────────────────────────────────────────
 

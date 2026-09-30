@@ -11,7 +11,6 @@ import uuid
 from typing import Any
 
 import pytest
-from conftest import make_ctx
 
 from services.agent.business.adapters.base import GenerationEvent
 from services.agent.business.adapters.builtin import BuiltinAdapter
@@ -19,6 +18,7 @@ from services.agent.business.kernel.budget import Budget, BudgetTracker
 from services.agent.business.kernel.cancellation import CancellationCoordinator
 from services.agent.business.kernel.ledger import KernelLedger
 from services.agent.domain.model.kernel_context import TaskRef
+from tests.agent.conftest import make_ctx
 
 ANSWER_SCHEMA = {"type": "object", "required": ["answer"], "properties": {"answer": {"type": "string"}}}
 

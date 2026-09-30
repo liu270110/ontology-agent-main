@@ -18,7 +18,6 @@ from collections.abc import Callable
 from typing import Any
 
 import pytest
-from conftest import make_ctx
 
 from services.agent.business.capabilities.subagent import (
     BUDGET_SHARE_DEFAULT,
@@ -39,6 +38,7 @@ from services.agent.domain.model.kernel_actions import ToolCall, ToolResult
 from services.agent.domain.model.kernel_context import TaskRef, TenantContext
 from services.agent.domain.model.kernel_gates import RunOutcome
 from services.platform.errors import ErrorCode
+from tests.agent.conftest import make_ctx
 
 _OBJECT_SCHEMA = {"type": "object", "required": ["summary"], "properties": {"summary": {"type": "string"}}}
 PARENT_RUN = uuid.UUID(int=0)  # 单父用例约定：bind_parent 与派生归因同用该 run_id

@@ -18,7 +18,6 @@ import time
 from typing import Any
 
 import pytest
-from conftest import FakePlanner, make_candidate, make_ctx, make_task, make_tool_dispatcher
 
 from services.agent.business.capabilities.ask_user import (
     ASK_USER_ACTION_IRI,
@@ -43,6 +42,7 @@ from services.agent.domain.model.kernel_planning import PlanStep
 from services.agent.domain.model.step_state import StepStatus
 from services.agent.domain.model.task import RunStatus
 from services.platform.errors import ErrorCode
+from tests.agent.conftest import FakePlanner, make_candidate, make_ctx, make_task, make_tool_dispatcher
 
 # ── 桩与构造器（零外部依赖）───────────────────────────────────────────────
 

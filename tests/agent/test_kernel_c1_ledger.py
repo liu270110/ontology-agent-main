@@ -6,12 +6,12 @@ from __future__ import annotations
 import uuid
 
 import pytest
-from conftest import make_ctx
 
 from services.agent.business.kernel.errors import KernelContractError
 from services.agent.business.kernel.ledger import KernelLedger
 from services.agent.domain.model.kernel_actions import ToolCall
 from services.agent.domain.model.step_state import LoopStage, StepState, StepStatus
+from tests.agent.conftest import make_ctx
 
 
 def _call() -> ToolCall:

@@ -22,7 +22,6 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import pytest
-from conftest import make_ctx, make_tool_dispatcher
 
 from services.agent.business.capabilities.terminal import (
     OUTPUT_LIMIT,
@@ -42,6 +41,7 @@ from services.agent.business.kernel.dispatcher import ExtensionDispatcher
 from services.agent.business.kernel.gate_baseline import canonical_param_hash
 from services.agent.domain.model.kernel_actions import ApprovalTicket, ExecutionMode, ToolCall
 from services.platform.errors import ErrorCode
+from tests.agent.conftest import make_ctx, make_tool_dispatcher
 
 # ── 桩与构造器 ───────────────────────────────────────────────────────────
 

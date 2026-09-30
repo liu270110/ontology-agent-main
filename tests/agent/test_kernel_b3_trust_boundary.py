@@ -3,7 +3,12 @@
 
 from __future__ import annotations
 
-from conftest import (
+from services.agent.business.kernel.budget import Budget
+from services.agent.business.kernel.execution import ExecutionStage
+from services.agent.business.kernel.loop import AgentKernel
+from services.agent.domain.model.kernel_actions import ToolResult
+from services.agent.domain.model.kernel_context import TrustLevel
+from tests.agent.conftest import (
     FakePlanner,
     FakeProvider,
     FakeTool,
@@ -13,12 +18,6 @@ from conftest import (
     make_task,
     make_tool_dispatcher,
 )
-
-from services.agent.business.kernel.budget import Budget
-from services.agent.business.kernel.execution import ExecutionStage
-from services.agent.business.kernel.loop import AgentKernel
-from services.agent.domain.model.kernel_actions import ToolResult
-from services.agent.domain.model.kernel_context import TrustLevel
 
 
 def test_工具结果自称高信任级_内核降权只留痕():

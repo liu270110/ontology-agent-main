@@ -1,6 +1,6 @@
 import '@testing-library/jest-dom/vitest'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { afterEach, beforeAll, afterAll, describe, expect, it } from 'vitest'
+import { afterEach, beforeAll, describe, expect, it } from 'vitest'
 import { http, HttpResponse } from 'msw'
 import { App } from '@/app/App'
 import { server } from '@/mocks/node'
@@ -28,7 +28,7 @@ beforeAll(() => {
     }
   }
   ;(globalThis as unknown as { EventSource: unknown }).EventSource ??= EventSourceStub
-  server.listen({ onUnhandledRequest: 'bypass' })
+  // MSW 启停由全局 setupFiles（src/mocks/node-setup.ts）承担；本文件不再重复 server.listen
 })
 afterEach(() => {
   server.resetHandlers()
@@ -36,7 +36,6 @@ afterEach(() => {
   localStorage.clear()
   useAuthStore.getState().clearSession()
 })
-afterAll(() => server.close())
 
 /** S8 状态切片 · 会话列表（s8-states）：MSW 注入失败（不动 src/mocks/handlers.ts）。
  *  失败 → ErrorState 可见 → 恢复 mock 后点重试 → 会话列表出现。

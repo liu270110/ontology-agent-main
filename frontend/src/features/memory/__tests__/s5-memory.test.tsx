@@ -1,17 +1,14 @@
 import '@testing-library/jest-dom/vitest'
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
-import { afterEach, beforeAll, afterAll, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it } from 'vitest'
 import { App } from '@/app/App'
-import { server } from '@/mocks/node'
 import { useAuthStore } from '@/stores/auth-store'
 
-beforeAll(() => server.listen({ onUnhandledRequest: 'bypass' }))
 afterEach(() => {
   cleanup()
   localStorage.clear()
   useAuthStore.getState().clearSession()
 })
-afterAll(() => server.close())
 
 /** S5 平台域 · 记忆管理（26 篇 §8.1 矩阵 DoD）：IX-MEM-01 升级审核对照弹窗——
  *  L2 队列入口 → 弹窗双栏（候选卡/原文高亮对照/迷你时间线）→ 通过并入 L3 →

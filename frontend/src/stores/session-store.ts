@@ -18,6 +18,9 @@ export interface ChatMessage {
   wsAction?: 'created' | 'modified' | 'deleted'
   wsPath?: string
   wsName?: string
+  /** Agent 产物卡（设计稿 p-chat L2424-2427 .artifact）：SSE artifact.created 自定义帧/
+   *  历史载荷附着；候选产物语义——人工终审后生效（宪法 3），名称+摘要+可选资源 id */
+  artifact?: { name: string; summary: string; resource_id?: string }
 }
 
 export interface ToolCall {
@@ -188,6 +191,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       stream?: string
       text?: string
       groups?: RunUsageEventData['groups']
+      artifact?: ChatMessage['artifact']
     }
 
     switch (evt.name) {
@@ -206,6 +210,13 @@ export const useSessionStore = create<SessionState>((set, get) => ({
         break
       case 'TEXT_MESSAGE_END':
         set(s => ({ messages: s.messages.map(m => (m.id === d.message_id ? { ...m, finishReason: d.finish_reason } : m)) }))
+        break
+      case 'artifact.created':
+        // 画框03 产物卡（自定义扩展帧，纯追加——api/02「未知事件忽略」裁决下老客户端向前兼容）：
+        // artifact 载荷挂到对应助手消息（MESSAGE_CONTENT 系列的 content 元数据口径）
+        set(s => ({
+          messages: s.messages.map(m => (m.id === String(d.message_id ?? '') ? { ...m, artifact: d.artifact } : m)),
+        }))
         break
       case 'TOOL_CALL_START': {
         const tid = String(d.tool_call_id ?? '')

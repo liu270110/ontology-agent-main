@@ -1,11 +1,10 @@
 import '@testing-library/jest-dom/vitest'
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
-import { afterEach, beforeAll, afterAll, describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { App } from '@/app/App'
 import { server } from '@/mocks/node'
 import { useAuthStore } from '@/stores/auth-store'
 
-beforeAll(() => server.listen({ onUnhandledRequest: 'bypass' }))
 afterEach(() => {
   server.resetHandlers()
   cleanup()
@@ -13,7 +12,6 @@ afterEach(() => {
   useAuthStore.getState().clearSession()
   vi.restoreAllMocks()
 })
-afterAll(() => server.close())
 
 /** B3-P 功能占位转实 · 记忆搜索/导出（IX-ACC-08 语义入口；B3-P 切片 P）：
  *  纯客户端、无新端点——

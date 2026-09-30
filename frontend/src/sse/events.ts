@@ -14,6 +14,8 @@ export const KNOWN_EVENTS = [
   'workspace.file.created', 'workspace.file.modified', 'workspace.file.deleted', 'terminal.output',
   // 回答上下文用量（api/02 M4 扩展：IX-CHT-04 上下文面板四分组真数据源）
   'run.usage',
+  // Agent 产物卡（S2 设计稿对齐切片追加：画框03 .artifact，载荷挂 message_id + artifact）
+  'artifact.created',
 ] as const
 
 export type SseEventName = (typeof KNOWN_EVENTS)[number] | (string & {})

@@ -1,6 +1,6 @@
 import '@testing-library/jest-dom/vitest'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest'
+import { afterEach, beforeAll, describe, expect, it } from 'vitest'
 import { http, HttpResponse } from 'msw'
 import { App } from '@/app/App'
 import { ContextMeter } from '@/features/chat/components/ContextMeter'
@@ -111,7 +111,7 @@ beforeAll(() => {
     }
   }
   ;(globalThis as unknown as { DOMMatrixReadOnly: unknown }).DOMMatrixReadOnly ??= DOMMatrixReadOnlyMock
-  server.listen({ onUnhandledRequest: 'bypass' })
+  // MSW 启停由全局 setupFiles（src/mocks/node-setup.ts）承担；本文件不再重复 server.listen
 })
 afterEach(() => {
   server.resetHandlers()
@@ -120,7 +120,6 @@ afterEach(() => {
   useAuthStore.getState().clearSession()
   useSessionStore.getState().setActiveSession(null) // 复位会话级状态（usageGroups/usageTokens 等）
 })
-afterAll(() => server.close())
 
 async function loginAndGo(path: string) {
   window.history.pushState({}, '', path)
@@ -182,10 +181,13 @@ describe('S2 对话闭环收口（run.usage / compact / 图谱下钻）', () => 
 
     fireEvent.click(screen.getByTestId('ctx-compact'))
 
-    // 成功：用量重置为 summary_tokens=4200（4K / 128K · 3%），≤80% 后压缩按钮随之隐藏
+    // 成功：用量重置为 summary_tokens=4200（4K / 128K · 3%）；压缩钮恒显（设计稿 L2440 裁决），
+    // 低用量档色调回 accent-soft
     await waitFor(() => expect(meter.textContent).toContain('4K / 128K · 3%'))
     expect(useSessionStore.getState().usageTokens).toBe(4200)
-    expect(screen.queryByTestId('ctx-compact')).not.toBeInTheDocument()
+    const compact = screen.getByTestId('ctx-compact')
+    expect(compact).toBeInTheDocument()
+    expect(compact.getAttribute('style')).toContain('var(--accent-soft)')
 
     // 请求断言：POST 打到 /sessions/s-2481/compact，载荷为空对象（压缩参数由服务端定）
     expect(compactPosts).toHaveLength(1)

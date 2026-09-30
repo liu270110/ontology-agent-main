@@ -12,6 +12,8 @@ export interface GroupMessage extends GroupMessageRow {
   member_id?: string
   /** 高风险动作 confirm_token 回执（确认后置；IX-G-04 语义占位） */
   confirmed_token?: string
+  /** 高风险动作本地拒绝终态（设计稿 p-group L2319「拒绝」钮：卡转灰态 + 系统行，写审计） */
+  action_rejected?: boolean
 }
 
 export interface GroupToolCall {
@@ -46,6 +48,8 @@ interface GroupStreamState {
   appendLocal: (content: string) => void
   /** 确认高风险动作后回写该消息 pending_action → confirmed */
   resolveAction: (messageId: string, token: string) => void
+  /** 拒绝高风险动作（本地终态：卡转已拒绝灰态 + 系统行；动作不执行） */
+  rejectAction: (messageId: string) => void
   /** 归约一帧：'applied' | 'dup' | 'gap'（gap 由调用方触发 ?last_event_id= 重连，api/02 §4） */
   apply: (evt: SseEvent) => 'applied' | 'dup' | 'gap'
 }
@@ -97,6 +101,13 @@ export const useGroupStreamStore = create<GroupStreamState>((set, get) => ({
     set(s => ({
       messages: s.messages.map(m =>
         m.id === messageId && m.pending_action ? { ...m, confirmed_token: token } : m,
+      ),
+    })),
+
+  rejectAction: messageId =>
+    set(s => ({
+      messages: s.messages.map(m =>
+        m.id === messageId && m.pending_action ? { ...m, action_rejected: true } : m,
       ),
     })),
 

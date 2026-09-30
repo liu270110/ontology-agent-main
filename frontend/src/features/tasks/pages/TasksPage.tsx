@@ -31,6 +31,23 @@ export function TasksPage() {
   })
   const tasks = useMemo(() => data?.items ?? [], [data])
 
+  // 状态 chips 计数（设计稿 p-tasks L1773「全部 12 / 运行中 2 …」）：
+  // 恒拉全量一份计数（status=all 与主查询同 key → 当前为全部时直接复用缓存不重复请求）
+  const allQ = useQuery({
+    queryKey: ['tasks', 'list', 'all'],
+    queryFn: () => listTasks(),
+    refetchInterval: 8000,
+  })
+  const counts = useMemo(() => {
+    const items = allQ.data?.items ?? []
+    const c: Record<'all' | TaskStatus, number> = {
+      all: items.length,
+      running: 0, queued: 0, failed: 0, completed: 0, canceled: 0,
+    }
+    for (const t of items) c[t.status] += 1
+    return c
+  }, [allQ.data])
+
   // 深链：?taskId=（IX-G-02 通知联动）/ ?job=（导出/导入建任务回跳）→ 打开详情抽屉
   const deepId = params.get('taskId') ?? params.get('job')
   useEffect(() => {
@@ -69,7 +86,7 @@ export function TasksPage() {
         <span className="text-xs text-label-3">抽取 / 索引 / 对账 / 导出统一进度台账（全程可追溯）</span>
       </div>
 
-      {/* 状态筛选 chips（?status= 深链还原） */}
+      {/* 状态筛选 chips（?status= 深链还原；计数=设计稿 L1773 同款） */}
       <div className="mt-3 flex flex-wrap gap-1" role="tablist" aria-label="任务状态筛选">
         {STATUS_FILTERS.map(f => (
           <button
@@ -82,6 +99,7 @@ export function TasksPage() {
             className={`rounded-lg px-3 py-1.5 text-xs ${status === f.key ? 'bg-accent-soft font-semibold text-accent' : 'text-label-2 hover:bg-surface-2'}`}
           >
             {f.label}
+            <span className="ml-1 opacity-70" data-testid={`tsk-count-${f.key}`}>{counts[f.key]}</span>
           </button>
         ))}
       </div>

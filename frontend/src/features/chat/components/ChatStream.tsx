@@ -153,7 +153,65 @@ function MessageActions({ m, sessionId, regenerateContent }: { m: ChatMessage; s
 /** workspace.file.* 系统行动词（31 篇：创建/更新/删除按事件区分） */
 const WS_VERB: Record<NonNullable<ChatMessage['wsAction']>, string> = { created: '创建', modified: '更新', deleted: '删除' }
 
-export function ChatStream({ sessionId, onOpenEvidence }: { sessionId: string; onOpenEvidence: (f: EvidenceFocus) => void }) {
+/** 助手消息头元信息（设计稿 p-chat L2411-2413）：Agent 名称（粗体）+ 模型徽标（b-gray）+
+ *  角色徽标（b-purple 主答）+ 时间（mono label-3）。消息载荷无时间戳（M4 帧未下发），
+ *  时间取消息到达/挂载时刻 HH:mm 兜底展示。 */
+function AssistantMsgHead({ m }: { m: ChatMessage }) {
+  const [time] = useState(() =>
+    new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false }),
+  )
+  return (
+    <div data-testid={`msg-head-${m.id}`} className="mb-1 flex items-center gap-1.5 text-2xs text-label-3">
+      <b className="text-11px font-semibold text-label">ontology-agent</b>
+      <span className="badge b-gray px-[7px] py-px text-2xs">Claude Sonnet</span>
+      <span className="badge b-purple px-[7px] py-px text-2xs">主答</span>
+      <span className="font-mono text-2xs">{time}</span>
+    </div>
+  )
+}
+
+/** 产物卡（设计稿 p-chat L2424-2427 .artifact/.af-h/.af-b）：Agent 生成产物（如排查报告）
+ *  出现在消息流；「在工作区查看」切右栏工作区页签（rightTab 接线由宿主下发）。 */
+function ChatArtifactCard({
+  artifact,
+  onOpenWorkspace,
+}: {
+  artifact: NonNullable<ChatMessage['artifact']>
+  onOpenWorkspace?: () => void
+}) {
+  return (
+    <div data-testid="artifact-card" className="artifact mt-2">
+      <div className="af-h">
+        <FileText size={13} aria-hidden />
+        <b>{artifact.name}</b>
+        <span className="badge b-blue more text-2xs">Artifact</span>
+      </div>
+      <div className="af-b">{artifact.summary}</div>
+      <div className="border-t border-separator px-3 py-1.5 text-right">
+        <button
+          type="button"
+          data-testid="artifact-open-workspace"
+          title="切换到 Agent 工作区查看产物文件"
+          onClick={onOpenWorkspace}
+          className="text-2xs text-accent hover:underline"
+        >
+          在工作区查看 →
+        </button>
+      </div>
+    </div>
+  )
+}
+
+export function ChatStream({
+  sessionId,
+  onOpenEvidence,
+  onOpenWorkspace,
+}: {
+  sessionId: string
+  onOpenEvidence: (f: EvidenceFocus) => void
+  /** 产物卡「在工作区查看」→ 宿主切右栏工作区页签（ChatPage rightTab 最小接线） */
+  onOpenWorkspace?: () => void
+}) {
   const messages = useSessionStore(s => s.messages)
   const toolCalls = useSessionStore(s => s.toolCalls)
   const evidence = useSessionStore(s => s.evidence)
@@ -223,8 +281,15 @@ export function ChatStream({ sessionId, onOpenEvidence }: { sessionId: string; o
           <div key={m.id} className="msg group flex gap-2">
             <span className="avatar mt-0.5 flex h-8 w-8 flex-none items-center justify-center rounded-full bg-surface-2 text-xs">✦</span>
             <div className="min-w-0 max-w-[80%]">
+              {/* 助手消息头元信息（设计稿 L2411-2413）：名称/模型徽标/角色徽标/时间 */}
+              <AssistantMsgHead m={m} />
               {Object.entries(toolCalls).map(([id, c]) => <ToolCallCard key={id} id={id} call={c} />)}
-              <div className="bubble bubble-a rounded-2xl rounded-bl-md border border-separator bg-surface px-4 py-2.5 text-sm">
+              {/* 气泡左缘 3px 来源分类色（--src-system=indigo，tokens.css 来源分类变量） */}
+              <div
+                data-testid={`bubble-${m.id}`}
+                className="bubble bubble-a rounded-2xl rounded-bl-md border border-separator bg-surface px-4 py-2.5 text-sm"
+                style={{ borderLeft: '3px solid var(--src-system)' }}
+              >
                 {m.content || <span className="text-label-3">思考中…</span>}
                 {running && m.id === messages[messages.length - 1]?.id && <span className="stream-caret ml-0.5 animate-pulse">▍</span>}
                 {/* IX-CHT-06：手动停止后保留已生成部分 + 标记 */}
@@ -239,6 +304,8 @@ export function ChatStream({ sessionId, onOpenEvidence }: { sessionId: string; o
                   ) : null
                 })()}
               </div>
+              {/* 产物卡（设计稿 L2424-2427）：载荷携带 artifact 时渲染于气泡之下 */}
+              {m.artifact && <ChatArtifactCard artifact={m.artifact} onOpenWorkspace={onOpenWorkspace} />}
               {/* 悬停操作条：流式中的末条不展示（等生成完） */}
               {!(running && m.id === messages[messages.length - 1]?.id) && (
                 <MessageActions m={m} sessionId={sessionId} regenerateContent={regenerateFor(m)} />

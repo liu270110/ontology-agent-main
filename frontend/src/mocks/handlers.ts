@@ -263,6 +263,16 @@ function scriptFor(sessionId: string, question: string): { frames: string[]; ids
     // run.usage：助手回答完成前推本次上下文用量四分组（api/02 M4 扩展，IX-CHT-04 真数据源）
     ['run.usage', { run_id: 'pending-run', groups: USAGE_GROUPS }],
     ['TEXT_MESSAGE_END', { message_id: 'pending', finish_reason: 'stop' }],
+    // 画框03 产物卡（S2 设计稿对齐切片追加帧）：流末尾自定义帧携带 artifact 载荷
+    // （纯追加不改既有帧；api/02「未知事件忽略」裁决下向前兼容，message_id 挂 content 元数据）
+    ['artifact.created', {
+      message_id: 'pending',
+      artifact: {
+        name: '停电故障风险排查报告 · 草稿 v0.1',
+        summary: '依据越限记录与缺陷单生成排查项；候选产物走产物流，人工终审后生效（trace 9f3c…81）。',
+        resource_id: 'res-2481-b2',
+      },
+    }],
     ['RUN_FINISHED', { run_id: ids.run_id, usage: { tokens: 218, cost: 0.0042 } }],
   ]
   // pending 占位 id 替换为真实时序值
@@ -273,7 +283,7 @@ function scriptFor(sessionId: string, question: string): { frames: string[]; ids
     .map(([name, data]) => {
       const d = { ...(data as Record<string, unknown>) }
       if (name === 'TEXT_MESSAGE_START') { mid = `m_${Date.now()}`; d.message_id = mid }
-      if (name === 'TEXT_MESSAGE_CONTENT' || name === 'TEXT_MESSAGE_END') d.message_id = mid
+      if (name === 'TEXT_MESSAGE_CONTENT' || name === 'TEXT_MESSAGE_END' || name === 'artifact.created') d.message_id = mid
       if (name === 'TOOL_CALL_START') { tcid = `tc_${Date.now()}`; d.tool_call_id = tcid }
       if (name === 'TOOL_CALL_ARGS' || name === 'TOOL_CALL_END' || name === 'TOOL_CALL_RESULT') d.tool_call_id = tcid
       if (name === 'RUN_STARTED') { rid = String(d.run_id) }

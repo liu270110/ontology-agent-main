@@ -91,6 +91,9 @@ export function InspectorPanel({ projectId, cls }: { projectId: string; cls: Ont
   const err = (k: keyof MetaForm) =>
     fieldErr[k] ? <div className="field-err">zod：{fieldErr[k]}</div> : null
 
+  // 子类 chips（只读）：从类清单按 parent_id 过滤当前类的下位类（设计稿 p-onto Inspector 子类行）
+  const children = classList.filter(c => c.parent_id === cls.id)
+
   return (
     <aside className="scroll-thin flex w-[260px] flex-none xl:w-[300px] flex-col overflow-y-auto rounded-xl border border-separator bg-surface" data-testid="onto-inspector">
       {/* 头：选中节点 + 脏态徽标 */}
@@ -156,6 +159,19 @@ export function InspectorPanel({ projectId, cls }: { projectId: string; cls: Ont
           </select>
           {parent && <div className="fhint">当前父类：{parent.label} {parent.name}</div>}
         </div>
+        {/* 子类 chips 行（只读，随 SubclassOf 展示层级上下文；无子类不渲染） */}
+        {children.length > 0 && (
+          <div className="field" data-testid="insp-children">
+            <span className="field-label">子类（{children.length}）</span>
+            <div className="flex flex-wrap gap-1">
+              {children.map(c => (
+                <span key={c.id} className="badge b-gray" title={c.iri}>
+                  {c.label} {c.name}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
         <div className="field">
           <label className="field-label" htmlFor="insp-disjoint">DisjointWith（互斥类）</label>
           <input id="insp-disjoint" className="input h-8 text-xs" placeholder="变压器 Transformer、开关 Switch" {...register('disjointWith')} />

@@ -565,6 +565,8 @@ export const ontologyHandlers = [
         stats: { triples: 48210, elapsed_ms: 387 },
         results: VALIDATE_RESULTS,
         inferences: { count: 12, samples: ['WO-1024 rdf:type out:UrgentOrder', 'E-0901 out:affects out:K-77'] },
+        // 纯追加指标（验证报告 Sheet 用）：术语唯一性 1.0 = 无同形异义术语；HermiT 一致性由 conforms 派生渲染
+        term_uniqueness: 1.0,
       },
     })
   }),

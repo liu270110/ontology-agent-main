@@ -1,12 +1,14 @@
 import { Fragment, useEffect, useMemo, useRef } from 'react'
-import { AlertTriangle, ArrowRight, Check, ChevronDown, Copy, Database, Search, Star, X, Zap } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
+import { AlertTriangle, ArrowRight, Check, ChevronDown, Copy, Database, Search, ShieldAlert, Star, X, Zap } from 'lucide-react'
 import { useGroupStreamStore, type GroupMessage } from '../group-store'
 import type { GroupMember } from '../api'
 import { AgentAvatar, ModelChip } from './shared'
 
 /** 消息流（27 篇 P14 归属着色）：每条 Agent 消息 = 头像 + 名称 + 模型徽标 + 分类色左缘；
  *  协调者系统行（GRP-03）/ ResponseGroup 多答并列（GRP-04）/ ActionConfirmCard 高风险确认
- *  （IX-G-04 语义复用：确认 → confirm_token 占位 + enterprise 转审批 chip）。 */
+ *  （IX-G-04 语义复用：确认 → confirm_token 占位；拒绝 → 本地终态灰卡 + 系统行；
+ *  转人工审批 → 审批中心深链 /console/approvals。设计稿 p-group L2319 三按钮）。 */
 
 function memberOf(members: GroupMember[], agentId?: string, memberId?: string): GroupMember | undefined {
   if (memberId) return members.find(m => m.id === memberId)
@@ -25,11 +27,13 @@ function renderContent(text: string) {
 }
 
 export function GroupStream({ members }: { members: GroupMember[] }) {
+  const navigate = useNavigate()
   const messages = useGroupStreamStore(s => s.messages)
   const toolCalls = useGroupStreamStore(s => s.toolCalls)
   const decisions = useGroupStreamStore(s => s.decisions)
   const running = useGroupStreamStore(s => s.running)
   const resolveAction = useGroupStreamStore(s => s.resolveAction)
+  const rejectAction = useGroupStreamStore(s => s.rejectAction)
   const bottomRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -209,29 +213,74 @@ export function GroupStream({ members }: { members: GroupMember[] }) {
                   </div>
                 ))}
                 {m.pending_action && (
-                  <div className="confirm-card mt-2.5" data-testid="grp-action-confirm">
+                  <div
+                    className="confirm-card mt-2.5"
+                    data-testid="grp-action-confirm"
+                    style={m.action_rejected ? { opacity: 0.66, filter: 'grayscale(0.5)' } : undefined}
+                  >
                     <h5>
                       <AlertTriangle size={14} aria-hidden />
                       高风险动作确认 · {m.pending_action.scope}
                     </h5>
                     <p className="mt-1.5 text-xs leading-relaxed text-label-2">{m.pending_action.label}</p>
                     <div className="mt-2.5 flex items-center gap-2">
-                      {m.confirmed_token ? (
+                      {m.action_rejected ? (
+                        // 本地终态：已拒绝灰态（动作不执行，决定写审计）
+                        <span className="badge b-gray" data-testid="grp-action-rejected">已拒绝 · 动作终止（本地终态）</span>
+                      ) : m.confirmed_token ? (
                         <span className="badge b-green" data-testid="grp-action-token">confirm_token 已回执 · {m.confirmed_token}</span>
                       ) : (
-                        <button
-                          type="button"
-                          className="btn btn-p btn-sm"
-                          data-testid="grp-action-confirm-go"
-                          onClick={() => resolveAction(m.id, `cft_${m.pending_action!.action_id}`)}
-                        >
-                          <Check size={12} aria-hidden />
-                          确认执行（confirm_token）
-                        </button>
+                        <>
+                          <button
+                            type="button"
+                            className="btn btn-p btn-sm"
+                            data-testid="grp-action-confirm-go"
+                            onClick={() => resolveAction(m.id, `cft_${m.pending_action!.action_id}`)}
+                          >
+                            <Check size={12} aria-hidden />
+                            确认执行（confirm_token）
+                          </button>
+                          <button
+                            type="button"
+                            className="btn btn-d btn-sm"
+                            data-testid="grp-action-reject"
+                            onClick={() => rejectAction(m.id)}
+                          >
+                            <X size={12} aria-hidden />
+                            拒绝
+                          </button>
+                          <button
+                            type="button"
+                            className="btn btn-g btn-sm"
+                            data-testid="grp-action-escalate"
+                            onClick={() => navigate('/console/approvals')}
+                          >
+                            <ShieldAlert size={12} aria-hidden />
+                            转人工审批
+                          </button>
+                        </>
                       )}
-                      <span className="badge b-purple">enterprise 档转审批</span>
-                      <span className="text-[11px] text-label-3">IX-G-04 语义复用 · 确认写审计</span>
+                      {m.action_rejected ? (
+                        <span className="text-[11px] text-label-3">拒绝决定写审计（宪法 5）· 可在消息流回溯</span>
+                      ) : (
+                        <span className="badge b-purple">enterprise 档转审批</span>
+                      )}
+                      {!m.action_rejected && <span className="text-[11px] text-label-3">IX-G-04 语义复用 · 确认写审计</span>}
                     </div>
+                  </div>
+                )}
+                {m.action_rejected && (
+                  // 拒绝系统行（GRP-03 同款样式语义）：决策留痕，全程可追溯
+                  <div className="mt-2 flex items-center gap-2.5" data-testid={`grp-action-reject-row-${m.id}`}>
+                    <div className="h-px flex-1" style={{ background: 'var(--separator)' }} />
+                    <span
+                      className="inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-[11px] text-label-2"
+                      style={{ background: 'var(--surface-2)', border: '1px solid var(--separator)' }}
+                    >
+                      <X size={10} className="text-red" aria-hidden />
+                      已拒绝高风险动作「{m.pending_action?.label ?? m.pending_action?.action_id}」· 本地终态，写审计
+                    </span>
+                    <div className="h-px flex-1" style={{ background: 'var(--separator)' }} />
                   </div>
                 )}
               </div>

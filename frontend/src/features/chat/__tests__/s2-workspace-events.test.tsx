@@ -1,6 +1,6 @@
 import '@testing-library/jest-dom/vitest'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest'
+import { afterEach, beforeAll, describe, expect, it } from 'vitest'
 import { http, HttpResponse } from 'msw'
 import { App } from '@/app/App'
 import { server } from '@/mocks/node'
@@ -93,7 +93,7 @@ class SseStub {
 
 beforeAll(() => {
   ;(globalThis as unknown as { EventSource: unknown }).EventSource ??= SseStub
-  server.listen({ onUnhandledRequest: 'bypass' })
+  // MSW 启停由全局 setupFiles（src/mocks/node-setup.ts）承担；本文件不再重复 server.listen
 })
 afterEach(() => {
   server.resetHandlers()
@@ -101,7 +101,6 @@ afterEach(() => {
   localStorage.clear()
   useAuthStore.getState().clearSession()
 })
-afterAll(() => server.close())
 
 async function loginAndGo(path: string) {
   window.history.pushState({}, '', path)

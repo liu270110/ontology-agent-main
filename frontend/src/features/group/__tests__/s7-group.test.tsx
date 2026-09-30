@@ -1,21 +1,17 @@
 import '@testing-library/jest-dom/vitest'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { afterEach, beforeAll, afterAll, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it } from 'vitest'
 import { http, HttpResponse } from 'msw'
 import { App } from '@/app/App'
 import { server } from '@/mocks/node'
 import { useAuthStore } from '@/stores/auth-store'
 
-beforeAll(() => {
-  server.listen({ onUnhandledRequest: 'bypass' })
-})
 afterEach(() => {
   server.resetHandlers()
   cleanup()
   localStorage.clear()
   useAuthStore.getState().clearSession()
 })
-afterAll(() => server.close())
 
 /** S7 协作域 · 群聊（30 篇 §2 S7 / 26 篇 §15 DoD-4）：MSW 演练关键交互。
  *  ① IX-GRP-01 建群双栏选成员 + 角色 → POST /sessions（type=group）载荷断言

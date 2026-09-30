@@ -578,6 +578,12 @@ const DISCOVER_REPLY = {
 // handlers
 // ============================================================
 
+/** S-AD 切片：/me/export 导出任务存储（设置·数据与导出 Tab；任务 #512 预置 done，
+ *  与设计稿「任务 #512 · 202 已受理」口径一致；POST /me/export 亦复用该 id） */
+const ME_EXPORT_TASKS = new Map<string, { task_id: string; status: 'queued' | 'running' | 'done' | 'failed'; download_url?: string }>([
+  ['512', { task_id: '512', status: 'done', download_url: '/exports/me-20260930-512.zip' }],
+])
+
 export const platformHandlers = [
   // ---------- §5.5 memory ----------
   // R 预登记：GET /memory/l1 列表（契约仅单条 GET /memory/l1/{session_id}，IX-MEM-03 需要会话集合）
@@ -848,6 +854,23 @@ export const platformHandlers = [
       headers: { 'X-Removed-Tools': String(removed.adopted_count), 'X-Affected-Agents': '2' },
     })
   }),
+  // ---------- S-AD 切片追加（设置四新 Tab + 主页新手引导；纯追加，不改动上方既有行） ----------
+  // R 预登记：数据与导出（api/01 无 /me/export 登记；设置·数据与导出 Tab：
+  //   POST 202 {task_id, status:'queued'} → GET 轮询 200 {status:'done', download_url}）
+  //   任务 #512 预置 done（与设计稿「任务 #512 · 202 已受理」口径一致；POST 亦复用该 id）
+  http.post('*/api/v1/me/export', () => ok({ task_id: '512', status: 'queued' }, 202)),
+  http.get('*/api/v1/me/export/:task_id', ({ params }) => {
+    const t = ME_EXPORT_TASKS.get(String(params.task_id))
+    if (!t) return err(3001, '导出任务不存在', 404)
+    return ok(t)
+  }),
+  // R 预登记：下线全部设备会话（api/01 §5.9 无此端点；设置·账号 Danger Zone：
+  //   DELETE /auth/sessions/all → 200 {revoked:3}，与 admin-handlers DEVICES 三台口径一致，
+  //   全设备（含当前）会话立即失效需重新登录）
+  http.delete('*/api/v1/auth/sessions/all', () => ok({ revoked: 3 })),
+  // 注：/me/preferences 扩展字段（onboarding_done / chat_* / group_routing_* / memory_*）
+  // 由 admin-handlers.ts 既有 PUT Object.assign 透传合并，无需在此追加。
+
 ]
 
 function setToolEnabled(id: string, enabled: boolean) {

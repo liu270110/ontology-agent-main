@@ -1,19 +1,20 @@
 import '@testing-library/jest-dom/vitest'
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
-import { afterEach, beforeAll, afterAll, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it } from 'vitest'
 import { http, HttpResponse } from 'msw'
 import { App } from '@/app/App'
 import { server } from '@/mocks/node'
 import { useAuthStore } from '@/stores/auth-store'
 
-beforeAll(() => server.listen({ onUnhandledRequest: 'bypass' }))
+// MSW 生命周期归全局 setupFiles（src/mocks/node-setup.ts）：listen/resetHandlers/close 均由其接管。
+// 本文件原 beforeAll(server.listen)/afterAll(server.close) 与全局接管冲突（双重 listen 抛 Invariant
+// Violation），S-AD 切片同步迁移至新测试基建；用例内仍以 server.use(...) 注入可控数据。
 afterEach(() => {
   server.resetHandlers()
   cleanup()
   localStorage.clear()
   useAuthStore.getState().clearSession()
 })
-afterAll(() => server.close())
 
 /** S8 工作台真数据接入（DashboardPage）：MSW 注入会话数据（不动 src/mocks/handlers.ts）。
  *  ① sessions 200 空列表 → 优雅空态 + 「发起新对话」CTA（IX-CHT-02 深链）；

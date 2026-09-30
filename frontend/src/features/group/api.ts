@@ -47,7 +47,15 @@ export interface GroupSession {
 
 export interface GroupSessionDetail extends GroupSession {
   members: GroupMember[]
+  /** 成员容量上限（会话配置；mock 群聊详情返回，缺省回落 GROUP_MEMBER_CAP） */
+  max_members?: number
+  /** 共享上下文占用（0-1；设计稿 p-group L2342「上下文 62%」，mock 预登记待后端回填） */
+  context_usage?: number
 }
+
+/** 群成员容量上限 v1 = 5（mock 成员端点 409 文案「群成员已达 v1 上限 5（容量核算待定）」；
+ *  DTO 无全局配置端点，详情 max_members 缺省时以此兜底——容量核算定稿后随配置下发替换） */
+export const GROUP_MEMBER_CAP = 5
 
 export interface GroupMessageRow {
   id: string

@@ -1,6 +1,6 @@
 import '@testing-library/jest-dom/vitest'
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
-import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest'
+import { afterEach, beforeAll, describe, expect, it } from 'vitest'
 import { App } from '@/app/App'
 import { server } from '@/mocks/node'
 import { useAuthStore } from '@/stores/auth-store'
@@ -27,7 +27,7 @@ beforeAll(() => {
     }
   }
   ;(globalThis as unknown as { EventSource: unknown }).EventSource ??= EventSourceStub
-  server.listen({ onUnhandledRequest: 'bypass' })
+  // MSW 启停由全局 setupFiles（src/mocks/node-setup.ts）承担；本文件不再重复 server.listen
 })
 afterEach(() => {
   server.resetHandlers()
@@ -35,7 +35,6 @@ afterEach(() => {
   localStorage.clear()
   useAuthStore.getState().clearSession()
 })
-afterAll(() => server.close())
 
 async function loginAndGo(path: string) {
   window.history.pushState({}, '', path)

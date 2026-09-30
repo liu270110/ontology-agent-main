@@ -3,7 +3,13 @@
 
 from __future__ import annotations
 
-from conftest import (
+from services.agent.business.kernel.budget import Budget
+from services.agent.business.kernel.gate_baseline import canonical_param_hash
+from services.agent.business.kernel.loop import AgentKernel
+from services.agent.domain.model.kernel_actions import ApprovalTicket, ExecutionMode
+from services.agent.domain.model.step_state import StepStatus
+from services.agent.domain.model.task import RunStatus
+from tests.agent.conftest import (
     WRITE_ACTION_IRI,
     FakePlanner,
     FakeTool,
@@ -13,13 +19,6 @@ from conftest import (
     make_task,
     make_tool_dispatcher,
 )
-
-from services.agent.business.kernel.budget import Budget
-from services.agent.business.kernel.gate_baseline import canonical_param_hash
-from services.agent.business.kernel.loop import AgentKernel
-from services.agent.domain.model.kernel_actions import ApprovalTicket, ExecutionMode
-from services.agent.domain.model.step_state import StepStatus
-from services.agent.domain.model.task import RunStatus
 
 
 def _write_step() -> object:

@@ -4,18 +4,6 @@
 from __future__ import annotations
 
 import pytest
-from conftest import (
-    ACTION_IRI,
-    FakePackGate,
-    FakePlanner,
-    FakeTamperingGate,
-    FakeTool,
-    make_candidate,
-    make_ctx,
-    make_step,
-    make_task,
-    make_tool_dispatcher,
-)
 
 from services.agent.business.kernel.budget import Budget
 from services.agent.business.kernel.errors import KernelContractError
@@ -27,6 +15,18 @@ from services.agent.domain.model.kernel_gates import GateReport, GateVerdict
 from services.agent.domain.model.step_state import LoopStage, StepStatus
 from services.agent.domain.model.task import RunStatus
 from services.platform.errors import ErrorCode
+from tests.agent.conftest import (
+    ACTION_IRI,
+    FakePackGate,
+    FakePlanner,
+    FakeTamperingGate,
+    FakeTool,
+    make_candidate,
+    make_ctx,
+    make_step,
+    make_task,
+    make_tool_dispatcher,
+)
 
 
 def _decision(params: dict | None = None) -> ActionDecision:

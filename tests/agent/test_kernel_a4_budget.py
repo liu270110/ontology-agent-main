@@ -6,13 +6,21 @@ from __future__ import annotations
 import time
 
 import pytest
-from conftest import FakePlanner, FakeTool, make_candidate, make_ctx, make_step, make_task, make_tool_dispatcher
 
 from services.agent.business.kernel.budget import Budget, BudgetTracker
 from services.agent.business.kernel.errors import BudgetExhaustedError
 from services.agent.business.kernel.loop import AgentKernel
 from services.agent.domain.model.step_state import StepStatus
 from services.agent.domain.model.task import RunStatus
+from tests.agent.conftest import (
+    FakePlanner,
+    FakeTool,
+    make_candidate,
+    make_ctx,
+    make_step,
+    make_task,
+    make_tool_dispatcher,
+)
 
 
 def test_预算构造_非正数被拒():

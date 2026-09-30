@@ -4,7 +4,12 @@
 from __future__ import annotations
 
 import pytest
-from conftest import (
+
+from services.agent.business.kernel.budget import Budget
+from services.agent.business.kernel.loop import AgentKernel
+from services.agent.domain.model.step_state import LoopStage, StepStatus
+from services.agent.domain.model.task import RunStatus
+from tests.agent.conftest import (
     ACTION_IRI,
     FakeModel,
     FakePlanner,
@@ -15,11 +20,6 @@ from conftest import (
     make_task,
     make_tool_dispatcher,
 )
-
-from services.agent.business.kernel.budget import Budget
-from services.agent.business.kernel.loop import AgentKernel
-from services.agent.domain.model.step_state import LoopStage, StepStatus
-from services.agent.domain.model.task import RunStatus
 
 
 async def test_七阶段主路径_全步validated并闭环落账():

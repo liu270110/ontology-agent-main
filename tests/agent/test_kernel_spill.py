@@ -7,7 +7,6 @@ import uuid
 from pathlib import Path
 
 import pytest
-from conftest import FakePlanner, FakeTool, make_candidate, make_ctx, make_step, make_task, make_tool_dispatcher
 
 from services.agent.business.kernel.budget import Budget
 from services.agent.business.kernel.loop import AgentKernel
@@ -21,6 +20,15 @@ from services.agent.business.kernel.spill import (
 )
 from services.agent.domain.model.kernel_actions import ToolResult
 from services.agent.domain.model.kernel_context import TrustLevel
+from tests.agent.conftest import (
+    FakePlanner,
+    FakeTool,
+    make_candidate,
+    make_ctx,
+    make_step,
+    make_task,
+    make_tool_dispatcher,
+)
 
 _BUDGET = Budget(max_tokens=10_000, max_steps=5, duration_s=30.0)
 

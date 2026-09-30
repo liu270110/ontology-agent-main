@@ -13,7 +13,11 @@ import os
 
 import httpx
 import pytest
-from conftest import (
+
+from services.agent.business.kernel.budget import Budget
+from services.agent.business.kernel.loop import AgentKernel
+from services.platform.llm.gateway import OpenAICompatibleModelPort
+from tests.agent.conftest import (
     ACTION_IRI,
     SCOPE_TOOL,
     FakePlanner,
@@ -24,10 +28,6 @@ from conftest import (
     make_task,
     make_tool_dispatcher,
 )
-
-from services.agent.business.kernel.budget import Budget
-from services.agent.business.kernel.loop import AgentKernel
-from services.platform.llm.gateway import OpenAICompatibleModelPort
 
 _OLLAMA = os.environ.get("OA_OLLAMA_BASE_URL", "http://localhost:11434")
 _MODEL = os.environ.get("OA_OLLAMA_SMOKE_MODEL", "qwen3:0.6b")

@@ -4,7 +4,16 @@
 from __future__ import annotations
 
 import pytest
-from conftest import (
+
+from services.agent.business.kernel.budget import Budget
+from services.agent.business.kernel.errors import KernelContractError
+from services.agent.business.kernel.execution import ExecutionStage
+from services.agent.business.kernel.gate_baseline import canonical_param_hash
+from services.agent.business.kernel.loop import AgentKernel
+from services.agent.domain.model.kernel_actions import ApprovalTicket, ExecutionMode
+from services.agent.domain.model.kernel_planning import PlanStep
+from services.agent.domain.model.task import RunStatus
+from tests.agent.conftest import (
     CODE_ACTION_IRI,
     FakeBackend,
     FakePlanner,
@@ -15,15 +24,6 @@ from conftest import (
     make_task,
     make_tool_dispatcher,
 )
-
-from services.agent.business.kernel.budget import Budget
-from services.agent.business.kernel.errors import KernelContractError
-from services.agent.business.kernel.execution import ExecutionStage
-from services.agent.business.kernel.gate_baseline import canonical_param_hash
-from services.agent.business.kernel.loop import AgentKernel
-from services.agent.domain.model.kernel_actions import ApprovalTicket, ExecutionMode
-from services.agent.domain.model.kernel_planning import PlanStep
-from services.agent.domain.model.task import RunStatus
 
 
 def test_沙箱规格恒无网_内核构造不允许能力侧开启网络():

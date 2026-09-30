@@ -4,7 +4,11 @@
 from __future__ import annotations
 
 import pytest
-from conftest import (
+
+from services.agent.business.kernel.dispatcher import LOOP_CONTRACT_VERSION, ExtensionDispatcher
+from services.agent.business.kernel.errors import KernelContractError
+from services.agent.domain.model.kernel_context import ExtensionMeta
+from tests.agent.conftest import (
     ACTION_IRI,
     FakeBackend,
     FakeMemoryPolicy,
@@ -17,10 +21,6 @@ from conftest import (
     make_candidate,
     make_step,
 )
-
-from services.agent.business.kernel.dispatcher import LOOP_CONTRACT_VERSION, ExtensionDispatcher
-from services.agent.business.kernel.errors import KernelContractError
-from services.agent.domain.model.kernel_context import ExtensionMeta
 
 
 def _tool_with_meta(meta: ExtensionMeta) -> FakeTool:

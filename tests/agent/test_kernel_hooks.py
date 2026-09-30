@@ -12,15 +12,6 @@ import asyncio
 import uuid
 
 import pytest
-from conftest import (
-    FakePlanner,
-    FakeTool,
-    make_candidate,
-    make_ctx,
-    make_step,
-    make_task,
-    make_tool_dispatcher,
-)
 
 from services.agent.business.kernel.budget import Budget
 from services.agent.business.kernel.dispatcher import ExtensionDispatcher
@@ -33,6 +24,15 @@ from services.agent.domain.model.kernel_context import KernelEvent, TenantContex
 from services.agent.domain.model.step_state import LoopStage, StepState, StepStatus
 from services.agent.domain.model.task import RunStatus
 from services.platform.errors import ErrorCode
+from tests.agent.conftest import (
+    FakePlanner,
+    FakeTool,
+    make_candidate,
+    make_ctx,
+    make_step,
+    make_task,
+    make_tool_dispatcher,
+)
 
 # 单步成功运行的锚点事件名序列（grounding 两条 + planning + gate + observation + settlement）
 _ANCHOR_SEQUENCE = [

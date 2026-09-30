@@ -16,8 +16,6 @@ from __future__ import annotations
 import time
 from typing import Any
 
-from conftest import make_ctx, make_task
-
 from services.agent.business.adapters.builtin import build_tools_segment, mask_tools, render_tool_schema_section
 from services.agent.business.kernel.budget import Budget
 from services.agent.business.kernel.compaction import (
@@ -30,6 +28,7 @@ from services.agent.business.kernel.grounding import ContextAssemblyStage
 from services.agent.business.kernel.run_context import RunContext
 from services.agent.domain.model.kernel_context import ContextBlock, ExtensionMeta, TrustLevel
 from services.platform.config import Settings
+from tests.agent.conftest import make_ctx, make_task
 
 
 class TierProvider:

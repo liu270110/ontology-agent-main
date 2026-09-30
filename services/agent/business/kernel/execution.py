@@ -70,6 +70,20 @@ class ExecutionStage:
             state.transition(StepStatus.WAITING_APPROVAL, stage=LoopStage.EXECUTION)
             ledger.record_step(state)
             if approval is None:  # 超时默认拒绝（02 §2 B5）
+                # H-0b 接线：先落 pending 锚点事件（审批呈现端点从 task_events 消费写
+                # task.payload，人工批准后经 worker resume 通道携票重放本步——07 边界契约 D6）
+                self._emit(
+                    ledger,
+                    ctx,
+                    state.run_id,
+                    "kernel.approval_pending",
+                    {
+                        "step_seq": state.seq,
+                        "param_hash": param_hash,
+                        "action_iri": str(step.action_iri) if hasattr(step, "action_iri") else None,
+                        "execution_mode": str(step.execution_mode.value) if hasattr(step.execution_mode, "value") else str(step.execution_mode),
+                    },
+                )
                 state.transition(StepStatus.FAILED, stage=LoopStage.EXECUTION)
                 state.error = _err(ErrorCode.SCOPE_INSUFFICIENT, "审批缺失/超时，默认拒绝（B5）")
                 ledger.record_step(state)

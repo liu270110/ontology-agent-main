@@ -1,7 +1,6 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import {
-  Check,
+import {SearchX, Check,
   Download,
   MoreHorizontal,
   Pencil,
@@ -10,12 +9,11 @@ import {
   Plus,
   Search,
   Trash2,
-  X,
-} from 'lucide-react'
+  X,} from 'lucide-react'
 import { api, ApiError } from '@/api/client'
 import { qk } from '@/lib/qk'
 import { useSessionStore } from '@/stores/session-store'
-import { ErrorState, SkeletonRows } from '@/components/states'
+import {ErrorState, SkeletonRows, EmptyState} from '@/components/states'
 import { MenuSurface } from '@/components/popover'
 
 interface SessionItem {
@@ -288,7 +286,7 @@ export function SessionList({ onPicked }: { onPicked?: (id: string) => void }) {
           ),
         )}
         {!isPending && !isError && items.length === 0 && (
-          <div className="px-4 py-6 text-center text-[11px] text-label-3">无匹配会话</div>
+          <EmptyState compact icon={SearchX} title="无匹配会话" />
         )}
       </div>
     </div>

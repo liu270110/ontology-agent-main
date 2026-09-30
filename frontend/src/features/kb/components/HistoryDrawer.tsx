@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import { Trash2 } from 'lucide-react'
+import {History, Trash2} from 'lucide-react'
+import {EmptyState} from '@/components/states'
 import { Sheet } from '@/components/sheet'
 import { Modal } from '@/components/modal'
 import { relativeTime } from './shared'
@@ -34,10 +35,7 @@ export function HistoryDrawer({
     <Sheet open={open} onClose={onClose} title="检索历史" width={420}>
       <div className="flex flex-col p-4">
         {history.length === 0 && (
-          <div className="empty">
-            <div className="t">暂无历史</div>
-            <div className="d">检索记录仅保存在本机浏览器。</div>
-          </div>
+          <EmptyState icon={History} title="暂无历史" desc="检索记录仅保存在本机浏览器。" />
         )}
         {history.map((h, i) => (
           <button

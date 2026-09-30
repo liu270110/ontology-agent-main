@@ -1,9 +1,9 @@
 import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { UserPlus } from 'lucide-react'
+import {Link2, UserPlus} from 'lucide-react'
 import { toast } from 'sonner'
 import { ApiError } from '@/api/client'
-import { ErrorState, SkeletonRows } from '@/components/states'
+import {ErrorState, SkeletonRows, EmptyState} from '@/components/states'
 import { Modal } from '@/components/modal'
 import { relativeTime } from '@/lib/reltime'
 import { Select } from '@/components/select'
@@ -365,7 +365,7 @@ function InviteModal({ onClose }: { onClose: () => void }) {
           <span className="text-[11px] text-label-3">撤销立即失效且不可逆</span>
         </div>
         {links.length === 0 ? (
-          <div className="mt-2 text-[11px] text-label-3">暂无邀请链接（生成后在此列出，供撤销管理）</div>
+          <EmptyState compact icon={Link2} title="暂无邀请链接" desc="生成后在此列出，供撤销管理。" />
         ) : (
           <div className="mt-2 space-y-1.5">
             {links.map(l => (

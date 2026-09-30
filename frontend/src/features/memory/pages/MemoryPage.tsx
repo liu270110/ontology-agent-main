@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { Gavel, Lock, Search, X } from 'lucide-react'
+import {Brain, SearchX, Gavel, Lock, Search, X} from 'lucide-react'
 import { toast } from 'sonner'
 import { ApiError } from '@/api/client'
-import { ErrorState, SkeletonCards, SkeletonRows } from '@/components/states'
+import {ErrorState, SkeletonCards, SkeletonRows, EmptyState} from '@/components/states'
 import { listFacts, listL1, listPromotions, type FactLayer, type MemoryFact } from '../api'
 import { LAYER_META } from '../api'
 import { FactStatusBadge, LayerBadge, TtlBar, relativeTime } from '../components/shared'
@@ -302,16 +302,10 @@ export function MemoryPage() {
             />
           )}
           {l1Items.length === 0 && !l1Query.isLoading && !l1Query.isError && (
-            <div className="empty mt-6">
-              <div className="t">当前没有活跃的 L1 工作记忆</div>
-              <div className="d">L1 随会话创建，会话关闭时触发归档与 L2 沉淀。</div>
-            </div>
+            <EmptyState className="mt-6" icon={Brain} title="当前没有活跃的 L1 工作记忆" desc="L1 随会话创建，会话关闭时触发归档与 L2 沉淀。" />
           )}
           {l1Items.length > 0 && visibleL1.length === 0 && q && (
-            <div className="empty mt-6" data-testid="mem-search-empty-l1">
-              <div className="t">无匹配会话</div>
-              <div className="d">当前层内没有标题或内容块包含「{kw.trim()}」的 L1 会话。</div>
-            </div>
+            <EmptyState className="mt-6" icon={SearchX} title="无匹配会话" desc={<>当前层内没有标题或内容块包含「{kw.trim()}」的 L1 会话。</>} />
           )}
           <div className="mt-3 text-[11px] text-label-3">
             L1 写入仅限系统沉淀与用户自编辑记忆块（PUT /memory/l1/&#123;session_id&#125;）；平台管理页对本层只读。脱敏规则待权限矩阵评审定稿（25 篇 §14）。

@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ArrowRight, Download, Search, ShieldAlert } from 'lucide-react'
+import {Quote, ArrowRight, Download, Search, ShieldAlert} from 'lucide-react'
+import {EmptyState} from '@/components/states'
 import { toast } from 'sonner'
 import { Sheet } from '@/components/sheet'
 import { getFactTimeline, invalidateFact, type MemoryFact } from '../api'
@@ -160,7 +161,7 @@ export function FactDetailSheet({
                 <div className="text-label-2">「{r.snippet}」</div>
               </div>
             ))}
-            {refs.length === 0 && <div className="text-[11px] text-label-3">暂无回答引用。</div>}
+            {refs.length === 0 && <EmptyState compact icon={Quote} title="暂无回答引用" desc="回答引用随检索命中自动挂接。" />}
           </div>
         </div>
 

@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate, useParams } from 'react-router-dom'
-import { Plus, Search, Share2, Users, X, Zap } from 'lucide-react'
+import {MessagesSquare, Plus, Search, Share2, Users, X, Zap} from 'lucide-react'
 import { api, ApiError } from '@/api/client'
-import { ErrorState, SkeletonRows } from '@/components/states'
+import {ErrorState, SkeletonRows, EmptyState} from '@/components/states'
 import { getGroupSession, listGroupSessions, type GroupMessageRow, type GroupSessionDetail, type RoutingMode } from '../api'
 import { useGroupStreamStore } from '../group-store'
 import { useGroupStream } from '../useGroupStream'
@@ -164,9 +164,11 @@ export function GroupChatPage() {
             </button>
           ))}
           {!listQ.isPending && !listQ.isError && filteredSessions.length === 0 && (
-            <div className="px-4 py-6 text-center text-xs text-label-3">
-              {sessionItems.length === 0 ? '暂无群聊 · 点 ＋ 新建' : '无匹配群聊'}
-            </div>
+            <EmptyState
+              compact
+              icon={MessagesSquare}
+              title={sessionItems.length === 0 ? '暂无群聊 · 点 ＋ 新建' : '无匹配群聊'}
+            />
           )}
         </div>
       </aside>

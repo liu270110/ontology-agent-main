@@ -88,8 +88,13 @@
 .empty{display:flex;flex-direction:column;align-items:center;gap:6px;padding:40px 20px;text-align:center}
 .empty svg{width:28px;height:28px;color:var(--label-3)}
 .empty .t{font-size:14px;font-weight:600;color:var(--label)}
-.empty .d{font-size:12px;color:var(--label-2)}
+.empty .d{font-size:12px;color:var(--label-2);line-height:1.6;max-width:300px}
 .empty .acts{display:flex;gap:8px;margin-top:8px}
+/* v1.4 窄容器档（侧栏列表/抽屉）：缩内距与图标；EmptyState 基元 compact 档消费 */
+.empty.sm{padding:24px 12px;gap:4px}
+.empty.sm svg{width:20px;height:20px}
+.empty.sm .t{font-size:12.5px}
+.empty.sm .d{font-size:11px}
 
 /* ---- 计量条 / 键位 / 骨架 ---- */
 .meter{height:6px;border-radius:3px;background:rgba(0,0,0,.06);overflow:hidden}

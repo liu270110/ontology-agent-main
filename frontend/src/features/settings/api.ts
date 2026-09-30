@@ -12,6 +12,22 @@ export interface Preferences {
   timezone: string
   totp_enabled: boolean
   notifications: Record<string, { inapp: boolean; email: boolean; locked?: boolean }>
+  /** ---- S-AD 切片扩展偏好（全部可选；PUT /me/preferences mock 侧 Object.assign 透传合并，
+   *  GET 原样带回；旧后端忽略未知字段亦不破坏读写） ---- */
+  /** 新手引导完成标记（工作台全三步完成时写入；true 后引导卡不再渲染） */
+  onboarding_done?: boolean
+  /** 对话偏好：默认模型（claude-sonnet | gpt-4o | deepseek） */
+  chat_default_model?: string
+  /** 对话偏好：思考档位（standard 标准 | deep 深度 | flash 闪电） */
+  chat_thinking_level?: string
+  /** 对话偏好：群聊编排默认模式（mention | round_robin | all | orchestrator，文案同 group 域 ROUTING_LABEL） */
+  group_routing_default?: string
+  /** 记忆：总开关（关闭后不再召回、不再沉淀） */
+  memory_enabled?: boolean
+  /** 记忆：群聊会话写入个性化记忆（L1） */
+  memory_group_l1_write?: boolean
+  /** 记忆：清除记忆走失效边（墓碑式软删，可追溯） */
+  memory_clear_via_invalidate?: boolean
 }
 
 export const getPreferences = () => api.get<Preferences>('/me/preferences')
@@ -26,6 +42,21 @@ export interface DeviceSession {
 }
 export const listDevices = () => api.get<{ items: DeviceSession[] }>('/me/sessions')
 export const revokeDevice = (id: string) => api.post<void>(`/me/sessions/${id}/revoke`)
+
+// ---- 数据与导出（S-AD 切片：异步任务 202 受理 → GET 轮询 → done 带下载链接；
+//      mock 平台域纯追加，契约未登记端点，交付报告 R 清单同步） ----
+export interface ExportTask {
+  task_id: string
+  status: 'queued' | 'running' | 'done' | 'failed'
+  download_url?: string
+}
+/** 发起导出：202 {task_id, status:'queued'} */
+export const requestMyExport = () => api.post<ExportTask>('/me/export')
+/** 轮询导出任务：200 {status, download_url?} */
+export const getMyExportTask = (taskId: string) => api.get<ExportTask>(`/me/export/${taskId}`)
+
+// ---- 账号 Danger Zone（S-AD 切片）：下线全部设备会话（含当前） ----
+export const revokeAllSessions = () => api.delete<{ revoked: number }>('/auth/sessions/all')
 
 // ---- 2FA（§5.9 totp 三端点已登记；backup-codes 重新生成预登记） ----
 export interface TotpSetup { secret: string; otpauth_uri: string }

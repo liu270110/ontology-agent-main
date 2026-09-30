@@ -51,6 +51,13 @@ export async function countOntologies() {
   return r.items.length
 }
 
+/** 知识文档非空判定（新手引导第③步，S-AD 切片）：只拉 1 条判存在即可，不取全量；
+ *  live /kb/documents 挂起（api.ts 头注）→ 引导卡第③步保持未完成态，不阻塞其余两步。 */
+export async function countKbDocuments() {
+  const r = await api.get<{ items: unknown[] }>('/kb/documents?limit=1')
+  return r.items.length
+}
+
 /** 今日会话计数：created_at 在今天的会话数（≤100 首页近似）；TODO(R5x): 后端统计端点交付后切换 */
 export async function countTodaySessions() {
   const r = await api.get<{ items: DashSession[] }>('/sessions?limit=100')

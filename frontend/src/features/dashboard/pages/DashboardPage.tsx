@@ -4,14 +4,18 @@ import {
   Layers,
   ListTodo,
   MessageSquare,
+  Plus,
+  Upload,
   Users,
   Workflow,
 } from 'lucide-react'
+import { Link } from 'react-router-dom'
 import { useAuthStore } from '@/stores/auth-store'
 import { LauncherCardView, type LauncherCard } from '../components/launcher-card'
 import { RecentSessions } from '../components/recent-sessions'
 import { RecentTasks } from '../components/recent-tasks'
 import { ConsoleEntryCard } from '../components/console-entry-card'
+import { OnboardingCard } from '../components/onboarding-card'
 import { useDashboardQueries } from '../hooks'
 
 /** 主页启动台（双区 IA，2026-09-28 用户裁决）：常用功能大卡（7 卡，按角色过滤）+ 最近动态
@@ -21,8 +25,11 @@ import { useDashboardQueries } from '../hooks'
  *  - 卡片指标：今日对话 GET /sessions（created_at 近似）、本体项目 GET /ontologies（首页长度
  *    近似）、运行中任务取自任务列表、待审批 GET /admin/reviews?status=pending（total）——
  *    拿不到的指标省略不硬造（知识文档 live /kb/documents 挂起 → 知识库卡不放指标）。
+ *  S-AD 切片（宿主 p-dashboard L192-193 / L228-235）：页头右上「上传文档 / 新建本体项目」
+ *  快捷动作钮（kb 无 ?upload=1 消费、ontology 无新建直达参数 → 纯路由跳转）+
+ *  新手引导三步卡（components/onboarding-card.tsx，判定复用本页查询缓存）。
  *  模块化第一批：查询集中 hooks.ts（useDashboardQueries），启动台卡/最近会话/最近任务/
- *  控制台入口卡拆 components/，本文件只留编排与卡片装配，行为零变化。 */
+ *  控制台入口卡拆 components/，本文件只留编排与卡片装配。 */
 
 export function DashboardPage() {
   const user = useAuthStore(s => s.user)
@@ -33,12 +40,19 @@ export function DashboardPage() {
     todayQ,
     sessionsQ,
     tasksQ,
+    docsQ,
     sessions,
     tasks,
     pendingTotal,
     runningTasks,
     subLine,
   } = useDashboardQueries()
+
+  // 新手引导三步判定（live 数据非空即完成；三路都成功才渲染，防加载中误判）
+  const onboardingReady = !sessionsQ.isPending && !sessionsQ.isError && !ontoQ.isPending && !ontoQ.isError && !docsQ.isPending && !docsQ.isError
+  const onboardingChatDone = sessions.length > 0
+  const onboardingProjectDone = (ontoQ.data ?? 0) > 0
+  const onboardingDocsDone = (docsQ.data ?? 0) > 0
 
   const cards: LauncherCard[] = [
     {
@@ -82,13 +96,36 @@ export function DashboardPage() {
 
   return (
     <div>
-      {/* 欢迎行 + 控制台入口卡：sm 以下堆叠（入口卡 flex-none，横排会挤压标题） */}
+      {/* 欢迎行 + 快捷动作 + 控制台入口卡：sm 以下堆叠（入口卡 flex-none，横排会挤压标题） */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:gap-4">
         <div className="min-w-0 flex-1">
-          <h1 className="text-xl font-bold">{greeting()}，{user?.displayName ?? '用户'}</h1>
+          <div className="flex flex-wrap items-center gap-3">
+            <h1 className="text-xl font-bold">{greeting()}，{user?.displayName ?? '用户'}</h1>
+            {/* 快捷动作钮（p-dashboard L192-193）：上传文档 → /kb、新建本体项目 → /ontology */}
+            <span className="ml-auto flex items-center gap-2">
+              <Link to="/kb" className="btn btn-s" data-testid="dash-quick-upload">
+                <Upload size={13} aria-hidden />
+                上传文档
+              </Link>
+              <Link to="/ontology" className="btn btn-p" data-testid="dash-quick-new-project">
+                <Plus size={13} aria-hidden />
+                新建本体项目
+              </Link>
+            </span>
+          </div>
           <p className="sub mt-1 text-xs text-label-3">{subLine}</p>
         </div>
         <ConsoleEntryCard pendingTotal={pendingTotal} isPending={pendingQ.isPending} isError={pendingQ.isError} />
+      </div>
+
+      {/* 新手引导三步卡（启动台 grid 上方；全完成写 onboarding_done 后隐藏） */}
+      <div className="mt-4">
+        <OnboardingCard
+          ready={onboardingReady}
+          chatDone={onboardingChatDone}
+          projectDone={onboardingProjectDone}
+          docsDone={onboardingDocsDone}
+        />
       </div>
 
       {/* 常用功能启动台（7 卡；角色过滤与 routes.tsx meta 对齐） */}

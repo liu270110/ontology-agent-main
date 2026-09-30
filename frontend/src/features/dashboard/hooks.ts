@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { qk } from '@/lib/qk'
-import { countOntologies, countPendingReviews, countTodaySessions, listRecentSessions, listRecentTasks } from './api'
+import { countKbDocuments, countOntologies, countPendingReviews, countTodaySessions, listRecentSessions, listRecentTasks } from './api'
 
 /** 工作台查询集中 hook（模块化第一批自 DashboardPage 拆出，行为零变化）：
  *  聚合计数（真数据；供启动台指标与副行）+ 入口列表（真数据；空列表=合法真实态 →
@@ -14,6 +14,8 @@ export function useDashboardQueries() {
   // ---- 入口列表（真数据；空列表=合法真实态 → 优雅空态；启动台只露 top3） ----
   const sessionsQ = useQuery({ queryKey: qk.session.list({ limit: 3 }), queryFn: () => listRecentSessions(3) })
   const tasksQ = useQuery({ queryKey: qk.tasks.list({ limit: 3 }), queryFn: () => listRecentTasks(3) })
+  // ---- 新手引导第③步判定（S-AD 切片）：知识文档非空（limit=1 判存在，live 挂起则保持未完成） ----
+  const docsQ = useQuery({ queryKey: ['dashboard', 'kb-doc-count'], queryFn: countKbDocuments })
 
   // 指标口径用全量返回（mock 忽略 limit 参数），展示口径收敛 top3
   const allSessions = sessionsQ.data?.items ?? []
@@ -36,6 +38,7 @@ export function useDashboardQueries() {
     todayQ,
     sessionsQ,
     tasksQ,
+    docsQ,
     sessions,
     tasks,
     pendingTotal,

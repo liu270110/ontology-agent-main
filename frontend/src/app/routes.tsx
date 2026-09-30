@@ -5,7 +5,13 @@
  *
  *  双区 IA（2026-09-28 用户裁决）：主页区（AppShell 宿主，常用功能启动台）＋
  *  管理控制台区（ConsoleShell 宿主，治理/能力配置/观测）。管理类路由迁至 /console/*，
- *  旧路径经 App.tsx LegacyRedirect 保书签（查询串透传，/admin?tab=audit 类深链不丢）。 */
+ *  旧路径经 App.tsx LegacyRedirect 保书签（查询串透传，/admin?tab=audit 类深链不丢）。
+ *
+ *  四区 IA（2026-10-01 用户裁决）：在双区之上新增平台能力区——/platform（PlatformShell 宿主，
+ *  用户浏览与获取平台能力的统一入口：总览/插件市场/工具与技能/MCP 接入/Agent 目录）；
+ *  扩展中心三页自 /console/* 迁出、/agents 列表迁入（旧路径 LegacyRedirect 保书签）；
+ *  管理控制台收缩为治理/观测（审批中心 + 系统管理，审计=系统管理 audit Tab）。
+ *  主侧边栏「独立页面」分组（STANDALONE_NAV）为跨分区入口：平台能力/管理控制台/用户设置。 */
 
 /** 角色码权威=08 篇 §2.2：admin/ontologist/curator/member/guest（+平台级 super_admin） */
 export type RoleCode = 'admin' | 'ontologist' | 'curator' | 'member' | 'guest' | 'super_admin'
@@ -15,8 +21,8 @@ export const AUTHED_ROLES: RoleCode[] = ['admin', 'ontologist', 'curator', 'memb
 
 const AUTHED = AUTHED_ROLES
 
-/** 控制台窄导航分组（ConsoleShell 左栏） */
-export type ConsoleGroup = '治理' | '能力配置' | '观测'
+/** 控制台窄导航分组（ConsoleShell 左栏；四区收缩后=治理/观测，能力配置三页迁 /platform） */
+export type ConsoleGroup = '治理' | '观测'
 
 export interface RouteMeta {
   path: string
@@ -27,12 +33,14 @@ export interface RouteMeta {
   console?: boolean
   /** 控制台窄导航分组（console=true 时消费，ConsoleShell） */
   consoleGroup?: ConsoleGroup
+  /** 四区 IA：true=平台能力区（PlatformShell 宿主，不进主侧边栏；浏览/获取=用户能力，总览与市场 AUTHED） */
+  platform?: boolean
   /** 细粒度 scope（11 篇 资源:动作）；RouteGuard 判缺 → 403 */
   permission?: string
   /** 角色粗过滤（08 §2.2 矩阵映射）；缺省 = 全部认证角色可见 */
   roles?: RoleCode[]
   hidden?: boolean
-  /** 主侧边栏收敛（双区 IA 只留 7 常用项）：false=不进主侧边栏（⌘K/深链仍可达） */
+  /** 主侧边栏收敛（四区 IA 只留 7 常用项 + 独立页面分组）：false=不进主侧边栏（⌘K/深链仍可达） */
   sidebar?: boolean
 }
 
@@ -66,25 +74,45 @@ export const ROUTES: RouteMeta[] = [
   { path: '/kb/playground', title: '检索 Playground', icon: 'flask', group: '语义资产', roles: ['admin', 'ontologist', 'curator', 'super_admin'], sidebar: false },
   { path: '/memory', title: '记忆管理', icon: 'layers', group: '语义资产', roles: AUTHED },
   // S5 平台域动态路由（hidden=侧栏/cmdk 不露，深链直达；IX-AGT-02 详情四 Tab ?tab=info|tools|adapter|history）
+  // 四区 IA：详情仍宿主主页区（自 /platform/agents 列表跳入），列表路由迁 /platform/agents
   { path: '/agents/:agentId', title: 'Agent 详情', icon: 'bot', group: '能力', roles: ['admin', 'curator', 'member', 'super_admin'], hidden: true },
-  { path: '/agents', title: 'Agent 管理', icon: 'bot', group: '能力', roles: ['admin', 'curator', 'member', 'super_admin'], sidebar: false },
   { path: '/settings', title: '个人设置', icon: 'user', group: '工作台', hidden: true, roles: AUTHED },
 
-  // ---- 管理控制台区（console=true，ConsoleShell 宿主；旧路径 /approvals /admin /mcp
-  // /marketplace /tools /system 由 App.tsx LegacyRedirect 映射，查询串透传）----
+  // ---- 平台能力区（platform=true，PlatformShell 宿主；四区 IA 2026-10-01 用户裁决：
+  // 扩展中心三页自 /console/* 迁出 + /agents 列表迁入；旧路径由 App.tsx LegacyRedirect 保书签）----
+  // 权限口径：浏览与获取是用户能力——总览/市场 AUTHED 全员；tools/mcp 沿用原口径（08 §2.2 无 curator，
+  // 安装/接入写操作页内再按 scope 过滤）；agents 沿用原口径（无 ontologist）
+  { path: '/platform/market', title: '插件市场', icon: 'puzzle', group: '能力', platform: true, roles: AUTHED },
+  { path: '/platform/tools', title: '工具与技能', icon: 'wrench', group: '能力', platform: true, roles: ['admin', 'ontologist', 'member', 'super_admin'] },
+  { path: '/platform/mcp', title: 'MCP 接入', icon: 'plug', group: '能力', platform: true, roles: ['admin', 'ontologist', 'member', 'super_admin'] },
+  { path: '/platform/agents', title: 'Agent 目录', icon: 'bot', group: '能力', platform: true, roles: ['admin', 'curator', 'member', 'super_admin'] },
+
+  // ---- 管理控制台区（console=true，ConsoleShell 宿主；旧路径 /approvals /admin /system 由
+  // App.tsx LegacyRedirect 映射，查询串透传。四区收缩：能力配置三页已迁 /platform/*）----
   // S6 审批中心（26 篇 §10.1 p-approve）：终审门禁限 admin/curator（super_admin 平台级豁免）
   { path: '/console/approvals', title: '审批中心', icon: 'shield', group: '治理', console: true, consoleGroup: '治理', roles: ['admin', 'curator', 'super_admin'] },
   // S6 系统管理（26 篇 §10.2 宿主路径 /admin→/console/admin；Tab 深链 ?tab=users|groups|roles|
   // models|audit，租户 Tab super_admin 可见）；审计日志控制台入口 = /console/admin?tab=audit
   { path: '/console/admin', title: '系统管理', icon: 'gear', group: '治理', console: true, consoleGroup: '治理', permission: 'user:manage', roles: ['admin', 'super_admin'] },
-  // S5 扩展中心三页：26 篇 §9 宿主路径（/marketplace、/tools、/mcp → /console/*）。
-  // market 全员可见；tools/mcp 无 curator（08 篇 §2.2 矩阵）——安装/接入写操作页内再按 scope 过滤
-  { path: '/console/mcp', title: 'MCP 管理', icon: 'plug', group: '能力', console: true, consoleGroup: '能力配置', roles: ['admin', 'ontologist', 'member', 'super_admin'] },
-  { path: '/console/market', title: '插件市场', icon: 'puzzle', group: '能力', console: true, consoleGroup: '能力配置', roles: AUTHED },
-  { path: '/console/tools', title: '工具与技能', icon: 'wrench', group: '能力', console: true, consoleGroup: '能力配置', roles: ['admin', 'ontologist', 'member', 'super_admin'] },
 ]
 
 /** 主页区路由（AppShell 侧栏/⌘K 事实源） */
-export const MAIN_ROUTES = ROUTES.filter(r => !r.console)
+export const MAIN_ROUTES = ROUTES.filter(r => !r.console && !r.platform)
 /** 管理控制台区路由（ConsoleShell 宿主 + 控制台窄导航/首页卡片事实源） */
 export const CONSOLE_ROUTES = ROUTES.filter(r => r.console)
+/** 平台能力区路由（PlatformShell 宿主；/platform 总览为壳 index，不入此表） */
+export const PLATFORM_ROUTES = ROUTES.filter(r => r.platform)
+
+/** 主侧边栏「独立页面」分组（四区 IA 2026-10-01）：跨分区入口，非 AppShell 宿主路由
+ *  （/platform=PlatformShell、/console=ConsoleShell、/settings=AppShell hidden 深链）。 */
+export interface StandaloneNavItem {
+  title: string
+  to: string
+  icon: string
+  desc: string
+}
+export const STANDALONE_NAV: StandaloneNavItem[] = [
+  { title: '平台能力', to: '/platform', icon: 'puzzle', desc: '插件市场 · 工具技能 · MCP · Agent 目录' },
+  { title: '管理控制台', to: '/console', icon: 'shield', desc: '审批中心 · 系统管理 · 审计观测' },
+  { title: '用户设置', to: '/settings', icon: 'user', desc: '个人资料与偏好' },
+]

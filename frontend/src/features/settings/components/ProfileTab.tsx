@@ -4,6 +4,7 @@ import { toast } from 'sonner'
 import { Modal } from '@/components/modal'
 import { useAuthStore } from '@/stores/auth-store'
 import { getPreferences, putPreferences } from '../api'
+import { Select } from '@/components/select'
 
 /** IX-SET-01 资料 Tab（26 篇 §3）：头像上传（canvas 圆形裁剪简版）+ 姓名/邮箱（邮箱只读）
  *  + 语言/时区选择 + 保存按钮（脏态才可点）。姓名/部门自更新走 PUT /me/preferences
@@ -128,18 +129,18 @@ export function ProfileTab() {
         </div>
         <div className="field">
           <label className="field-label" htmlFor="set-profile-lang">语言</label>
-          <select id="set-profile-lang" className="input" value={prefs.language} onChange={e => patch({ language: e.target.value })}>
+          <Select id="set-profile-lang" className="input" value={prefs.language} onChange={e => patch({ language: e.target.value })}>
             <option value="zh-CN">简体中文</option>
             <option value="en-US">English (US)</option>
-          </select>
+          </Select>
         </div>
         <div className="field">
           <label className="field-label" htmlFor="set-profile-tz">时区</label>
-          <select id="set-profile-tz" className="input" value={prefs.timezone} onChange={e => patch({ timezone: e.target.value })}>
+          <Select id="set-profile-tz" className="input" value={prefs.timezone} onChange={e => patch({ timezone: e.target.value })}>
             <option value="Asia/Shanghai">(GMT+8) 上海</option>
             <option value="UTC">(UTC) 协调世界时</option>
             <option value="America/New_York">(GMT-5) 纽约</option>
-          </select>
+          </Select>
         </div>
       </div>
 

@@ -5,6 +5,7 @@ import { StreamLanguage } from '@codemirror/language'
 import { turtle } from '@codemirror/legacy-modes/mode/turtle'
 import { AlertTriangle, CheckCircle2, FilePlus2, Wand2 } from 'lucide-react'
 import type { OntoAxiomRow, ValidateReport } from '../api'
+import { Select } from '@/components/select'
 
 /** 公理编辑器（26 篇 §6.2 IX-ON-08；画板 ix-on-08，?tab=axioms 整页态）：
  *  shape 模板库下拉 + SHACL Turtle mono 编辑器（CodeMirror 6 StreamLanguage 语法级高亮
@@ -118,7 +119,7 @@ export function AxiomEditor({
             <span className="badge b-orange">试校验 {violations.length} 违例</span>
           )}
           <span className="ml-auto flex gap-2">
-            <select
+            <Select
               aria-label="shape 模板下拉"
               className="input h-7 w-56 text-[11px]"
               value=""
@@ -135,7 +136,7 @@ export function AxiomEditor({
               {TEMPLATES.map(t => (
                 <option key={t.name} value={t.name}>{t.name}</option>
               ))}
-            </select>
+            </Select>
             <button type="button" className="btn btn-s btn-sm" data-testid="axiom-validate" disabled={validating} onClick={() => onRunValidate(shapeName)}>
               <Wand2 size={12} className={validating ? 'animate-spin' : ''} aria-hidden /> 试校验
             </button>

@@ -4,6 +4,7 @@ import { z } from 'zod'
 import { ExternalLink, History, Link2, RotateCcw, Save } from 'lucide-react'
 import { listClasses, type OntoClassNode } from '../api'
 import { useWorkbenchStore } from '../stores/workbench-store'
+import { Select } from '@/components/select'
 
 /** 右侧检查器（26 篇 §6.2 IX-ON-04；画板 ix-on-04，右栏 320px）：
  *  GB/T 48000.3 类 8 项元数据（Name/Label/Definition/SubclassOf/DisjointWith/抽象开关/
@@ -30,7 +31,7 @@ export function InspectorPanel({ projectId, cls }: { projectId: string; cls: Ont
   const [applied, setApplied] = useState(false)
   const [fieldErr, setFieldErr] = useState<Partial<Record<keyof MetaForm, string>>>({})
 
-  const { register, watch, reset, getValues } = useForm<MetaForm>({
+  const { register, watch, reset, getValues, setValue } = useForm<MetaForm>({
     defaultValues: { name: '', label: '', definition: '', subclassOf: '', disjointWith: '', synonyms: '' },
   })
   const values = watch()
@@ -147,7 +148,13 @@ export function InspectorPanel({ projectId, cls }: { projectId: string; cls: Ont
         </div>
         <div className="field">
           <label className="field-label" htmlFor="insp-parent">SubclassOf（父类）</label>
-          <select id="insp-parent" className="input h-8 text-xs" {...register('subclassOf')}>
+          <Select
+            id="insp-parent"
+            className="input h-8 text-xs"
+            name="subclassOf"
+            value={values.subclassOf ?? ''}
+            onChange={e => setValue('subclassOf', e.target.value, { shouldDirty: true })}
+          >
             <option value="">— 无（顶层类）—</option>
             {classList
               .filter(c => c.id !== cls.id)
@@ -156,7 +163,7 @@ export function InspectorPanel({ projectId, cls }: { projectId: string; cls: Ont
                   {c.label} {c.name}
                 </option>
               ))}
-          </select>
+          </Select>
           {parent && <div className="fhint">当前父类：{parent.label} {parent.name}</div>}
         </div>
         {/* 子类 chips 行（只读，随 SubclassOf 展示层级上下文；无子类不渲染） */}

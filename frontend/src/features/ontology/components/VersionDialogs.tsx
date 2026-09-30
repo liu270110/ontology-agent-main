@@ -3,6 +3,7 @@ import { CheckCircle2, XCircle } from 'lucide-react'
 import { Modal } from '@/components/modal'
 import type { Changeset, DiffRow, OntoVersion } from '../api'
 import { ChangeCountChips, CsStatusBadge } from './shared'
+import { Select } from '@/components/select'
 
 /** 版本评审弹窗组（26 篇 §7.1）：IX-VR-01 对比选择器（左右双列 + 差异计数）、
  *  IX-VR-03 通过并发布确认（发布说明必填 + 五步物化进度条「图谱物化→检索索引同步」
@@ -61,22 +62,22 @@ export function CompareSelectorDialog({
       <div className="grid grid-cols-2 gap-3">
         <div>
           <div className="field-label">基线版本（左）</div>
-          <select aria-label="基线版本" className="input h-8 text-xs" value={left} onChange={e => { setLeft(e.target.value); setStats(null) }}>
+          <Select aria-label="基线版本" className="input h-8 text-xs" value={left} onChange={e => { setLeft(e.target.value); setStats(null) }}>
             {published.map(v => (
               <option key={v.version} value={v.version}>{v.version} · 已发布</option>
             ))}
-          </select>
+          </Select>
           <div className="mt-1 text-[11px] text-label-3">时间线式：仅已发布可选</div>
         </div>
         <div>
           <div className="field-label">目标版本（右）</div>
-          <select aria-label="目标版本" className="input h-8 text-xs" value={right} onChange={e => { setRight(e.target.value); setStats(null) }}>
+          <Select aria-label="目标版本" className="input h-8 text-xs" value={right} onChange={e => { setRight(e.target.value); setStats(null) }}>
             {[...draft, ...published].map(v => (
               <option key={v.version} value={v.version}>
                 {v.version} · {v.status === 'draft' ? '草稿' : '已发布'}
               </option>
             ))}
-          </select>
+          </Select>
           <div className="mt-1 text-[11px] text-label-3">当前草稿默认在右</div>
         </div>
       </div>

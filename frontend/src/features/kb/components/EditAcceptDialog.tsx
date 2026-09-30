@@ -3,6 +3,7 @@ import { toast } from 'sonner'
 import { Modal } from '@/components/modal'
 import { decide, type KbCandidate } from '../api'
 import { HighlightedQuote } from './shared'
+import { Select } from '@/components/select'
 
 /** IX-REV-01 编辑后接受弹窗（Modal 680px 双栏；26 篇 §5.2）：
  *  左=原文对照（命中句高亮，只读）；右=三元组编辑表单（主语只读 / 谓词下拉 / 宾语输入+类联想）；
@@ -82,13 +83,13 @@ export function EditAcceptDialog({ candidate, onClose, onDecided }: { candidate:
           </label>
           <label className="block">
             <span className="mb-1 block text-xs text-label-2">谓词（按本体类约束过滤）</span>
-            <select className="input h-8 text-xs" value={pred} onChange={e => setPredicate(e.target.value)} aria-label="谓词">
+            <Select className="input h-8 text-xs" value={pred} onChange={e => setPredicate(e.target.value)} aria-label="谓词">
               {[...new Set([candidate.predicate, ...PREDICATES].filter(Boolean))].map(p => (
                 <option key={p} value={p}>
                   {p}
                 </option>
               ))}
-            </select>
+            </Select>
           </label>
           <label className="block">
             <span className="mb-1 block text-xs text-label-2">宾语（输入，类联想）</span>

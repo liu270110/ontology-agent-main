@@ -3,6 +3,7 @@ import { Monitor, Moon, Sun } from 'lucide-react'
 import { useTheme, type ThemePref } from '@/app/providers/theme-provider'
 import { toast } from 'sonner'
 import { getPreferences, putPreferences } from '../api'
+import { Select } from '@/components/select'
 
 /** IX-SET 外观与语言 Tab（宿主 p-settings L2053-2179；S-AD 切片）：
  *  主题三态三选卡（单事实源 = ThemeProvider，持久化 localStorage('oa-theme')——与顶栏
@@ -84,7 +85,7 @@ export function AppearanceTab() {
       <div className="card mt-3 !p-4" data-testid="set-appearance-language">
         <div className="field mb-0">
           <label className="field-label" htmlFor="set-appearance-lang">界面语言</label>
-          <select
+          <Select
             id="set-appearance-lang"
             className="input"
             data-testid="set-appearance-lang"
@@ -94,7 +95,7 @@ export function AppearanceTab() {
           >
             <option value="zh-CN">简体中文</option>
             <option value="en" disabled>English（多语言包 v2 提供）</option>
-          </select>
+          </Select>
         </div>
         <div className="mt-2 text-[11px] text-label-3">多语言能力随多语言包 v2 交付；当前仅简体中文可选。</div>
       </div>

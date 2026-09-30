@@ -6,6 +6,7 @@ import { ApiError } from '@/api/client'
 import { ErrorState, SkeletonRows } from '@/components/states'
 import { Modal } from '@/components/modal'
 import { relativeTime } from '@/lib/reltime'
+import { Select } from '@/components/select'
 import {
   ROLE_BADGE, ROLE_LABEL, createInviteLink, disableUser, inviteUsers, listInviteLinks, listUsers,
   revokeInviteLink, updateUser,
@@ -286,11 +287,11 @@ function InviteModal({ onClose }: { onClose: () => void }) {
           </div>
           <div className="field">
             <label className="field-label" htmlFor="adm-invite-role">初始角色（默认 member）</label>
-            <select id="adm-invite-role" data-testid="adm-invite-role" className="input" value={role} onChange={e => setRole(e.target.value)}>
+            <Select id="adm-invite-role" data-testid="adm-invite-role" className="input" value={role} onChange={e => setRole(e.target.value)}>
               {Object.entries(ROLE_LABEL).filter(([k]) => k !== 'super_admin').map(([k, v]) => (
                 <option key={k} value={k}>{v}</option>
               ))}
-            </select>
+            </Select>
           </div>
           <div className="field">
             <label className="field-label" htmlFor="adm-invite-note">附言（可选）</label>
@@ -309,11 +310,11 @@ function InviteModal({ onClose }: { onClose: () => void }) {
         <>
           <div className="field">
             <label className="field-label" htmlFor="adm-invite-link-role">初始角色（加入即获此角色）</label>
-            <select id="adm-invite-link-role" data-testid="adm-invite-link-role" className="input" value={linkRole} onChange={e => setLinkRole(e.target.value)}>
+            <Select id="adm-invite-link-role" data-testid="adm-invite-link-role" className="input" value={linkRole} onChange={e => setLinkRole(e.target.value)}>
               {Object.entries(ROLE_LABEL).filter(([k]) => k !== 'super_admin').map(([k, v]) => (
                 <option key={k} value={k}>{v}</option>
               ))}
-            </select>
+            </Select>
           </div>
           <div className="field">
             <span className="field-label">有效期</span>

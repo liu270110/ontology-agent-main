@@ -7,6 +7,7 @@ import { Play, Wrench, XCircle } from 'lucide-react'
 import { toast } from 'sonner'
 import { Modal } from '@/components/modal'
 import { dryRunTool, registerTool } from '../api'
+import { Select } from '@/components/select'
 
 /** IX-TLS-02 注册工具弹窗（26 篇 §9.2；画板 ix-tls-02）：560px——
  *  HTTP 工具封装（endpoint + 鉴权方式）+ 输入/输出 Schema JSON 编辑器
@@ -184,9 +185,9 @@ export function RegisterToolModal({ open, onClose }: { open: boolean; onClose: (
           <label className="field-label" htmlFor="tls-tool-type">
             类型
           </label>
-          <select id="tls-tool-type" className="input" defaultValue="HTTP 工具封装">
+          <Select id="tls-tool-type" className="input" defaultValue="HTTP 工具封装">
             <option>HTTP 工具封装</option>
-          </select>
+          </Select>
         </div>
       </div>
       <div className="field mb-2">
@@ -219,11 +220,11 @@ export function RegisterToolModal({ open, onClose }: { open: boolean; onClose: (
           <label className="field-label" htmlFor="tls-tool-auth">
             鉴权方式
           </label>
-          <select id="tls-tool-auth" className="input" value={auth} onChange={e => setAuth(e.target.value)}>
+          <Select id="tls-tool-auth" className="input" value={auth} onChange={e => setAuth(e.target.value)}>
             <option>Bearer Token</option>
             <option>Basic</option>
             <option>内网白名单（无鉴权头）</option>
-          </select>
+          </Select>
         </div>
       </div>
 

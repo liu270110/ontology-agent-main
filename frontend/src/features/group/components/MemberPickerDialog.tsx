@@ -12,6 +12,7 @@ import {
   type MemberRole,
 } from '../api'
 import { AgentAvatar } from './shared'
+import { Select } from '@/components/select'
 
 /** IX-GRP-01 建群 / 成员选择 MemberPickerDialog（Modal 600px 双栏）：
  *  左 = 可选 Agent 插槽（ACL use 级过滤 + 运行状态徽标 + 跨租户审批提示）；
@@ -195,7 +196,7 @@ export function MemberPickerDialog({
             >
               <AgentAvatar name={p.slot.name} color={p.slot.color} size={26} />
               <b className="whitespace-nowrap text-xs">{p.slot.name}</b>
-              <select
+              <Select
                 className="input ml-auto h-[30px] w-[92px] px-2 text-xs"
                 data-testid={`grp-role-${p.slot.id}`}
                 value={p.role}
@@ -204,7 +205,7 @@ export function MemberPickerDialog({
                 <option value="coordinator">协调者</option>
                 <option value="speaker">发言者</option>
                 <option value="observer">观察者</option>
-              </select>
+              </Select>
               <button
                 type="button"
                 aria-label={`移除 ${p.slot.name}`}

@@ -5,6 +5,7 @@ import { toast } from 'sonner'
 import { ApiError } from '@/api/client'
 import { ErrorState, SkeletonRows } from '@/components/states'
 import { Modal } from '@/components/modal'
+import { Select } from '@/components/select'
 import {
   createModelChannel, deleteModelChannel, getModelImpact, listModels, testModelChannel,
   type ConnectivityResult, type ModelChannel,
@@ -200,12 +201,12 @@ function AddChannelModal({ onClose }: { onClose: () => void }) {
       <div className="grid grid-cols-2 gap-3">
         <div className="field">
           <label className="field-label" htmlFor="adm-model-priority">优先级</label>
-          <select id="adm-model-priority" className="input" value={priority} onChange={e => setPriority(Number(e.target.value))}>
+          <Select id="adm-model-priority" className="input" value={priority} onChange={e => setPriority(Number(e.target.value))}>
             <option value={1}>P1 · 本地默认</option>
             <option value={2}>P2</option>
             <option value={3}>P3</option>
             <option value={4}>P4 · 云溢出</option>
-          </select>
+          </Select>
         </div>
         <div className="field">
           <label className="field-label" htmlFor="adm-model-budget">预算上限（¥ / 日）</label>
@@ -323,10 +324,10 @@ function DeleteChannelModal({ channel, onClose }: { channel: ModelChannel; onClo
       </div>
       <div className="field mt-3">
         <label className="field-label" htmlFor="adm-model-migrate">迁移建议（引用插槽的默认渠道切到）</label>
-        <select id="adm-model-migrate" data-testid="adm-model-migrate" className="input" value={migrateTo} onChange={e => setMigrateTo(e.target.value)}>
+        <Select id="adm-model-migrate" data-testid="adm-model-migrate" className="input" value={migrateTo} onChange={e => setMigrateTo(e.target.value)}>
           <option value="">不迁移（插槽置为待配置）</option>
           {(impact?.migrate_to ?? []).map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
-        </select>
+        </Select>
       </div>
       <div className="field">
         <label className="field-label" htmlFor="adm-model-del-name">输入渠道名 <b className="text-red">{channel.name}</b> 以确认（不可逆，审计留痕）</label>

@@ -1,21 +1,20 @@
 import '@testing-library/jest-dom/vitest'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { afterEach, beforeAll, afterAll, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it } from 'vitest'
 import { http, HttpResponse } from 'msw'
 import { App } from '@/app/App'
 import { server } from '@/mocks/node'
 import { useAuthStore } from '@/stores/auth-store'
 
-beforeAll(() => server.listen({ onUnhandledRequest: 'bypass' }))
+// MSW 生命周期归全局 setupFiles（src/mocks/node-setup.ts）：listen/resetHandlers/close 均由其接管，
+// 本文件不重复 listen（重复会抛 Invariant Violation）；用例内仍以 server.use(...) 注入可控数据。
 afterEach(() => {
-  server.resetHandlers()
   cleanup()
   localStorage.clear()
   useAuthStore.getState().clearSession()
 })
-afterAll(() => server.close())
 
-/** S8 状态切片 · /console/tools 工具与技能（s8-states）：MSW 注入失败（不动 src/mocks/handlers.ts）。
+/** S8 状态切片 · /platform/tools 工具与技能（s8-states）：MSW 注入失败（不动 src/mocks/handlers.ts）。
  *  ① 工具注册表失败 → ErrorState → 恢复后重试 → 工具行出现；
  *  ② 技能库失败 → ErrorState → 恢复后重试 → 技能卡出现。
  *  （两用例查询键不同：['tools'] vs ['skills','list']，模块级单例缓存互不污染；
@@ -35,7 +34,7 @@ describe('S8 状态切片 · 工具注册表 · 失败重试', () => {
         HttpResponse.json({ code: 500, message: '工具目录服务不可用', data: null }, { status: 500 }),
       ),
     )
-    await loginAndGo('/console/tools')
+    await loginAndGo('/platform/tools')
 
     const err = await screen.findByTestId('error-state', {}, { timeout: 10_000 })
     expect(err).toHaveTextContent('加载失败')
@@ -58,7 +57,7 @@ describe('S8 状态切片 · 技能库 · 失败重试', () => {
         HttpResponse.json({ code: 500, message: '技能库服务不可用', data: null }, { status: 500 }),
       ),
     )
-    await loginAndGo('/console/tools')
+    await loginAndGo('/platform/tools')
 
     fireEvent.click(await screen.findByTestId('tls-view-skills', {}, { timeout: 10_000 }))
 

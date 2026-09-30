@@ -8,6 +8,7 @@ import { Modal } from '@/components/modal'
 import { ROLE_LABEL } from '@/lib/invite'
 import { useAuthStore } from '@/stores/auth-store'
 import { relativeTime } from '@/lib/reltime'
+import { Select } from '@/components/select'
 
 /** 403 页（16 篇 §4.2 步骤 3 / §7 2008）：判定不足渲染 403，不重定向（防循环）。
  *  「申请权限」完整申请流（2026-09-29 B3-R 切片，占位转实）：弹窗（被拒路径 mono 只读 +
@@ -178,7 +179,7 @@ export function ForbiddenPage({ permission }: { permission?: string }) {
           </div>
           <div>
             <label className="field-label" htmlFor="ar-role">期望角色（可选）</label>
-            <select
+            <Select
               id="ar-role"
               data-testid="ar-role"
               className="input"
@@ -189,7 +190,7 @@ export function ForbiddenPage({ permission }: { permission?: string }) {
               {DESIRED_ROLE_OPTIONS.map(o => (
                 <option key={o.value} value={o.value}>{o.label}</option>
               ))}
-            </select>
+            </Select>
           </div>
           <div className="fhint">提交后生成「权限申请」审批工单，管理员终审通过后自动授权并审计（候选非成品）。</div>
         </div>

@@ -19,6 +19,7 @@ import { DeleteDocDialog } from '../components/DeleteDocDialog'
 import { RetryDialog } from '../components/RetryDialog'
 import { RecycleBinSheet } from '../components/RecycleBinSheet'
 import { CollectionSettingsSheet } from '../components/CollectionSettingsSheet'
+import { Select } from '@/components/select'
 
 /** /kb 文档管理页（宿主画框 p-kb；26 篇 §5.1 IX-KB-01~04 + 30 篇 §2 S3-A）：
  *  规模统计带 + 文档表（@tanstack/react-table：名称/类型/大小/切片/流水线状态/更新/操作）
@@ -191,7 +192,7 @@ export function DocumentsPage() {
         </div>
         <span className="badge b-blue">
           <Filter size={11} aria-hidden />
-          <select
+          <Select
             className="bg-transparent text-[11px] font-semibold outline-none"
             aria-label="按类型筛选"
             value={typeFilter}
@@ -202,10 +203,10 @@ export function DocumentsPage() {
                 {t === 'all' ? '全部类型' : t}
               </option>
             ))}
-          </select>
+          </Select>
         </span>
         <span className="badge b-blue">
-          <select
+          <Select
             className="bg-transparent text-[11px] font-semibold outline-none"
             aria-label="按状态筛选"
             value={statusFilter}
@@ -216,7 +217,7 @@ export function DocumentsPage() {
                 {s.label}
               </option>
             ))}
-          </select>
+          </Select>
         </span>
         {can('kb:write') && (
           <button type="button" className="btn btn-p btn-sm ml-auto" onClick={() => setUploadOpen(true)}>

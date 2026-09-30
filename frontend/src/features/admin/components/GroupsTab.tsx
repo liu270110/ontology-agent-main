@@ -4,6 +4,7 @@ import { Users } from 'lucide-react'
 import { toast } from 'sonner'
 import { Modal } from '@/components/modal'
 import { ROLE_LABEL, createGroup, listGroups, listUsers, type AdminUser } from '../api'
+import { Select } from '@/components/select'
 
 /** 用户组 Tab（26 篇 §10.2）：组列表 + IX-ADM-09 建组双栏（UserGroupForm +
  *  GroupMemberPicker）。groups CRUD 为 §5.10 预登记（见 R 清单）。 */
@@ -105,11 +106,11 @@ function GroupModal({ onClose }: { onClose: () => void }) {
           </div>
           <div className="field">
             <label className="field-label" htmlFor="adm-group-template">组内角色模板</label>
-            <select id="adm-group-template" data-testid="adm-group-template" className="input" value={template} onChange={e => setTemplate(e.target.value)}>
+            <Select id="adm-group-template" data-testid="adm-group-template" className="input" value={template} onChange={e => setTemplate(e.target.value)}>
               {Object.entries(ROLE_LABEL).filter(([k]) => k !== 'super_admin').map(([k, v]) => (
                 <option key={k} value={k}>{v}</option>
               ))}
-            </select>
+            </Select>
             <div className="fhint">组权限对组内成员批量生效（RBAC 之上的批量授权单元）。</div>
           </div>
         </div>

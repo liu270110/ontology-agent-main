@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
 import { Outlet, useLocation, useNavigate } from 'react-router-dom'
-import { PanelLeft, Search, Settings, ShieldCheck } from 'lucide-react'
+import { PanelLeft, Search, Settings } from 'lucide-react'
 import { useUiStore } from '@/stores/ui-store'
 import { useAuthStore } from '@/stores/auth-store'
 import { ThemeToggle } from '@/components/theme-toggle'
@@ -15,8 +15,9 @@ import { UserMenu } from './UserMenu'
  *  （board.css .app 配方，玻璃折射的彩色来源），侧边栏 .glass-side（board.css .sb 配方）、
  *  顶栏 .material-bar（board.css .bbar 配方）。
  *  顶栏（⌘K / 主题三态 / 通知占位 / 用户菜单「退出登录」）+ CommandMenu。
- *  双区 IA（2026-09-28 裁决）：主侧边栏只留 7 常用项；管理类入口收进管理控制台
- *  （sb-foot「管理控制台」按钮 → /console）；侧边栏 Logo 点击回主页启动台。
+ *  双区 IA（2026-09-28 裁决）：主侧边栏只留 7 常用项；侧边栏 Logo 点击回主页启动台。
+ *  四区 IA（2026-10-01 裁决）：跨分区入口（平台能力/管理控制台/用户设置）收进侧边栏
+ *  「独立页面」分组（SidebarGroups 消费 STANDALONE_NAV），sb-foot 只留设置齿轮。
  *  用户名显示邮箱前缀——JWT claims 无显示名字段（R13 建议后端补 name claim / me 端点）。
  *  模块化第一批：分组导航折叠逻辑拆 sidebar/SidebarGroups，用户菜单拆 UserMenu，
  *  本文件只留布局编排，行为零变化。 */
@@ -75,18 +76,8 @@ export function AppShell() {
               {ROLE_LABEL[user?.roles?.[0] ?? ''] ?? '成员'} · {user?.tenantName ?? '默认租户'}
             </small>
           )}
-          {/* 双区 IA：管理类入口收进管理控制台（独立窗口心智） */}
+          {/* 四区 IA：跨分区入口收进「独立页面」分组（SidebarGroups）；sb-foot 只留设置齿轮 */}
           <div className="ml-auto flex flex-none items-center gap-1">
-            <button
-              type="button"
-              aria-label="管理控制台"
-              title="管理控制台"
-              data-testid="shell-console-entry"
-              onClick={() => navigate('/console')}
-              className="flex h-7 w-7 items-center justify-center rounded-lg text-label-2 hover:bg-black/5 dark:hover:bg-white/[.07]"
-            >
-              <ShieldCheck size={15} aria-hidden />
-            </button>
             <button
               type="button"
               aria-label="设置"

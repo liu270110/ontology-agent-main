@@ -1,24 +1,24 @@
 import '@testing-library/jest-dom/vitest'
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
-import { afterEach, beforeAll, afterAll, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it } from 'vitest'
 import { App } from '../App'
-import { server } from '@/mocks/node'
 import { useAuthStore } from '@/stores/auth-store'
 
-beforeAll(() => server.listen({ onUnhandledRequest: 'bypass' }))
+// MSW 生命周期归全局 setupFiles（src/mocks/node-setup.ts）：listen/resetHandlers/close 均由其接管，
+// 本文件不重复 listen（重复会抛 Invariant Violation）；用例内仍以 server.use(...) 注入可控数据。
 afterEach(() => {
-  server.resetHandlers()
   cleanup()
   localStorage.clear()
   useAuthStore.getState().clearSession()
 })
-afterAll(() => server.close())
 
 /** S8 信息架构双区改造（2026-09-28 用户裁决）：
  *  ① 主页启动台七卡渲染（admin 全量可见）+ 点击对话卡跳 /chat；
  *  ② /console/approvals 经 ConsoleShell 渲染 + 控制台侧栏有治理分组 + 返回主页链接；
  *  ③ 旧路径 /approvals redirect 到 /console/approvals（保书签）；
- *  ④ 双区隔离：主侧边栏（主导航）不含「审批中心」「插件市场」等管理项。 */
+ *  ④ 双区隔离：主侧边栏（主导航）不含「审批中心」「插件市场」等管理项。
+ *  四区 IA 增补（2026-10-01）：④ 同步断言「独立页面」分组（平台能力/管理控制台/用户设置，
+ *  替换原 sb-foot 单管理钮）。 */
 
 async function loginAndGo(path: string) {
   window.history.pushState({}, '', path)
@@ -62,7 +62,7 @@ describe('S8 信息架构双区改造', () => {
     expect(window.location.search).toBe('?status=pending')
   }, 30_000)
 
-  it('④ 双区隔离：主侧边栏不含管理项，控制台入口在 sb-foot', async () => {
+  it('④ 双区隔离：主侧边栏不含管理项，独立页面分组三项跨区入口（四区 IA）', async () => {
     await loginAndGo('/')
     await screen.findByTestId('launcher-grid', {}, { timeout: 10_000 })
     const mainNav = screen.getByRole('navigation', { name: '主导航' })
@@ -72,7 +72,9 @@ describe('S8 信息架构双区改造', () => {
     // 主侧边栏七常用项仍在（对话/群聊/工作流/任务中心/本体工作台/知识库/记忆管理）
     expect(within(mainNav).getByRole('link', { name: '对话' })).toBeInTheDocument()
     expect(within(mainNav).getByRole('link', { name: '知识库' })).toBeInTheDocument()
-    // sb-foot 控制台入口（→ /console）
-    expect(screen.getByTestId('shell-console-entry')).toBeInTheDocument()
+    // 四区 IA：独立页面分组（平台能力/管理控制台/用户设置；图标条态下可访问名走 aria-label）
+    expect(within(mainNav).getByTestId('standalone-nav-platform')).toHaveAttribute('href', '/platform')
+    expect(within(mainNav).getByTestId('standalone-nav-console')).toHaveAttribute('href', '/console')
+    expect(within(mainNav).getByTestId('standalone-nav-settings')).toHaveAttribute('href', '/settings')
   }, 30_000)
 })

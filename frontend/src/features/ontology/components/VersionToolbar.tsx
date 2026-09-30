@@ -1,6 +1,7 @@
 import { FileUp, GitCompare, History, Save, ShieldCheck } from 'lucide-react'
 import { TierBadge } from './shared'
 import type { OntoTier, OntoVersion } from '../api'
+import { Select } from '@/components/select'
 
 /** 版本操作栏（模块化第一批自 WorkbenchPage 拆出，行为零变化）：
  *  项目名 / 版本徽标 / 版本下拉 / 草稿状态 / 导入、历史版本、对比、保存草稿、提交评审。
@@ -49,7 +50,7 @@ export function VersionToolbar({
     <div className="flex flex-none flex-wrap items-center gap-2 pb-2">
       <h1 className="truncate text-[15px] font-bold">{projectName}</h1>
       <TierBadge tier={tier} />
-      <select
+      <Select
         aria-label="版本选择"
         className="input h-7 w-40 text-xs"
         value={version}
@@ -60,7 +61,7 @@ export function VersionToolbar({
             {v.version} · {v.status === 'published' ? '已发布' : '草稿'}
           </option>
         ))}
-      </select>
+      </Select>
       {dirty ? (
         <span className="badge b-orange">草稿 {version} · {dirtyCount} 处修改</span>
       ) : draftSavedAt ? (

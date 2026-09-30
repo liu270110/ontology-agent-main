@@ -4,6 +4,7 @@ import { Check, ChevronRight, CircleCheck, Loader2, Plug } from 'lucide-react'
 import { toast } from 'sonner'
 import { Modal } from '@/components/modal'
 import { discoverServer, registerServer, type DiscoveredTool, type McpTransport } from '../api'
+import { Select } from '@/components/select'
 
 /** IX-MCP-01 接入向导（26 篇 §9.3；画板 ix-mcp-01）：3 步 680px——
  *  ①连接配置：名称 + 传输分段（Streamable HTTP / stdio）+ URL/命令 + 鉴权（Bearer/Basic）
@@ -225,11 +226,11 @@ export function AddServerWizard({ open, onClose }: { open: boolean; onClose: () 
               <label className="field-label" htmlFor="mcp-auth">
                 鉴权
               </label>
-              <select id="mcp-auth" className="input" value={auth} onChange={e => setAuth(e.target.value)}>
+              <Select id="mcp-auth" className="input" value={auth} onChange={e => setAuth(e.target.value)}>
                 <option>Bearer Token</option>
                 <option>Basic</option>
                 <option>无鉴权（内网白名单）</option>
-              </select>
+              </Select>
             </div>
             {auth !== '无鉴权（内网白名单）' && (
               <div className="field mb-0">

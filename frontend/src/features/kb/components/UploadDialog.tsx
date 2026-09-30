@@ -6,6 +6,7 @@ import { Modal } from '@/components/modal'
 import { describeError } from '@/lib/errors'
 import { startPipeline, uploadDocumentText } from '../api'
 import { formatSize } from './shared'
+import { Select } from '@/components/select'
 
 /** IX-KB-01 上传文档弹窗（Modal 600px；画板 p-kb / 26 篇 §5.1）：
  *  拖拽区（react-dropzone，拖入高亮 + 点击选择）→ 多文件队列（名/大小/格式徽标/移除/逐行状态）
@@ -266,13 +267,13 @@ export function UploadDialog({ open, onClose, onUploaded }: { open: boolean; onC
             </label>
             <label className="flex items-center gap-2">
               <span className="text-label-2">目标知识库</span>
-              <select className="input h-8 w-52 text-xs" value={kbTarget} onChange={e => setKbTarget(e.target.value)}>
+              <Select className="input h-8 w-52 text-xs" value={kbTarget} onChange={e => setKbTarget(e.target.value)}>
                 {KB_TARGETS.map(k => (
                   <option key={k} value={k}>
                     {k}
                   </option>
                 ))}
-              </select>
+              </Select>
             </label>
           </div>
         )}

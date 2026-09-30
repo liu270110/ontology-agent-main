@@ -1,19 +1,19 @@
 import '@testing-library/jest-dom/vitest'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { afterEach, beforeAll, afterAll, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it } from 'vitest'
 import { http, HttpResponse } from 'msw'
 import { App } from '@/app/App'
 import { server } from '@/mocks/node'
 import { MCP_SERVERS } from '@/mocks/platform-handlers'
 import { useAuthStore } from '@/stores/auth-store'
 
-beforeAll(() => server.listen({ onUnhandledRequest: 'bypass' }))
+// MSW 生命周期归全局 setupFiles（src/mocks/node-setup.ts）：listen/resetHandlers/close 均由其接管，
+// 本文件不重复 listen（重复会抛 Invariant Violation）；用例内仍以 server.use(...) 注入可控数据。
 afterEach(() => {
   cleanup()
   localStorage.clear()
   useAuthStore.getState().clearSession()
 })
-afterAll(() => server.close())
 
 /** S5 扩展中心 · MCP 管理（26 篇 §9.3 矩阵 DoD）：IX-MCP-01 接入向导——
  *  ①连接配置（Streamable HTTP 分段 + URL + Bearer）②连接测试与发现（成功列出工具

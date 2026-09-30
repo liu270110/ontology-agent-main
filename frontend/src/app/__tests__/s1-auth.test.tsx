@@ -1,18 +1,16 @@
 import '@testing-library/jest-dom/vitest'
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
-import { afterEach, beforeAll, afterAll, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it } from 'vitest'
 import { App } from '../App'
-import { server } from '@/mocks/node'
 import { useAuthStore } from '@/stores/auth-store'
 
-beforeAll(() => server.listen({ onUnhandledRequest: 'bypass' }))
+// MSW 生命周期归全局 setupFiles（src/mocks/node-setup.ts）：listen/resetHandlers/close 均由其接管，
+// 本文件不重复 listen（重复会抛 Invariant Violation）；用例内仍以 server.use(...) 注入可控数据。
 afterEach(() => {
-  server.resetHandlers()
   cleanup()
   localStorage.clear()
   useAuthStore.getState().clearSession()
 })
-afterAll(() => server.close())
 
 /** S1 认证与基座（30 篇 §2 S1 / 16 篇 §5.1 §5.2 DoD-4）：MSW 演练关键交互。
  *  ①登录成功进 AppShell ②mfa@example.com 二步验证 ③locked 1002 统一文案

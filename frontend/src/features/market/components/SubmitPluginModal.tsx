@@ -6,6 +6,7 @@ import { FileCheck2, ShieldCheck, Upload, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { Modal } from '@/components/modal'
 import { registerPlugin, submitPlugin } from '../api'
+import { Select } from '@/components/select'
 
 /** IX-MKT-03 上架申请（26 篇 §9.1；画板 ix-mkt-03）：560px 弹窗——
  *  拖拽上传插件包（.opk / server.json / OpenAPI 3.x，上传后自动验签）
@@ -120,13 +121,13 @@ export function SubmitPluginModal({ open, onClose }: { open: boolean; onClose: (
           <label className="field-label" htmlFor="mkt-plugin-category">
             分类
           </label>
-          <select id="mkt-plugin-category" className="input" value={category} onChange={e => setCategory(e.target.value)}>
+          <Select id="mkt-plugin-category" className="input" value={category} onChange={e => setCategory(e.target.value)}>
             {CATEGORIES.map(c => (
               <option key={c} value={c}>
                 {c}
               </option>
             ))}
-          </select>
+          </Select>
         </div>
       </div>
 

@@ -1,19 +1,18 @@
 import '@testing-library/jest-dom/vitest'
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
-import { afterEach, beforeAll, afterAll, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it } from 'vitest'
 import { http, HttpResponse } from 'msw'
 import { App } from '../App'
 import { server } from '@/mocks/node'
 import { useAuthStore } from '@/stores/auth-store'
 
-beforeAll(() => server.listen({ onUnhandledRequest: 'bypass' }))
+// MSW 生命周期归全局 setupFiles（src/mocks/node-setup.ts）：listen/resetHandlers/close 均由其接管，
+// 本文件不重复 listen（重复会抛 Invariant Violation）；用例内仍以 server.use(...) 注入可控数据。
 afterEach(() => {
-  server.resetHandlers()
   cleanup()
   localStorage.clear()
   useAuthStore.getState().clearSession()
 })
-afterAll(() => server.close())
 
 /** S9 权限申请流切片（2026-09-29 B3-R · ForbiddenPage「申请权限」占位转实 · 4 用例）：
  *  ① member 403 页打开申请弹窗 → 理由 ≥10 字校验 → 提交 POST 载荷断言 → 状态条「审理中」

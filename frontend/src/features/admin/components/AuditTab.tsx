@@ -7,6 +7,7 @@ import { ApiError } from '@/api/client'
 import { ErrorState, SkeletonRows } from '@/components/states'
 import { Modal } from '@/components/modal'
 import { exportAuditLogs, getTrace, listAuditLogs, type AuditRow } from '../api'
+import { Select } from '@/components/select'
 
 /** 审计 Tab（26 篇 §10.2 p-auditlog）：筛选（操作者/动作/时间）+ 审计表 +
  *  IX-ADM-07 trace 行展开全链路面板（瀑布横条 + 关联成本 + writeback 台账行 +
@@ -39,26 +40,26 @@ export function AuditTab() {
   return (
     <div>
       <div className="flex flex-wrap items-center gap-2">
-        <select aria-label="操作者筛选" className="input h-8 w-36 text-xs" value={operator} onChange={e => setOperator(e.target.value)}>
+        <Select aria-label="操作者筛选" className="input h-8 w-36 text-xs" value={operator} onChange={e => setOperator(e.target.value)}>
           <option value="all">全部操作者</option>
           <option value="刘以在">刘以在</option>
           <option value="王工">王工</option>
           <option value="陈晨">陈晨</option>
           <option value="Agent · 原生">Agent · 原生</option>
           <option value="系统">系统</option>
-        </select>
-        <select aria-label="动作筛选" className="input h-8 w-44 text-xs" value={action} onChange={e => setAction(e.target.value)}>
+        </Select>
+        <Select aria-label="动作筛选" className="input h-8 w-44 text-xs" value={action} onChange={e => setAction(e.target.value)}>
           <option value="all">全部动作</option>
           <option value="review">review.*</option>
           <option value="action.invoke">action.invoke</option>
           <option value="candidate">candidate.*</option>
           <option value="memory">memory.*</option>
           <option value="auth">auth.*</option>
-        </select>
-        <select aria-label="时间范围" className="input h-8 w-28 text-xs" value={range} onChange={e => setRange(e.target.value)}>
+        </Select>
+        <Select aria-label="时间范围" className="input h-8 w-28 text-xs" value={range} onChange={e => setRange(e.target.value)}>
           <option value="7d">近 7 天</option>
           <option value="30d">近 30 天</option>
-        </select>
+        </Select>
         <input aria-label="搜索资源或 trace_id" className="input h-8 w-52 text-xs" placeholder="搜索资源 / trace_id" value={q} onChange={e => setQ(e.target.value)} />
         <span className="text-[11px] text-label-3">共 {data?.total?.toLocaleString() ?? '—'} 条 · 点击 trace_id 展开</span>
         <button type="button" className="btn btn-g btn-sm ml-auto" data-testid="adm-audit-export" onClick={() => setExportOpen(true)}>

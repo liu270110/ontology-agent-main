@@ -16,6 +16,7 @@ import { api, ApiError } from '@/api/client'
 import { qk } from '@/lib/qk'
 import { useSessionStore } from '@/stores/session-store'
 import { ErrorState, SkeletonRows } from '@/components/states'
+import { MenuSurface } from '@/components/popover'
 
 interface SessionItem {
   id: string
@@ -58,6 +59,7 @@ export function SessionList({ onPicked }: { onPicked?: (id: string) => void }) {
   const [kw, setKw] = useState('')
   // IX-CHT-01 菜单态：打开菜单的会话 / 删除二步确认 / 重命名行内输入
   const [menuId, setMenuId] = useState<string | null>(null)
+  const [menuAnchor, setMenuAnchor] = useState<DOMRect | null>(null)
   const [confirmId, setConfirmId] = useState<string | null>(null)
   const [renamingId, setRenamingId] = useState<string | null>(null)
   const [renameText, setRenameText] = useState('')
@@ -191,12 +193,14 @@ export function SessionList({ onPicked }: { onPicked?: (id: string) => void }) {
                     className="icobtn flex h-[22px] w-[22px] flex-none items-center justify-center rounded-md text-label-3 opacity-0 hover:bg-surface hover:text-label group-hover:opacity-100 focus:opacity-100"
                     onClick={e => {
                       e.stopPropagation()
+                      setMenuAnchor((e.currentTarget as HTMLElement).getBoundingClientRect())
                       setMenuId(menuId === s.id ? null : s.id)
                       setConfirmId(null)
                     }}
                     onKeyDown={e => {
                       if (e.key === 'Enter' || e.key === ' ') {
                         e.stopPropagation()
+                        setMenuAnchor((e.currentTarget as HTMLElement).getBoundingClientRect())
                         setMenuId(menuId === s.id ? null : s.id)
                         setConfirmId(null)
                       }
@@ -211,17 +215,19 @@ export function SessionList({ onPicked }: { onPicked?: (id: string) => void }) {
                 </div>
               </button>
 
-              {/* 会话项菜单（IX-CHT-01）：置顶/重命名/导出/删除（危险二次确认） */}
-              {menuId === s.id && (
-                <>
-                  <div className="fixed inset-0 z-10" onClick={() => { setMenuId(null); setConfirmId(null) }} aria-hidden />
-                  <div
-                    role="menu"
-                    aria-label={`会话菜单 ${s.title}`}
-                    data-testid={`session-menu-pop-${s.id}`}
-                    className="menu absolute right-2 top-9 z-20 shadow-lg"
-                  >
-                    {confirmId === s.id ? (
+              {/* 会话项菜单（IX-CHT-01）：置顶/重命名/导出/删除（危险二次确认）。
+                  v1.3 经 MenuSurface portal——容器内 absolute 曾被玻璃层压住且侧栏裁剪 */}
+              <MenuSurface
+                open={menuId === s.id}
+                anchor={menuAnchor}
+                onClose={() => {
+                  setMenuId(null)
+                  setConfirmId(null)
+                }}
+                label={`会话菜单 ${s.title}`}
+              >
+                <div data-testid={`session-menu-pop-${s.id}`}>
+                  {confirmId === s.id ? (
                       // 删除危险确认（二步）：明确影响面（会话及其消息与证据引用）
                       <div className="p-2.5">
                         <div className="menu-i danger pointer-events-none h-auto items-start gap-1.5">
@@ -276,9 +282,8 @@ export function SessionList({ onPicked }: { onPicked?: (id: string) => void }) {
                         </div>
                       </>
                     )}
-                  </div>
-                </>
-              )}
+                </div>
+              </MenuSurface>
             </div>
           ),
         )}

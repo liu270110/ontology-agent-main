@@ -159,7 +159,7 @@ export function ServerDetailSheet({
                       <span className="absolute top-0.5 h-3.5 w-3.5 rounded-full bg-white shadow transition-all" style={{ left: t.enabled ? 18 : 3 }} />
                     </button>
                   </Tooltip>
-                  <Link to="/console/tools" className="text-[11px] text-accent hover:underline" title="跳 IX-TLS-01 工具详情">
+                  <Link to="/platform/tools" className="text-[11px] text-accent hover:underline" title="跳 IX-TLS-01 工具详情">
                     详情
                   </Link>
                 </span>

@@ -3,6 +3,7 @@ import { AlertTriangle, CheckCircle2 } from 'lucide-react'
 import { Modal } from '@/components/modal'
 import type { Changeset, OntoClassNode, OntoPropertyRow, ValidateReport } from '../api'
 import { ChangeCountChips } from './shared'
+import { Select } from '@/components/select'
 
 /** 工作台弹窗组（26 篇 §6.2）：IX-ON-01 新建类/属性/规则（类型随左树 Tab）、
  *  IX-ON-02 连线（关系）编辑（谓词下拉 + 基数 min/max + 双向开关）、
@@ -120,12 +121,12 @@ export function NewElementDialog({
           </div>
           <div className="field">
             <label className="field-label" htmlFor="ne-parent">父类（多选树取其一）</label>
-            <select id="ne-parent" className="input h-8 text-xs" value={parentId} onChange={e => setParentId(e.target.value)}>
+            <Select id="ne-parent" className="input h-8 text-xs" value={parentId} onChange={e => setParentId(e.target.value)}>
               <option value="">— 无（顶层类）—</option>
               {classes.map(c => (
                 <option key={c.id} value={c.id}>{c.label} {c.name}</option>
               ))}
-            </select>
+            </Select>
           </div>
           <label className="flex cursor-pointer items-center gap-2 text-xs">
             <input type="checkbox" checked={abstract} onChange={e => setAbstract(e.target.checked)} />
@@ -149,24 +150,24 @@ export function NewElementDialog({
           </div>
           <div className="field">
             <label className="field-label" htmlFor="ne-ptype">类型</label>
-            <select id="ne-ptype" className="input h-8 text-xs" value={propType} onChange={e => setPropType(e.target.value as 'data' | 'object')}>
+            <Select id="ne-ptype" className="input h-8 text-xs" value={propType} onChange={e => setPropType(e.target.value as 'data' | 'object')}>
               <option value="data">数据属性（xsd）</option>
               <option value="object">对象属性（→ 类）</option>
-            </select>
+            </Select>
           </div>
           <div className="field">
             <label className="field-label" htmlFor="ne-domain">定义域</label>
-            <select id="ne-domain" className={`input h-8 text-xs ${errors.domain ? 'err' : ''}`} value={domain} onChange={e => setDomain(e.target.value)}>
+            <Select id="ne-domain" className={`input h-8 text-xs ${errors.domain ? 'err' : ''}`} value={domain} onChange={e => setDomain(e.target.value)}>
               <option value="">— 选择类 —</option>
               {classes.map(c => (
                 <option key={c.id} value={c.iri}>{c.label} {c.name}</option>
               ))}
-            </select>
+            </Select>
             {errors.domain && <div className="field-err">{errors.domain}</div>}
           </div>
           <div className="field">
             <label className="field-label" htmlFor="ne-range">值域</label>
-            <select id="ne-range" className={`input h-8 text-xs ${errors.range ? 'err' : ''}`} value={range} onChange={e => setRange(e.target.value)}>
+            <Select id="ne-range" className={`input h-8 text-xs ${errors.range ? 'err' : ''}`} value={range} onChange={e => setRange(e.target.value)}>
               <option value="">— 选择 —</option>
               {propType === 'data' ? (
                 ['xsd:string', 'xsd:decimal', 'xsd:dateTime', 'xsd:boolean'].map(x => (
@@ -177,7 +178,7 @@ export function NewElementDialog({
                   <option key={c.id} value={c.iri}>{c.label} {c.name}</option>
                 ))
               )}
-            </select>
+            </Select>
             {errors.range && <div className="field-err">{errors.range}</div>}
           </div>
           <div className="flex gap-3">
@@ -202,7 +203,7 @@ export function NewElementDialog({
           </div>
           <div className="field">
             <label className="field-label" htmlFor="ne-tpl">模板下拉</label>
-            <select
+            <Select
               id="ne-tpl"
               className="input h-8 text-xs"
               value={template}
@@ -215,7 +216,7 @@ export function NewElementDialog({
               {Object.keys(TEMPLATES).map(t => (
                 <option key={t} value={t}>{t}</option>
               ))}
-            </select>
+            </Select>
           </div>
           <div className="field mb-0">
             <label className="field-label" htmlFor="ne-construct">SPARQL CONSTRUCT（mono 编辑器）</label>
@@ -299,14 +300,14 @@ export function ConnectDialog({
       </div>
       <div className="field">
         <label className="field-label" htmlFor="conn-pred">谓词（按两端类兼容性过滤 + 搜索）</label>
-        <select id="conn-pred" className="input h-8 text-xs" value={predicate} onChange={e => setPredicate(e.target.value)}>
+        <Select id="conn-pred" className="input h-8 text-xs" value={predicate} onChange={e => setPredicate(e.target.value)}>
           <option value="">— 选择谓词 —</option>
           {candidates.map(p => (
             <option key={p.id} value={p.iri}>
               {p.name}（{p.label}）
             </option>
           ))}
-        </select>
+        </Select>
       </div>
       <div className="flex gap-3">
         <div className="field flex-1">
@@ -439,11 +440,11 @@ export function SubmitReviewDialog({
       </div>
       <div className="field mb-0">
         <label className="field-label" htmlFor="sr-reviewer">目标评审人（curator）</label>
-        <select id="sr-reviewer" className="input h-8 text-xs" value={reviewer} onChange={e => setReviewer(e.target.value)}>
+        <Select id="sr-reviewer" className="input h-8 text-xs" value={reviewer} onChange={e => setReviewer(e.target.value)}>
           {CURATORS.map(c => (
             <option key={c} value={c}>{c}</option>
           ))}
-        </select>
+        </Select>
       </div>
       <p className="mt-3 text-[11px] text-label-3">提交 → 审批中心出现卡片，工作台转只读锁定态；驳回将退回提交人。</p>
     </Modal>

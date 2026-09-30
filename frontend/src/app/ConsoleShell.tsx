@@ -3,22 +3,20 @@ import {
   ArrowLeft,
   ArrowRight,
   LayoutGrid,
-  Plug,
-  Puzzle,
   ScrollText,
   Settings,
   ShieldCheck,
-  Wrench,
   type LucideIcon,
 } from 'lucide-react'
 import { useAuthStore } from '@/stores/auth-store'
 import { ThemeToggle } from '@/components/theme-toggle'
 import { CONSOLE_ROUTES, type ConsoleGroup, type RoleCode } from './routes'
 
-/** 管理控制台壳（双区 IA，2026-09-28 用户裁决）：与主窗口（AppShell）分区的独立布局——
- *  左侧窄导航沉底（bg-surface-2，治理/能力配置/观测三分组）+ 顶栏（返回主页 + 当前页标题），
- *  主区留玻璃卡；视觉同液态玻璃语言，但整体更"控制台"，与主页启动台形成双区心智。
- *  审计日志=AdminPage audit Tab 深链（/console/admin?tab=audit），控制台导航单列为观测项。 */
+/** 管理控制台壳（双区 IA，2026-09-28 用户裁决；四区收缩 2026-10-01）：与主窗口（AppShell）、
+ *  平台能力区（PlatformShell）分区的独立布局——左侧窄导航沉底（bg-surface-2，治理/观测两组）+
+ *  顶栏（返回主页 + 当前页标题），主区留玻璃卡。四区 IA：能力配置三页（市场/工具/MCP）已迁
+ *  /platform/*，本壳只保留治理与观测。审计日志=AdminPage audit Tab 深链（/console/admin?tab=audit），
+ *  控制台导航单列为观测项。 */
 
 interface ConsoleNavItem {
   title: string
@@ -38,14 +36,6 @@ const CONSOLE_NAV: Array<{ group: ConsoleGroup; items: ConsoleNavItem[] }> = [
     items: [
       { title: '审批中心', to: '/console/approvals', icon: ShieldCheck, desc: '候选产物人工终审与批量审批队列', roles: ['admin', 'curator', 'super_admin'] },
       { title: '系统管理', to: '/console/admin', icon: Settings, desc: '用户 / 用户组 / 角色 / 模型渠道', roles: ['admin', 'super_admin'], permission: 'user:manage' },
-    ],
-  },
-  {
-    group: '能力配置',
-    items: [
-      { title: 'MCP 管理', to: '/console/mcp', icon: Plug, desc: 'MCP 服务器接入与工具发现', roles: ['admin', 'ontologist', 'member', 'super_admin'] },
-      { title: '插件市场', to: '/console/market', icon: Puzzle, desc: '插件安装与版本管理', roles: ['admin', 'ontologist', 'curator', 'member', 'super_admin'] },
-      { title: '工具与技能', to: '/console/tools', icon: Wrench, desc: '工具注册与技能编排', roles: ['admin', 'ontologist', 'member', 'super_admin'] },
     ],
   },
   {
@@ -93,7 +83,7 @@ export function ConsoleShell() {
           </span>
           <div className="min-w-0">
             <b className="block truncate text-sm">管理控制台</b>
-            <small className="block truncate text-[10px] text-label-3">治理 · 能力配置 · 观测</small>
+            <small className="block truncate text-[10px] text-label-3">治理 · 观测</small>
           </div>
         </div>
         <nav className="min-h-0 flex-1 overflow-y-auto px-2" aria-label="控制台导航">
@@ -153,11 +143,11 @@ export function ConsoleIndex() {
   return (
     <div className="mx-auto max-w-[1180px]">
       <h1 className="text-lg font-bold">管理控制台</h1>
-      <p className="sub mt-1 text-xs text-label-3">治理、能力配置与观测的集中入口——日常常用功能请回主页启动台。</p>
+      <p className="sub mt-1 text-xs text-label-3">治理与观测的集中入口——常用功能回主页启动台，能力浏览与获取进平台能力页。</p>
       {nav.map(g => (
         <section key={g.group} className="mt-5">
           <h2 className="text-2xs uppercase tracking-wide text-label-3">{g.group}</h2>
-          <div className="mt-2 grid grid-cols-3 gap-4">
+          <div className="mt-2 grid grid-cols-2 gap-4">
             {g.items.map(i => (
               <button
                 key={i.to}

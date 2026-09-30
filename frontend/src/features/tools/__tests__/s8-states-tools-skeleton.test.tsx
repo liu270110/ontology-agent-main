@@ -1,21 +1,20 @@
 import '@testing-library/jest-dom/vitest'
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
-import { afterEach, beforeAll, afterAll, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it } from 'vitest'
 import { delay, http, HttpResponse } from 'msw'
 import { App } from '@/app/App'
 import { server } from '@/mocks/node'
 import { useAuthStore } from '@/stores/auth-store'
 
-beforeAll(() => server.listen({ onUnhandledRequest: 'bypass' }))
+// MSW 生命周期归全局 setupFiles（src/mocks/node-setup.ts）：listen/resetHandlers/close 均由其接管，
+// 本文件不重复 listen（重复会抛 Invariant Violation）；用例内仍以 server.use(...) 注入可控数据。
 afterEach(() => {
-  server.resetHandlers()
   cleanup()
   localStorage.clear()
   useAuthStore.getState().clearSession()
 })
-afterAll(() => server.close())
 
-/** S8 状态切片 · /console/tools 工具与技能（s8-states）：MSW 注入延迟（不动 src/mocks/handlers.ts）。
+/** S8 状态切片 · /platform/tools 工具与技能（s8-states）：MSW 注入延迟（不动 src/mocks/handlers.ts）。
  *  ① 工具注册表延迟 → 骨架行先出现 → 数据到达后骨架消失；
  *  ② 技能库延迟 → 骨架卡先出现 → 数据到达后骨架消失。
  *  （与失败场景分文件：App 的 QueryClient 是模块级单例，同文件用例共享查询缓存，
@@ -47,7 +46,7 @@ describe('S8 状态切片 · 工具注册表 · 加载骨架', () => {
         })
       }),
     )
-    await loginAndGo('/console/tools')
+    await loginAndGo('/platform/tools')
 
     expect(await screen.findByTestId('skeleton-rows', {}, { timeout: 10_000 })).toBeInTheDocument()
     expect(await screen.findByTestId('tool-tr-skeleton.tool', {}, { timeout: 10_000 })).toBeInTheDocument()
@@ -74,7 +73,7 @@ describe('S8 状态切片 · 技能库 · 加载骨架', () => {
         })
       }),
     )
-    await loginAndGo('/console/tools')
+    await loginAndGo('/platform/tools')
 
     fireEvent.click(await screen.findByTestId('tls-view-skills', {}, { timeout: 10_000 }))
 

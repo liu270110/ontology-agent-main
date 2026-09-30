@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
 import { getPreferences, putPreferences } from '../api'
 import { ROUTING_LABEL } from '@/features/group/api'
+import { Select } from '@/components/select'
 
 /** IX-SET 对话偏好 Tab（宿主 p-settings「对话偏好」卡；S-AD 切片）：默认模型渠道 +
  *  思考档位 seg（标准/深度/闪电）+ 群聊默认发言编排（四模式文案复用 group 域
@@ -62,7 +63,7 @@ export function ChatPrefsTab() {
       <div className="card mt-3 !p-4" data-testid="set-chat-prefs">
         <div className="field">
           <label className="field-label" htmlFor="set-chat-model">默认模型渠道</label>
-          <select
+          <Select
             id="set-chat-model"
             className="input"
             data-testid="set-chat-model"
@@ -73,7 +74,7 @@ export function ChatPrefsTab() {
             {MODEL_OPTIONS.map(o => (
               <option key={o.value} value={o.value}>{o.label}</option>
             ))}
-          </select>
+          </Select>
         </div>
 
         <div className="field">
@@ -98,7 +99,7 @@ export function ChatPrefsTab() {
 
         <div className="field mb-0">
           <label className="field-label" htmlFor="set-chat-routing">群聊默认发言编排</label>
-          <select
+          <Select
             id="set-chat-routing"
             className="input"
             data-testid="set-chat-routing"
@@ -109,7 +110,7 @@ export function ChatPrefsTab() {
             {(Object.keys(ROUTING_LABEL) as (keyof typeof ROUTING_LABEL)[]).map(m => (
               <option key={m} value={m}>{ROUTING_LABEL[m]}</option>
             ))}
-          </select>
+          </Select>
           <div className="mt-1.5 text-[11px] text-label-3">新建群聊会话的初始路由；会话内可随时切换（切换写审计）。</div>
         </div>
       </div>

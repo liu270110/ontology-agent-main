@@ -11,6 +11,7 @@ import { ModeInfoPopover } from '../components/ModeInfoPopover'
 import { HistoryDrawer, type PlayHistoryItem } from '../components/HistoryDrawer'
 import { EvidenceGraph } from '../components/EvidenceGraph'
 import { ChunkPreviewSheet } from '../components/ChunkPreviewSheet'
+import { Select } from '@/components/select'
 
 /** /kb/playground 检索 Playground（宿主画框 p-playground；26 篇 §5.3 IX-PG-01~03）：
  *  查询输入 + 三模式分段（Local/Global/Drift）+ 检索（loading 骨架）→ 左答案摘要
@@ -108,13 +109,13 @@ export function PlaygroundPage() {
         <ModeInfoPopover />
         <span className="badge b-gray ml-1">
           Top-K{' '}
-          <select className="bg-transparent font-semibold outline-none" aria-label="Top-K 数量" value={topK} onChange={e => setTopK(Number(e.target.value))}>
+          <Select className="bg-transparent font-semibold outline-none" aria-label="Top-K 数量" value={topK} onChange={e => setTopK(Number(e.target.value))}>
             {[4, 6, 8, 12].map(k => (
               <option key={k} value={k}>
                 {k}
               </option>
             ))}
-          </select>
+          </Select>
         </span>
         <button type="button" className="btn btn-g btn-sm ml-auto" onClick={() => setHistoryOpen(true)}>
           <History size={12} aria-hidden /> 历史

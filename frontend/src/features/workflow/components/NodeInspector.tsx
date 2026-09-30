@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { AlertTriangle, Check, GitBranch, X } from 'lucide-react'
 import { KIND_LABEL, listToolRegistry, toolScopeLabel, type WfNode, type WfEdge, type WfAgentSlot, type WfToolRow } from '../api'
+import { Select } from '@/components/select'
 
 /** IX-GRP-07 节点参数检查器（B5-C 布局切片：右栏面板 → 右上浮层卡）：悬浮于全幅画布之上
  *  （absolute right-3 top-3，玻璃卡 + shadow-float），未选中节点不渲染（画布完全敞开）；
@@ -161,12 +162,12 @@ function InspectorBody({
       {node.kind === 'agent' && (
         <div className="field">
           <label className="field-label">绑定 Agent 插槽</label>
-          <select className="input" data-testid="wf-param-slot" value={String(params.slot_id ?? '')} onChange={e => { patchParam({ slot_id: e.target.value }); onUpdate(node.id, { sub: e.target.value }) }}>
+          <Select className="input" data-testid="wf-param-slot" value={String(params.slot_id ?? '')} onChange={e => { patchParam({ slot_id: e.target.value }); onUpdate(node.id, { sub: e.target.value }) }}>
             <option value="">未绑定</option>
             {slots.map(s => (
               <option key={s.id} value={s.id}>{s.name} · {s.model}</option>
             ))}
-          </select>
+          </Select>
           <div className="fhint">继承群聊成员参数；编排不提权（运行期仍受原 Agent ACL 约束）。</div>
         </div>
       )}
@@ -174,7 +175,7 @@ function InspectorBody({
       {node.kind === 'tool' && (
         <div className="field">
           <label className="field-label">注册表选取</label>
-          <select
+          <Select
             className="input"
             data-testid="wf-param-tool"
             value={toolsQuery.isPending ? '__loading' : curTool}
@@ -204,7 +205,7 @@ function InspectorBody({
                 ))}
               </>
             )}
-          </select>
+          </Select>
           {typeof params.tool === 'string' && params.tool && !toolsQuery.isPending && (
             <div className="mt-1.5">
               {curEntry ? (
@@ -227,11 +228,11 @@ function InspectorBody({
       {node.kind === 'retrieval' && (
         <div className="field">
           <label className="field-label">GraphRAG 三模式</label>
-          <select className="input" data-testid="wf-param-mode" value={String(params.mode ?? 'hybrid')} onChange={e => patchParam({ mode: e.target.value })}>
+          <Select className="input" data-testid="wf-param-mode" value={String(params.mode ?? 'hybrid')} onChange={e => patchParam({ mode: e.target.value })}>
             <option value="local">local · 局部</option>
             <option value="global">global · 全局</option>
             <option value="hybrid">hybrid · 混合</option>
-          </select>
+          </Select>
           <div className="field mt-2 mb-0">
             <label className="field-label">top_k</label>
             <input className="input" style={{ height: 34 }} type="number" data-testid="wf-param-topk" value={Number(params.top_k ?? 6)} onChange={e => patchParam({ top_k: Number(e.target.value) })} />
@@ -261,7 +262,7 @@ function InspectorBody({
             />
           </div>
           <div className="mt-2 flex items-center gap-1.5">
-            <select
+            <Select
               className="input h-[30px] flex-1 text-xs"
               aria-label="表达式模板"
               data-testid="wf-expr-template"
@@ -275,7 +276,7 @@ function InspectorBody({
               {EXPR_TEMPLATES.map(t => (
                 <option key={t.id} value={t.id}>{t.name}</option>
               ))}
-            </select>
+            </Select>
             <button
               type="button"
               className="btn btn-s btn-sm flex-none"
@@ -324,11 +325,11 @@ function InspectorBody({
       {node.kind === 'approval' && (
         <div className="field">
           <label className="field-label">审批模板</label>
-          <select className="input" data-testid="wf-param-approval" value={String(params.template ?? '')} onChange={e => patchParam({ template: e.target.value })}>
+          <Select className="input" data-testid="wf-param-approval" value={String(params.template ?? '')} onChange={e => patchParam({ template: e.target.value })}>
             <option value="">未选择</option>
             <option value="检修申请审批">检修申请审批</option>
             <option value="发布终审">发布终审</option>
-          </select>
+          </Select>
           <div className="fhint">运行期生成审批中心工单并等待回执（候选非成品，硬门禁）。</div>
         </div>
       )}

@@ -139,3 +139,44 @@
   border:1px solid var(--separator);border-radius:var(--r-ctl);font-size:13px;color:var(--label);cursor:pointer}
 .dpick svg{width:13px;height:13px;color:var(--label-3)}
 .fhint{font-size:11px;color:var(--label-3);margin-top:5px;line-height:1.5}
+
+/* =============================================================
+   v1.3 下拉/菜单弹层基元（Select 弹层 + MenuSurface）——24 篇 §3.2 修订
+   交互规范：WAI-ARIA APG select-only combobox（aria-activedescendant 巡航）
+   堆叠纪律：弹层一律 portal 到 body + fixed 定位——玻璃卡片 backdrop-filter
+   产生堆叠上下文，容器内 absolute 弹层会被后续兄弟玻璃层压住
+   （2026-10-01 用户菜单被首页卡片遮挡实锤后立此规）
+   ============================================================= */
+.sel-trigger{display:flex;align-items:center;justify-content:space-between;gap:6px;
+  text-align:left;cursor:pointer;font-family:var(--font)}
+.sel-trigger:disabled{cursor:not-allowed;opacity:.55}
+.sel-trigger .sel-chev{flex:none;color:var(--label-3);transition:transform var(--dur-2) var(--ease)}
+.sel-trigger[aria-expanded="true"] .sel-chev{transform:rotate(180deg)}
+.sel-label{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sel-pop{position:fixed;border-radius:13px;padding:5px;overflow:hidden;
+  background:linear-gradient(135deg,var(--glass-tint),transparent 42%),var(--glass-regular);
+  -webkit-backdrop-filter:blur(24px) saturate(200%);backdrop-filter:blur(24px) saturate(200%);
+  border:1px solid var(--glass-border);
+  box-shadow:inset 0 1px 0 var(--glass-hi),var(--sh-float);
+  transform-origin:top;animation:sel-in var(--dur-2) var(--spring-soft)}
+/* MenuSurface 复用 .menu（patterns 层后置会盖掉背景，复合选择器提回玻璃配方） */
+.menu.sel-pop{background:linear-gradient(135deg,var(--glass-tint),transparent 42%),var(--glass-regular)}
+.sel-pop.up{transform-origin:bottom}
+@keyframes sel-in{from{opacity:0;transform:scale(.97)}}
+@supports not ((backdrop-filter:blur(1px)) or (-webkit-backdrop-filter:blur(1px))){
+  .sel-pop,.menu.sel-pop{background:var(--surface);border-color:var(--separator)}
+}
+@media (prefers-reduced-transparency:reduce){
+  .sel-pop,.menu.sel-pop{background:var(--surface);border-color:var(--separator)}
+}
+.sel-opt{display:flex;align-items:center;gap:8px;min-height:32px;padding:0 10px;border-radius:8px;
+  font-size:13px;color:var(--label);cursor:pointer;white-space:nowrap}
+.sel-opt svg{width:14px;height:14px;flex:none}
+.sel-opt-label{overflow:hidden;text-overflow:ellipsis}
+.sel-opt[data-active="true"]{background:rgba(0,0,0,.05)}
+.dark .sel-opt[data-active="true"]{background:rgba(255,255,255,.07)}
+.sel-opt[aria-selected="true"]{color:var(--accent);font-weight:600}
+.sel-opt .sel-check{margin-left:auto;color:var(--accent)}
+.sel-opt[data-dis="true"]{color:var(--label-3);cursor:default}
+.sel-opt[data-dis="true"][data-active="true"]{background:transparent}
+.sel-empty{padding:8px 10px;font-size:12px;color:var(--label-3)}

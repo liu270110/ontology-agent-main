@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { Bot, CircleStop, MessageSquare, Pencil, Play, Send, ListChecks } from 'lucide-react'
+import {EmptyState} from '@/components/states'
 import { useAuthStore } from '@/stores/auth-store'
 import {
   getAgent,
@@ -227,7 +228,7 @@ export function AgentDetailPage() {
                   </Link>
                 </div>
               ))}
-              {(sessions.data?.items ?? []).length === 0 && <div className="text-[11px] text-label-3">暂无会话。</div>}
+              {(sessions.data?.items ?? []).length === 0 && <EmptyState compact icon={MessageSquare} title="暂无会话" desc="与该 Agent 开启一段对话后在此列出。" />}
             </div>
           </div>
 
@@ -256,7 +257,7 @@ export function AgentDetailPage() {
                   </div>
                 </div>
               ))}
-              {(tasks.data?.items ?? []).length === 0 && <div className="text-[11px] text-label-3">暂无任务。</div>}
+              {(tasks.data?.items ?? []).length === 0 && <EmptyState compact icon={ListChecks} title="暂无任务" desc="该 Agent 的抽取/检索任务将在此跟踪。" />}
             </div>
           </div>
 

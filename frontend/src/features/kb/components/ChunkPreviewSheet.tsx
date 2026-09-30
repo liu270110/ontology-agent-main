@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { ChevronLeft, ChevronRight } from 'lucide-react'
+import {FileText, ChevronLeft, ChevronRight} from 'lucide-react'
+import {EmptyState} from '@/components/states'
 import { Sheet } from '@/components/sheet'
 import { listChunks, type KbDocument } from '../api'
 
@@ -26,10 +27,7 @@ export function ChunkPreviewSheet({ doc, onClose }: { doc: KbDocument | null; on
     <Sheet open={!!doc} onClose={onClose} title={`分片预览 · ${doc?.name ?? ''}`} width={640}>
       {chunksQuery.isLoading && <div className="space-y-2 p-5">{[0, 1, 2, 3].map(i => <div key={i} className="skel w-full" />)}</div>}
       {!chunksQuery.isLoading && chunks.length === 0 && (
-        <div className="empty">
-          <div className="t">暂无分片</div>
-          <div className="d">该文档尚未完成切片（待抽取或抽取中）。</div>
-        </div>
+        <EmptyState icon={FileText} title="暂无分片" desc="该文档尚未完成切片（待抽取或抽取中）。" />
       )}
       {chunks.length > 0 && (
         <div className="flex h-full">

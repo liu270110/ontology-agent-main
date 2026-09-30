@@ -1,9 +1,32 @@
 /* =============================================================
-   工具类层 v1.3 —— 与 Tailwind 共存的少量语义工具类
+   工具类层 v1.4 —— 与 Tailwind 共存的少量语义工具类
    ============================================================= */
-/* 应用舞台底（board.css .app 权威配方）：静态双光斑，为玻璃提供可折射的彩色背景。
-   只声明 background-image，基色由消费方的 bg-bg（var(--bg)）承担；光斑层零 blur、
-   零动画（性能纪律：同屏 backdrop-filter 层数克制，动态氛围交给 .glass-aurora 且降级） */
+/* ---- 效果工具类 v1.4（Magic UI 模式令牌化：Dot/Grid Pattern / Shimmer Text /
+   Border Beam，2026-10-01 组件获取台账批次；全部只消费令牌，亮暗自适配） ---- */
+/* 点阵/网格底纹：装饰背景（radial/linear-gradient 实现，零 SVG 零依赖）；
+   配 .bg-fade-radial 径向渐隐融入玻璃卡（Magic UI mask-image 手法） */
+.bg-dots{background-image:radial-gradient(circle,var(--edge) 1px,transparent 1px);background-size:20px 20px}
+.bg-grid{background-image:linear-gradient(to right,var(--edge) 1px,transparent 1px),
+  linear-gradient(to bottom,var(--edge) 1px,transparent 1px);background-size:56px 56px}
+.bg-fade-radial{-webkit-mask-image:radial-gradient(75% 75% at 50% 42%,#000 30%,transparent 100%);
+  mask-image:radial-gradient(75% 75% at 50% 42%,#000 30%,transparent 100%)}
+/* 流光文字：background-clip:text 的高光扫过（标题/引导语用；信息文字禁用——对比度纪律） */
+.text-shimmer{background:linear-gradient(110deg,var(--label-2) 42%,var(--label) 50%,var(--label-2) 58%);
+  background-size:200% 100%;-webkit-background-clip:text;background-clip:text;color:transparent;
+  animation:oa-text-shimmer 3.2s linear infinite}
+@keyframes oa-text-shimmer{from{background-position:200% 0}to{background-position:-200% 0}}
+/* 边框光束：conic-gradient 旋转描边（重点卡/进行中容器用；@property 驱动角度，
+   不支持 @property 的浏览器静置为静态弧光，reduce-motion 全局开关冻结） */
+@property --beam-angle{syntax:'<angle>';inherits:false;initial-value:0deg}
+.beam-border{position:relative;isolation:isolate}
+.beam-border::after{content:"";position:absolute;inset:0;border-radius:inherit;padding:1px;
+  pointer-events:none;z-index:1;
+  background:conic-gradient(from var(--beam-angle),transparent 0 82%,var(--accent) 92%,var(--teal) 97%,transparent 100%);
+  -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);
+  -webkit-mask-composite:xor;mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);
+  mask-composite:exclude;animation:oa-beam 6s linear infinite}
+@keyframes oa-beam{to{--beam-angle:360deg}}
+/* ---- 既有工具类 ---- */
 .app-stage{background-image:
   radial-gradient(50% 40% at 88% 0%,var(--accent-soft),transparent 60%),
   radial-gradient(40% 35% at 0% 100%,var(--teal-soft),transparent 58%)}

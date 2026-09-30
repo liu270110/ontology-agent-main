@@ -145,5 +145,37 @@
 </div>
 
 <p class="sub" style="margin-top:32px">样式库 v1.2 · 全部类名与设计稿画板同源 · 验收：23 篇 DoD · 详见 docs/架构设计/24 篇</p>
+
+<h2>效果 Effects（v1.4 · Magic UI 模式令牌化）</h2>
+<div class="grid">
+  <div class="card bg-dots" style="height:120px;position:relative;overflow:hidden"></div>
+  <div class="card bg-grid bg-fade-radial" style="height:120px;position:relative;overflow:hidden"></div>
+  <div class="card" style="height:120px;display:flex;align-items:center;justify-content:center">
+    <b class="text-shimmer" style="font-size:18px;letter-spacing:-.2px">本体推理引擎持续运行</b>
+  </div>
+  <div class="card beam-border" style="height:120px;overflow:hidden">
+    <b style="font-size:13px">边框光束 · 进行中</b>
+    <div style="font-size:12px;color:var(--label-2);margin-top:6px">重点容器/长任务卡可用；6s 一周</div>
+  </div>
+</div>
+
+<h2>空状态 Empty（v1.4 · EmptyState 基元同源）</h2>
+<div class="grid">
+  <div class="card" style="min-height:180px;display:flex;align-items:center;justify-content:center">
+    <div class="empty">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg>
+      <div class="t">暂无待审候选</div>
+      <div class="d">抽取完成或调整筛选条件后，候选将出现在左侧队列。</div>
+      <div class="acts"><button class="btn btn-s btn-sm">去知识库</button></div>
+    </div>
+  </div>
+  <div class="card" style="min-height:180px;display:flex;align-items:center;justify-content:center">
+    <div class="empty sm">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/><line x1="8" x2="14" y1="11" y2="11"/></svg>
+      <div class="t">无匹配会话</div>
+    </div>
+  </div>
+</div>
+
 </body>
 </html>

@@ -35,5 +35,9 @@ export default defineConfig({
   test: {
     environment: 'jsdom',
     globals: true,
+    // 懒加载路由 chunk + query 首拉链路（S8）：单测默认 5s 不够
+    testTimeout: 15000,
+    // jsdom 相对 URL fetch 需 MSW node 拦截（S1 回归：缺 setup 后 login 请求抛 Invalid URL）
+    setupFiles: ['./src/mocks/node-setup.ts'],
   },
 })

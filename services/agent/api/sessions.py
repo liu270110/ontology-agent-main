@@ -111,6 +111,22 @@ def build_kernel_ledger_sink_factory(
             data = dict(event.data)
             data.setdefault("run_id", str(run_id))
             async with uow.for_tenant(event.tenant_id) as tx:
+                # H-0b 接线：approval_pending 锚点事件 → task.payload（审批呈现端点的核验锚，
+                # approval_service PENDING_KEY 同款键；人工批准后 worker resume 通道携票消费该锚）
+                if event.event_type == "kernel.approval_pending":
+                    task = await tx.tasks.get(task_id)
+                    if task is not None:
+                        task.payload = {
+                            **(task.payload or {}),
+                            "approval_pending": {
+                                "run_id": str(run_id),
+                                "step_seq": data.get("step_seq"),
+                                "param_hash": data.get("param_hash"),
+                                "action_iri": data.get("action_iri"),
+                                "execution_mode": data.get("execution_mode"),
+                            },
+                        }
+                        await tx.tasks.save(task)
                 await tx.tasks.append_event(
                     task_id,
                     TaskEvent(task_id=task_id, event_type=event.event_type, data=data),

@@ -107,7 +107,12 @@ export function ChatPage() {
         </header>
         {sessionId ? (
           <>
-            <ChatStream sessionId={sessionId} onOpenEvidence={setEvFocus} />
+            <ChatStream
+              sessionId={sessionId}
+              onOpenEvidence={setEvFocus}
+              // 产物卡「在工作区查看」→ 切右栏工作区页签（设计稿 L2427 操作接线）
+              onOpenWorkspace={() => setRightTab('workspace')}
+            />
             <ContextMeter used={62_000} limit={128_000} />
             <MessageInput sessionId={sessionId} onStop={handleStop} />
           </>

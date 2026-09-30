@@ -10,11 +10,13 @@ register_hook（H-0a ``on(event)`` 生命周期钩子，07 研究 §7.4/§332—
 - meta 为 :class:`ExtensionMeta` 且 name 带「命名空间.名称」、version 合 semver（§4.1 纪律③）；
 - 语义标注非空（§7.4 无语义标注不上架）；工具绑定必须声明 ``action_iri``（行动类对账键）；
 - 版本握手（§4.1 注 4）：提供方 ``loop_versions`` 与内核 loop 契约版本主版本号不兼容即拒；
-- 同一行动类重复绑定 / 同名重复注册一律拒绝。
+- 同一行动类重复绑定 / 同名重复注册一律拒绝（唯一例外：压缩策略幂等覆盖——重复注册
+  后者覆盖前者并 WARNING 留痕，M4 H-2：内置提取式策略可被能力包策略替换）。
 """
 
 from __future__ import annotations
 
+import logging
 import re
 from collections.abc import Callable
 from typing import Any
@@ -40,6 +42,8 @@ from services.platform.ports.model_port import ModelPort
 LOOP_CONTRACT_VERSION = "1.0.0"  # 内核 loop 契约版本（semver，§4.1 注 4 握手基准）
 
 _SEMVER_RE = re.compile(r"^\d+\.\d+\.\d+$")
+
+logger = logging.getLogger(__name__)
 
 
 def _require_meta(extension: object, *, point: str) -> ExtensionMeta:
@@ -120,13 +124,18 @@ class ExtensionDispatcher:
     ) -> None:
         """注册上下文压缩策略（H-2 D3 接缝，07 边界契约 D-7：策略=能力层）。
 
-        策略唯一（一次运行一个压缩策略；无注册=内核确定性兜底截断，宁截勿编）。
-        内置 L3 策略本批不交付（摘要须过裁判，随 07 §11 压缩设计批）。
+        幂等语义（M4 H-2 遗留补齐）：重复注册**后者覆盖前者**并 WARNING 留痕——
+        内置提取式策略（compaction.ExtractiveCompactionStrategy）可被能力包策略替换；
+        无注册=内核确定性兜底截断（宁截勿编，行为不变）。
         """
         meta = _require_meta(strategy, point="CompactionStrategy")
         _check_loop_versions(loop_versions, extension_name=meta.name)
         if self._compaction_strategy is not None:
-            raise KernelContractError("CompactionStrategy 已注册，禁重复（一次运行一个压缩策略）")
+            logger.warning(
+                "CompactionStrategy 重复注册，后者覆盖前者: %s → %s",
+                self._compaction_strategy.meta.name,
+                meta.name,
+            )
         self._compaction_strategy = strategy
 
     def register_planning_strategy(

@@ -135,7 +135,7 @@ def load_resume() -> dict[str, dict[str, Any]]:
 def _resolve_llm_config() -> tuple[str, str, str | None]:
     """LLM 端点解析：services.infra.config 优先，回落 OA_ 环境变量；未配置返回空 base_url。"""
     try:
-        from services.infra.config import get_settings
+        from services.platform.config import get_settings
 
         s = get_settings()
         return str(s.llm_base_url or ""), str(s.llm_model), s.llm_api_key
@@ -143,20 +143,100 @@ def _resolve_llm_config() -> tuple[str, str, str | None]:
         return os.getenv("OA_LLM_BASE_URL", ""), os.getenv("OA_LLM_MODEL", "deepseek-chat"), None
 
 
-async def extract_doc(client: Any, doc_text: str) -> list[dict[str, Any]]:
-    """抽取一篇文档：复用抽取链的消息构造与容错解析，返回 relations 候选列表。"""
-    from services.semantic.knowledge.extract import build_extraction_messages, parse_json_loose
+class _VllmChatClient:
+    """本地对话客户端（OpenAI 兼容 /v1/chat/completions；适配现模块轴，PoC 夹具）。"""
 
-    messages = build_extraction_messages(doc_text, list(SEED_CLASS_NAMES))
-    # 思考型模型（qwen3 系）先输出 reasoning 再出 JSON：默认 2048 预算对台账型大文档必截断
-    #（PoC② 实跑实证：4096 下 125/160/95 事实的三篇全部「JSON 对象未闭合」）——OA_ 变量覆盖
-    text = await client.chat(
-        messages,
-        max_tokens=int(os.getenv("OA_LLM_CHAT_MAX_TOKENS", "4096")),
+    def __init__(self, base_url: str, *, model: str, api_key: str | None, timeout: float) -> None:
+        import httpx
+
+        headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
+        self._http = httpx.AsyncClient(base_url=base_url, timeout=timeout, headers=headers)
+        self._model = model
+
+    async def chat(self, messages: list[dict], *, max_tokens: int) -> str:
+        resp = await self._http.post(
+            "/chat/completions",
+            json={"model": self._model, "messages": messages, "max_tokens": max_tokens, "temperature": 0.2},
+        )
+        resp.raise_for_status()
+        return resp.json()["choices"][0]["message"]["content"] or ""
+
+    async def aclose(self) -> None:
+        await self._http.aclose()
+
+
+def _parse_json_loose(text: str) -> dict:
+    """宽松 JSON 解析：截取首个括号平衡的 {...} 块（思考型模型前缀 reasoning 后出 JSON）。"""
+    start = text.find("{")
+    while start != -1:
+        depth = 0
+        for i in range(start, len(text)):
+            if text[i] == "{":
+                depth += 1
+            elif text[i] == "}":
+                depth -= 1
+                if depth == 0:
+                    try:
+                        return json.loads(text[start : i + 1])
+                    except json.JSONDecodeError:
+                        break
+        start = text.find("{", start + 1)
+    return {}
+
+
+def _build_messages(doc_text: str) -> list[dict]:
+    """实例级三元组抽取消息（PoC② 校准对象=候选实例，§7.1；种子类清单做 grounding 白名单）。
+
+    口径注记：现役流水线 v2 模板面向类级 schema 抽取，本夹具按金标口径（实例三元组：
+    subject=实例名/predicate=rdf:type 或自然谓词/object=实例或类名）单独构造——校准的是
+    人工终审所见的候选实例置信度分布，非流水线 schema 抽取质量（后者由 §10 端到端覆盖）。
+    """
+    from services.kb.business.kb_extraction import load_seed_catalog
+    from services.kb.business.prompts.extract_v2 import render_catalog
+
+    catalog = load_seed_catalog()
+    classes = ", ".join(label for _, label in _iter_class_labels(catalog))
+    props = ", ".join(sorted({f"pw:{local}" for _, _, local in catalog.properties}))
+    system = (
+        "你是实例级知识抽取器。从文档中抽取实例三元组（ABox）："
+        "- subject：具体实例名（如「110kV城东变电站」「10kV滨河线」），不是类名；"
+        "- predicate：**只准用谓词白名单**——类型断言用 \"rdf:type\"（object=类名），"
+        f"其余用属性白名单中的值：{props}；白名单外的谓词一律不用；"
+        f"- subject_type / object_type：必须从种子类白名单中选：{classes}；"
+        "- confidence：0~1 自报置信度；evidence：原文逐字引语（禁止改写）。"
+        "只输出一个 JSON 对象：{\"triples\": [{\"subject\":…,\"subject_type\":…,\"predicate\":…,"
+        "\"object\":…,\"object_type\":…,\"confidence\":…,\"evidence\":…}]}，不要输出 JSON 以外的文字。"
     )
-    parsed = parse_json_loose(text)
-    relations = parsed.get("relations", [])
-    return relations if isinstance(relations, list) else []
+    return [{"role": "system", "content": system}, {"role": "user", "content": "## 抽取文本" + chr(10) + doc_text}]
+
+
+def _iter_class_labels(catalog: Any) -> list[tuple[str, str]]:
+    """种子类 (IRI 本地名, 中文 label) 迭代（grounding 白名单用）。"""
+    return [(iri, label) for iri, label, _local in catalog.classes]  # (IRI, 中文 label) 声明序
+
+
+async def extract_doc(client: Any, doc_text: str) -> list[dict[str, Any]]:
+    """抽取一篇文档：分块抽取合并（local-main 上下文 16k——整篇塞入后思考+JSON 空间不足，
+    PoC②「硬件天花板」的实际根因；按流水线同款 chunk_document 切片，逐块抽再合并去重）。"""
+    from services.kb.retrieval.chunking import chunk_document
+
+    max_tokens = int(os.getenv("OA_LLM_CHAT_MAX_TOKENS", "8192"))
+    merged: list[dict[str, Any]] = []
+    seen: set[tuple[str, str, str]] = set()
+    for ch in chunk_document(doc_text, target_tokens=1000):
+        text = await client.chat(_build_messages(ch.content), max_tokens=max_tokens)
+        if "</think>" in text:  # 思考型模型先出推理段：剥后再解析
+            text = text.split("</think>", 1)[1]
+        parsed = _parse_json_loose(text)
+        for rel in parsed.get("triples") or parsed.get("relations", []):
+            if not isinstance(rel, dict):
+                continue
+            key = (str(rel.get("subject", "")), str(rel.get("predicate", "")), str(rel.get("object", "")))
+            if key in seen or not key[0]:
+                continue
+            seen.add(key)
+            merged.append(rel)
+    return merged
 
 
 def _to_candidate(rel: dict[str, Any]) -> dict[str, Any]:
@@ -238,15 +318,6 @@ def _markdown_table(title: str, report: dict[str, Any]) -> str:
 
 async def run() -> int:
     args = _parse_args()
-    try:  # 延迟导入：抽取链未合入的分支上给出明确前置提示
-        from services.semantic.knowledge.extract import ChatModelClient
-    except ImportError:
-        print(
-            "[前置未就绪] 无法导入 services.semantic.knowledge.extract.ChatModelClient。\n"
-            "等待抽取链（subagent E）合入后重试。",
-            file=sys.stderr,
-        )
-        return 2
 
     base_url, model, api_key = _resolve_llm_config()
     if not base_url:
@@ -268,11 +339,11 @@ async def run() -> int:
         return 1
 
     done = {} if args.force else load_resume()
-    client = ChatModelClient(
+    client = _VllmChatClient(
         base_url,
         model=model,
         api_key=api_key,
-        timeout=float(os.getenv("OA_LLM_CHAT_TIMEOUT_SECONDS", "120")),
+        timeout=float(os.getenv("OA_LLM_CHAT_TIMEOUT_SECONDS", "300")),
     )
     per_doc: list[dict[str, Any]] = []
     append_mode = "w" if args.force else "a"

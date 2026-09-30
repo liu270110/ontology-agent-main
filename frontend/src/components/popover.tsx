@@ -47,3 +47,75 @@ export function FloatingCard({
     document.body,
   )
 }
+
+/** 菜单浮层 v1.3（IX-MN-01；UserMenu/会话项菜单共用）：portal 到 body + fixed
+ *  锚点定位（右对齐默认）+ 视口内上翻 + Esc/外点关闭。堆叠纪律：菜单绝不留在
+ *  容器内 absolute——玻璃 backdrop-filter 堆叠上下文会把它压在兄弟层之下
+ *  （2026-10-01 用户菜单被首页卡片遮挡实锤，见 elements.css v1.3 节）。 */
+export function MenuSurface({
+  open,
+  anchor,
+  onClose,
+  width = 212,
+  align = 'right',
+  label,
+  labelledBy,
+  children,
+}: {
+  open: boolean
+  /** 触发元素的 getBoundingClientRect（每次渲染时更新，悬浮跟随） */
+  anchor: DOMRect | null
+  onClose: () => void
+  width?: number
+  align?: 'left' | 'right'
+  label?: string
+  labelledBy?: string
+  children: React.ReactNode
+}) {
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!open) return
+    const onDown = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) onClose()
+    }
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose()
+    }
+    // mousedown 与触发器 click 切换竞态：延迟一帧注册，避免立即自关
+    const t = window.setTimeout(() => window.addEventListener('mousedown', onDown), 0)
+    window.addEventListener('keydown', onKey)
+    return () => {
+      window.clearTimeout(t)
+      window.removeEventListener('mousedown', onDown)
+      window.removeEventListener('keydown', onKey)
+    }
+  }, [open, onClose])
+
+  if (!open || !anchor) return null
+  const left =
+    align === 'right'
+      ? Math.max(8, Math.min(anchor.right - width, window.innerWidth - width - 8))
+      : Math.max(8, Math.min(anchor.left, window.innerWidth - width - 8))
+  const flipUp = anchor.bottom + 6 + 240 > window.innerHeight && anchor.top > 260
+  const style = {
+    position: 'fixed',
+    left,
+    width,
+    zIndex: 'var(--z-popover)',
+    ...(flipUp ? { bottom: window.innerHeight - anchor.top + 6 } : { top: anchor.bottom + 6 }),
+  } as React.CSSProperties
+  return createPortal(
+    <div
+      ref={ref}
+      role="menu"
+      aria-label={label}
+      aria-labelledby={labelledBy}
+      className="menu sel-pop"
+      style={style}
+    >
+      {children}
+    </div>,
+    document.body,
+  )
+}

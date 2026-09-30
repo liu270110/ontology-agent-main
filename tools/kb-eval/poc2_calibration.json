@@ -1,6 +1,6 @@
 {
   "strict": {
-    "extracted_total": 54,
+    "extracted_total": 523,
     "confidence_missing": 0,
     "bins": [
       {
@@ -40,17 +40,17 @@
       },
       {
         "bin": "0.5-0.6",
-        "total": 0,
+        "total": 2,
         "correct": 0,
-        "precision": null,
-        "avg_confidence": null
+        "precision": 0.0,
+        "avg_confidence": 0.5
       },
       {
         "bin": "0.6-0.7",
-        "total": 0,
+        "total": 3,
         "correct": 0,
-        "precision": null,
-        "avg_confidence": null
+        "precision": 0.0,
+        "avg_confidence": 0.7
       },
       {
         "bin": "0.7-0.8",
@@ -61,26 +61,26 @@
       },
       {
         "bin": "0.8-0.9",
-        "total": 1,
+        "total": 10,
         "correct": 0,
         "precision": 0.0,
-        "avg_confidence": 0.85
+        "avg_confidence": 0.8
       },
       {
         "bin": "0.9-1.0",
-        "total": 53,
-        "correct": 0,
-        "precision": 0.0,
-        "avg_confidence": 0.9387
+        "total": 508,
+        "correct": 91,
+        "precision": 0.1791,
+        "avg_confidence": 0.9931
       }
     ],
-    "ece": 0.9371,
-    "true_positives": 0,
-    "false_positives": 54,
+    "ece": 0.8119,
+    "true_positives": 91,
+    "false_positives": 432,
     "golden_total": 582
   },
   "loose": {
-    "extracted_total": 54,
+    "extracted_total": 523,
     "confidence_missing": 0,
     "bins": [
       {
@@ -120,17 +120,17 @@
       },
       {
         "bin": "0.5-0.6",
-        "total": 0,
+        "total": 2,
         "correct": 0,
-        "precision": null,
-        "avg_confidence": null
+        "precision": 0.0,
+        "avg_confidence": 0.5
       },
       {
         "bin": "0.6-0.7",
-        "total": 0,
+        "total": 3,
         "correct": 0,
-        "precision": null,
-        "avg_confidence": null
+        "precision": 0.0,
+        "avg_confidence": 0.7
       },
       {
         "bin": "0.7-0.8",
@@ -141,80 +141,150 @@
       },
       {
         "bin": "0.8-0.9",
-        "total": 1,
+        "total": 10,
         "correct": 0,
         "precision": 0.0,
-        "avg_confidence": 0.85
+        "avg_confidence": 0.8
       },
       {
         "bin": "0.9-1.0",
-        "total": 53,
-        "correct": 0,
-        "precision": 0.0,
-        "avg_confidence": 0.9387
+        "total": 508,
+        "correct": 91,
+        "precision": 0.1791,
+        "avg_confidence": 0.9931
       }
     ],
-    "ece": 0.9371,
-    "true_positives": 0,
-    "false_positives": 54,
+    "ece": 0.8119,
+    "true_positives": 91,
+    "false_positives": 432,
     "golden_total": 582
   },
   "per_doc": [
     {
       "doc_id": "d01_设备台账_城东片区一次设备",
-      "error": "LlmUnavailableError: 对话模型不可达: ",
-      "recall": null
+      "extracted": 120,
+      "golden": 125,
+      "hit": 35,
+      "resumed": true,
+      "recall": 0.28
     },
     {
       "doc_id": "d02_台区客户与计量表台账",
-      "error": "LlmUnavailableError: 对话模型不可达: ",
-      "recall": null
+      "extracted": 106,
+      "golden": 160,
+      "hit": 15,
+      "recall": 0.0938
+    },
+    {
+      "doc_id": "d03_抢修班组与人员名册",
+      "extracted": 22,
+      "golden": 24,
+      "hit": 6,
+      "recall": 0.25
     },
     {
       "doc_id": "d04_故障报告_0418雷雨滨河线故障",
-      "extracted": 8,
+      "extracted": 21,
+      "golden": 9,
+      "hit": 2,
+      "recall": 0.2222
+    },
+    {
+      "doc_id": "d05_故障报告_0418雷雨城网线柳荫线故障",
+      "extracted": 24,
+      "golden": 17,
+      "hit": 4,
+      "recall": 0.2353
+    },
+    {
+      "doc_id": "d06_故障报告_0422翠湖线电缆故障",
+      "extracted": 18,
       "golden": 9,
       "hit": 0,
       "recall": 0.0
     },
     {
-      "doc_id": "d06_故障报告_0422翠湖线电缆故障",
-      "extracted": 7,
+      "doc_id": "d07_故障报告_0502开发区线树障与0508温泉线配变烧损",
+      "extracted": 28,
+      "golden": 18,
+      "hit": 0,
+      "recall": 0.0
+    },
+    {
+      "doc_id": "d08_故障报告_0526城网线配变低压侧故障",
+      "extracted": 9,
       "golden": 9,
+      "hit": 2,
+      "recall": 0.2222
+    },
+    {
+      "doc_id": "d09_调度日志_0418雷雨夜",
+      "extracted": 20,
+      "golden": 4,
+      "hit": 0,
+      "recall": 0.0
+    },
+    {
+      "doc_id": "d10_调度日志_0502大风与0516预警",
+      "extracted": 12,
+      "golden": 3,
       "hit": 0,
       "recall": 0.0
     },
     {
       "doc_id": "d11_操作票_0422翠湖线故障隔离",
-      "extracted": 7,
+      "extracted": 18,
       "golden": 1,
       "hit": 0,
       "recall": 0.0
     },
     {
+      "doc_id": "d12_操作票_0428柳荫线计划检修",
+      "extracted": 12,
+      "golden": 9,
+      "hit": 0,
+      "recall": 0.0
+    },
+    {
       "doc_id": "d13_停电工单台账",
-      "error": "LlmUnavailableError: 对话模型不可达: ",
-      "recall": null
+      "extracted": 21,
+      "golden": 95,
+      "hit": 11,
+      "recall": 0.1158
+    },
+    {
+      "doc_id": "d14_停电分析报告_0418雷雨与0422电缆故障",
+      "extracted": 10,
+      "golden": 2,
+      "hit": 0,
+      "recall": 0.0
+    },
+    {
+      "doc_id": "d15_停电分析报告_0502大风与0508温泉线",
+      "extracted": 23,
+      "golden": 2,
+      "hit": 0,
+      "recall": 0.0
     },
     {
       "doc_id": "d16_抢修完成与复电记录_四月",
-      "extracted": 20,
+      "extracted": 24,
       "golden": 36,
-      "hit": 0,
-      "recall": 0.0
+      "hit": 8,
+      "recall": 0.2222
     },
     {
       "doc_id": "d17_抢修完成与复电记录_五月",
-      "extracted": 12,
+      "extracted": 35,
       "golden": 59,
-      "hit": 0,
-      "recall": 0.0
+      "hit": 8,
+      "recall": 0.1356
     }
   ],
   "env": {
-    "model": "qwen3:8b",
-    "base_url": "http://localhost:11434/v1",
-    "max_tokens": "12288",
-    "timeout": "1800"
+    "model": "local-main",
+    "base_url": "http://127.0.0.1:18001/v1",
+    "max_tokens": "4096",
+    "timeout": "120"
   }
 }

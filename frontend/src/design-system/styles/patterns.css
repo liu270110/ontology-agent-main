@@ -85,13 +85,13 @@
 .diffline{font-family:var(--mono);font-size:11px;padding:2px 8px;border-radius:5px;line-height:1.7}
 .diffline.add{background:var(--green-soft);color:var(--green)}
 .diffline.del{background:var(--red-soft);color:var(--red)}
-.empty{display:flex;flex-direction:column;align-items:center;gap:6px;padding:40px 20px;text-align:center}
+.empty{display:flex;flex-direction:column;align-items:center;gap:6px;padding:24px;text-align:center}
 .empty svg{width:28px;height:28px;color:var(--label-3)}
 .empty .t{font-size:14px;font-weight:600;color:var(--label)}
 .empty .d{font-size:12px;color:var(--label-2);line-height:1.6;max-width:300px}
 .empty .acts{display:flex;gap:8px;margin-top:8px}
 /* v1.4 窄容器档（侧栏列表/抽屉）：缩内距与图标；EmptyState 基元 compact 档消费 */
-.empty.sm{padding:24px 12px;gap:4px}
+.empty.sm{padding:16px 12px;gap:4px}
 .empty.sm svg{width:20px;height:20px}
 .empty.sm .t{font-size:12.5px}
 .empty.sm .d{font-size:11px}
@@ -177,6 +177,8 @@
 .devrow .d-ic{width:34px;height:34px;border-radius:9px;background:var(--surface-2);border:1px solid var(--separator);
   display:flex;align-items:center;justify-content:center;color:var(--label-2);flex:none}
 .devrow .d-ic svg{width:16px;height:16px}
+.avatar{width:28px;height:28px;border-radius:50%;background:var(--indigo-soft);color:var(--indigo);
+  display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;flex:none}
 .avatar-group{display:flex;align-items:center}
 .avatar-group .avatar{width:26px;height:26px;font-size:10px;border:2px solid var(--surface);margin-left:-8px}
 .avatar-group .avatar:first-child{margin-left:0}

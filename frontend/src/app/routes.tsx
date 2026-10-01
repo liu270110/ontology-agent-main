@@ -55,6 +55,9 @@ export const ROUTES: RouteMeta[] = [
   // /chat/group 无会话态 = 建群入口页，同元素渲染空态）
   { path: '/chat/group/:sessionId', title: 'Agent 群聊', icon: 'chat', group: '工作台', roles: AUTHED, hidden: true },
   { path: '/chat/group', title: '群聊', icon: 'spark', group: '工作台', roles: AUTHED },
+  // S9 会话轨迹回放（画框21 / 08 篇只追加事件流；hidden=消息操作组「查看轨迹」深链直达，
+  // RouteGuard 沿 AUTHED，会话主人可见性由服务端 PDP 兜底）
+  { path: '/chat/:sessionId/trajectory', title: '轨迹回放', icon: 'list', group: '工作台', roles: AUTHED, hidden: true },
   // S7 协作域：工作流编排（27 篇 P15；hidden=编辑器深链直达，列表入主侧边栏）
   { path: '/workflows', title: '工作流', icon: 'workflow', group: '工作台', roles: ['admin', 'ontologist', 'super_admin'] },
   { path: '/workflows/:id', title: '工作流编辑器', icon: 'workflow', group: '工作台', roles: ['admin', 'ontologist', 'super_admin'], hidden: true },

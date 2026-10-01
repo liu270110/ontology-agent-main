@@ -21,6 +21,8 @@ const queryClient = new QueryClient({
 const DashboardPage = lazy(() => import('@/features/dashboard/pages/DashboardPage').then(m => ({ default: m.DashboardPage })))
 const ChatPage = lazy(() => import('@/features/chat/pages/ChatPage').then(m => ({ default: m.ChatPage })))
 const GroupChatPage = lazy(() => import('@/features/group/pages/GroupChatPage').then(m => ({ default: m.GroupChatPage })))
+// S9 会话轨迹回放（画框21；最小接线——用户 2026-10-01 已裁决允许 App.tsx 两行）
+const TrajectoryPage = lazy(() => import('@/features/trajectory/pages/TrajectoryPage').then(m => ({ default: m.TrajectoryPage })))
 const WorkflowListPage = lazy(() => import('@/features/workflow/pages/WorkflowListPage').then(m => ({ default: m.WorkflowListPage })))
 const WorkflowEditorPage = lazy(() => import('@/features/workflow/pages/WorkflowEditorPage').then(m => ({ default: m.WorkflowEditorPage })))
 const DocumentsPage = lazy(() => import('@/features/kb/pages/DocumentsPage').then(m => ({ default: m.DocumentsPage })))
@@ -52,6 +54,7 @@ const PAGES: Record<string, React.ReactNode> = {
   '/chat/new': <ChatPage />, // IX-EX-01 去对话深链（?entity= 携带实体上下文）
   '/chat/group/:sessionId': <GroupChatPage />, // S7 协作域：Agent 群聊（IX-GRP-01~05）
   '/chat/group': <GroupChatPage />, // S7 协作域：建群入口（无会话空态，GRP-01 触发）
+  '/chat/:sessionId/trajectory': <TrajectoryPage />, // S9 会话轨迹回放（画框21；消息操作组「查看轨迹」入口）
   '/workflows': <WorkflowListPage />, // S7 协作域：工作流列表（IX-GRP-06）
   '/workflows/:id': <WorkflowEditorPage />, // S7 协作域：工作流编辑器（IX-GRP-07~11）
   '/kb': <DocumentsPage />, // S3 知识域：文档管理（IX-KB-01~04）

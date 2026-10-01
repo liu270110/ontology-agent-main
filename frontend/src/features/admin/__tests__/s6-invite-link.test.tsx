@@ -1,13 +1,14 @@
 import '@testing-library/jest-dom/vitest'
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
-import { afterEach, beforeAll, afterAll, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import { http, HttpResponse } from 'msw'
 import { App } from '@/app/App'
 import { server } from '@/mocks/node'
 import { useAuthStore } from '@/stores/auth-store'
 
+// listen/resetHandlers/close 由全局 setupFiles（src/mocks/node-setup.ts）统一管理（7bd3e2a），
+// 测试不自管；此处仅保留本文件特有的 clipboard stub
 beforeAll(() => {
-  server.listen({ onUnhandledRequest: 'bypass' })
   // jsdom 无 clipboard：Object.defineProperty stub（writeText spy，供复制反馈断言）
   Object.defineProperty(navigator, 'clipboard', {
     value: { writeText: vi.fn().mockResolvedValue(undefined) },
@@ -20,7 +21,6 @@ afterEach(() => {
   useAuthStore.getState().clearSession()
   vi.mocked(navigator.clipboard.writeText).mockClear()
 })
-afterAll(() => server.close())
 
 /** S6 链接邀请切片（2026-09-28 ★ invite-links 五端点 · 4 用例 · Dify 式链接自助加入）：
  *  ① 生成→链接展示→复制「已复制 ✓」→ 弹窗下方列表生效中行（POST 载荷断言 {role, expires_in_hours}）

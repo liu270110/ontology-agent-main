@@ -293,6 +293,48 @@ function scriptFor(sessionId: string, question: string): { frames: string[]; ids
     return { frames, ids }
 }
 
+// ---- S9 轨迹回放演示会话（2026-10-01 D2 切片，纯追加）：s-traj-2481 不进 SESSIONS 列表
+// （对话页会话列表零影响），仅供 /chat/s-traj-2481/trajectory 深链回放与 s9 用例：
+// 历史消息 seq 899/921 与 SSE 回放帧 900~920 交错，GET /sessions/{id}/events 复用
+// framesBySession 通道原样回放（08 篇：回放、审计、恢复共享同一事件流）。
+// 帧序含两次运行 → 2 个分叉点（session.compacted 压缩分叉 + 第二次 RUN_STARTED 重新生成分叉）。 ----
+const TRAJ_SID = 's-traj-2481'
+HISTORY[TRAJ_SID] = [
+  { id: 'm-traj-u', role: 'user', content: '对比 GB/T 31486 与 36276 在循环寿命测试上的要求差异。', seq: 899 },
+  {
+    id: 'm-traj-a', role: 'assistant', finish_reason: 'stop', seq: 921,
+    content: '两条标准的核心差异在测试对象与判定口径：GB/T 31486 以单体/模块为对象考核容量恢复能力；GB/T 36276 面向电池单体与电池簇，循环 1000 次后容量保持率须 ≥80%。',
+  },
+]
+const trajFrame = (s: number, name: string, data: Record<string, unknown>) => ({
+  seq: s,
+  text: `id: ${s}\nevent: ${name}\ndata: ${JSON.stringify(data)}\n\n`,
+})
+framesBySession[TRAJ_SID] = [
+  trajFrame(900, 'RUN_STARTED', { run_id: 'r_traj_a', session_id: TRAJ_SID, task_id: 't_traj_a' }),
+  trajFrame(902, 'run.usage', { run_id: 'r_traj_a', groups: USAGE_GROUPS }),
+  trajFrame(904, 'TOOL_CALL_START', { tool_call_id: 'tc_traj_1', tool_name: 'knowledge.search' }),
+  trajFrame(905, 'TOOL_CALL_ARGS', { tool_call_id: 'tc_traj_1', delta: '{"mode":"local","query":"循环寿命 对比"}' }),
+  trajFrame(906, 'TOOL_CALL_END', { tool_call_id: 'tc_traj_1' }),
+  trajFrame(907, 'TOOL_CALL_RESULT', { tool_call_id: 'tc_traj_1', ok: true, summary: '命中 6 实体 / 2 社区', cost_ms: 842 }),
+  trajFrame(908, 'RETRIEVAL_EVIDENCE', {
+    chunks: [{ doc_id: 'GB/T 36276', chunk_id: 'chunk_017', quote: '1000 次循环后容量保持率 ≥80%', score: 0.83 }],
+    graph_paths: [{ nodes: ['PowerCell', 'CycleLife'], edges: ['考核'] }],
+    degraded: false,
+  }),
+  trajFrame(910, 'TEXT_MESSAGE_START', { message_id: 'm_traj_1' }),
+  trajFrame(912, 'TEXT_MESSAGE_CONTENT', { message_id: 'm_traj_1', delta: '两条标准的核心差异在测试对象与循环次数要求：31486 考核容量恢复能力，36276 要求千次循环保持率 ≥80%。' }),
+  trajFrame(913, 'TEXT_MESSAGE_END', { message_id: 'm_traj_1', finish_reason: 'stop' }),
+  trajFrame(914, 'RUN_FINISHED', { run_id: 'r_traj_a', usage: { tokens: 218, cost: 0.0042 } }),
+  // 分叉 #1：上下文压缩（08 篇 compaction——折叠历史至摘要后继续）
+  trajFrame(916, 'session.compacted', { compacted_before_seq: 913, summary_tokens: 4200 }),
+  // 分叉 #2：重新生成（第二次 RUN_STARTED）
+  trajFrame(917, 'RUN_STARTED', { run_id: 'r_traj_b', session_id: TRAJ_SID, task_id: 't_traj_b' }),
+  trajFrame(918, 'TEXT_MESSAGE_START', { message_id: 'm_traj_2' }),
+  trajFrame(919, 'TEXT_MESSAGE_CONTENT', { message_id: 'm_traj_2', delta: '按判定口径重排对比：GB/T 36276 更严——千次循环保持率硬指标 ≥80%。' }),
+  trajFrame(920, 'TEXT_MESSAGE_END', { message_id: 'm_traj_2', finish_reason: 'stop' }),
+]
+
 export const handlers = [
   ...groupHandlers, // S7 协作域（api/01 §5.2 群聊 X15 + §5.11 workflows X16，见 group-handlers.ts；注册于首位，重叠路径非群聊请求 return undefined 放行）
   ...kbHandlers, // S3 知识域（api/01 §5.4/§6.2，见 kb-handlers.ts）

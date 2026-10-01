@@ -584,6 +584,55 @@ const ME_EXPORT_TASKS = new Map<string, { task_id: string; status: 'queued' | 'r
   ['512', { task_id: '512', status: 'done', download_url: '/exports/me-20260930-512.zip' }],
 ])
 
+// ============================================================
+// §5.8 admin/system-logs —— 服务级运行日志（S9 系统日志切片；设计稿 20b p-syslogs）
+// ============================================================
+
+/** 种子 10 条覆盖六服务（gateway/kb/ontology/extraction/memory/llm-channel）× 各级别，
+ *  按 ts 倒序——mock「现在」= 首条时间，时间档 range 据此算截止线（1h 档排除
+ *  12:58/11:22/10:05 三条，供 range 过滤可观测）。两条 ERROR 携完整 span 瀑布：
+ *  trace 8f2a71c4 与设计稿 20b 逐字对齐（kb.extract → embed → vector.timeout →
+ *  degrade BM25）；WARN「MinIO latency 412ms 超阈值」与健康卡口径互证。
+ *  span.steps.color_kind → 瀑布着色：start=teal/embed=indigo/timeout=red/degrade=orange/ok=green。 */
+const SYS_LOGS: {
+  id: string
+  ts: string
+  level: 'error' | 'warn' | 'info' | 'debug'
+  service: string
+  message: string
+  trace_id?: string
+  span?: { steps: { t: string; event: string; color_kind: 'start' | 'embed' | 'timeout' | 'degrade' | 'ok'; duration_ms?: number; timeout?: boolean; detail?: string }[] }
+}[] = [
+  {
+    id: 'sl-001', ts: '2026-09-26 14:21:07.412', level: 'error', service: 'kb',
+    message: 'embedding 通道超时，降级 BM25（degraded_reasons=[vector_timeout]）', trace_id: '8f2a71c4',
+    span: { steps: [
+      { t: '14:21:06.900', event: 'kb.extract.start', color_kind: 'start', detail: '文档 d-105 · 12 分片' },
+      { t: '14:21:07.100', event: 'llm.embed →', color_kind: 'embed', duration_ms: 312 },
+      { t: '14:21:07.412', event: 'vector.timeout ✕', color_kind: 'timeout', duration_ms: 5000, timeout: true },
+      { t: '14:21:07.420', event: 'degrade → BM25', color_kind: 'degrade', detail: 'has_embedding=false 分片 12/12' },
+    ] },
+  },
+  {
+    id: 'sl-002', ts: '2026-09-26 14:19:52.106', level: 'error', service: 'llm-channel',
+    message: '渠道 deepseek 429 限速，单飞重试成功（attempt 2）', trace_id: 'b71c09e2',
+    span: { steps: [
+      { t: '14:19:50.980', event: 'llm.call.start', color_kind: 'start', detail: '渠道 deepseek · deepseek-chat' },
+      { t: '14:19:51.002', event: 'llm.call →', color_kind: 'embed', duration_ms: 1080 },
+      { t: '14:19:52.081', event: 'rate.429 ✕', color_kind: 'timeout', duration_ms: 1200, timeout: true, detail: 'Retry-After 1s' },
+      { t: '14:19:52.090', event: 'retry → attempt 2', color_kind: 'ok', duration_ms: 16, detail: '单飞重试成功' },
+    ] },
+  },
+  { id: 'sl-003', ts: '2026-09-26 14:18:33.884', level: 'warn', service: 'gateway', message: 'MinIO latency 412ms 超阈值（readiness 仍 pass）' },
+  { id: 'sl-004', ts: '2026-09-26 14:12:20.310', level: 'info', service: 'ontology', message: 'SHACL 增量校验完成 · 0 违例（ont-outage v1.5.0）' },
+  { id: 'sl-005', ts: '2026-09-26 14:08:02.118', level: 'info', service: 'extraction', message: 'JOB #218 分片抽取完成 · 12/12（候选 36 条进审核队列）' },
+  { id: 'sl-006', ts: '2026-09-26 13:47:55.602', level: 'warn', service: 'memory', message: 'L1 会话 s-2398 TTL 剩余 <10min · consolidate 延后' },
+  { id: 'sl-007', ts: '2026-09-26 13:30:41.027', level: 'debug', service: 'gateway', message: 'rate limit 中间件命中计数 · key=ip:10.2.14.7（未触发 429）' },
+  { id: 'sl-008', ts: '2026-09-26 12:58:10.443', level: 'info', service: 'llm-channel', message: '渠道 qwen 溢出启用 · fallback 链 deepseek→qwen' },
+  { id: 'sl-009', ts: '2026-09-26 11:22:04.900', level: 'debug', service: 'kb', message: '检索缓存命中率 87.4%（近 1h 窗口）' },
+  { id: 'sl-010', ts: '2026-09-26 10:05:33.217', level: 'warn', service: 'ontology', message: 'owlrl 物化耗时 2.4s 高于基线（TBox v1.4.9）' },
+]
+
 export const platformHandlers = [
   // ---------- §5.5 memory ----------
   // R 预登记：GET /memory/l1 列表（契约仅单条 GET /memory/l1/{session_id}，IX-MEM-03 需要会话集合）
@@ -871,6 +920,47 @@ export const platformHandlers = [
   // 注：/me/preferences 扩展字段（onboarding_done / chat_* / group_routing_* / memory_*）
   // 由 admin-handlers.ts 既有 PUT Object.assign 透传合并，无需在此追加。
 
+  // ---------- S9 系统日志切片追加（管理台·系统日志 Tab；纯追加，不改动上方既有行） ----------
+  // R 预登记：GET /admin/system-logs（api/01 §5.8 表 2026-10-01 追加 ☆，数据源
+  //   audit_logs+llm_calls）。四维过滤：level（error/warn/info/debug）+ service +
+  //   range（1h/24h/7d，以最新种子为「现在」算截止）+ q（trace_id 精确匹配优先，
+  //   否则 message/service 关键词子串）；total=全集级别计数（seg 徽标不随过滤抖动）。
+  http.get('*/api/v1/admin/system-logs', ({ request }) => {
+    const url = new URL(request.url)
+    const level = url.searchParams.get('level')
+    const service = url.searchParams.get('service')
+    const range = url.searchParams.get('range') ?? '1h'
+    const q = url.searchParams.get('q')?.trim() ?? ''
+    const rangeMin = range === '1h' ? 60 : range === '24h' ? 24 * 60 : 7 * 24 * 60
+    const newestMs = Date.parse(SYS_LOGS[0].ts.replace(' ', 'T'))
+    const cutMs = newestMs - rangeMin * 60_000
+    let items = SYS_LOGS.filter(l => Date.parse(l.ts.replace(' ', 'T')) >= cutMs)
+    if (service && service !== 'all') items = items.filter(l => l.service === service)
+    if (level && level !== 'all') items = items.filter(l => l.level === level)
+    if (q) {
+      const byTrace = items.filter(l => l.trace_id === q)
+      items = byTrace.length > 0 ? byTrace : items.filter(l => `${l.message} ${l.service}`.includes(q))
+    }
+    const total = { error: 0, warn: 0, info: 0, debug: 0 }
+    for (const l of SYS_LOGS) total[l.level] += 1
+    return ok({ items, total })
+  }),
+  // 服务健康卡（设计稿 20b：直连 readyz——裸 JSON 非 {code,data} 信封，形状与
+  // services/gateway/health.py ReadyzOut 同形 {status,version,profile,checks}；
+  // MinIO ok=true 但 latency 412ms>300ms 阈值 → 前端橙「延迟偏高」，readiness 本身
+  // pass 与后端「可选依赖慢不降级」口径一致）
+  http.get('*/api/v1/readyz', () =>
+    HttpResponse.json({
+      status: 'ok',
+      version: '0.3.0',
+      profile: 'lite',
+      checks: {
+        postgres: { ok: true, latency_ms: 2, error: null, skipped: false },
+        redis: { ok: true, latency_ms: 1, error: null, skipped: false },
+        minio: { ok: true, latency_ms: 412, error: null, skipped: false },
+      },
+    }),
+  ),
 ]
 
 function setToolEnabled(id: string, enabled: boolean) {

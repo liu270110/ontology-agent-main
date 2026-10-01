@@ -1,5 +1,8 @@
-import { useEffect, useRef, useState } from 'react'
-import { Check, Copy, FileText, RefreshCw, ThumbsDown, ThumbsUp } from 'lucide-react'
+import { memo, useEffect, useRef, useState } from 'react'
+import { Check, Copy, FileText, ListTree, RefreshCw, ThumbsDown, ThumbsUp } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
+import Markdown, { type Components } from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 import { useSessionStore, type ChatMessage, type EvidenceChunk } from '@/stores/session-store'
 import { api } from '@/api/client'
 import { SkeletonRows } from '@/components/states'
@@ -8,7 +11,9 @@ import type { EvidenceFocus } from './EvidenceSheet'
 
 /** 消息流（画框03）：用户气泡实底蓝、助手气泡玻璃、工具卡、证据 chip（点击开抽屉 IX-CHT-03）、
  *  流式光标、助手消息悬停操作条（IX-CHT-07：复制/重新生成/赞踩——复制真实剪贴板，
- *  重新生成重发末条用户消息，赞踩本地高亮）、手动停止标记（IX-CHT-06）。 */
+ *  重新生成重发末条用户消息，赞踩本地高亮）、手动停止标记（IX-CHT-06）。
+ *  D2 切片（2026-10-01）：助手消息 content 走 Markdown/代码块渲染（react-markdown + remark-gfm，
+ *  手写 component 映射不引 typography 插件，长消息 memo）；操作组追加「查看轨迹」（画框21 深链）。 */
 
 /** 剪贴板兜底：jsdom/非安全上下文无 navigator.clipboard 时退化为 execCommand */
 async function copyText(text: string): Promise<boolean> {
@@ -32,6 +37,82 @@ async function copyText(text: string): Promise<boolean> {
     return false
   }
 }
+
+/** ---- 助手消息 Markdown 渲染（D2 切片）：react-markdown + remark-gfm，手写 component 映射
+ *  （不引 typography 插件），排版对齐气泡内 13px/1.7；用户气泡保持纯文本不受影响。 ---- */
+
+/** 代码块卡（深色 mono + 右上复制按钮）：fenced code（language-*）走块级卡；
+ *  行内 code 走 pill（见 MD_COMPONENTS.code 分流，react-markdown FAQ 惯例）。 */
+function CodeBlockCard({ code, lang }: { code: string; lang?: string }) {
+  const [copied, setCopied] = useState(false)
+  return (
+    <span data-testid="md-code-block" className="relative my-2 block overflow-hidden rounded-lg border border-black/40" style={{ background: '#141922' }}>
+      <span className="flex items-center justify-between gap-2 px-3 pt-1.5">
+        <span className="font-mono text-2xs" style={{ color: 'rgba(215,223,234,.45)' }}>{lang ?? '代码'}</span>
+        <button
+          type="button"
+          data-testid="md-code-copy"
+          aria-label="复制代码"
+          onClick={() => {
+            void copyText(code).then(ok => {
+              if (ok) {
+                setCopied(true)
+                window.setTimeout(() => setCopied(false), 1600)
+              }
+            })
+          }}
+          className="flex items-center gap-1 rounded-md px-1.5 py-0.5 text-2xs text-white/50 hover:bg-white/10 hover:text-white/80"
+        >
+          {copied ? <Check size={10} aria-hidden /> : <Copy size={10} aria-hidden />}
+          {copied ? '已复制' : '复制'}
+        </button>
+      </span>
+      <pre className="overflow-x-auto px-3 pb-2.5 pt-1 font-mono text-xs leading-relaxed" style={{ color: '#d7dfea' }}>
+        <code>{code}</code>
+      </pre>
+    </span>
+  )
+}
+
+/** Markdown component 映射（气泡内排版：块级元素按 prose 间距手写，表格套 .tbl 设计稿类） */
+const MD_COMPONENTS: Components = {
+  // 块级 fenced code（带 language-*）→ 深色卡；行内 code → pill
+  code({ className, children }) {
+    const m = /language-([\w-]+)/.exec(className ?? '')
+    if (m) return <CodeBlockCard code={String(children).replace(/\n$/, '')} lang={m[1]} />
+    return <code className="rounded-[5px] border border-separator bg-surface-2 px-1 py-px font-mono text-[12px]">{children}</code>
+  },
+  // 块级卡自带头部/复制按钮，pre 仅解包防双壳嵌套
+  pre: ({ children }) => <>{children}</>,
+  // 外链新窗口打开 + 安全 rel（不回传引用者）
+  a: ({ children, href }) => (
+    <a href={href} target="_blank" rel="noopener noreferrer nofollow" className="text-accent hover:underline">{children}</a>
+  ),
+  table: ({ children }) => (
+    <div className="my-2 overflow-x-auto">
+      <table className="tbl">{children}</table>
+    </div>
+  ),
+  ul: ({ children }) => <ul className="my-1.5 ml-4 list-disc space-y-0.5">{children}</ul>,
+  ol: ({ children }) => <ol className="my-1.5 ml-4 list-decimal space-y-0.5">{children}</ol>,
+  li: ({ children }) => <li className="pl-0.5">{children}</li>,
+  p: ({ children }) => <p className="my-1.5 first:mt-0 last:mb-0">{children}</p>,
+  // 标题压到气泡内尺度（h1~h3 → h3~h5 标签，避免撑破气泡）
+  h1: ({ children }) => <h3 className="mb-1 mt-2 text-sm font-semibold first:mt-0">{children}</h3>,
+  h2: ({ children }) => <h4 className="mb-1 mt-2 text-[13px] font-semibold first:mt-0">{children}</h4>,
+  h3: ({ children }) => <h5 className="mb-1 mt-1.5 text-[13px] font-semibold first:mt-0">{children}</h5>,
+  blockquote: ({ children }) => <blockquote className="my-2 border-l-2 border-separator pl-2 text-label-2">{children}</blockquote>,
+  hr: () => <hr className="my-2 border-separator" />,
+}
+
+/** 助手消息正文（长消息 memo：仅 content 变化才重渲染——流式推进时历史消息零重渲染开销） */
+const AssistantMarkdown = memo(function AssistantMarkdown({ content }: { content: string }) {
+  return (
+    <div className="md-body min-w-0" style={{ fontSize: 13, lineHeight: 1.7 }}>
+      <Markdown remarkPlugins={[remarkGfm]} components={MD_COMPONENTS}>{content}</Markdown>
+    </div>
+  )
+})
 
 /** 证据 chip 行（IX-CHT-03 触发源）：文档分片 + 图谱路径两类，点击滑出原文抽屉 */
 function EvidenceChips({
@@ -87,11 +168,13 @@ function EvidenceChips({
   )
 }
 
-/** 助手消息悬停操作条（IX-CHT-07）：复制 / 重新生成 / 赞踩（反馈本地高亮，M4 接 POST 反馈端点） */
+/** 助手消息悬停操作条（IX-CHT-07）：复制 / 重新生成 / 赞踩（反馈本地高亮，M4 接 POST 反馈端点）
+ *  +「查看轨迹」（D2 切片：画框21 /chat/:sid/trajectory 深链） */
 function MessageActions({ m, sessionId, regenerateContent }: { m: ChatMessage; sessionId: string; regenerateContent: string | null }) {
   const [copied, setCopied] = useState(false)
   const [feedback, setFeedback] = useState<'up' | 'down' | null>(null)
   const running = useSessionStore(s => s.running)
+  const navigate = useNavigate()
 
   return (
     <div
@@ -141,10 +224,20 @@ function MessageActions({ m, sessionId, regenerateContent }: { m: ChatMessage; s
         type="button"
         aria-label="踩"
         aria-pressed={feedback === 'down'}
-        onClick={() => setFeedback(f => (f === 'down' ? null : 'down'))}
+        onClick={() => setFeedback(f => (f === 'up' ? null : 'down'))}
         className={`flex h-6 w-6 items-center justify-center rounded-md hover:bg-surface-2 ${feedback === 'down' ? 'text-red' : 'text-label-3'}`}
       >
         <ThumbsDown size={11} aria-hidden />
+      </button>
+      <button
+        type="button"
+        data-testid={`msg-trajectory-${m.id}`}
+        aria-label="查看轨迹"
+        title="查看本会话执行轨迹回放（画框21）"
+        onClick={() => navigate(`/chat/${sessionId}/trajectory`)}
+        className="flex h-6 items-center gap-1 rounded-md px-1.5 text-[11px] text-label-3 hover:bg-surface-2 hover:text-label"
+      >
+        <ListTree size={11} aria-hidden /> 查看轨迹
       </button>
     </div>
   )
@@ -290,7 +383,8 @@ export function ChatStream({
                 className="bubble bubble-a rounded-2xl rounded-bl-md border border-separator bg-surface px-4 py-2.5 text-sm"
                 style={{ borderLeft: '3px solid var(--src-system)' }}
               >
-                {m.content || <span className="text-label-3">思考中…</span>}
+                {/* 助手正文：Markdown/代码块渲染（用户气泡保持纯文本）；空内容=流式等待 */}
+                {m.content ? <AssistantMarkdown content={m.content} /> : <span className="text-label-3">思考中…</span>}
                 {running && m.id === messages[messages.length - 1]?.id && <span className="stream-caret ml-0.5 animate-pulse">▍</span>}
                 {/* IX-CHT-06：手动停止后保留已生成部分 + 标记 */}
                 {m.finishReason === 'stopped' && (

@@ -1,4 +1,4 @@
-import { api } from '@/api/client'
+import { api, ApiError } from '@/api/client'
 
 /** 系统管理域 API（契约=api/01 §5.8 admin + §6.5 writeback 台账 + §5.2 tasks 事件；
  *  groups/roles-matrix/models-写入/trace 展开/导出为预登记，见 mocks/admin-handlers.ts 头注）。
@@ -169,3 +169,58 @@ export const revokeInviteLink = (id: string) =>
 
 export { previewInviteLink, joinInviteLink } from '@/lib/invite'
 export type { InviteLinkPreview } from '@/lib/invite'
+
+// ---- 系统日志（§5.8 GET /admin/system-logs ☆ 前端 D1 切片预登记 2026-10-01：
+//      数据源 audit_logs+llm_calls；级别/服务/时间档/trace_id-关键词四维参数） ----
+/** 瀑布单步：color_kind → 着色（start=teal/embed=indigo/timeout=red/degrade=orange/ok=green）；
+ *  有 duration_ms 渲染耗时横条（timeout=true → 「Nms 超时」红条），无则仅事件文本 */
+export interface SysLogSpanStep {
+  t: string
+  event: string
+  color_kind: 'start' | 'embed' | 'timeout' | 'degrade' | 'ok'
+  duration_ms?: number
+  timeout?: boolean
+  detail?: string
+}
+export interface SysLogRow {
+  id: string
+  ts: string
+  level: 'error' | 'warn' | 'info' | 'debug'
+  service: string
+  message: string
+  trace_id?: string
+  span?: { steps: SysLogSpanStep[] }
+}
+export function listSystemLogs(params: { level?: string; service?: string; range?: string; q?: string }) {
+  const qs = new URLSearchParams()
+  if (params.level) qs.set('level', params.level)
+  if (params.service && params.service !== 'all') qs.set('service', params.service)
+  if (params.range) qs.set('range', params.range)
+  if (params.q) qs.set('q', params.q)
+  return api.get<{ items: SysLogRow[]; total: { error: number; warn: number; info: number; debug: number } }>(
+    `/admin/system-logs?${qs.toString()}`,
+  )
+}
+
+// ---- 服务健康（GET /readyz：readiness 探针返回**裸 JSON 非 {code,data} 信封**，
+//      且 503 也携带依赖明细（services/gateway/health.py ReadyzOut）——故走裸 fetch
+//      不走 api 拦截层，把 degraded 明细原样交 UI 判红态） ----
+export interface ReadyzCheck {
+  ok: boolean
+  latency_ms: number
+  error?: string | null
+  skipped?: boolean
+}
+export interface ReadyzOut {
+  status: 'ok' | 'degraded'
+  version: string
+  profile: string
+  checks: Record<string, ReadyzCheck>
+}
+export async function getReadyz(): Promise<ReadyzOut> {
+  const base = import.meta.env.VITE_API_BASE ?? '/api/v1'
+  const res = await fetch(`${base}/readyz`)
+  const body = (await res.json().catch(() => null)) as ReadyzOut | null
+  if (!body?.checks) throw new ApiError(-1, `HTTP ${res.status}`, res.status)
+  return body
+}

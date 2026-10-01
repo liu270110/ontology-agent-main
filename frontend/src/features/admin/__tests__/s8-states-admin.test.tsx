@@ -1,19 +1,17 @@
 import '@testing-library/jest-dom/vitest'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { afterEach, beforeAll, afterAll, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it } from 'vitest'
 import { http, HttpResponse } from 'msw'
 import { App } from '@/app/App'
 import { server } from '@/mocks/node'
 import { useAuthStore } from '@/stores/auth-store'
 
-beforeAll(() => server.listen({ onUnhandledRequest: 'bypass' }))
+// listen/resetHandlers/close 由全局 setupFiles（src/mocks/node-setup.ts）统一管理（7bd3e2a），测试不自管
 afterEach(() => {
-  server.resetHandlers()
   cleanup()
   localStorage.clear()
   useAuthStore.getState().clearSession()
 })
-afterAll(() => server.close())
 
 /** S8 状态切片 · /admin 三 Tab（s8-states）：MSW 注入失败（不动 src/mocks/handlers.ts）。
  *  users / models / audit 三 Tab 表格此前无错误态（Groups/Roles 自带态，不重复接入）。

@@ -1,4 +1,5 @@
 import { useSearchParams } from 'react-router-dom'
+import { Activity, type LucideIcon } from 'lucide-react'
 import { useAuthStore } from '@/stores/auth-store'
 import { UsersTab } from '../components/UsersTab'
 import { GroupsTab } from '../components/GroupsTab'
@@ -6,17 +7,20 @@ import { RolesTab } from '../components/RolesTab'
 import { ModelsTab } from '../components/ModelsTab'
 import { AuditTab } from '../components/AuditTab'
 import { TenantsTab } from '../components/TenantsTab'
+import { SystemLogsTab } from '../components/SystemLogsTab'
 
 /** /admin 系统管理（宿主 p-admin + p-auditlog；26 篇 §10.2）：Tab 深链 ?tab=users|groups|
- *  roles|models|audit（租户 Tab 仅 super_admin 可见）。roles=admin/super_admin（routes meta）。 */
+ *  roles|models|audit|logs（租户 Tab 仅 super_admin 可见）。roles=admin/super_admin（routes meta）。 */
 
-const TABS = [
+type TabDef = { key: string; label: string; icon?: LucideIcon }
+const TABS: TabDef[] = [
   { key: 'users', label: '用户' },
   { key: 'groups', label: '用户组' },
   { key: 'roles', label: '角色' },
   { key: 'models', label: '模型渠道' },
   { key: 'audit', label: '审计日志' },
-] as const
+  { key: 'logs', label: '系统日志', icon: Activity }, // S9 系统日志切片（设计稿 20b p-syslogs）
+]
 
 export function AdminPage() {
   const [params, setParams] = useSearchParams()
@@ -43,6 +47,7 @@ export function AdminPage() {
             onClick={() => setParams({ tab: t.key })}
             className={`rounded-lg px-3 py-1.5 text-xs ${tab === t.key ? 'bg-accent-soft font-semibold text-accent' : 'text-label-2 hover:bg-surface-2'}`}
           >
+            {t.icon && <t.icon size={12} aria-hidden className="mr-1 inline align-[-2px]" />}
             {t.label}
           </button>
         ))}
@@ -54,6 +59,7 @@ export function AdminPage() {
         {tab === 'roles' && <RolesTab />}
         {tab === 'models' && <ModelsTab />}
         {tab === 'audit' && <AuditTab />}
+        {tab === 'logs' && <SystemLogsTab />}
         {tab === 'tenants' && <TenantsTab />}
       </div>
     </div>

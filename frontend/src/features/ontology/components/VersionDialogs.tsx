@@ -17,25 +17,54 @@ export function CompareSelectorDialog({
   versions,
   onClose,
   onCompare,
+  onPreview,
 }: {
   open: boolean
   versions: OntoVersion[]
   onClose: () => void
   onCompare: (base: string, target: string) => void
+  /** 38-V1：差异计数走真实 diff 端点（不再硬编码 12/3/4）；未传则不渲染预览按钮 */
+  onPreview?: (base: string, target: string) => Promise<{ add: number; del: number; mod: number }>
 }) {
   const published = versions.filter(v => v.status === 'published')
   const draft = versions.filter(v => v.status === 'draft')
-  const [left, setLeft] = useState(published[1]?.version ?? published[0]?.version ?? '')
-  const [right, setRight] = useState(draft[0]?.version ?? published[0]?.version ?? '')
+  // 默认值响应式回填：弹窗常挂载（open 受控），versions 可能晚于首挂载到达——
+  // 初值不能写成 useState(published[0])（挂载时为空且不会更新）；用户已手选则不回填
+  const [left, setLeft] = useState('')
+  const [right, setRight] = useState('')
   const [stats, setStats] = useState<{ add: number; del: number; mod: number } | null>(null)
+  const [previewing, setPreviewing] = useState(false)
+  const [previewErr, setPreviewErr] = useState('')
 
   useEffect(() => {
-    if (!open) setStats(null)
+    if (left) return
+    const head = published[0]?.version ?? ''
+    if (head) setLeft(head)
+  }, [left, published])
+  useEffect(() => {
+    if (right) return
+    const dft = draft[0]?.version ?? published[0]?.version ?? ''
+    if (dft) setRight(dft)
+  }, [right, draft, published])
+
+  useEffect(() => {
+    if (!open) {
+      setStats(null)
+      setPreviewErr('')
+    }
   }, [open])
 
   async function previewDiff() {
-    if (!left || !right || left === right) return
-    setStats({ add: 12, del: 3, mod: 4 })
+    if (!left || !right || left === right || !onPreview) return
+    setPreviewing(true)
+    setPreviewErr('')
+    try {
+      setStats(await onPreview(left, right))
+    } catch {
+      setPreviewErr('差异预览失败，请重试')
+    } finally {
+      setPreviewing(false)
+    }
   }
 
   return (
@@ -82,16 +111,19 @@ export function CompareSelectorDialog({
         </div>
       </div>
 
-      <button type="button" className="btn btn-g btn-sm mt-3" data-testid="compare-preview" onClick={() => void previewDiff()}>
-        预览差异计数
-      </button>
+      {onPreview && (
+        <button type="button" className="btn btn-g btn-sm mt-3" data-testid="compare-preview" disabled={previewing} onClick={() => void previewDiff()}>
+          {previewing ? '预览中…' : '预览差异计数'}
+        </button>
+      )}
+      {previewErr && <div className="field-err">{previewErr}</div>}
       {stats && (
         <div className="mt-2 flex items-center gap-2 rounded-lg bg-surface-2 px-3 py-2 text-xs" data-testid="compare-stats">
           差异预览计数：<ChangeCountChips stats={stats} />
           <span className="text-label-3">（base={left} → target={right}）</span>
         </div>
       )}
-      {left === right && <div className="field-err">左右版本相同，请重新选择</div>}
+      {left && right && left === right && <div className="field-err">左右版本相同，请重新选择</div>}
     </Modal>
   )
 }

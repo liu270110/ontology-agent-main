@@ -49,7 +49,7 @@ export function ContextMeter({ used, limit }: { used: number; limit: number }) {
       <div className="h-[3px] min-w-0 flex-1 overflow-hidden rounded-full bg-separator/30">
         <div
           className={`h-full rounded-full transition-[width] duration-300 ${
-            pct > 95 ? 'bg-red-500' : pct > 80 ? 'bg-orange-400' : 'bg-accent'
+            pct > 95 ? 'grad-bad' : pct > 80 ? 'grad-warn' : 'grad-accent'
           }`}
           style={{ width: `${pct}%` }}
         />

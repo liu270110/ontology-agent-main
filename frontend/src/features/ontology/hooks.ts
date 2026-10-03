@@ -2,14 +2,14 @@ import { useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import {
   getProject, listAxioms, listClasses, listProperties,
-  type OntoAxiomRow, type OntoClassNode,
+  type OntoAxiomRow, type OntoClassNode, type OntoPropertyRow,
 } from './api'
 import type { GraphEdgeBiz, GraphNodeBiz } from '@/components/graph/GraphCanvas'
 import { useWorkbenchStore } from './stores/workbench-store'
 
 /** 本体工作台数据 hook（模块化第一批自 WorkbenchPage 拆出，行为零变化）：
- *  项目详情 / 类 / 属性 / 公理四路查询 + 画布数据装配（类层级 + 公理约束节点，
- *  双向联动事实源 = workbench-store selectedIri）。 */
+ *  项目详情 / 类 / 属性 / 公理四路查询 + 画布数据装配（类层级 + 公理约束节点 +
+ *  对象属性边，双向联动事实源 = workbench-store selectedIri）。 */
 
 export function useWorkbenchData(projectId: string, shapeParam: string | null) {
   const detail = useQuery({ queryKey: ['ontology', 'detail', projectId], queryFn: () => getProject(projectId) })
@@ -62,8 +62,10 @@ export function useWorkbenchData(projectId: string, shapeParam: string | null) {
         label: '约束',
         dashed: true,
       })),
+      // 38 号对账 O1：对象属性边（连线即对象属性是画板核心隐喻；GraphCanvas 已支持边 label）
+      ...propertyEdgesOf(properties, classes),
     ],
-    [classes, axioms],
+    [classes, axioms, properties],
   )
 
   const axiomForEditor = useMemo(
@@ -72,6 +74,23 @@ export function useWorkbenchData(projectId: string, shapeParam: string | null) {
   )
 
   return { detail, classesQ, propsQ, axiomsQ, classes, properties, axioms, selectedCls, graphNodes, graphEdges, axiomForEditor }
+}
+
+/** 对象属性边上图（38 号对账 O1）：对象属性（prop_type=object）按 domain→range 装配为
+ *  画布边，label=属性名（predicate，如 locatedIn）。数据属性不上图；range 类不在类表
+ *  或自环（domain=range）时丢弃——数据不足不虚构节点/边。层级布局只认 hier 边，
+ *  属性边不参与分层，不改变既有落位。 */
+export function propertyEdgesOf(properties: OntoPropertyRow[], classes: OntoClassNode[]): GraphEdgeBiz[] {
+  const edges: GraphEdgeBiz[] = []
+  for (const p of properties) {
+    if (p.prop_type !== 'object') continue
+    const source = classes.find(c => c.id === p.domain_id)?.iri
+    const tail = p.range.split(/[:#]/).pop() ?? p.range
+    const target = classes.find(c => c.iri === p.range || c.name === p.range || c.name === tail || c.iri.endsWith(`:${tail}`))?.iri
+    if (!source || !target || source === target) continue
+    edges.push({ id: `prop:${p.id}`, source, target, label: p.name })
+  }
+  return edges
 }
 
 function categoryOf(c: OntoClassNode): string {

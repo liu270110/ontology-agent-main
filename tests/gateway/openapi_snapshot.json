@@ -6421,6 +6421,18 @@
             "title": "Attempt Count",
             "type": "integer"
           },
+          "created_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
           "error": {
             "anyOf": [
               {
@@ -6498,27 +6510,22 @@
       },
       "TaskListOut": {
         "additionalProperties": false,
+        "description": "任务列表（api/01 §3.1 信封：{data, meta:{page,page_size,total}}，B1 批统一）。",
         "properties": {
-          "items": {
+          "data": {
             "items": {
               "$ref": "#/components/schemas/TaskOut"
             },
-            "title": "Items",
+            "title": "Data",
             "type": "array"
           },
-          "limit": {
-            "title": "Limit",
-            "type": "integer"
-          },
-          "offset": {
-            "title": "Offset",
-            "type": "integer"
+          "meta": {
+            "$ref": "#/components/schemas/PageMeta"
           }
         },
         "required": [
-          "items",
-          "offset",
-          "limit"
+          "data",
+          "meta"
         ],
         "title": "TaskListOut",
         "type": "object"
@@ -6553,6 +6560,18 @@
           "attempt_count": {
             "title": "Attempt Count",
             "type": "integer"
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
           },
           "id": {
             "format": "uuid",
@@ -12871,6 +12890,7 @@
     },
     "/api/v1/tasks": {
       "get": {
+        "description": "偏移分页改 page/page_size（B1 批，api/01 §3.1；offset=(page-1)*page_size 内部换算）。",
         "operationId": "list_tasks_api_v1_tasks_get",
         "parameters": [
           {
@@ -12924,24 +12944,24 @@
           },
           {
             "in": "query",
-            "name": "offset",
+            "name": "page",
             "required": false,
             "schema": {
-              "default": 0,
-              "minimum": 0,
-              "title": "Offset",
+              "default": 1,
+              "minimum": 1,
+              "title": "Page",
               "type": "integer"
             }
           },
           {
             "in": "query",
-            "name": "limit",
+            "name": "page_size",
             "required": false,
             "schema": {
               "default": 20,
               "maximum": 100,
               "minimum": 1,
-              "title": "Limit",
+              "title": "Page Size",
               "type": "integer"
             }
           }
@@ -12968,7 +12988,7 @@
             "description": "Validation Error"
           }
         },
-        "summary": "任务列表（按 session_id/status/type 过滤）",
+        "summary": "任务列表（按 session_id/status/type 过滤；api/01 §3.1 信封）",
         "tags": [
           "tasks"
         ]

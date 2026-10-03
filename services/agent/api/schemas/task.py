@@ -11,6 +11,7 @@ from datetime import datetime
 from pydantic import BaseModel, ConfigDict
 
 from services.agent.domain.model.task import Run, Task
+from services.platform.schemas import PageMeta
 
 
 class RunOut(BaseModel):
@@ -33,6 +34,7 @@ class TaskOut(BaseModel):
     agent_id: uuid.UUID | None
     attempt_count: int
     active_run_id: uuid.UUID | None
+    created_at: datetime | None = None  # 域内已有（Task.created_at），列表/详情统一透出（台账 B1④）
 
 
 class TaskDetailOut(TaskOut):
@@ -44,10 +46,11 @@ class TaskDetailOut(TaskOut):
 
 
 class TaskListOut(BaseModel):
+    """任务列表（api/01 §3.1 信封：{data, meta:{page,page_size,total}}，B1 批统一）。"""
+
     model_config = ConfigDict(extra="forbid")
-    items: list[TaskOut]
-    offset: int
-    limit: int
+    data: list[TaskOut]
+    meta: PageMeta
 
 
 class TaskEventOut(BaseModel):
@@ -88,6 +91,7 @@ def task_from_domain(t: Task) -> TaskOut:
         agent_id=t.agent_id,
         attempt_count=t.attempt_count,
         active_run_id=t.active_run_id,
+        created_at=t.created_at,
     )
 
 
@@ -100,6 +104,7 @@ def task_detail_from_domain(t: Task) -> TaskDetailOut:
         agent_id=t.agent_id,
         attempt_count=t.attempt_count,
         active_run_id=t.active_run_id,
+        created_at=t.created_at,
         payload=t.payload,
         result=t.result,
         error=t.error,

@@ -122,9 +122,11 @@ async def test_task_列表详情与取消_终态不可逆4102(gateway_uow, seed)
     r = await send_message(s.id, SendMessageIn(content="触发任务"), principal=principal, uow=gateway_uow)
     task_id = uuid.UUID(r["data"]["task_id"])
     run_id = uuid.UUID(r["data"]["run_id"])
-    # 列表 + 详情（聚合内 Run 实体随读）
+    # 列表 + 详情（聚合内 Run 实体随读；api/01 §3.1 信封 + created_at 透出台账 B1④）
     page = await list_tasks(principal=principal, uow=gateway_uow, session_id=s.id)
-    assert [t.id for t in page.items] == [task_id]
+    assert [t.id for t in page.data] == [task_id]
+    assert page.meta.total == 1 and page.meta.page == 1 and page.meta.page_size == 20
+    assert page.data[0].created_at is not None
     detail = await get_task(task_id, principal=principal, uow=gateway_uow)
     assert detail.status == "running"
     assert (detail.runs[0].id, detail.runs[0].status) == (run_id, "queued")

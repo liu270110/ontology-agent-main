@@ -1,5 +1,6 @@
 import { Fragment, useEffect, useMemo, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { toast } from 'sonner'
 import { AlertTriangle, ArrowRight, Check, ChevronDown, Copy, Database, Search, ShieldAlert, Star, X, Zap } from 'lucide-react'
 import { useGroupStreamStore, type GroupMessage } from '../group-store'
 import type { GroupMember } from '../api'
@@ -41,11 +42,12 @@ export function GroupStream({ members }: { members: GroupMember[] }) {
     bottomRef.current?.scrollIntoView?.({ behavior: 'smooth' })
   }, [messages, decisions])
 
-  // 工具卡归属：仅挂到该 Agent 的最新一条消息（历史消息不重复渲染直播期工具卡）
-  const lastIdxByAgent = useMemo(() => {
-    const map = new Map<string, number>()
-    messages.forEach((m, i) => {
-      if (m.role === 'assistant' && m.agent_id) map.set(m.agent_id, i)
+  // 工具卡归属：仅挂到该 Agent 的最新一条消息（历史消息不重复渲染直播期工具卡）。
+  // perf：存消息 id（配合 Map 查），消除渲染内 messages.indexOf O(n²)
+  const lastMsgIdByAgent = useMemo(() => {
+    const map = new Map<string, string>()
+    messages.forEach(m => {
+      if (m.role === 'assistant' && m.agent_id) map.set(m.agent_id, m.id)
     })
     return map
   }, [messages])
@@ -97,10 +99,21 @@ export function GroupStream({ members }: { members: GroupMember[] }) {
                 <CrownIcon />
                 <span>协调者 <ArrowRight size={10} className="inline align-[-1px]" aria-hidden /> <b className="text-label">{node.to}</b></span>
                 <span className="text-label-3">（原因：{node.reason}）</span>
-                <span className="ev-chip flex-none">
+                {/* ui-audit「假可交互」：Copy 图标暗示可复制但 span 不可点 → 真 button（审计 TracePanel copyTrace 同语言） */}
+                <button
+                  type="button"
+                  className="ev-chip flex-none"
+                  aria-label={`复制 trace ${node.trace}`}
+                  title="复制 trace_id"
+                  onClick={() => {
+                    void navigator.clipboard?.writeText(node.trace)
+                      .then(() => toast.success(`已复制 trace_id：${node.trace}`))
+                      .catch(() => {})
+                  }}
+                >
                   trace {node.trace}
                   <Copy size={9} aria-hidden />
-                </span>
+                </button>
               </span>
               <div className="h-px flex-1" style={{ background: 'var(--separator)' }} />
             </div>
@@ -149,8 +162,17 @@ export function GroupStream({ members }: { members: GroupMember[] }) {
                           选优
                         </button>
                         <span className="text-[11px] text-label-3">评分</span>
-                        <button type="button" className="btn btn-g btn-sm"><Star size={12} aria-hidden />有用</button>
-                        <button type="button" className="btn btn-g btn-sm"><X size={12} aria-hidden />有误</button>
+                        {/* 状态完备（非死按钮）：反馈动作未实装 → 诚实禁用 + 外层 span 承载 tooltip（disabled 不收指针事件） */}
+                        <span title="答案反馈随 M4 批开放">
+                          <button type="button" className="btn btn-g btn-sm" disabled>
+                            <Star size={12} aria-hidden />有用
+                          </button>
+                        </span>
+                        <span title="答案反馈随 M4 批开放">
+                          <button type="button" className="btn btn-g btn-sm" disabled>
+                            <X size={12} aria-hidden />有误
+                          </button>
+                        </span>
                       </div>
                     </div>
                   )
@@ -160,7 +182,10 @@ export function GroupStream({ members }: { members: GroupMember[] }) {
                 <div className="mt-3 flex items-center gap-2 rounded-xl px-3 py-2 text-[11px] text-label-2" style={{ border: '1px dashed var(--separator)' }}>
                   <ChevronDown size={13} className="text-label-3" aria-hidden />
                   <span>{memberOf(members, timeoutItem.agent_id)?.name ?? '成员'}（发言者）本轮应答超时未返回，可点开重答；未选优答案折叠保留、随时可展开对比。</span>
-                  <button type="button" className="btn btn-g btn-sm ml-auto">展开差异对照</button>
+                  {/* 状态完备（非死按钮）：差异对照视图未实装 → 诚实禁用 + tooltip 外挂（同上） */}
+                  <span className="ml-auto flex-none" title="差异对照随 M4 批开放">
+                    <button type="button" className="btn btn-g btn-sm" disabled>展开差异对照</button>
+                  </span>
                 </div>
               )}
             </div>
@@ -178,7 +203,7 @@ export function GroupStream({ members }: { members: GroupMember[] }) {
           )
         }
         const mem = memberOf(members, m.agent_id, m.member_id)
-        const isLastOfAgent = m.agent_id ? lastIdxByAgent.get(m.agent_id) === messages.indexOf(m) : false
+        const isLastOfAgent = m.agent_id ? lastMsgIdByAgent.get(m.agent_id) === m.id : false
         const calls = isLastOfAgent
           ? Object.entries(toolCalls).filter(([, c]) => c.agentId && c.agentId === m.agent_id)
           : []

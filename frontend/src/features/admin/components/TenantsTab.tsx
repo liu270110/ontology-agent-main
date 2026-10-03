@@ -115,6 +115,7 @@ function CreateTenantModal({ onClose }: { onClose: () => void }) {
               key={t.key}
               type="button"
               data-testid={`adm-tenant-tier-${t.key}`}
+              aria-pressed={tier === t.key}
               onClick={() => setTier(t.key)}
               className={`rounded-xl border p-3 text-left transition-colors ${tier === t.key ? 'border-accent bg-accent-soft' : 'border-separator hover:border-label-3'}`}
             >

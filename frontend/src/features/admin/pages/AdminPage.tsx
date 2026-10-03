@@ -27,6 +27,7 @@ export function AdminPage() {
   const isSuperAdmin = useAuthStore(s => s.hasAnyRole(['super_admin']))
   const tabKeys = isSuperAdmin ? [...TABS.map(t => t.key), 'tenants'] : [...TABS.map(t => t.key)]
   const tab = tabKeys.includes(params.get('tab') ?? '') ? (params.get('tab') as string) : 'users'
+  const visibleTabs = isSuperAdmin ? [...TABS, { key: 'tenants', label: '租户' }] : TABS
 
   return (
     <div className="mx-auto max-w-[1180px]">
@@ -35,13 +36,15 @@ export function AdminPage() {
         <span className="text-xs text-label-3">实际权限以服务端鉴权为准，此处仅做展示过滤</span>
       </div>
 
-      {/* Tab 条（?tab= 深链还原） */}
+      {/* Tab 条（?tab= 深链还原）；tab↔panel 补 id/aria-controls 关联（ui-audit APG 最小接线） */}
       <div className="mt-3 flex flex-wrap gap-1" role="tablist" aria-label="系统管理分区">
-        {(isSuperAdmin ? [...TABS, { key: 'tenants', label: '租户' }] : TABS).map(t => (
+        {visibleTabs.map(t => (
           <button
             key={t.key}
             type="button"
             role="tab"
+            id={`adm-tab-${t.key}`}
+            aria-controls="adm-tab-panel"
             aria-selected={tab === t.key}
             data-testid={`adm-tab-${t.key}`}
             onClick={() => setParams({ tab: t.key })}
@@ -53,7 +56,7 @@ export function AdminPage() {
         ))}
       </div>
 
-      <div className="mt-4">
+      <div className="mt-4" role="tabpanel" id="adm-tab-panel" aria-labelledby={`adm-tab-${tab}`}>
         {tab === 'users' && <UsersTab />}
         {tab === 'groups' && <GroupsTab />}
         {tab === 'roles' && <RolesTab />}

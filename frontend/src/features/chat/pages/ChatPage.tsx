@@ -103,7 +103,8 @@ export function ChatPage() {
   }
 
   const statusText = running ? '运行中' : CONNECTION_TEXT[connection] ?? connection
-  const statusDot = running ? 'bg-green-500 animate-pulse' : connection === 'open' ? 'bg-green-500' : connection === 'offline' ? 'bg-red-500' : 'bg-orange-400'
+  // 宪法「语义色只用令牌」：裸 tailwind 色板（bg-green-500 等）→ 令牌点变体 .dot d-*（elements.css）
+  const statusDot = running ? 'd-green animate-pulse' : connection === 'open' ? 'd-green' : connection === 'offline' ? 'd-red' : 'd-orange'
 
   return (
     <div className="flex h-full min-h-0">
@@ -113,7 +114,7 @@ export function ChatPage() {
           <span className="text-sm font-semibold">对话</span>
           {sessionId ? (
             <span data-testid="conn-status" className="badge flex items-center gap-1.5 rounded-full border border-separator px-2 py-0.5 text-2xs text-label-2">
-              <span className={`h-1.5 w-1.5 rounded-full ${statusDot}`} />
+              <span className={`dot h-1.5 w-1.5 ${statusDot}`} />
               {statusText}
             </span>
           ) : (
@@ -122,9 +123,12 @@ export function ChatPage() {
           <span className="ml-auto" />
           {sessionId && (
             <div className="seg" role="tablist" aria-label="右侧面板">
+              {/* ui-audit：tab 与面板补 id/aria-controls 关联（APG tabs 最小接线） */}
               <button
                 type="button"
                 role="tab"
+                id="right-tab-context"
+                aria-controls="chat-right-panel"
                 data-testid="right-tab-context"
                 aria-selected={rightTab === 'context'}
                 className={`seg-btn ${rightTab === 'context' ? 'on' : ''}`}
@@ -135,6 +139,8 @@ export function ChatPage() {
               <button
                 type="button"
                 role="tab"
+                id="right-tab-workspace"
+                aria-controls="chat-right-panel"
                 data-testid="right-tab-workspace"
                 aria-selected={rightTab === 'workspace'}
                 className={`seg-btn ${rightTab === 'workspace' ? 'on' : ''}`}
@@ -180,13 +186,18 @@ export function ChatPage() {
           </div>
         )}
       </div>
-      {/* 右栏（IX-CHT-04 + 画框23）：上下文面板 / Agent 工作区面板 页签切换，可折叠为窄轨 */}
-      {!sessionId ? null : ctxCollapsed ? (
-        <ContextPanelRail onExpand={() => setCtxCollapsed(false)} />
-      ) : rightTab === 'context' ? (
-        <ContextPanel onOpenEvidence={setEvFocus} />
-      ) : (
-        <WorkspacePanel sessionId={sessionId} />
+      {/* 右栏（IX-CHT-04 + 画框23）：上下文面板 / Agent 工作区面板 页签切换，可折叠为窄轨。
+          tabpanel 语义接线（ui-audit）：display:contents 壳承载 role/aria，不改变三档 flex 布局 */}
+      {!sessionId ? null : (
+        <div role="tabpanel" id="chat-right-panel" aria-labelledby={rightTab === 'context' ? 'right-tab-context' : 'right-tab-workspace'} className="contents">
+          {ctxCollapsed ? (
+            <ContextPanelRail onExpand={() => setCtxCollapsed(false)} />
+          ) : rightTab === 'context' ? (
+            <ContextPanel onOpenEvidence={setEvFocus} />
+          ) : (
+            <WorkspacePanel sessionId={sessionId} />
+          )}
+        </div>
       )}
       {/* 证据原文抽屉（IX-CHT-03）：消息流 chip / 上下文面板引用文档 共用宿主 */}
       <EvidenceSheet focus={evFocus} onClose={() => setEvFocus(null)} />

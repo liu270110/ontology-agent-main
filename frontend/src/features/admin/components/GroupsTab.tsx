@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Users } from 'lucide-react'
 import { toast } from 'sonner'
 import { Modal } from '@/components/modal'
+import { EmptyState, SkeletonRows } from '@/components/states'
 import { ROLE_LABEL, createGroup, listGroups, listUsers, type AdminUser } from '../api'
 import { Select } from '@/components/select'
 
@@ -17,7 +18,8 @@ export function GroupsTab() {
   return (
     <div>
       <div className="flex items-center gap-2">
-        <span className="text-xs text-label-2">共 {groups.length} 个组</span>
+        {/* 状态完备：加载期不显「共 0 个组」假计数 */}
+        <span className="text-xs text-label-2">{isLoading ? '组列表加载中…' : `共 ${groups.length} 个组`}</span>
         <button type="button" className="btn btn-p btn-sm ml-auto" data-testid="adm-group-open" onClick={() => setCreateOpen(true)}>
           <Users size={13} aria-hidden /> 新建组
         </button>
@@ -41,7 +43,13 @@ export function GroupsTab() {
             </div>
           </div>
         ))}
-        {isLoading && <div className="empty"><div className="t">加载中…</div></div>}
+        {/* 状态完备：加载走 SkeletonRows 基元（.empty 是空态模式，不用于加载态）；成功空列表给空态+动作 */}
+        {isLoading && <div className="sm:col-span-2"><SkeletonRows rows={2} rowHeight={72} /></div>}
+        {!isLoading && groups.length === 0 && (
+          <div className="sm:col-span-2">
+            <EmptyState compact title="还没有用户组" desc="新建组后按组内角色模板批量授权。" />
+          </div>
+        )}
       </div>
 
       {createOpen && <GroupModal onClose={() => setCreateOpen(false)} />}

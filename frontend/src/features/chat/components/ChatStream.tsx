@@ -142,7 +142,9 @@ function EvidenceChips({
           onClick={() => onOpen({ chunk: c, graph_paths: graphPaths })}
           className="flex max-w-full items-center gap-1 rounded-full border border-separator bg-surface-2 px-2 py-0.5 text-2xs text-label-2 hover:border-accent hover:text-accent"
         >
-          <FileText size={9} aria-hidden /> {c.doc_id} · {c.quote.slice(0, 18)}… ({c.score.toFixed(2)})
+          {/* ui-audit 容器健壮：长 doc_id/引文截断（min-w-0 + truncate），完整引文进抽屉看 */}
+          <FileText size={9} aria-hidden />
+          <span className="min-w-0 truncate">{c.doc_id} · {c.quote.slice(0, 18)}… ({c.score.toFixed(2)})</span>
         </button>
       ))}
       {graphPaths.map((p, i) => (
@@ -162,7 +164,7 @@ function EvidenceChips({
           }
           className="flex max-w-full items-center gap-1 rounded-full border border-separator bg-surface-2 px-2 py-0.5 text-2xs text-label-2 hover:border-accent hover:text-accent"
         >
-          ◆ {p.nodes.join(' ← ')}
+          <span className="min-w-0 truncate">◆ {p.nodes.join(' ← ')}</span>
         </button>
       ))}
     </div>
@@ -397,15 +399,21 @@ export function ChatStream({
   const showBanner = !hydrating && baselineError != null && (baselineDegraded || messages.length > 0)
   const showEmptyThread = !hydrating && baselineError == null && messages.length === 0
 
-  const lastAssistantId = [...messages].reverse().find(m => m.role === 'assistant')?.id
-  const failedRun = Object.values(runs).find(r => r.status === 'failed')
-  /** IX-CHT-07 重新生成：该助手消息之前最近的用户消息内容（无则禁用） */
-  const regenerateFor = (m: ChatMessage): string | null => {
-    const idx = messages.findIndex(x => x.id === m.id)
-    if (idx < 0) return null
-    for (let i = idx - 1; i >= 0; i--) if (messages[i].role === 'user') return messages[i].content
-    return null
+  // perf（react-perf 微观）：尾向线性查找替代 [...messages].reverse() 全量拷贝
+  let lastAssistantId: string | null = null
+  for (let i = messages.length - 1; i >= 0; i--) {
+    if (messages[i].role === 'assistant') { lastAssistantId = messages[i].id; break }
   }
+  // IX-CHT-07 重新生成：单遍预构建「助手消息 → 之前最近用户消息」映射（替代每条 O(n) 回扫，O(n²)→O(n)）
+  const regenMap = new Map<string, string | null>()
+  {
+    let lastUser: string | null = null
+    for (const m of messages) {
+      if (m.role === 'user') lastUser = m.content
+      else if (m.role === 'assistant') regenMap.set(m.id, lastUser)
+    }
+  }
+  const failedRun = Object.values(runs).find(r => r.status === 'failed')
 
   return (
     <div className="msgs flex flex-1 flex-col gap-4 overflow-auto px-6 py-4">
@@ -467,11 +475,12 @@ export function ChatStream({
           </div>
         ) : (
           <div key={m.id} className="msg group flex gap-2">
-            <span className="avatar mt-0.5 flex h-8 w-8 flex-none items-center justify-center rounded-full bg-surface-2 text-xs">✦</span>
+            <span className="avatar mt-0.5 flex h-8 w-8 flex-none items-center justify-center rounded-full bg-surface-2 text-xs" aria-hidden>✦</span>
             <div className="min-w-0 max-w-[80%]">
               {/* 助手消息头元信息（设计稿 L2411-2413）：名称/模型徽标/角色徽标/时间 */}
               <AssistantMsgHead m={m} />
-              {Object.entries(toolCalls).map(([id, c]) => <ToolCallCard key={id} id={id} call={c} />)}
+              {/* 直播期工具卡只挂末条助手消息（对齐 GroupStream 归属模式；原全量×每条重复渲染） */}
+              {m.id === lastAssistantId && Object.entries(toolCalls).map(([id, c]) => <ToolCallCard key={id} id={id} call={c} />)}
               {/* 气泡左缘 3px 来源分类色（--src-system=indigo，tokens.css 来源分类变量） */}
               <div
                 data-testid={`bubble-${m.id}`}
@@ -497,15 +506,17 @@ export function ChatStream({
               {m.artifact && <ChatArtifactCard artifact={m.artifact} onOpenWorkspace={onOpenWorkspace} />}
               {/* 悬停操作条：流式中的末条不展示（等生成完） */}
               {!(running && m.id === messages[messages.length - 1]?.id) && (
-                <MessageActions m={m} sessionId={sessionId} regenerateContent={regenerateFor(m)} />
+                <MessageActions m={m} sessionId={sessionId} regenerateContent={regenMap.get(m.id) ?? null} />
               )}
             </div>
           </div>
         ),
       )}
       {failedRun?.error && (
+        // deslop 黑名单「emoji/字符当图标」：⚠ 字符换 AlertTriangle（与顶部警示条同语言），语义色走令牌
         <div className="err-banner flex items-center gap-2 rounded-lg border border-red/40 bg-red/10 px-3 py-2 text-xs text-red">
-          ⚠ 生成失败 · {failedRun.error.code} {failedRun.error.message}
+          <AlertTriangle size={13} className="flex-none" aria-hidden />
+          <span className="min-w-0 flex-1">生成失败 · {failedRun.error.code} {failedRun.error.message}</span>
         </div>
       )}
       <div ref={bottomRef} />

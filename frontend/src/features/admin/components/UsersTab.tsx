@@ -49,7 +49,10 @@ export function UsersTab() {
   return (
     <div>
       <div className="flex items-center gap-2">
-        <span className="text-xs text-label-2">共 {users.length} 名成员 · 角色调整即时生效并写审计</span>
+        {/* 状态完备：加载期不显「共 0 名成员」假计数（deslop 空值/加载语义诚实） */}
+        <span className="text-xs text-label-2">
+          {isLoading ? '成员列表加载中…' : `共 ${users.length} 名成员 · 角色调整即时生效并写审计`}
+        </span>
         <button type="button" className="btn btn-p btn-sm ml-auto" data-testid="adm-invite-open" onClick={() => setInviteOpen(true)}>
           <UserPlus size={13} aria-hidden /> 邀请成员
         </button>
@@ -68,6 +71,14 @@ export function UsersTab() {
             </tr>
           </thead>
           <tbody>
+            {/* 状态完备：成功空列表 → 空态行（加载/错误态互斥门控，S8 切片同款） */}
+            {!isLoading && !isError && users.length === 0 && (
+              <tr>
+                <td colSpan={6}>
+                  <EmptyState compact title="还没有成员" desc="邀请第一批成员加入后，账号与角色会显示在这里。" />
+                </td>
+              </tr>
+            )}
             {users.map(u => (
               <tr key={u.id} className="hairline-b" data-testid={`adm-user-${u.id}`}>
                 <td className="mono px-4 py-2.5">{u.email}</td>

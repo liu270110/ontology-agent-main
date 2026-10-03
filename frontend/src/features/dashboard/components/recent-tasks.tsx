@@ -1,5 +1,7 @@
 import { Link, useNavigate } from 'react-router-dom'
+import { ListTodo } from 'lucide-react'
 import { describeError } from '@/lib/errors'
+import { relativeTime } from '@/lib/reltime'
 import { ErrorState, SkeletonRows } from '@/components/states'
 import { DASH_TASK_STATUS, DASH_TASK_TYPE, type DashTask } from '../api'
 
@@ -70,16 +72,20 @@ function TaskRow({ task: t }: { task: DashTask }) {
   const failed = t.status === 'failed'
   return (
     <div data-testid="dash-task-row" className="flex items-center gap-3 border-b border-separator py-2.5 last:border-0">
-      <span className="flex h-8 w-8 flex-none items-center justify-center rounded-lg bg-teal-soft text-sm text-teal">▤</span>
+      {/* deslop 黑名单「emoji 当图标」：▤ 换 lucide 线性图标（语义=任务，与启动台任务卡同源） */}
+      <span className="flex h-8 w-8 flex-none items-center justify-center rounded-lg bg-teal-soft text-teal">
+        <ListTodo size={14} aria-hidden />
+      </span>
       <div className="min-w-0 flex-1">
         <div className={`truncate text-[13px] ${failed ? 'font-semibold text-red' : ''}`}>
           {t.name ?? `${DASH_TASK_TYPE[t.type ?? ''] ?? '任务'} · ${t.id.slice(0, 8)}`}
         </div>
-        <div className="text-[11px] text-label-3">{t.created_at ?? ''}</div>
+        {/* deslop「数字/日期走 Intl」+「空值有占位语义（—）」：裸 ISO 串直出改为相对时间，空值占位 */}
+        <div className="text-[11px] text-label-3">{t.created_at ? relativeTime(t.created_at) : '—'}</div>
       </div>
       {typeof t.progress === 'number' ? (
         // bad 挂容器（patterns.css .meter.bad i，与 .meter.warn 同约定），挂内层 i 不生效
-        <span className={`meter w-16 flex-none ${failed ? 'bad' : ''}`} role="progressbar" aria-valuenow={t.progress} aria-valuemin={0} aria-valuemax={100}>
+        <span className={`meter w-16 flex-none ${failed ? 'bad' : ''}`} role="progressbar" aria-label="任务进度" aria-valuenow={t.progress} aria-valuemin={0} aria-valuemax={100}>
           <i style={{ width: `${t.progress}%` }} />
         </span>
       ) : (

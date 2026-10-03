@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate, useParams } from 'react-router-dom'
-import {MessagesSquare, Plus, Search, Share2, Users, X, Zap} from 'lucide-react'
+import {AlertTriangle, MessagesSquare, Plus, Search, Share2, Users, X, Zap} from 'lucide-react'
 import { api, ApiError } from '@/api/client'
 import {ErrorState, SkeletonRows, EmptyState} from '@/components/states'
 import { getGroupSession, listGroupSessions, type GroupMessageRow, type GroupSessionDetail, type RoutingMode } from '../api'
@@ -15,6 +15,10 @@ import { MemberPanel } from '../components/MemberPanel'
 import { GroupStream } from '../components/GroupStream'
 import { GroupInput } from '../components/GroupInput'
 
+/** perf（react-perf 微观）：map 内不重建映射/格式化器——路由简称与列表时间格式提模块级（deslop「日期走 Intl」） */
+const ROUTING_SHORT: Record<RoutingMode, string> = { mention: '@点名', round_robin: '轮询', all: '多答对比', orchestrator: '协调者模式' }
+const LIST_TIME_FMT = new Intl.DateTimeFormat('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+
 /** Agent 群聊页（27 篇 P14 / 26 篇 §15 GRP-01~05，画框 28）：
  *  三栏 = 群会话列表｜消息流（归属着色 + 协调者系统行 + ResponseGroup + 高风险确认）｜
  *  MemberPanel 240px。数据流同单聊（16 篇 §3.2）：GET messages 历史基线（lastSeq 对齐）→
@@ -27,6 +31,10 @@ export function GroupChatPage() {
   const [conn, setConn] = useState<string>('connecting')
   const [mentionCount, setMentionCount] = useState(0)
   const [missing, setMissing] = useState(false)
+  /** 消息基线失败（36 §B 静默失败治理）：404=会话真不存在归 missing；其余错误显示错误条可重试 */
+  const [baselineErr, setBaselineErr] = useState<unknown>(null)
+  /** 重载计数：错误条「重新加载」→ +1 重拉基线 */
+  const [baselineTick, setBaselineTick] = useState(0)
   // 左栏「过滤群聊」客户端过滤（设计稿 p-group sc-col 搜索框；纯前端，无检索端点）
   const [listFilter, setListFilter] = useState('')
 
@@ -48,20 +56,26 @@ export function GroupChatPage() {
     reset()
     setMissing(false)
     setMentionCount(0)
+    setBaselineErr(null)
     if (!sessionId) return
     let alive = true
     void (async () => {
       try {
         const { items } = await api.get<{ items: GroupMessageRow[] }>(`/sessions/${sessionId}/messages`)
         if (alive) seed(items)
-      } catch {
-        if (alive) setMissing(true)
+      } catch (e) {
+        if (!alive) return
+        // 404 = 会话真不存在（保持原「不存在」语义）；网络/5xx 不再误报为「不存在」，
+        // 走消息流顶部错误条 + 重试（对齐 ChatPage 36 §B 错误治理）
+        const is404 = e instanceof ApiError && e.httpStatus === 404
+        setMissing(is404)
+        if (!is404) setBaselineErr(e)
       }
     })()
     return () => {
       alive = false
     }
-  }, [sessionId, reset, seed])
+  }, [sessionId, reset, seed, baselineTick])
 
   useEffect(() => {
     if (sessionQ.error) setMissing(true)
@@ -155,11 +169,12 @@ export function GroupChatPage() {
             >
               <div className="flex items-center gap-1.5">
                 <span className="truncate text-[13px] font-medium">{s.title}</span>
-                <span className="badge b-purple" style={{ fontSize: 9, padding: '1px 6px' }}>群 · {s.member_count}</span>
+                {/* 字阶刻度归一：内联 fontSize 9px → text-2xs（10px，六阶键）；密度内联保留 */}
+                <span className="badge b-purple text-2xs" style={{ padding: '1px 6px' }}>群 · {s.member_count}</span>
               </div>
               <div className="mt-0.5 flex items-center gap-1.5 text-[11px] text-label-3">
                 <span className={`dot ${running && s.id === sessionId ? 'd-green' : 'd-blue'}`} style={{ width: 6, height: 6 }} />
-                {{ mention: '@点名', round_robin: '轮询', all: '多答对比', orchestrator: '协调者模式' }[s.routing]} · {new Date(s.updated_at).toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                {ROUTING_SHORT[s.routing]} · {LIST_TIME_FMT.format(new Date(s.updated_at))}
               </div>
             </button>
           ))}
@@ -210,6 +225,16 @@ export function GroupChatPage() {
         </header>
         {sessionId && session ? (
           <>
+            {/* 36 §B 基线失败错误条：与 ChatStream 同语言（AlertTriangle + 重试），输入/流不阻断 */}
+            {baselineErr != null && (
+              <div className="flex flex-none items-center gap-2 border-b border-separator bg-surface px-6 py-2 text-xs" role="alert">
+                <AlertTriangle size={13} className="flex-none text-red" aria-hidden />
+                <span className="min-w-0 flex-1 text-red">消息历史加载失败，本次会话流仍可用；可重试拉取历史。</span>
+                <button type="button" className="btn btn-g btn-sm flex-none" onClick={() => setBaselineTick(t => t + 1)}>
+                  重新加载
+                </button>
+              </div>
+            )}
             <GroupStream members={members} />
             <GroupInput
               sessionId={sessionId}
@@ -237,8 +262,19 @@ export function GroupChatPage() {
             />
           </div>
         ) : (
-          <div className="flex flex-1 items-center justify-center text-sm text-label-3">
-            {missing ? `群会话 ${sessionId} 不存在` : '← 从左侧选择群聊，或点 ＋ 新建群聊'}
+          // 36 §A1 同款（ChatPage 已销账）：未选会话/404 → EmptyState hero + 主动作（主区唯一 btn-p）
+          <div className="flex flex-1 items-center justify-center px-6">
+            <EmptyState
+              hero
+              icon={Users}
+              title={missing && sessionId ? '群会话不存在' : '选择一个群聊'}
+              desc={missing && sessionId ? `「${sessionId}」不存在或已被删除，可返回左侧列表另选。` : '从左侧列表选择群聊继续协作，也可以新建一个。'}
+              action={
+                <button type="button" className="btn btn-p" onClick={() => setPickerOpen(true)}>
+                  <Plus size={13} aria-hidden /> 新建群聊
+                </button>
+              }
+            />
           </div>
         )}
       </div>

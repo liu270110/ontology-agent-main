@@ -101,7 +101,8 @@ export function OnboardingCard({
               <span className="h-[18px] w-[18px] flex-none rounded-full border-[1.5px] border-separator" aria-hidden />
             )}
             <b className="text-[13px]">{s.title}</b>
-            <span className="text-[11.5px] text-label-3">{s.done ? s.doneText : s.todoText}</span>
+            {/* 字阶刻度归一：11.5px 奇数值脱刻度 → text-11px（tailwind.config 六阶键，视觉 -0.5px） */}
+            <span className="text-11px text-label-3">{s.done ? s.doneText : s.todoText}</span>
             {!s.done && (
               <Link to={s.to} className="ml-auto flex items-center gap-0.5 text-[11px] text-accent hover:underline" data-testid={`onboarding-link-${s.key}`}>
                 {s.linkText}

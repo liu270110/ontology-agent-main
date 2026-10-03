@@ -131,7 +131,7 @@ export function MemberPanel({
               </div>
             </div>
             <button type="button" className="menu-i w-full" data-testid="grp-menu-pause" onClick={() => void act(() => patchMember(sessionId, target.id, { paused: !target.paused }))}>
-              {target.paused ? <Play size={14} /> : <Pause size={14} />}
+              {target.paused ? <Play size={14} aria-hidden /> : <Pause size={14} aria-hidden />}
               {target.paused ? '恢复接收新轮' : '暂停接收新轮'}
               <span className="menu-k">可恢复</span>
             </button>
@@ -139,7 +139,7 @@ export function MemberPanel({
               .filter(r => r !== target.routing_role)
               .map(r => (
                 <button key={r} type="button" className="menu-i w-full" data-testid={`grp-menu-role-${r}`} onClick={() => void act(() => patchMember(sessionId, target.id, { routing_role: r }))}>
-                  {r === 'coordinator' ? <Crown size={14} /> : r === 'observer' ? <Eye size={14} /> : <Play size={14} />}
+                  {r === 'coordinator' ? <Crown size={14} aria-hidden /> : r === 'observer' ? <Eye size={14} aria-hidden /> : <Play size={14} aria-hidden />}
                   角色调整为{ROLE_LABEL[r]}
                   {r === 'coordinator' && <span className="menu-k">唯一性校验</span>}
                 </button>
@@ -151,7 +151,7 @@ export function MemberPanel({
             )}
             <div className="menu-sep" />
             <button type="button" className="menu-i danger w-full" data-testid="grp-menu-remove" onClick={() => { setRemoveTarget(target); setMenuFor(null) }}>
-              <Trash2 size={14} />
+              <Trash2 size={14} aria-hidden />
               移除出群
               <span className="menu-k">需确认</span>
             </button>
@@ -213,7 +213,12 @@ function MemberRow({
       </div>
       {!m.human && <RoleBadge role={m.routing_role} />}
       {m.paused && <span className="badge b-orange">已暂停</span>}
-      <span className={`dot ${m.status === 'running' ? 'd-green' : 'd-gray'}`} title={m.human ? '在线' : m.status === 'running' ? '运行中' : '空闲'} />
+      {/* 缺陷修复：d-gray 类全站无定义（空闲点透明不可见）→ 令牌内联兜底（--label-3，暗色成对自动跟随） */}
+      <span
+        className="dot"
+        style={{ width: 6, height: 6, background: m.status === 'running' ? 'var(--green)' : 'var(--label-3)' }}
+        title={m.human ? '在线' : m.status === 'running' ? '运行中' : '空闲'}
+      />
       {!m.human && (
         <button
           type="button"

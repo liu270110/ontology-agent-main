@@ -57,7 +57,9 @@ export function ExplorePage() {
     queryKey: ['kb', 'graph', 'catalog', kbId],
     queryFn: () => graphSearch('', 20),
   })
-  const centerEntity = useMemo(() => searchQ.data?.items[0] ?? null, [searchQ.data])
+  // fe1-F3（live 实测 2026-10-04）：graph/search 裸回 {nodes,rels}（无 items）或错误体时
+  // items 为 undefined——?.[0] 短路为 null，空 q/空结果走下方 explore-empty 空态，不再崩进 ErrorBoundary
+  const centerEntity = useMemo(() => searchQ.data?.items?.[0] ?? null, [searchQ.data])
   const [centerId, setCenterId] = useState<string | null>(null)
   useEffect(() => {
     if (!centerId && centerEntity) setCenterId(centerEntity.id)
@@ -68,6 +70,8 @@ export function ExplorePage() {
   // ---- 实体联想候选（搜索选择器下拉） ----
   const [suggestOpen, setSuggestOpen] = useState(false)
   const suggestions = (searchQ.data?.items ?? []).filter(e => seg === 'all' || segGroup(e.category) === seg)
+  // fe1-F3 空态判定：无可居中实体、且不在加载/错误路径（错误态与加载态各归其位），短路渲染空态
+  const exploreEmpty = !centerEntity && !searchQ.isPending && !searchQ.isError && !nb.loading && !nb.error
 
   // ---- 图数据 ----
   const entityById = useMemo(() => {
@@ -254,6 +258,20 @@ export function ExplorePage() {
             <span className="flex items-center gap-2 text-xs text-label-2">
               <Loader2 size={14} className="animate-spin" aria-hidden /> 图谱加载中…
             </span>
+          </div>
+        )}
+        {/* fe1-F3 空态：q 为空/无命中（live graph/search 无 items 可居中）→ 空态而非空白画布 */}
+        {exploreEmpty && (
+          <div
+            className="pointer-events-none absolute inset-0 flex items-center justify-center"
+            data-testid="explore-empty"
+            role="status"
+            aria-label="暂无图谱数据"
+          >
+            <div className="empty">
+              <div className="t">暂无图谱数据</div>
+              <div className="d">在上方搜索框输入实体名（联想）开始探索；双击节点可展开邻域。</div>
+            </div>
           </div>
         )}
         {/* 右上工具 */}

@@ -269,3 +269,24 @@ async def test_access_token_正常认证路径_logout_204(auth_env):
     # Act / Assert
     resp = await client.post("/api/v1/auth/logout", headers={"Authorization": f"Bearer {access}"})
     assert resp.status_code == status.HTTP_204_NO_CONTENT
+
+
+@pytest.mark.integration
+async def test_logout_空body与null_body均_204(auth_env):
+    """B-⑤ 联调修复：logout body 形参补 =None 默认（api/01 §5.9「认证即可」）。
+
+    此前无默认值时 FastAPI 视 logout body 必填——客户端登出常不带 body（EventSource/
+    fetch 简化调用），被 RequestValidationError 挡回 422 而非 204。
+    """
+    client, env = auth_env
+    # Arrange：两个独立登录态（各自登出，防 access jti 吊销串扰）
+    first = (await client.post("/api/v1/auth/login", json={"email": env["email"], "password": env["password"]})).json()
+    second = (await client.post("/api/v1/auth/login", json={"email": env["email"], "password": env["password"]})).json()
+    # Act：① 完全不带 body；② 显式 null body（同 test_无token访问受保护端点 的 json=None 形态）
+    resp_empty = await client.post("/api/v1/auth/logout", headers={"Authorization": f"Bearer {first['access_token']}"})
+    resp_null = await client.post(
+        "/api/v1/auth/logout", headers={"Authorization": f"Bearer {second['access_token']}"}, json=None
+    )
+    # Assert：两种空体形态均 204
+    assert resp_empty.status_code == status.HTTP_204_NO_CONTENT
+    assert resp_null.status_code == status.HTTP_204_NO_CONTENT

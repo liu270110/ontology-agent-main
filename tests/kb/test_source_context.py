@@ -195,7 +195,11 @@ def _principal(tenant_id: uuid.UUID) -> Principal:
 def _fake_request() -> Request:
     """最小 Request 桩：app.state 挂 settings（Ollama 9 端口不可达 → 端点向量路自动降级）。"""
     state = SimpleNamespace(
-        settings=SimpleNamespace(ollama_base_url="http://localhost:9", kb_acl_filter_enabled=False)
+        settings=SimpleNamespace(
+            ollama_base_url="http://localhost:9",
+            kb_acl_filter_enabled=False,
+            embed_protocol="ollama",  # 嵌入协议开关（OA_EMBED_PROTOCOL；桩显式 ollama，不读全局配置）
+        )
     )  # kb_acl_filter_enabled=False：本用例不测 ACL，开关关闭=零行为变化（develop 端点融合后新增读取）
     return Request({"type": "http", "app": SimpleNamespace(state=state), "headers": [], "query_string": b""})
 

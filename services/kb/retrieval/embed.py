@@ -32,6 +32,11 @@ EMBED_MODEL = "bge-m3"
 OLLAMA_TIMEOUT_SECONDS = 10.0
 EMBED_BATCH_SIZE = 32
 
+# 嵌入端点协议（docs/Agent/09 §2.1 工程问题 2「嵌入协议漂移」；OA_EMBED_PROTOCOL 配置开关）：
+# - ollama：POST {base}/api/embed，body {model, input}，响应取 embeddings 字段（ops/03 单轨口径）；
+# - tei：POST {base}/embed，body {inputs}，响应直接是数组的数组（huggingface text-embeddings-inference）。
+EMBED_PROTOCOLS = ("ollama", "tei")
+
 logger = logging.getLogger("services.kb.retrieval.acl")
 
 
@@ -40,10 +45,14 @@ class EmbeddingUnavailableError(RuntimeError):
 
 
 class OllamaEmbedder:
-    """Ollama /api/embed 批量客户端（httpx；超时 10s；批量 ≤ batch_size 分批）。
+    """批量嵌入客户端（httpx；超时 10s；批量 ≤ batch_size 分批；双协议 ollama|tei）。
 
-    AsyncClient 由调用方持有复用（网关挂 app.state）；连接失败/超时/非 200/响应缺字段
-    一律归一为 EmbeddingUnavailableError（调用方降级口径唯一）。
+    协议由配置开关选择（Settings.embed_protocol，OA_EMBED_PROTOCOL；docs/Agent/09 §2.1
+    工程问题 2「嵌入协议漂移」的正式解法）：ollama=POST /api/embed（默认，存量口径零变化）；
+    tei=POST /embed（本机 GPU 栈 text-embeddings-inference 部署）。``model`` 仅 ollama 协议
+    出网（TEI 模型在服务端部署期固定，请求无 model 字段）——tei 模式换模型须重启 TEI 服务。
+    AsyncClient 由调用方持有复用（网关挂 app.state）；连接失败/超时/非 200/响应缺字段/返回
+    长度与批次不一致一律归一为 EmbeddingUnavailableError（调用方降级口径唯一）。
     """
 
     def __init__(
@@ -54,11 +63,15 @@ class OllamaEmbedder:
         timeout: float = OLLAMA_TIMEOUT_SECONDS,
         batch_size: int = EMBED_BATCH_SIZE,
         client: httpx.AsyncClient | None = None,
+        protocol: str = "ollama",  # ollama|tei；tei 模式下 model 不出网（TEI 部署期固定模型）
     ) -> None:
+        if protocol not in EMBED_PROTOCOLS:
+            raise ValueError(f"未知嵌入协议 {protocol!r}（可选：{'|'.join(EMBED_PROTOCOLS)}）")
         self._base_url = base_url.rstrip("/")
         self._model = model
         self._batch_size = max(1, batch_size)
         self._client = client or httpx.AsyncClient(timeout=timeout)
+        self._protocol = protocol
 
     async def embed(self, texts: Sequence[str]) -> list[list[float]]:
         """批量嵌入；输入顺序即输出顺序；任何失败抛 EmbeddingUnavailableError。"""
@@ -71,18 +84,29 @@ class OllamaEmbedder:
 
     async def _embed_batch(self, batch: list[str]) -> list[list[float]]:
         try:
-            resp = await self._client.post(f"{self._base_url}/api/embed", json={"model": self._model, "input": batch})
+            if self._protocol == "tei":
+                resp = await self._client.post(f"{self._base_url}/embed", json={"inputs": batch})
+            else:
+                resp = await self._client.post(
+                    f"{self._base_url}/api/embed", json={"model": self._model, "input": batch}
+                )
         except httpx.HTTPError as exc:
             raise EmbeddingUnavailableError(f"嵌入服务不可达（{self._base_url}）: {exc}") from exc
         if resp.status_code != 200:
             raise EmbeddingUnavailableError(f"嵌入服务返回 {resp.status_code}: {resp.text[:200]}")
         try:
-            embeddings = resp.json()["embeddings"]
-            if not isinstance(embeddings, list) or len(embeddings) != len(batch):
-                raise KeyError("embeddings")
-            return embeddings
+            if self._protocol == "tei":
+                embeddings = resp.json()  # TEI 响应直接是数组的数组（无包裹字段）
+            else:
+                embeddings = resp.json()["embeddings"]
         except (KeyError, TypeError, ValueError) as exc:
-            raise EmbeddingUnavailableError(f"嵌入响应结构异常: {exc}") from exc
+            raise EmbeddingUnavailableError(f"嵌入响应结构异常（{self._protocol}）: {exc}") from exc
+        if not isinstance(embeddings, list) or len(embeddings) != len(batch):
+            got = f"向量数 {len(embeddings)}" if isinstance(embeddings, list) else f"非数组 {type(embeddings).__name__}"
+            raise EmbeddingUnavailableError(
+                f"嵌入响应与批次不一致（{self._protocol}）: 响应{got} != 批次 {len(batch)}"
+            )
+        return embeddings
 
     async def aclose(self) -> None:
         await self._client.aclose()

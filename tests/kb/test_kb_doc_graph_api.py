@@ -50,11 +50,12 @@ from services.kb.api.kb import (
     expand_neighborhood,
     find_graph_path,
     get_document,
+    list_collections,
     list_document_chunks,
     retry_pipeline,
     search_graph_entities,
 )
-from services.kb.api.schemas.kb import DocumentCreateIn, KbGraphQueryOut
+from services.kb.api.schemas.kb import DocumentCreateIn, KbGraphQueryOut, doc_type_of
 from services.kb.data.orm import Document as DocumentORM
 from services.kb.data.orm import DocumentChunk as DocumentChunkORM
 from services.kb.data.orm import KbCollection as KbCollectionORM
@@ -69,7 +70,7 @@ from services.kb.retrieval.graph import (
 )
 from services.platform.config import Settings
 from services.platform.deps import Principal
-from services.platform.errors import GatewayError
+from services.platform.errors import ErrorCode, GatewayError
 
 if sys.platform == "win32":
     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
@@ -90,6 +91,17 @@ def _seed_hierarchy():
             (SUBSTATION, "变电站", [EQUIPMENT]),
         ]
     )
+
+
+def test_doc_type_of_文本类收敛_不再误判图片():
+    """docs/Agent/09 §2.1 工程问题 4：text/*（markdown/plain/json）收敛「文本」；CSV 先于
+    text/* 通配比对；未登记类型兜底「图片」不变。"""
+    assert doc_type_of("设备手册.md", "text/markdown") == "文本"
+    assert doc_type_of("无扩展名文档", "text/plain") == "文本"  # mime 兜底
+    assert doc_type_of("接口定义", "application/json") == "文本"
+    assert doc_type_of("台账", "text/csv") == "CSV"  # CSV 优先于 text/* 通配（不被文本吞并）
+    assert doc_type_of("扫描件", None) == "图片"  # 未登记兜底不变（mock 同款）
+    assert doc_type_of("报表.xlsx", None) == "Excel"  # 既有五类判定零回归
 
 
 # ---------------------------------------------------------------- 图引擎纯函数（零外部依赖，恒跑）
@@ -565,6 +577,80 @@ async def test_CREATE_同内容幂等_墓碑后重传全新插入(doc_env, kb_pg
     live = [r for r in all_rows if r.valid_to is None]
     assert len(sealed) == 1 and sealed[0].id == first.id
     assert len(live) == 1 and live[0].id == again.id
+
+
+# ---------------------------------------------------------------- 入口两层防御（mime 白名单 + NUL 拒收）
+
+
+@pytest.mark.integration
+async def test_CREATE_二进制垃圾拒收_415_业务错误_正常文本不受影响(doc_env, kb_pg):
+    """docs/Agent/09 §2.1 工程问题 3（E2 实测裸 500 UntranslatableCharacter）：mime 白名单与
+    NUL 清洗前置——415 业务错误体（3004 UNSUPPORTED_MEDIA_TYPE）且零副作用，正常 markdown
+    （含带参 mime）不受影响。"""
+    env = doc_env
+    principal = _principal(env, scopes=["kb:write"])
+    async with kb_pg() as db:
+        # ① mime 白名单：application/pdf → 415 业务错误（非裸 500）
+        with pytest.raises(GatewayError) as exc:
+            await create_document(
+                DocumentCreateIn(
+                    collection_id=env["collection_id"],
+                    title="图纸.pdf",
+                    content="%PDF-1.7 二进制垃圾",
+                    mime_type="application/pdf",
+                ),
+                principal,
+                db,
+            )
+        assert exc.value.code == int(ErrorCode.UNSUPPORTED_MEDIA_TYPE) and exc.value.status_code == 415
+        # ② NUL 清洗：text/markdown 内容混入 \x00 → 415（JSONB 落库前拦截）
+        with pytest.raises(GatewayError) as exc:
+            await create_document(
+                DocumentCreateIn(collection_id=env["collection_id"], title="垃圾.md", content="正常文本\x00二进制尾巴"),
+                principal,
+                db,
+            )
+        assert exc.value.code == int(ErrorCode.UNSUPPORTED_MEDIA_TYPE) and exc.value.status_code == 415
+        # ③ 正常 markdown 文本不受影响（含 mime 参数段剥离：text/markdown; charset=utf-8）
+        ok = await create_document(
+            DocumentCreateIn(
+                collection_id=env["collection_id"],
+                title="正常联调.md",
+                content="# 正常内容\n段落文本。",
+                mime_type="text/markdown; charset=utf-8",
+            ),
+            principal,
+            db,
+        )
+        await db.commit()
+    assert ok.created is True
+    async with kb_pg() as db:  # 零副作用：两笔拒收均未落行（种子 1 行 + 正常上传 1 行）
+        n_rows = (
+            await db.execute(
+                select(func.count()).select_from(DocumentORM).where(DocumentORM.tenant_id == env["tenant_id"])
+            )
+        ).scalar_one()
+    assert n_rows == 2
+
+
+# ---------------------------------------------------------------- 集合列表（GET /kb/collections，R53 补齐）
+
+
+@pytest.mark.integration
+async def test_GET_collections_信封_租户隔离(doc_env, kb_pg):
+    """docs/Agent/09 §2.1 工程问题 4（信封漂移）：GET /kb/collections 返回 {code,message,data}
+    信封（对齐 documents 列表），租户 deny-by-default 空列表合法。"""
+    env = doc_env
+    principal = _principal(env)
+    async with kb_pg() as db:
+        out = await list_collections(principal, db)
+        assert out.code == 0 and out.message == "ok"  # 强信封（前端 apiFetchEnvelope 解包口径）
+        assert out.data.total == 1 and out.data.limit == 50 and out.data.next_cursor is None
+        assert [str(c.id) for c in out.data.items] == [str(env["collection_id"])]
+        assert out.data.items[0].name == "b6-it-库" and out.data.items[0].embedding_model == "bge-m3"
+        # 他人租户不可见（deny-by-default）：随机租户 → 空列表非失败
+        other = await list_collections(_principal({**env, "tenant_id": uuid.uuid4()}), db)
+    assert other.code == 0 and other.data.total == 0 and other.data.items == []
 
 
 # ---------------------------------------------------------------- 图三查（GET /kb/graph/search|neighborhood|path）

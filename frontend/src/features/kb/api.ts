@@ -18,7 +18,8 @@ export type CandidateType = 'entity' | 'relation' | 'attribute' | 'axiom'
 export interface KbDocument {
   id: string
   name: string
-  doc_type: 'PDF' | 'Word' | 'Excel' | 'CSV' | '图片'
+  /** 后端 KbDocType 六类（「文本」=text/* 收敛，docs/Agent/09 §2.1 工程问题 4） */
+  doc_type: 'PDF' | 'Word' | 'Excel' | 'CSV' | '文本' | '图片'
   size_bytes: number
   chunk_count: number
   status: KbDocStatus
@@ -162,8 +163,9 @@ export interface KbCollectionOut {
 }
 
 /** POST /kb/collections —— 创建知识库集合（live 实测 201 裸 DTO；同名 409「同名知识库已存在」）。
- *  后端无 GET 列表端点（R53）：collection_id 只能经创建获得 → 前端按目标库名缓存复用
- *  （ensureCollectionId），缓存失效（库重置 404）时清缓存重建一次。 */
+ *  GET /kb/collections 列表端点已落地（R53 补齐，2026-10-03 kb 摄取加固批，{code,message,data}
+ *  强信封）——ensureCollectionId 的 localStorage 缓存仍保留（上传链路少一次往返），迁移到
+ *  列表端点随后续批次。 */
 export function createCollection(body: { name: string; description?: string; embedding_model?: string }) {
   return postKbRaw<KbCollectionOut>('/kb/collections', body)
 }

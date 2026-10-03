@@ -52,6 +52,11 @@ class Settings(BaseSettings):
     llm_api_key: str | None = None
     # M0 历史字段（ops/03 单轨 Ollama 时期）：14 篇 §9 vLLM 定稿后随网关改造移除，勿新增依赖
     ollama_base_url: str = "http://localhost:11434"
+    # 嵌入端点协议开关（docs/Agent/09 §2.1 工程问题 2「嵌入协议漂移」）：ollama=POST
+    # {base}/api/embed body {model,input}（默认，存量口径零变化）；tei=POST {base}/embed
+    # body {inputs}，响应直接是数组的数组（huggingface TEI，本机 GPU 栈部署）。
+    # TEI 部署示例：OA_OLLAMA_BASE_URL=http://127.0.0.1:18002 + OA_EMBED_PROTOCOL=tei
+    embed_protocol: str = Field(default="ollama", pattern="^(ollama|tei)$")
 
     # 能力层 P0（docs/Agent/06）：fs 工作区根（None=禁用 fs 工具）与 web 出口白名单（空=全拒 fail-closed）
     workspace_root: str | None = None

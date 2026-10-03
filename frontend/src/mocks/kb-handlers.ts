@@ -12,7 +12,8 @@ export type KbDocStatus = 'pending' | 'extracting' | 'indexed' | 'failed'
 export interface KbDoc {
   id: string
   name: string
-  doc_type: 'PDF' | 'Word' | 'Excel' | 'CSV' | '图片'
+  /** 后端 KbDocType 六类（「文本」=text/* 收敛，与 features/kb/api.ts KbDocument 同步） */
+  doc_type: 'PDF' | 'Word' | 'Excel' | 'CSV' | '文本' | '图片'
   size_bytes: number
   chunk_count: number
   status: KbDocStatus
@@ -333,15 +334,32 @@ export const kbHandlers = [
       name?: string
       content?: string
       size_bytes?: number
-      content_type?: string
+      mime_type?: string // live 契约字段名（M2 直传 {collection_id,title,content,mime_type?}）
     }
     const name = body.title?.trim() || body.name?.trim() || '未命名文档'
     if (name.includes('失败')) return jsonErr(5002, '上游模型服务异常', 500)
     const ext = (name.split('.').pop() ?? '').toUpperCase()
+    // mime 参数段剥离 + 小写（与后端 _reject_binary_payload 同口径）；缺省 text/markdown=DTO 默认
+    const mime = (body.mime_type ?? 'text/markdown').split(';')[0].trim().toLowerCase()
     const doc: KbDoc = {
       id: `d-${++docSeq}`,
       name,
-      doc_type: ext === 'PDF' ? 'PDF' : ext === 'DOC' || ext === 'DOCX' ? 'Word' : ext === 'XLS' || ext === 'XLSX' ? 'Excel' : ext === 'CSV' ? 'CSV' : '图片',
+      // doc_type 推断对齐后端 doc_type_of（六类；CSV 优先于 text/* 通配）：扩展名优先，
+      // 「文本」分支带 mime 兜底（前缀 text/ 或恰为 application/json）；其余类别仅扩展名推断
+      doc_type:
+        ext === 'PDF'
+          ? 'PDF'
+          : ext === 'DOC' || ext === 'DOCX'
+            ? 'Word'
+            : ext === 'XLS' || ext === 'XLSX'
+              ? 'Excel'
+              : ext === 'CSV'
+                ? 'CSV'
+                : ['MD', 'MARKDOWN', 'TXT', 'TEXT', 'JSON'].includes(ext) ||
+                    mime.startsWith('text/') ||
+                    mime === 'application/json'
+                  ? '文本'
+                  : '图片',
       size_bytes: body.size_bytes ?? (body.content ? body.content.length : 0),
       chunk_count: 0,
       status: 'pending',

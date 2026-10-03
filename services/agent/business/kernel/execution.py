@@ -81,7 +81,9 @@ class ExecutionStage:
                         "step_seq": state.seq,
                         "param_hash": param_hash,
                         "action_iri": str(step.action_iri) if hasattr(step, "action_iri") else None,
-                        "execution_mode": str(step.execution_mode.value) if hasattr(step.execution_mode, "value") else str(step.execution_mode),
+                        "execution_mode": str(step.execution_mode.value)
+                        if hasattr(step.execution_mode, "value")
+                        else str(step.execution_mode),
                     },
                 )
                 state.transition(StepStatus.FAILED, stage=LoopStage.EXECUTION)

@@ -202,12 +202,13 @@ def cmd_auth_whoami(args: argparse.Namespace, ctx: Context) -> int:
 
 
 def cmd_sessions_list(args: argparse.Namespace, ctx: Context) -> int:
-    """GET /sessions：当前用户会话列表（api/01 §5.2；实现返回 {items, offset, limit}）。"""
-    data, meta = ctx.client.request("GET", "/sessions", params={"offset": int(args.offset), "limit": int(args.limit)})
-    payload = _as_dict(data)
-    items = _as_list(payload.get("items"))
+    """GET /sessions：当前用户会话列表（api/01 §5.2/§3.1；实现返回 {data, meta:{page,page_size,total}}）。"""
+    data, meta = ctx.client.request(
+        "GET", "/sessions", params={"page": int(args.page), "page_size": int(args.page_size)}
+    )
+    items = _as_list(data)
     if ctx.config.output == "json":
-        _emit_json(ctx, items, {"count": len(items), **_as_dict(payload), **meta})
+        _emit_json(ctx, items, {"count": len(items), **meta})
         return EXIT_OK
     ctx.stdout.write(f"{'ID':<38} {'STATUS':<10} {'TITLE':<24} AGENT\n")
     for item in items:
@@ -217,7 +218,8 @@ def cmd_sessions_list(args: argparse.Namespace, ctx: Context) -> int:
             f"{str(row.get('id', '?')):<38} {str(row.get('status', '?')):<10} {title:<24} {row.get('agent_id', '?')}\n"
         )
     ctx.stdout.write(
-        f"共 {len(items)} 条（offset={payload.get('offset', args.offset)} limit={payload.get('limit', args.limit)}）\n"
+        f"共 {len(items)} 条（page={meta.get('page', args.page)} "
+        f"page_size={meta.get('page_size', args.page_size)} total={meta.get('total', len(items))}）\n"
     )
     return EXIT_OK
 
@@ -391,8 +393,8 @@ def build_parser() -> argparse.ArgumentParser:
     sessions = subs.add_parser("sessions", parents=[shared], help="会话管理（api/01 §5.2）")
     ses_subs = sessions.add_subparsers(dest="subcommand", metavar="<子命令>", required=True)
     ses_list = ses_subs.add_parser("list", parents=[shared], help="当前用户会话列表")
-    ses_list.add_argument("--offset", type=int, default=0, help="偏移（默认 0）")
-    ses_list.add_argument("--limit", type=int, default=20, help="条数上限（默认 20，≤100）")
+    ses_list.add_argument("--page", type=int, default=1, help="页码（默认 1，≥1）")
+    ses_list.add_argument("--page-size", type=int, default=20, help="每页条数（默认 20，≤100）")
     ses_list.set_defaults(func=cmd_sessions_list)
     ses_create = ses_subs.add_parser("create", parents=[shared], help="创建会话（绑定 agent）")
     ses_create.add_argument("--agent", required=True, help="agent ID（UUID）")

@@ -238,6 +238,13 @@ class PgSessionRepository:
         seq_map = await self._seq_map([r.id for r in rows])
         return [_session_to_domain(r, next_seq=seq_map.get(r.id, 0)) for r in rows]
 
+    async def count_for_user(self, user_id: uuid.UUID, *, session_type: str | None = None) -> int:
+        filters = [SessionORM.tenant_id == self._tenant_id, SessionORM.user_id == user_id]
+        if session_type is not None:
+            filters.append(SessionORM.type == session_type)
+        stmt = select(func.count()).select_from(SessionORM).where(*filters)
+        return int((await self._db.execute(stmt)).scalar_one())
+
     async def list_messages(
         self, session_id: uuid.UUID, *, before_id: uuid.UUID | None = None, limit: int = 20
     ) -> list[Message]:
@@ -441,6 +448,22 @@ class PgTaskRepository:
         stmt = stmt.order_by(TaskORM.created_at.desc(), TaskORM.id.desc()).offset(offset).limit(limit)
         rows = (await self._db.execute(stmt)).scalars().all()
         return [_task_to_domain(r, runs=[]) for r in rows]
+
+    async def count(
+        self,
+        *,
+        session_id: uuid.UUID | None = None,
+        status: str | None = None,
+        task_type: str | None = None,
+    ) -> int:
+        stmt = select(func.count()).select_from(TaskORM).where(TaskORM.tenant_id == self._tenant_id)
+        if session_id is not None:
+            stmt = stmt.where(TaskORM.session_id == session_id)
+        if status is not None:
+            stmt = stmt.where(TaskORM.status == status)
+        if task_type is not None:
+            stmt = stmt.where(TaskORM.type == task_type)
+        return int((await self._db.execute(stmt)).scalar_one())
 
     async def _load_runs(self, task_id: uuid.UUID) -> list[Run]:
         stmt = (

@@ -177,23 +177,23 @@ def test_json输出_顶层data_meta结构可被jq消费(clean_env: pytest.Monkey
 
 
 def test_sessions_list_渲染条目与统计行(clean_env: pytest.MonkeyPatch):
-    # Arrange：实现返回 {items, offset, limit}（未包裹信封）
+    # Arrange：实现返回 {data, meta:{page,page_size,total}}（api/01 §3.1 信封）
     items = [
         {"id": "s-aaa", "status": "active", "title": "停电分析", "agent_id": "a-1"},
         {"id": "s-bbb", "status": "closed", "title": None, "agent_id": "a-2"},
     ]
 
     def handler(request: httpx.Request) -> httpx.Response:
-        assert request.url.params["offset"] == "0"
-        assert request.url.params["limit"] == "20"
-        return httpx.Response(200, json={"items": items, "offset": 0, "limit": 20})
+        assert request.url.params["page"] == "1"
+        assert request.url.params["page_size"] == "20"
+        return httpx.Response(200, json={"data": items, "meta": {"page": 1, "page_size": 20, "total": 2}})
 
     # Act
     code, out, _err = _run(["sessions", "list"], handler, clean_env)
     # Assert
     assert code == EXIT_OK
     assert "s-aaa" in out and "s-bbb" in out
-    assert "共 2 条" in out
+    assert "共 2 条" in out and "total=2" in out
 
 
 def test_sessions_create_提交agent与渠道(clean_env: pytest.MonkeyPatch):
@@ -406,10 +406,10 @@ def test_配置令牌注入_Bearer头随鉴权请求发送(clean_env: pytest.Mon
 
     def handler(request: httpx.Request) -> httpx.Response:
         seen["auth"] = request.headers.get("authorization")
-        return httpx.Response(200, json={"items": [], "offset": 0, "limit": 20})
+        return httpx.Response(200, json={"data": [], "meta": {"page": 1, "page_size": 20, "total": 0}})
 
     # Act
-    code, out, _err = _run(["sessions", "list", "--limit", "20"], handler, clean_env, cfg_file)
+    code, out, _err = _run(["sessions", "list", "--page-size", "20"], handler, clean_env, cfg_file)
     # Assert
     assert code == EXIT_OK
     assert seen["auth"] == "Bearer tok-7"

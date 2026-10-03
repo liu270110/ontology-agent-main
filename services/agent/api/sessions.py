@@ -50,6 +50,7 @@ from services.memory.business.runtime import build_l1_store  # memory 公开装�
 from services.platform.db.uow import AsyncUnitOfWork
 from services.platform.deps import get_redis, get_session_factory
 from services.platform.errors import GatewayError
+from services.platform.schemas import PageMeta
 
 router = APIRouter(prefix="/sessions", tags=["sessions"])
 
@@ -195,19 +196,25 @@ async def create_session(body: SessionCreateIn, principal: SessionWriteDep, uow:
     return from_domain(session)
 
 
-@router.get("", summary="当前用户会话列表")
+@router.get("", summary="当前用户会话列表（api/01 §3.1 信封）")
 async def list_sessions(
     principal: SessionReadDep,
     uow: UowDep,
-    offset: Annotated[int, Query(ge=0)] = 0,
-    limit: Annotated[int, Query(ge=1, le=100)] = 20,
+    page: Annotated[int, Query(ge=1)] = 1,
+    page_size: Annotated[int, Query(ge=1, le=100)] = 20,
     session_type: Annotated[str | None, Query(alias="type", pattern="^(single|group)$")] = None,
 ) -> SessionListOut:
+    """偏移分页改 page/page_size（B1 批，api/01 §3.1；offset=(page-1)*page_size 内部换算）。"""
+    offset = (page - 1) * page_size
     async with uow.for_tenant(principal.tenant_id) as tx:
         items = await tx.sessions.list_for_user(
-            principal.user_id, offset=offset, limit=limit, session_type=session_type
+            principal.user_id, offset=offset, limit=page_size, session_type=session_type
         )
-    return SessionListOut(items=[from_domain(s) for s in items], offset=offset, limit=limit)
+        total = await tx.sessions.count_for_user(principal.user_id, session_type=session_type)
+    return SessionListOut(
+        data=[from_domain(s) for s in items],
+        meta=PageMeta(page=page, page_size=page_size, total=total),
+    )
 
 
 @router.get("/{session_id}", summary="会话详情与状态")

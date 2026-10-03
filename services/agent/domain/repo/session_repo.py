@@ -42,6 +42,10 @@ class SessionRepository(Protocol):
         session_type: str | None = None,  # single|group（27 篇 X15：GET /sessions?type=group）
     ) -> list[Session]: ...
 
+    async def count_for_user(self, user_id: UUID, *, session_type: str | None = None) -> int:
+        """用户会话总数（api/01 §3.1 分页 meta.total；筛选条件与 list_for_user 同口径）。"""
+        ...
+
     async def list_messages(self, session_id: UUID, *, before_id: UUID | None = None, limit: int = 20) -> list[Message]:
         """历史消息回放（api/01 §5.2：before_id 游标分页；seq 倒序）。"""
         ...
@@ -94,3 +98,13 @@ class TaskRepository(Protocol):
         offset: int = 0,
         limit: int = 20,
     ) -> list[Task]: ...
+
+    async def count(
+        self,
+        *,
+        session_id: UUID | None = None,
+        status: str | None = None,
+        task_type: str | None = None,
+    ) -> int:
+        """任务总数（api/01 §3.1 分页 meta.total；筛选条件与 list 同口径）。"""
+        ...

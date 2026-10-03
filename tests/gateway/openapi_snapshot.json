@@ -6108,27 +6108,22 @@
       },
       "SessionListOut": {
         "additionalProperties": false,
+        "description": "会话列表（api/01 §3.1 信封：{data, meta:{page,page_size,total}}，B1 批统一）。",
         "properties": {
-          "items": {
+          "data": {
             "items": {
               "$ref": "#/components/schemas/SessionOut"
             },
-            "title": "Items",
+            "title": "Data",
             "type": "array"
           },
-          "limit": {
-            "title": "Limit",
-            "type": "integer"
-          },
-          "offset": {
-            "title": "Offset",
-            "type": "integer"
+          "meta": {
+            "$ref": "#/components/schemas/PageMeta"
           }
         },
         "required": [
-          "items",
-          "offset",
-          "limit"
+          "data",
+          "meta"
         ],
         "title": "SessionListOut",
         "type": "object"
@@ -12242,28 +12237,29 @@
     },
     "/api/v1/sessions": {
       "get": {
+        "description": "偏移分页改 page/page_size（B1 批，api/01 §3.1；offset=(page-1)*page_size 内部换算）。",
         "operationId": "list_sessions_api_v1_sessions_get",
         "parameters": [
           {
             "in": "query",
-            "name": "offset",
+            "name": "page",
             "required": false,
             "schema": {
-              "default": 0,
-              "minimum": 0,
-              "title": "Offset",
+              "default": 1,
+              "minimum": 1,
+              "title": "Page",
               "type": "integer"
             }
           },
           {
             "in": "query",
-            "name": "limit",
+            "name": "page_size",
             "required": false,
             "schema": {
               "default": 20,
               "maximum": 100,
               "minimum": 1,
-              "title": "Limit",
+              "title": "Page Size",
               "type": "integer"
             }
           },
@@ -12307,7 +12303,7 @@
             "description": "Validation Error"
           }
         },
-        "summary": "当前用户会话列表",
+        "summary": "当前用户会话列表（api/01 §3.1 信封）",
         "tags": [
           "sessions"
         ]

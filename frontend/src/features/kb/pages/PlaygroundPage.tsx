@@ -52,7 +52,8 @@ export function PlaygroundPage() {
   const [previewDocId, setPreviewDocId] = useState<string | null>(null)
 
   const docsQuery = useQuery({ queryKey: ['kb', 'documents'], queryFn: listDocuments })
-  const docs = docsQuery.data?.items ?? []
+  // fe3 信封收口：listDocuments 改 api.list 归一（{data,meta}），读 .data
+  const docs = docsQuery.data?.data ?? []
 
   const persistHistory = useCallback((items: PlayHistoryItem[]) => {
     setHistory(items)

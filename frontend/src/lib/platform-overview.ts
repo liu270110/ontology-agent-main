@@ -26,7 +26,11 @@ export function listMcpServerOverview() {
   return api.get<{ items: unknown[] }>('/mcp/servers')
 }
 
-/** GET /agents（api/01 §5.1）——托管 Agent 实例计数 */
+/** GET /agents（api/01 §5.1）——托管 Agent 实例计数。
+ *  fe3 信封收口（联调缺陷台账 2026-10-04）：GET /agents 已改 {data,meta} 信封（be2 B1 批），
+ *  裸 api.get<{items}> 下 PlatformPage 的 `agents.data.items.length` 直接 'reading length'
+ *  崩溃——改走 api.list 三形态归一（fe2 F0）；queryKey 与 AgentListPage 同源共享缓存，
+ *  两处 queryFn 形态必须一致（均 NormalizedList）。 */
 export function listAgentOverview() {
-  return api.get<{ items: unknown[] }>('/agents')
+  return api.list<unknown>('/agents')
 }

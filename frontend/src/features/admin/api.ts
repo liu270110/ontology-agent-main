@@ -26,6 +26,12 @@ export const ROLE_BADGE: Record<string, string> = {
 
 export const listUsers = () => api.get<{ items: AdminUser[]; next_cursor: null }>('/admin/users')
 
+// fe3 信封收口（联调缺陷台账 2026-10-04）：admin 四 tab 列表（groups/models/audit-logs/
+// system-logs）端点后端未实装（live 404）——读取统一改 api.list 归一形态（{data,meta}，
+// 端点未实装时 404 照抛 ApiError 进错误态，行为不变），未来后端按 api/01 §3.1 实装即通；
+// 标量副载荷（total 等）经 normalizeList 落 meta（SystemLogsTab 的分级计数 total 对象同通道）。
+// listUsers/listInviteLinks 未列入本批裁决清单，保持 api.get 不动。
+
 /** 邀请成员（预登记批量形态：emails[]；契约现仅单用户创建，见 R 清单） */
 export function inviteUsers(emails: string[], role: string, note?: string) {
   return api.post<{ invited: number; existing: { email: string; name: string }[] }>('/admin/users', { emails, role, note })
@@ -47,7 +53,7 @@ export interface AdminGroup {
   members: string[]
   created_at: string
 }
-export const listGroups = () => api.get<{ items: AdminGroup[]; next_cursor: null }>('/admin/groups')
+export const listGroups = () => api.list<AdminGroup>('/admin/groups')
 export function createGroup(body: { name: string; description: string; role_template: string; members: string[] }) {
   return api.post<AdminGroup>('/admin/groups', body)
 }
@@ -75,7 +81,7 @@ export interface ModelChannel {
   status: 'active' | 'disabled'
   usage_30d: string
 }
-export const listModels = () => api.get<{ items: ModelChannel[]; next_cursor: null }>('/admin/models')
+export const listModels = () => api.list<ModelChannel>('/admin/models')
 export interface ConnectivityResult {
   latency_ms: number
   models: { id: string; ctx: string }[]
@@ -112,7 +118,8 @@ export function listAuditLogs(params: { operator?: string; q?: string }) {
   const qs = new URLSearchParams()
   if (params.operator && params.operator !== 'all') qs.set('operator', params.operator)
   if (params.q) qs.set('q', params.q)
-  return api.get<{ items: AuditRow[]; total: number; next_cursor: null }>(`/admin/audit-logs?${qs.toString()}`)
+  // fe3 信封收口：改 api.list 归一（{data,meta}），total 落 meta（AuditTab 读 meta.total）
+  return api.list<AuditRow>(`/admin/audit-logs?${qs.toString()}`)
 }
 export interface TraceDetail {
   trace_id: string
@@ -198,12 +205,11 @@ export interface SysLogRow {
 export function listSystemLogs(params: { level?: string; service?: string; range?: string; q?: string }) {
   const qs = new URLSearchParams()
   if (params.level) qs.set('level', params.level)
-  if (params.service && params.service !== 'all') qs.set('service', params.service)
+  if (params.service) qs.set('service', params.service)
   if (params.range) qs.set('range', params.range)
   if (params.q) qs.set('q', params.q)
-  return api.get<{ items: SysLogRow[]; total: { error: number; warn: number; info: number; debug: number } }>(
-    `/admin/system-logs?${qs.toString()}`,
-  )
+  // fe3 信封收口：改 api.list 归一（{data,meta}），分级计数 total 对象落 meta
+  return api.list<SysLogRow>(`/admin/system-logs?${qs.toString()}`)
 }
 
 // ---- 服务健康（GET /readyz：readiness 探针返回**裸 JSON 非 {code,data} 信封**，

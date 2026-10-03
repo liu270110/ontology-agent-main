@@ -94,7 +94,8 @@ export function GroupChatPage() {
 
   const session = sessionQ.data as GroupSessionDetail | undefined
   const members = session?.members ?? []
-  const sessionItems = listQ.data?.items ?? []
+  // fe3 信封收口：listGroupSessions 改 api.list 归一（{data,meta}），读 .data
+  const sessionItems = listQ.data?.data ?? []
   const filteredSessions = useMemo(
     () =>
       listFilter.trim()

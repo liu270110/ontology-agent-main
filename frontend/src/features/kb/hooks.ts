@@ -20,8 +20,9 @@ export function useReviewQueue(typeFilter: CandidateType | 'all', lowConfOnly: b
   const [checked, setChecked] = useState<Set<string>>(new Set())
 
   const docsQuery = useQuery({ queryKey: ['kb', 'documents'], queryFn: listDocuments })
+  // fe3 信封收口：listDocuments 改 api.list 归一（{data,meta}），读 .data
   const reviewableDocIds = useMemo(
-    () => (docsQuery.data?.items ?? []).filter(d => d.status === 'indexed' || d.status === 'extracting').map(d => d.id),
+    () => (docsQuery.data?.data ?? []).filter(d => d.status === 'indexed' || d.status === 'extracting').map(d => d.id),
     [docsQuery.data],
   )
   const docKey = reviewableDocIds.join(',')
@@ -30,7 +31,7 @@ export function useReviewQueue(typeFilter: CandidateType | 'all', lowConfOnly: b
     queryKey: ['kb', 'review', docKey],
     queryFn: async () => {
       const lists = await Promise.all(reviewableDocIds.map(id => listCandidates(id)))
-      return lists.flatMap(l => l.items)
+      return lists.flatMap(l => l.data)
     },
     enabled: reviewableDocIds.length > 0,
   })

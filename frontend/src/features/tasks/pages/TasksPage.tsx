@@ -29,7 +29,8 @@ export function TasksPage() {
     queryFn: () => listTasks({ status }),
     refetchInterval: status === 'all' || status === 'running' ? 8000 : false,
   })
-  const tasks = useMemo(() => data?.items ?? [], [data])
+  // fe3 信封收口：listTasks 改 api.list 归一（{data,meta}），读 .data
+  const tasks = useMemo(() => data?.data ?? [], [data])
 
   // 状态 chips 计数（设计稿 p-tasks L1773「全部 12 / 运行中 2 …」）：
   // 恒拉全量一份计数（status=all 与主查询同 key → 当前为全部时直接复用缓存不重复请求）
@@ -39,7 +40,7 @@ export function TasksPage() {
     refetchInterval: 8000,
   })
   const counts = useMemo(() => {
-    const items = allQ.data?.items ?? []
+    const items = allQ.data?.data ?? []
     const c: Record<'all' | TaskStatus, number> = {
       all: items.length,
       running: 0, queued: 0, failed: 0, completed: 0, canceled: 0,

@@ -13,7 +13,9 @@ import { Select } from '@/components/select'
 export function GroupsTab() {
   const [createOpen, setCreateOpen] = useState(false)
   const { data, isLoading } = useQuery({ queryKey: ['admin', 'groups'], queryFn: listGroups })
-  const groups = useMemo(() => data?.items ?? [], [data])
+  // fe3 信封收口：listGroups 改 api.list 归一（{data,meta}），读 .data（下方建组成员候选
+  // 仍走 listUsers=api.get，未列入本批，读 .items 不变）
+  const groups = useMemo(() => data?.data ?? [], [data])
 
   return (
     <div>

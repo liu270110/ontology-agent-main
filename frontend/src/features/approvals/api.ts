@@ -141,10 +141,13 @@ export function normalizeReview(raw: ReviewTicketRaw): Approval {
   }
 }
 
+/** 工单列表。fe3 信封收口（联调缺陷台账 2026-10-04）：/admin/reviews 已改 B1 {data,meta}
+ *  信封（be2，旧 {code,message,data:{items}} 信封废止）——改走 api.list 三形态归一（fe2 F0，
+ *  兼容 MSW 旧 {items} mock），归一边完成 normalizeReview，返回 {data:Approval[],meta}。 */
 export function listReviews(status: 'pending' | 'done') {
   return api
-    .get<{ items: ReviewTicketRaw[]; next_cursor: null }>(`/admin/reviews?status=${status}`)
-    .then(res => ({ ...res, items: (res.items ?? []).map(normalizeReview) }))
+    .list<ReviewTicketRaw>(`/admin/reviews?status=${status}`)
+    .then(res => ({ data: res.data.map(normalizeReview), meta: res.meta }))
 }
 
 export function getReview(id: string) {

@@ -38,13 +38,10 @@ export function AgentListPage() {
   const [toggle, setToggle] = useState<{ agent: PlatformAgent; action: 'start' | 'stop' } | null>(null)
 
   const { data, isLoading, isError, error, refetch } = useQuery({ queryKey: ['agents', 'list'], queryFn: listAgents })
-  // {items} 解包防御（fe1-F2）：live 后端裸分页体 {items,offset,limit}（agents.json 实测）经 client
-  // 双形态兼容后 items 应在；容忍 items 缺失/非数组与裸数组两种降级，绝不让 undefined 进 map。
-  const agents = useMemo<PlatformAgent[]>(() => {
-    if (Array.isArray(data)) return data
-    const items = (data as { items?: unknown } | undefined)?.items
-    return Array.isArray(items) ? (items as PlatformAgent[]) : []
-  }, [data])
+  // fe3 信封收口（联调缺陷台账 2026-10-04）：listAgents 改走 api.list 三形态归一，
+  // 返回恒为 {data:[],meta}（normalizeList 保底空数组）——原 {items} 解包防御被归一化吸收，
+  // 直接读 data.data，绝不让 undefined 进 map。
+  const agents = useMemo<PlatformAgent[]>(() => data?.data ?? [], [data])
 
   return (
     <div className="mx-auto max-w-[1080px]">

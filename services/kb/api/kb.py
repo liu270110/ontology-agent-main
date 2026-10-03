@@ -2,11 +2,12 @@
 
 端点（api/01 登记册 kb 行；OntRAG §5 检索契约 REST 子集）：
     POST /kb/collections                      建库
-    GET  /kb/collections                      集合列表（R53 补齐：信封形态对齐 documents
-                                              列表，{items,total,next_cursor,offset,limit}）
-    GET  /kb/documents                        文档列表（R51 联调补齐：信封 + 前端
+    GET  /kb/collections                      集合列表（api/01 §3.1 信封 {data, meta}，
+                                              B1 批统一；{code,message,data} 旧信封废止）
+    GET  /kb/documents                        文档列表（R51 联调补齐 + B1 信封统一：契约
+                                              {data, meta:{page,page_size,total}}；前端
                                               KbDocument DTO；status/type/q 可选过滤 +
-                                              offset/limit 分页，limit 缺省 50 上限 200）
+                                              page/page_size 分页，page_size 缺省 50 上限 200）
     GET  /kb/documents/{id}                   文档详情（R17-a live 对账补齐：列表 DTO 全字段
                                               + chunk 计数/error；404=文档域 404* 同款错误体）
     DELETE /kb/documents/{id}                 删除文档（B6 墓碑式软删：documents.valid_to 封口
@@ -18,7 +19,7 @@
                                               七步中段 extract/align/validate 已插回）
     POST /kb/documents/{id}/pipeline/retry    失败文档流水线重试（B6：202 受理 + 后台断点续跑，
                                               非 failed 态 409）
-    GET  /kb/documents/{id}/chunks            分片列表（B6：seq 升序 + offset/limit 分页 +
+    GET  /kb/documents/{id}/chunks            分片列表（B6：seq 升序 + page/page_size 分页 +
                                               meta.total；content 预览截断/has_embedding 布尔）
     GET  /kb/graph/search                     图检索（B6：q/class_name 匹配类 + 层次/关系扩展）
     GET  /kb/graph/neighborhood               邻域查询（B6：类 IRI depth≤2 一跳近邻 + 关系边）
@@ -68,8 +69,7 @@ from services.kb.api.schemas.kb import (
     CandidateDecisionIn,
     CandidateDecisionOut,
     CollectionCreateIn,
-    CollectionListData,
-    CollectionListEnvelope,
+    CollectionListOut,
     CollectionOut,
     DocumentCreateIn,
     DocumentDeleteCascade,
@@ -77,9 +77,8 @@ from services.kb.api.schemas.kb import (
     DocumentDeleteEnvelope,
     DocumentDetailData,
     DocumentDetailEnvelope,
-    DocumentListData,
-    DocumentListEnvelope,
     DocumentListItem,
+    DocumentListOut,
     DocumentOut,
     DocumentPipelineProgress,
     DocumentStatusQuery,
@@ -88,7 +87,6 @@ from services.kb.api.schemas.kb import (
     KbAnswerOut,
     KbAnswerSentenceOut,
     KbChunkOut,
-    KbChunkPageMetaOut,
     KbChunkPageOut,
     KbCitationOut,
     KbDocType,
@@ -106,7 +104,6 @@ from services.kb.api.schemas.kb import (
     PipelineStepOut,
     ReviewCandidateEvidenceOut,
     ReviewCandidateOut,
-    ReviewCandidatePageMetaOut,
     ReviewCandidatePageOut,
     ReviewQueueBatchDecideIn,
     ReviewQueueBatchDecideOut,
@@ -155,6 +152,7 @@ from services.ontology.business.hierarchy_service import get_class_hierarchy
 from services.platform.deps import Principal, SessionDep, get_session_factory, require_scope
 from services.platform.errors import ErrorCode, GatewayError
 from services.platform.ports.model_port import ModelPort
+from services.platform.schemas import EmptyMeta, PageMeta
 
 if TYPE_CHECKING:  # 仅类型注解（运行时零 import——app.py 同款纪律）
     from fastapi import FastAPI
@@ -255,18 +253,19 @@ async def create_collection(body: CollectionCreateIn, principal: KbWriteDep, ses
     )
 
 
-@router.get("/collections", summary="知识库集合列表（R53 补齐：{code,message,data} 信封对齐 documents 列表）")
+@router.get("/collections", summary="知识库集合列表（api/01 §3.1 信封：{data, meta:{page,page_size,total}}）")
 async def list_collections(
     principal: KbReadDep,
     session: SessionDep,
-    offset: Annotated[int, Query(ge=0)] = 0,
-    limit: Annotated[int, Query(ge=1, le=200)] = 50,
-) -> CollectionListEnvelope:
-    """当前租户集合分页（created_at 降序；offset/limit 缺省 50 上限 200）。
+    page: Annotated[int, Query(ge=1)] = 1,
+    page_size: Annotated[int, Query(ge=1, le=200)] = 50,
+) -> CollectionListOut:
+    """当前租户集合分页（created_at 降序；page_size 缺省 50 上限 200 沿用现值）。
 
-    信封形态与 GET /kb/documents 同构（{code,message,data:{items,total,next_cursor,offset,
-    limit}}，前端 client apiFetchEnvelope 强信封解包）；空列表合法。租户 deny-by-default。
+    信封形态与 GET /kb/documents 同构（{data, meta}，api/01 §3.1；B1 批废止
+    {code,message,data} 旧信封）。空列表合法。租户 deny-by-default。
     """
+    offset = (page - 1) * page_size
     conds = [KbCollection.tenant_id == principal.tenant_id]
     total = (await session.execute(select(func.count()).select_from(KbCollection).where(*conds))).scalar_one()
     rows = (
@@ -276,7 +275,7 @@ async def list_collections(
                 .where(*conds)
                 .order_by(KbCollection.created_at.desc())
                 .offset(offset)
-                .limit(limit)
+                .limit(page_size)
             )
         )
         .scalars()
@@ -293,7 +292,7 @@ async def list_collections(
         )
         for row in rows
     ]
-    return CollectionListEnvelope(data=CollectionListData(items=items, total=int(total), offset=offset, limit=limit))
+    return CollectionListOut(data=items, meta=PageMeta(page=page, page_size=page_size, total=int(total)))
 
 
 # 摄取入口两层防御（docs/Agent/09 §2.1 工程问题 3「二进制健壮性」）：M2 唯一通道是 JSON
@@ -395,25 +394,27 @@ def _document_out(doc: Document, *, created: bool) -> DocumentOut:
     )
 
 
-@router.get("/documents", summary="文档列表（管理页；status/type/q 可选过滤 + offset/limit 分页）")
+@router.get("/documents", summary="文档列表（管理页；status/type/q 可选过滤 + page/page_size 分页）")
 async def list_documents(
     principal: KbReadDep,
     session: SessionDep,
     status_filter: Annotated[DocumentStatusQuery | None, Query(alias="status")] = None,
     type_filter: Annotated[KbDocType | None, Query(alias="type")] = None,
     q: Annotated[str | None, Query(max_length=128)] = None,
-    offset: Annotated[int, Query(ge=0)] = 0,
-    limit: Annotated[int, Query(ge=1, le=200)] = 50,
-) -> DocumentListEnvelope:
+    page: Annotated[int, Query(ge=1)] = 1,
+    page_size: Annotated[int, Query(ge=1, le=200)] = 50,
+) -> DocumentListOut:
     """当前有效文档分页（bi-temporal：valid_to IS NULL，最新优先），R51 联调补齐。
 
-    live 对账契约（2026-09-28）：① 前端 client apiFetchEnvelope 强信封解包 → 返回
-    {code,message,data:{items,total,next_cursor}}；② items=前端 KbDocument 全字段
+    契约（B1 批改定，api/01 §3.1）：① 信封 {data, meta:{page,page_size,total}}——废止
+    {code,message,data} 旧信封（A-5 证据端点）；② data items=前端 KbDocument 全字段
     （name/doc_type/size_bytes/chunk_count/status 四态/progress/job_id/error/updated_at/
     indexed_today）+ pipeline{step,total}/size/created_at/tier；③ ?status=（前端四态别名
     或后端八态原值）与 ?type=（五类文档类型）均为可选过滤；④ ?q= 名称模糊（title ILIKE，
-    LIKE 通配符转义防注入）+ ?limit=/?offset= 分页（缺省 50，上限 200）。空列表合法。
+    LIKE 通配符转义防注入）+ ?page=/?page_size= 分页（page_size 缺省 50，上限 200 沿用现值）。
+    空列表合法。
     """
+    offset = (page - 1) * page_size
     statuses: tuple[str, ...] | None = None
     if status_filter is not None:
         statuses = DOCUMENT_UI_STATUS_FILTER.get(status_filter, (status_filter,))
@@ -438,7 +439,7 @@ async def list_documents(
     docs = (
         (
             await session.execute(
-                select(Document).where(*conditions).order_by(Document.created_at.desc()).offset(offset).limit(limit)
+                select(Document).where(*conditions).order_by(Document.created_at.desc()).offset(offset).limit(page_size)
             )
         )
         .scalars()
@@ -448,7 +449,7 @@ async def list_documents(
     chunk_counts = await _chunk_counts_of(session, [doc.id for doc in docs])
     step_stats = await _step_stats_of(session, principal.tenant_id, [doc.id for doc in docs])
     items = [_document_item_of(doc, chunk_counts, step_stats) for doc in docs]
-    return DocumentListEnvelope(data=DocumentListData(items=items, total=total, offset=offset, limit=limit))
+    return DocumentListOut(data=items, meta=PageMeta(page=page, page_size=page_size, total=int(total)))
 
 
 async def _chunk_counts_of(session: AsyncSession, doc_ids: Sequence[uuid.UUID]) -> dict[uuid.UUID, int]:
@@ -527,7 +528,8 @@ async def get_document(document_id: uuid.UUID, principal: KbReadDep, session: Se
     step_stats = await _step_stats_of(session, principal.tenant_id, [document_id])
     item = _document_item_of(doc, chunk_counts, step_stats)
     return DocumentDetailEnvelope(
-        data=DocumentDetailData(**item.model_dump(), collection_id=doc.kb_collection_id, mime_type=doc.mime_type)
+        data=DocumentDetailData(**item.model_dump(), collection_id=doc.kb_collection_id, mime_type=doc.mime_type),
+        meta=EmptyMeta(),
     )
 
 
@@ -554,7 +556,7 @@ async def delete_document(document_id: uuid.UUID, principal: KbWriteDep, session
         )
     ).scalar_one_or_none()
     if doc is None or doc.valid_to is not None:  # 不存在 / 已墓碑 → 等价幂等未命中
-        return DocumentDeleteEnvelope(data=DocumentDeleteData(deleted=False))
+        return DocumentDeleteEnvelope(data=DocumentDeleteData(deleted=False), meta=EmptyMeta())
     chunk_count = (
         await session.execute(
             select(func.count())
@@ -568,25 +570,28 @@ async def delete_document(document_id: uuid.UUID, principal: KbWriteDep, session
     doc.valid_to = datetime.now(UTC)  # 封口即下线（检索三路 d.valid_to IS NULL 谓词即时生效）
     await session.commit()
     return DocumentDeleteEnvelope(
-        data=DocumentDeleteData(deleted=True, cascade=DocumentDeleteCascade(chunks=int(chunk_count)))
+        data=DocumentDeleteData(deleted=True, cascade=DocumentDeleteCascade(chunks=int(chunk_count))),
+        meta=EmptyMeta(),
     )
 
 
-@router.get("/documents/{document_id}/chunks", summary="分片列表（seq 升序；offset/limit 分页 + meta.total）")
+@router.get("/documents/{document_id}/chunks", summary="分片列表（seq 升序；page/page_size 分页 + meta.total）")
 async def list_document_chunks(
     document_id: uuid.UUID,
     principal: KbReadDep,
     session: SessionDep,
-    offset: Annotated[int, Query(ge=0)] = 0,
-    limit: Annotated[int, Query(ge=1, le=200)] = 50,
+    page: Annotated[int, Query(ge=1)] = 1,
+    page_size: Annotated[int, Query(ge=1, le=200)] = 50,
 ) -> KbChunkPageOut:
     """分片预览（api/01 §5.4 ★ 行，FR-KB-03）：仅当前有效分片（chunk.valid_to IS NULL），seq 升序。
 
+    信封 {data, meta:{page,page_size,total}}（api/01 §3.1，B1 批统一）；
     content=原文预览截断（≤500 字符；全文走文档原文）；span=命中高亮偏移（meta.span，指向原文
     [start, end)）；has_embedding=布尔（向量本体不回传；pgvector 列缺失恒 False=BM25-only 降级）。
     文档不存在/已墓碑 → 404（_load_document 统一口径）。
     """
     await _load_document(session, principal.tenant_id, document_id)  # 404 前置校验（含墓碑）
+    offset = (page - 1) * page_size
     conds = [
         DocumentChunk.tenant_id == principal.tenant_id,
         DocumentChunk.document_id == document_id,
@@ -596,7 +601,7 @@ async def list_document_chunks(
     rows = (
         (
             await session.execute(
-                select(DocumentChunk).where(*conds).order_by(DocumentChunk.seq).offset(offset).limit(limit)
+                select(DocumentChunk).where(*conds).order_by(DocumentChunk.seq).offset(offset).limit(page_size)
             )
         )
         .scalars()
@@ -620,7 +625,7 @@ async def list_document_chunks(
                 created_at=row.created_at,
             )
         )
-    return KbChunkPageOut(items=items, meta=KbChunkPageMetaOut(offset=offset, limit=limit, total=int(total)))
+    return KbChunkPageOut(data=items, meta=PageMeta(page=page, page_size=page_size, total=int(total)))
 
 
 @router.post(
@@ -885,9 +890,7 @@ async def search(body: KbSearchIn, principal: KbReadDep, request: Request, sessi
         # （vector_unavailable 等）一并透传，与非 agentic 分支及本端点 docstring 语义一致
         # （寒暄 skip 时回调不触发，此时仅静态路由理由；去重保序防双计 mode_downgraded:*）。
         degraded = mode_reason is not None or bool(last_inner_reasons)
-        degraded_reasons = list(
-            dict.fromkeys(([mode_reason] if mode_reason is not None else []) + last_inner_reasons)
-        )
+        degraded_reasons = list(dict.fromkeys(([mode_reason] if mode_reason is not None else []) + last_inner_reasons))
         channels = sorted({channel for hit in hits for channel in hit.channels})
         evidence = KbEvidenceOut(graph_paths=[])  # v1 边界：agentic 管线不回图路证据（trace 为解释面）
         answers: list[KbAnswerOut] = []  # v1 边界：抽取式摘要随完整档接入，不因纠错轮拼装误导
@@ -1157,11 +1160,15 @@ async def list_review_candidates(
     fact_type: Annotated[FactTypeFilter | None, Query()] = None,
     status_filter: Annotated[ReviewStatusFilter | None, Query(alias="status")] = None,  # 缺省=全部三态
     min_confidence: Annotated[float | None, Query(ge=0, le=1)] = None,  # confidence 下界（含）
-    offset: Annotated[int, Query(ge=0)] = 0,
-    limit: Annotated[int, Query(ge=1, le=200)] = 50,
+    page: Annotated[int, Query(ge=1)] = 1,
+    page_size: Annotated[int, Query(ge=1, le=200)] = 50,
 ) -> ReviewCandidatePageOut:
-    """P4 终审队列（api/01 §5.4 ★）：按 document_id（租户过滤）列出 kb_facts 候选。"""
+    """P4 终审队列（api/01 §5.4 ★）：按 document_id（租户过滤）列出 kb_facts 候选。
+
+    信封 {data, meta:{page,page_size,total}}（api/01 §3.1，B1 批统一）。
+    """
     await _load_document(session, principal.tenant_id, document_id)  # 404 前置校验
+    offset = (page - 1) * page_size
     conds = [KbFact.tenant_id == principal.tenant_id, KbFact.document_id == document_id]
     if fact_type is not None:
         conds.append(KbFact.fact_type == fact_type)
@@ -1178,15 +1185,15 @@ async def list_review_candidates(
                 # 同事务插入共享 now() 时间戳，id 作稳定游标（分页不重不漏）
                 .order_by(KbFact.created_at.desc(), KbFact.id)
                 .offset(offset)
-                .limit(limit)
+                .limit(page_size)
             )
         )
         .scalars()
         .all()
     )
     return ReviewCandidatePageOut(
-        items=[_candidate_out(row) for row in rows],
-        meta=ReviewCandidatePageMetaOut(offset=offset, limit=limit, total=int(total)),
+        data=[_candidate_out(row) for row in rows],
+        meta=PageMeta(page=page, page_size=page_size, total=int(total)),
     )
 
 

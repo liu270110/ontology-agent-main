@@ -28,6 +28,10 @@ class AgentRepository(Protocol):
 
     async def list(self, *, status: str | None = None, offset: int = 0, limit: int = 20) -> list[Agent]: ...
 
+    async def count(self, *, status: str | None = None) -> int:
+        """列表总数（api/01 §3.1 分页 meta.total；筛选条件与 list 同口径）。"""
+        ...
+
     async def get_adapter(self, adapter_id: UUID) -> AgentAdapterInfo | None:
         """适配器绑定行只读投影（详情/健康检查）；未命中返回 None。"""
         ...

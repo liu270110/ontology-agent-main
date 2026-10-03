@@ -30,6 +30,7 @@ from services.agent.api.schemas.task import (
 )
 from services.agent.domain.model.task import TaskError, TaskEvent
 from services.platform.errors import GatewayError
+from services.platform.schemas import PageMeta
 
 router = APIRouter(prefix="/tasks", tags=["tasks"])
 
@@ -47,25 +48,31 @@ _REPLAY_PAGE = 500  # 回放分页深取（PG 全量持久，无 4301 窗口语�
 _TAIL_MAX_S = 600.0  # SSE 尾随上限（客户端断线凭 Last-Event-ID 重连即续，防悬挂连接）
 
 
-@router.get("", summary="任务列表（按 session_id/status/type 过滤）")
+@router.get("", summary="任务列表（按 session_id/status/type 过滤；api/01 §3.1 信封）")
 async def list_tasks(
     principal: SessionReadDep,
     uow: UowDep,
     session_id: uuid.UUID | None = None,
     status_filter: Annotated[str | None, Query(alias="status")] = None,
     type_filter: Annotated[str | None, Query(alias="type")] = None,
-    offset: Annotated[int, Query(ge=0)] = 0,
-    limit: Annotated[int, Query(ge=1, le=100)] = 20,
+    page: Annotated[int, Query(ge=1)] = 1,
+    page_size: Annotated[int, Query(ge=1, le=100)] = 20,
 ) -> TaskListOut:
+    """偏移分页改 page/page_size（B1 批，api/01 §3.1；offset=(page-1)*page_size 内部换算）。"""
+    offset = (page - 1) * page_size
     async with uow.for_tenant(principal.tenant_id) as tx:
         items = await tx.tasks.list(
             session_id=session_id,
             status=status_filter,
             task_type=type_filter,
             offset=offset,
-            limit=limit,
+            limit=page_size,
         )
-    return TaskListOut(items=[task_from_domain(t) for t in items], offset=offset, limit=limit)
+        total = await tx.tasks.count(session_id=session_id, status=status_filter, task_type=type_filter)
+    return TaskListOut(
+        data=[task_from_domain(t) for t in items],
+        meta=PageMeta(page=page, page_size=page_size, total=total),
+    )
 
 
 @router.get("/{task_id}", summary="任务详情（状态 / 用量 / Run 历史）")

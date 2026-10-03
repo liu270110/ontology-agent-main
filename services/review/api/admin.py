@@ -14,9 +14,10 @@ review.api.*`` 豁免边且本批禁改 pyproject）——故本文件零 review
   表的同款先例——零 ORM import 边，列名漂移风险由 tests/review 集成用例锚定）；
 - 缺省口径：status 未指定时取 ``pending_review``（可决策待审队列；其余五态经 status 显式过滤）；
 - R50 联调修复（2026-09-28）：status 额外接受前端别名 pending/done（STATUS_QUERY_MAP 收敛
-  为工单六态 IN 过滤）；列表返回 {code,message,data:{items,total,offset,limit,next_cursor}}
-  信封（前端 client apiFetchEnvelope 强信封解包；5xx 根因=app.py 校验异常 handler 返回裸
-  dict 在 Starlette≥0.50 下 'dict' object is not callable，已改 JSONResponse）。
+  为工单六态 IN 过滤；5xx 根因=app.py 校验异常 handler 返回裸
+  dict 在 Starlette≥0.50 下 'dict' object is not callable，已改 JSONResponse）；
+- B1 批（2026-10-04）：列表信封改 api/01 §3.1 {data, meta:{page,page_size,total}}——
+  {code,message,data} 旧信封废止（联调缺陷台账 A-5 证据端点），page/page_size 参数生效。
 """
 
 from __future__ import annotations
@@ -30,11 +31,11 @@ from sqlalchemy import TextClause, bindparam, text
 from services.platform.deps import Principal, SessionDep, require_scope
 from services.platform.errors import GatewayError
 from services.platform.kernel import DomainError
+from services.platform.schemas import PageMeta
 from services.review.api.schemas.admin import (
     STATUS_QUERY_MAP,
+    AdminReviewListOut,
     AdminReviewOut,
-    AdminReviewPageData,
-    AdminReviewPageEnvelope,
     DecisionIn,
     DecisionOut,
     StatusQuery,
@@ -96,25 +97,26 @@ def _list_stmts(target_type: str | None, statuses: tuple[str, ...]) -> tuple[Tex
 # ---------------------------------------------------------------- 端点
 
 
-@router.get("", summary="审核工单列表（open 待审队列；target_type/status 过滤）")
+@router.get("", summary="审核工单列表（open 待审队列；target_type/status 过滤；api/01 §3.1 信封）")
 async def list_reviews(
     principal: ReviewReadDep,
     db: SessionDep,
     target_type: Annotated[TargetTypeFilter | None, Query()] = None,
     status_filter: Annotated[StatusQuery, Query(alias="status")] = _QUEUE_DEFAULT_STATUS,
-    offset: Annotated[int, Query(ge=0)] = 0,
-    limit: Annotated[int, Query(ge=1, le=100)] = 20,
-) -> AdminReviewPageEnvelope:
+    page: Annotated[int, Query(ge=1)] = 1,
+    page_size: Annotated[int, Query(ge=1, le=100)] = 20,
+) -> AdminReviewListOut:
     """分页列出本租户工单（最新优先）；审批工作台缺省看 pending_review。
 
-    R50 联调修复（2026-09-28）：① status 接受前端别名 pending/done；② 返回
-    {code,message,data:{items,total,offset,limit,next_cursor}} 信封（前端 client
-    apiFetchEnvelope 强信封解包，live 对账契约；空列表合法）。
+    R50 联调修复（2026-09-28）：status 接受前端别名 pending/done（别名面保留不变）。
+    B1 批（2026-10-04）：信封改 api/01 §3.1 {data, meta:{page,page_size,total}}——废止
+    {code,message,data} 旧信封（A-5 证据端点）；offset/limit 参数改 page/page_size。
     """
+    offset = (page - 1) * page_size
     statuses = STATUS_QUERY_MAP[status_filter]
     stmt, count_stmt, params = _list_stmts(target_type, statuses)
     base_params: dict[str, Any] = {"tenant_id": str(principal.tenant_id), "statuses": statuses, **params}
-    rows = (await db.execute(stmt, {**base_params, "limit": limit, "offset": offset})).mappings().all()
+    rows = (await db.execute(stmt, {**base_params, "limit": page_size, "offset": offset})).mappings().all()
     total = (await db.execute(count_stmt, base_params)).scalar_one()
     items = [
         AdminReviewOut(
@@ -130,7 +132,7 @@ async def list_reviews(
         )
         for row in rows
     ]
-    return AdminReviewPageEnvelope(data=AdminReviewPageData(items=items, total=total, offset=offset, limit=limit))
+    return AdminReviewListOut(data=items, meta=PageMeta(page=page, page_size=page_size, total=int(total)))
 
 
 @router.post(

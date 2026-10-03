@@ -12,6 +12,7 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict, Field
 
 from services.agent.domain.model.session import Message, Session, SessionStatus
+from services.platform.schemas import PageMeta
 
 
 class GroupMemberIn(BaseModel):
@@ -93,10 +94,11 @@ class SessionPatchIn(BaseModel):
 
 
 class SessionListOut(BaseModel):
+    """会话列表（api/01 §3.1 信封：{data, meta:{page,page_size,total}}，B1 批统一）。"""
+
     model_config = ConfigDict(extra="forbid")
-    items: list[SessionOut]
-    offset: int
-    limit: int
+    data: list[SessionOut]
+    meta: PageMeta
 
 
 class MessageOut(BaseModel):

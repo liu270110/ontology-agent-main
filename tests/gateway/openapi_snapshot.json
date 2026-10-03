@@ -1,6 +1,27 @@
 {
   "components": {
     "schemas": {
+      "AdminReviewListOut": {
+        "additionalProperties": false,
+        "description": "审核工单列表（api/01 §3.1 信封：{data, meta:{page,page_size,total}}，B1 批统一——\n原 {code,message,data:{items,total,offset,limit,next_cursor}} 旧信封废止，A-5 证据端点；\nR50 前端别名 pending/done 的 status 过滤面保留不变）。",
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/AdminReviewOut"
+            },
+            "title": "Data",
+            "type": "array"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/PageMeta"
+          }
+        },
+        "required": [
+          "meta"
+        ],
+        "title": "AdminReviewListOut",
+        "type": "object"
+      },
       "AdminReviewOut": {
         "additionalProperties": false,
         "description": "审核工单条目（admin 队列视图）。",
@@ -88,71 +109,6 @@
           "created_at"
         ],
         "title": "AdminReviewOut",
-        "type": "object"
-      },
-      "AdminReviewPageData": {
-        "additionalProperties": false,
-        "description": "工单分页 data 面（R50 联调对齐前端 listReviews：{items,next_cursor} + total/offset/limit）。",
-        "properties": {
-          "items": {
-            "items": {
-              "$ref": "#/components/schemas/AdminReviewOut"
-            },
-            "title": "Items",
-            "type": "array"
-          },
-          "limit": {
-            "default": 20,
-            "title": "Limit",
-            "type": "integer"
-          },
-          "next_cursor": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Next Cursor"
-          },
-          "offset": {
-            "default": 0,
-            "title": "Offset",
-            "type": "integer"
-          },
-          "total": {
-            "default": 0,
-            "title": "Total",
-            "type": "integer"
-          }
-        },
-        "title": "AdminReviewPageData",
-        "type": "object"
-      },
-      "AdminReviewPageEnvelope": {
-        "additionalProperties": false,
-        "description": "列表成功信封（live 对账口径：{code,message,data}；api/01 §3.1 反例注记与此处 live\n客户端强信封解包并存，本端点按 live 前端 client 契约返回信封——见 R50 交付报告）。",
-        "properties": {
-          "code": {
-            "default": 0,
-            "title": "Code",
-            "type": "integer"
-          },
-          "data": {
-            "$ref": "#/components/schemas/AdminReviewPageData"
-          },
-          "message": {
-            "default": "ok",
-            "title": "Message",
-            "type": "string"
-          }
-        },
-        "required": [
-          "data"
-        ],
-        "title": "AdminReviewPageEnvelope",
         "type": "object"
       },
       "AgentAdapterOut": {
@@ -338,27 +294,22 @@
       },
       "AgentListOut": {
         "additionalProperties": false,
+        "description": "agent 列表（api/01 §3.1 信封：{data, meta:{page,page_size,total}}，B1 批统一）。",
         "properties": {
-          "items": {
+          "data": {
             "items": {
               "$ref": "#/components/schemas/AgentOut"
             },
-            "title": "Items",
+            "title": "Data",
             "type": "array"
           },
-          "limit": {
-            "title": "Limit",
-            "type": "integer"
-          },
-          "offset": {
-            "title": "Offset",
-            "type": "integer"
+          "meta": {
+            "$ref": "#/components/schemas/PageMeta"
           }
         },
         "required": [
-          "items",
-          "offset",
-          "limit"
+          "data",
+          "meta"
         ],
         "title": "AgentListOut",
         "type": "object"
@@ -1208,69 +1159,25 @@
         "title": "CollectionCreateIn",
         "type": "object"
       },
-      "CollectionListData": {
+      "CollectionListOut": {
         "additionalProperties": false,
-        "description": "集合列表 data 面（信封解包后形态；与 DocumentListData 同构：{items,total,next_cursor}\n+ offset/limit，R53 补齐 GET /kb/collections，docs/Agent/09 §2.1 工程问题 4 信封漂移）。",
+        "description": "集合列表（api/01 §3.1 信封：{data, meta:{page,page_size,total}}，B1 批统一——\n原 {code,message,data} 旧信封废止）。",
         "properties": {
-          "items": {
+          "data": {
             "items": {
               "$ref": "#/components/schemas/CollectionOut"
             },
-            "title": "Items",
+            "title": "Data",
             "type": "array"
           },
-          "limit": {
-            "default": 50,
-            "title": "Limit",
-            "type": "integer"
-          },
-          "next_cursor": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Next Cursor"
-          },
-          "offset": {
-            "default": 0,
-            "title": "Offset",
-            "type": "integer"
-          },
-          "total": {
-            "default": 0,
-            "title": "Total",
-            "type": "integer"
-          }
-        },
-        "title": "CollectionListData",
-        "type": "object"
-      },
-      "CollectionListEnvelope": {
-        "additionalProperties": false,
-        "description": "集合列表成功信封（与 DocumentListEnvelope 同构：{code,message,data}，前端\napiFetchEnvelope 强信封解包口径）。",
-        "properties": {
-          "code": {
-            "default": 0,
-            "title": "Code",
-            "type": "integer"
-          },
-          "data": {
-            "$ref": "#/components/schemas/CollectionListData"
-          },
-          "message": {
-            "default": "ok",
-            "title": "Message",
-            "type": "string"
+          "meta": {
+            "$ref": "#/components/schemas/PageMeta"
           }
         },
         "required": [
-          "data"
+          "meta"
         ],
-        "title": "CollectionListEnvelope",
+        "title": "CollectionListOut",
         "type": "object"
       },
       "CollectionOut": {
@@ -1592,20 +1499,13 @@
       },
       "DocumentDeleteEnvelope": {
         "additionalProperties": false,
-        "description": "删除成功信封（R17-b：恒 200，deleted 区分命中/幂等未命中）。",
+        "description": "删除成功信封（R17-b 恒 200 口径保留，包裹形态改契约 {data, meta}——deleted 区分\n命中/幂等未命中；旧 {code,message,data} 信封废止）。",
         "properties": {
-          "code": {
-            "default": 0,
-            "title": "Code",
-            "type": "integer"
-          },
           "data": {
             "$ref": "#/components/schemas/DocumentDeleteData"
           },
-          "message": {
-            "default": "ok",
-            "title": "Message",
-            "type": "string"
+          "meta": {
+            "$ref": "#/components/schemas/EmptyMeta"
           }
         },
         "required": [
@@ -1757,91 +1657,19 @@
       },
       "DocumentDetailEnvelope": {
         "additionalProperties": false,
-        "description": "详情成功信封（R17-a：同列表信封口径，前端 apiFetchEnvelope 强信封解包）。",
+        "description": "单文档详情（api/01 §3.1 非列表包裹 {data, meta}，meta=空对象；旧 {code,message,data} 信封废止）。",
         "properties": {
-          "code": {
-            "default": 0,
-            "title": "Code",
-            "type": "integer"
-          },
           "data": {
             "$ref": "#/components/schemas/DocumentDetailData"
           },
-          "message": {
-            "default": "ok",
-            "title": "Message",
-            "type": "string"
+          "meta": {
+            "$ref": "#/components/schemas/EmptyMeta"
           }
         },
         "required": [
           "data"
         ],
         "title": "DocumentDetailEnvelope",
-        "type": "object"
-      },
-      "DocumentListData": {
-        "additionalProperties": false,
-        "description": "列表 data 面（信封解包后形态：{items,total,next_cursor} + offset/limit）。",
-        "properties": {
-          "items": {
-            "items": {
-              "$ref": "#/components/schemas/DocumentListItem"
-            },
-            "title": "Items",
-            "type": "array"
-          },
-          "limit": {
-            "default": 50,
-            "title": "Limit",
-            "type": "integer"
-          },
-          "next_cursor": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Next Cursor"
-          },
-          "offset": {
-            "default": 0,
-            "title": "Offset",
-            "type": "integer"
-          },
-          "total": {
-            "default": 0,
-            "title": "Total",
-            "type": "integer"
-          }
-        },
-        "title": "DocumentListData",
-        "type": "object"
-      },
-      "DocumentListEnvelope": {
-        "additionalProperties": false,
-        "description": "列表成功信封（live 对账口径：前端 client apiFetchEnvelope 强信封解包——同 R50 注）。",
-        "properties": {
-          "code": {
-            "default": 0,
-            "title": "Code",
-            "type": "integer"
-          },
-          "data": {
-            "$ref": "#/components/schemas/DocumentListData"
-          },
-          "message": {
-            "default": "ok",
-            "title": "Message",
-            "type": "string"
-          }
-        },
-        "required": [
-          "data"
-        ],
-        "title": "DocumentListEnvelope",
         "type": "object"
       },
       "DocumentListItem": {
@@ -1968,6 +1796,27 @@
         "title": "DocumentListItem",
         "type": "object"
       },
+      "DocumentListOut": {
+        "additionalProperties": false,
+        "description": "文档列表（api/01 §3.1 信封：{data, meta:{page,page_size,total}}，B1 批统一——\n原 {code,message,data:{items,total,next_cursor,offset,limit}} 旧信封废止，A-5 证据端点）。",
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/DocumentListItem"
+            },
+            "title": "Data",
+            "type": "array"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/PageMeta"
+          }
+        },
+        "required": [
+          "meta"
+        ],
+        "title": "DocumentListOut",
+        "type": "object"
+      },
       "DocumentOut": {
         "additionalProperties": false,
         "properties": {
@@ -2076,6 +1925,13 @@
           }
         },
         "title": "ElementDiffOut",
+        "type": "object"
+      },
+      "EmptyMeta": {
+        "additionalProperties": false,
+        "description": "非列表响应的空 meta（api/01 §3.1「meta 可为空对象」；序列化恒 {}）。",
+        "properties": {},
+        "title": "EmptyMeta",
         "type": "object"
       },
       "FactCategory": {
@@ -2988,43 +2844,19 @@
         "title": "KbChunkOut",
         "type": "object"
       },
-      "KbChunkPageMetaOut": {
-        "additionalProperties": false,
-        "description": "分片分页 meta（api/01 §3.1 meta 惯例；offset 分页）。",
-        "properties": {
-          "limit": {
-            "title": "Limit",
-            "type": "integer"
-          },
-          "offset": {
-            "title": "Offset",
-            "type": "integer"
-          },
-          "total": {
-            "title": "Total",
-            "type": "integer"
-          }
-        },
-        "required": [
-          "offset",
-          "limit",
-          "total"
-        ],
-        "title": "KbChunkPageMetaOut",
-        "type": "object"
-      },
       "KbChunkPageOut": {
         "additionalProperties": false,
+        "description": "分片列表（api/01 §3.1 信封：{data, meta:{page,page_size,total}}，B1 批统一）。",
         "properties": {
-          "items": {
+          "data": {
             "items": {
               "$ref": "#/components/schemas/KbChunkOut"
             },
-            "title": "Items",
+            "title": "Data",
             "type": "array"
           },
           "meta": {
-            "$ref": "#/components/schemas/KbChunkPageMetaOut"
+            "$ref": "#/components/schemas/PageMeta"
           }
         },
         "required": [
@@ -4283,6 +4115,34 @@
           "data_graph"
         ],
         "title": "OntologyValidateIn",
+        "type": "object"
+      },
+      "PageMeta": {
+        "additionalProperties": false,
+        "description": "偏移分页 meta（api/01 §3.1：page≥1，page_size 上限随端点既有值）。",
+        "properties": {
+          "page": {
+            "minimum": 1.0,
+            "title": "Page",
+            "type": "integer"
+          },
+          "page_size": {
+            "minimum": 1.0,
+            "title": "Page Size",
+            "type": "integer"
+          },
+          "total": {
+            "minimum": 0.0,
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "page",
+          "page_size",
+          "total"
+        ],
+        "title": "PageMeta",
         "type": "object"
       },
       "PipelineProgressOut": {
@@ -5582,47 +5442,23 @@
         "title": "ReviewCandidateOut",
         "type": "object"
       },
-      "ReviewCandidatePageMetaOut": {
-        "additionalProperties": false,
-        "description": "分页 meta（api/01 §3.1 meta 惯例；offset 分页）。",
-        "properties": {
-          "limit": {
-            "title": "Limit",
-            "type": "integer"
-          },
-          "offset": {
-            "title": "Offset",
-            "type": "integer"
-          },
-          "total": {
-            "title": "Total",
-            "type": "integer"
-          }
-        },
-        "required": [
-          "offset",
-          "limit",
-          "total"
-        ],
-        "title": "ReviewCandidatePageMetaOut",
-        "type": "object"
-      },
       "ReviewCandidatePageOut": {
         "additionalProperties": false,
+        "description": "终审候选列表（api/01 §3.1 信封：{data, meta:{page,page_size,total}}，B1 批统一）。",
         "properties": {
-          "items": {
+          "data": {
             "items": {
               "$ref": "#/components/schemas/ReviewCandidateOut"
             },
-            "title": "Items",
+            "title": "Data",
             "type": "array"
           },
           "meta": {
-            "$ref": "#/components/schemas/ReviewCandidatePageMetaOut"
+            "$ref": "#/components/schemas/PageMeta"
           }
         },
         "required": [
-          "items",
+          "data",
           "meta"
         ],
         "title": "ReviewCandidatePageOut",
@@ -6085,27 +5921,22 @@
       },
       "SessionListOut": {
         "additionalProperties": false,
+        "description": "会话列表（api/01 §3.1 信封：{data, meta:{page,page_size,total}}，B1 批统一）。",
         "properties": {
-          "items": {
+          "data": {
             "items": {
               "$ref": "#/components/schemas/SessionOut"
             },
-            "title": "Items",
+            "title": "Data",
             "type": "array"
           },
-          "limit": {
-            "title": "Limit",
-            "type": "integer"
-          },
-          "offset": {
-            "title": "Offset",
-            "type": "integer"
+          "meta": {
+            "$ref": "#/components/schemas/PageMeta"
           }
         },
         "required": [
-          "items",
-          "offset",
-          "limit"
+          "data",
+          "meta"
         ],
         "title": "SessionListOut",
         "type": "object"
@@ -6403,6 +6234,18 @@
             "title": "Attempt Count",
             "type": "integer"
           },
+          "created_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
           "error": {
             "anyOf": [
               {
@@ -6480,27 +6323,22 @@
       },
       "TaskListOut": {
         "additionalProperties": false,
+        "description": "任务列表（api/01 §3.1 信封：{data, meta:{page,page_size,total}}，B1 批统一）。",
         "properties": {
-          "items": {
+          "data": {
             "items": {
               "$ref": "#/components/schemas/TaskOut"
             },
-            "title": "Items",
+            "title": "Data",
             "type": "array"
           },
-          "limit": {
-            "title": "Limit",
-            "type": "integer"
-          },
-          "offset": {
-            "title": "Offset",
-            "type": "integer"
+          "meta": {
+            "$ref": "#/components/schemas/PageMeta"
           }
         },
         "required": [
-          "items",
-          "offset",
-          "limit"
+          "data",
+          "meta"
         ],
         "title": "TaskListOut",
         "type": "object"
@@ -6535,6 +6373,18 @@
           "attempt_count": {
             "title": "Attempt Count",
             "type": "integer"
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
           },
           "id": {
             "format": "uuid",
@@ -6950,7 +6800,7 @@
   "paths": {
     "/api/v1/admin/reviews": {
       "get": {
-        "description": "分页列出本租户工单（最新优先）；审批工作台缺省看 pending_review。\n\nR50 联调修复（2026-09-28）：① status 接受前端别名 pending/done；② 返回\n{code,message,data:{items,total,offset,limit,next_cursor}} 信封（前端 client\napiFetchEnvelope 强信封解包，live 对账契约；空列表合法）。",
+        "description": "分页列出本租户工单（最新优先）；审批工作台缺省看 pending_review。\n\nR50 联调修复（2026-09-28）：status 接受前端别名 pending/done（别名面保留不变）。\nB1 批（2026-10-04）：信封改 api/01 §3.1 {data, meta:{page,page_size,total}}——废止\n{code,message,data} 旧信封（A-5 证据端点）；offset/limit 参数改 page/page_size。",
         "operationId": "list_reviews_api_v1_admin_reviews_get",
         "parameters": [
           {
@@ -6999,24 +6849,24 @@
           },
           {
             "in": "query",
-            "name": "offset",
+            "name": "page",
             "required": false,
             "schema": {
-              "default": 0,
-              "minimum": 0,
-              "title": "Offset",
+              "default": 1,
+              "minimum": 1,
+              "title": "Page",
               "type": "integer"
             }
           },
           {
             "in": "query",
-            "name": "limit",
+            "name": "page_size",
             "required": false,
             "schema": {
               "default": 20,
               "maximum": 100,
               "minimum": 1,
-              "title": "Limit",
+              "title": "Page Size",
               "type": "integer"
             }
           }
@@ -7026,7 +6876,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/AdminReviewPageEnvelope"
+                  "$ref": "#/components/schemas/AdminReviewListOut"
                 }
               }
             },
@@ -7043,7 +6893,7 @@
             "description": "Validation Error"
           }
         },
-        "summary": "审核工单列表（open 待审队列；target_type/status 过滤）",
+        "summary": "审核工单列表（open 待审队列；target_type/status 过滤；api/01 §3.1 信封）",
         "tags": [
           "admin"
         ]
@@ -7300,6 +7150,7 @@
     },
     "/api/v1/agents": {
       "get": {
+        "description": "偏移分页改 page/page_size（B1 批，api/01 §3.1；offset=(page-1)*page_size 内部换算）。",
         "operationId": "list_agents_api_v1_agents_get",
         "parameters": [
           {
@@ -7321,24 +7172,24 @@
           },
           {
             "in": "query",
-            "name": "offset",
+            "name": "page",
             "required": false,
             "schema": {
-              "default": 0,
-              "minimum": 0,
-              "title": "Offset",
+              "default": 1,
+              "minimum": 1,
+              "title": "Page",
               "type": "integer"
             }
           },
           {
             "in": "query",
-            "name": "limit",
+            "name": "page_size",
             "required": false,
             "schema": {
               "default": 20,
               "maximum": 100,
               "minimum": 1,
-              "title": "Limit",
+              "title": "Page Size",
               "type": "integer"
             }
           }
@@ -7365,7 +7216,7 @@
             "description": "Validation Error"
           }
         },
-        "summary": "租户内 agent 列表（分页/状态筛选）",
+        "summary": "租户内 agent 列表（分页/状态筛选；api/01 §3.1 信封）",
         "tags": [
           "agents"
         ]
@@ -7975,29 +7826,29 @@
     },
     "/api/v1/kb/collections": {
       "get": {
-        "description": "当前租户集合分页（created_at 降序；offset/limit 缺省 50 上限 200）。\n\n信封形态与 GET /kb/documents 同构（{code,message,data:{items,total,next_cursor,offset,\nlimit}}，前端 client apiFetchEnvelope 强信封解包）；空列表合法。租户 deny-by-default。",
+        "description": "当前租户集合分页（created_at 降序；page_size 缺省 50 上限 200 沿用现值）。\n\n信封形态与 GET /kb/documents 同构（{data, meta}，api/01 §3.1；B1 批废止\n{code,message,data} 旧信封）。空列表合法。租户 deny-by-default。",
         "operationId": "list_collections_api_v1_kb_collections_get",
         "parameters": [
           {
             "in": "query",
-            "name": "offset",
+            "name": "page",
             "required": false,
             "schema": {
-              "default": 0,
-              "minimum": 0,
-              "title": "Offset",
+              "default": 1,
+              "minimum": 1,
+              "title": "Page",
               "type": "integer"
             }
           },
           {
             "in": "query",
-            "name": "limit",
+            "name": "page_size",
             "required": false,
             "schema": {
               "default": 50,
               "maximum": 200,
               "minimum": 1,
-              "title": "Limit",
+              "title": "Page Size",
               "type": "integer"
             }
           }
@@ -8007,7 +7858,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/CollectionListEnvelope"
+                  "$ref": "#/components/schemas/CollectionListOut"
                 }
               }
             },
@@ -8024,7 +7875,7 @@
             "description": "Validation Error"
           }
         },
-        "summary": "知识库集合列表（R53 补齐：{code,message,data} 信封对齐 documents 列表）",
+        "summary": "知识库集合列表（api/01 §3.1 信封：{data, meta:{page,page_size,total}}）",
         "tags": [
           "knowledge-base"
         ]
@@ -8071,7 +7922,7 @@
     },
     "/api/v1/kb/documents": {
       "get": {
-        "description": "当前有效文档分页（bi-temporal：valid_to IS NULL，最新优先），R51 联调补齐。\n\nlive 对账契约（2026-09-28）：① 前端 client apiFetchEnvelope 强信封解包 → 返回\n{code,message,data:{items,total,next_cursor}}；② items=前端 KbDocument 全字段\n（name/doc_type/size_bytes/chunk_count/status 四态/progress/job_id/error/updated_at/\nindexed_today）+ pipeline{step,total}/size/created_at/tier；③ ?status=（前端四态别名\n或后端八态原值）与 ?type=（五类文档类型）均为可选过滤；④ ?q= 名称模糊（title ILIKE，\nLIKE 通配符转义防注入）+ ?limit=/?offset= 分页（缺省 50，上限 200）。空列表合法。",
+        "description": "当前有效文档分页（bi-temporal：valid_to IS NULL，最新优先），R51 联调补齐。\n\n契约（B1 批改定，api/01 §3.1）：① 信封 {data, meta:{page,page_size,total}}——废止\n{code,message,data} 旧信封（A-5 证据端点）；② data items=前端 KbDocument 全字段\n（name/doc_type/size_bytes/chunk_count/status 四态/progress/job_id/error/updated_at/\nindexed_today）+ pipeline{step,total}/size/created_at/tier；③ ?status=（前端四态别名\n或后端八态原值）与 ?type=（五类文档类型）均为可选过滤；④ ?q= 名称模糊（title ILIKE，\nLIKE 通配符转义防注入）+ ?page=/?page_size= 分页（page_size 缺省 50，上限 200 沿用现值）。\n空列表合法。",
         "operationId": "list_documents_api_v1_kb_documents_get",
         "parameters": [
           {
@@ -8144,24 +7995,24 @@
           },
           {
             "in": "query",
-            "name": "offset",
+            "name": "page",
             "required": false,
             "schema": {
-              "default": 0,
-              "minimum": 0,
-              "title": "Offset",
+              "default": 1,
+              "minimum": 1,
+              "title": "Page",
               "type": "integer"
             }
           },
           {
             "in": "query",
-            "name": "limit",
+            "name": "page_size",
             "required": false,
             "schema": {
               "default": 50,
               "maximum": 200,
               "minimum": 1,
-              "title": "Limit",
+              "title": "Page Size",
               "type": "integer"
             }
           }
@@ -8171,7 +8022,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/DocumentListEnvelope"
+                  "$ref": "#/components/schemas/DocumentListOut"
                 }
               }
             },
@@ -8188,7 +8039,7 @@
             "description": "Validation Error"
           }
         },
-        "summary": "文档列表（管理页；status/type/q 可选过滤 + offset/limit 分页）",
+        "summary": "文档列表（管理页；status/type/q 可选过滤 + page/page_size 分页）",
         "tags": [
           "knowledge-base"
         ]
@@ -8322,7 +8173,7 @@
     },
     "/api/v1/kb/documents/{document_id}/chunks": {
       "get": {
-        "description": "分片预览（api/01 §5.4 ★ 行，FR-KB-03）：仅当前有效分片（chunk.valid_to IS NULL），seq 升序。\n\ncontent=原文预览截断（≤500 字符；全文走文档原文）；span=命中高亮偏移（meta.span，指向原文\n[start, end)）；has_embedding=布尔（向量本体不回传；pgvector 列缺失恒 False=BM25-only 降级）。\n文档不存在/已墓碑 → 404（_load_document 统一口径）。",
+        "description": "分片预览（api/01 §5.4 ★ 行，FR-KB-03）：仅当前有效分片（chunk.valid_to IS NULL），seq 升序。\n\n信封 {data, meta:{page,page_size,total}}（api/01 §3.1，B1 批统一）；\ncontent=原文预览截断（≤500 字符；全文走文档原文）；span=命中高亮偏移（meta.span，指向原文\n[start, end)）；has_embedding=布尔（向量本体不回传；pgvector 列缺失恒 False=BM25-only 降级）。\n文档不存在/已墓碑 → 404（_load_document 统一口径）。",
         "operationId": "list_document_chunks_api_v1_kb_documents__document_id__chunks_get",
         "parameters": [
           {
@@ -8337,24 +8188,24 @@
           },
           {
             "in": "query",
-            "name": "offset",
+            "name": "page",
             "required": false,
             "schema": {
-              "default": 0,
-              "minimum": 0,
-              "title": "Offset",
+              "default": 1,
+              "minimum": 1,
+              "title": "Page",
               "type": "integer"
             }
           },
           {
             "in": "query",
-            "name": "limit",
+            "name": "page_size",
             "required": false,
             "schema": {
               "default": 50,
               "maximum": 200,
               "minimum": 1,
-              "title": "Limit",
+              "title": "Page Size",
               "type": "integer"
             }
           }
@@ -8381,7 +8232,7 @@
             "description": "Validation Error"
           }
         },
-        "summary": "分片列表（seq 升序；offset/limit 分页 + meta.total）",
+        "summary": "分片列表（seq 升序；page/page_size 分页 + meta.total）",
         "tags": [
           "knowledge-base"
         ]
@@ -8574,7 +8425,7 @@
     },
     "/api/v1/kb/documents/{document_id}/review/candidates": {
       "get": {
-        "description": "P4 终审队列（api/01 §5.4 ★）：按 document_id（租户过滤）列出 kb_facts 候选。",
+        "description": "P4 终审队列（api/01 §5.4 ★）：按 document_id（租户过滤）列出 kb_facts 候选。\n\n信封 {data, meta:{page,page_size,total}}（api/01 §3.1，B1 批统一）。",
         "operationId": "list_review_candidates_api_v1_kb_documents__document_id__review_candidates_get",
         "parameters": [
           {
@@ -8650,24 +8501,24 @@
           },
           {
             "in": "query",
-            "name": "offset",
+            "name": "page",
             "required": false,
             "schema": {
-              "default": 0,
-              "minimum": 0,
-              "title": "Offset",
+              "default": 1,
+              "minimum": 1,
+              "title": "Page",
               "type": "integer"
             }
           },
           {
             "in": "query",
-            "name": "limit",
+            "name": "page_size",
             "required": false,
             "schema": {
               "default": 50,
               "maximum": 200,
               "minimum": 1,
-              "title": "Limit",
+              "title": "Page Size",
               "type": "integer"
             }
           }
@@ -12218,28 +12069,29 @@
     },
     "/api/v1/sessions": {
       "get": {
+        "description": "偏移分页改 page/page_size（B1 批，api/01 §3.1；offset=(page-1)*page_size 内部换算）。",
         "operationId": "list_sessions_api_v1_sessions_get",
         "parameters": [
           {
             "in": "query",
-            "name": "offset",
+            "name": "page",
             "required": false,
             "schema": {
-              "default": 0,
-              "minimum": 0,
-              "title": "Offset",
+              "default": 1,
+              "minimum": 1,
+              "title": "Page",
               "type": "integer"
             }
           },
           {
             "in": "query",
-            "name": "limit",
+            "name": "page_size",
             "required": false,
             "schema": {
               "default": 20,
               "maximum": 100,
               "minimum": 1,
-              "title": "Limit",
+              "title": "Page Size",
               "type": "integer"
             }
           },
@@ -12283,7 +12135,7 @@
             "description": "Validation Error"
           }
         },
-        "summary": "当前用户会话列表",
+        "summary": "当前用户会话列表（api/01 §3.1 信封）",
         "tags": [
           "sessions"
         ]
@@ -12851,6 +12703,7 @@
     },
     "/api/v1/tasks": {
       "get": {
+        "description": "偏移分页改 page/page_size（B1 批，api/01 §3.1；offset=(page-1)*page_size 内部换算）。",
         "operationId": "list_tasks_api_v1_tasks_get",
         "parameters": [
           {
@@ -12904,24 +12757,24 @@
           },
           {
             "in": "query",
-            "name": "offset",
+            "name": "page",
             "required": false,
             "schema": {
-              "default": 0,
-              "minimum": 0,
-              "title": "Offset",
+              "default": 1,
+              "minimum": 1,
+              "title": "Page",
               "type": "integer"
             }
           },
           {
             "in": "query",
-            "name": "limit",
+            "name": "page_size",
             "required": false,
             "schema": {
               "default": 20,
               "maximum": 100,
               "minimum": 1,
-              "title": "Limit",
+              "title": "Page Size",
               "type": "integer"
             }
           }
@@ -12948,7 +12801,7 @@
             "description": "Validation Error"
           }
         },
-        "summary": "任务列表（按 session_id/status/type 过滤）",
+        "summary": "任务列表（按 session_id/status/type 过滤；api/01 §3.1 信封）",
         "tags": [
           "tasks"
         ]

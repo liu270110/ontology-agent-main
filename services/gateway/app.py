@@ -70,7 +70,7 @@ from services.kb.api.kb import router as kb_router
 from services.memory.api.memory import router as memory_router
 from services.ontology.api.ontology import router as ontology_router
 from services.platform.db.uow import AsyncUnitOfWork
-from services.platform.deps import dispose_gateways, get_engine
+from services.platform.deps import dispose_gateways, get_engine, get_redis
 from services.platform.errors import error_response
 from services.plugin.api.plugins import router as plugin_router
 from services.review.api.admin import router as review_admin_router
@@ -295,6 +295,37 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         logger.info(
             "llm_calls audit buffer started: batch=%d interval=%ss", _LLM_AUDIT_MAX_BATCH, _LLM_AUDIT_FLUSH_INTERVAL_S
         )
+    # B7 接线（联调缺陷台账 2026-10-04）：memory records 权威链路（memory §5/06 篇 §6）——
+    # MemoryService / ConsolidationPipeline / PgMemoryRepository 装配挂 app.state（参数面同
+    # memory.business.tasks.build_dependencies 进程装配先例），memory 路由依赖自 app.state
+    # 读取（此前 get_memory_service/get_pipeline 恒 503「not wired」即缺本段）。fail-soft 同
+    # relay/worker 先例：装配失败不阻塞启动，records 族端点以 503+5004 明示未装配。
+    try:
+        from services.memory.business.consolidation_pipeline import ConsolidationPipeline
+        from services.memory.business.memory_service import MemoryService
+        from services.memory.data.cache.l1_redis import L1SessionStore
+        from services.memory.data.repositories.records_repo import PgMemoryRepository
+        from services.platform.llm.ollama_json import get_llm_client
+
+        memory_repo = PgMemoryRepository(get_session_factory(s))
+        app.state.memory_repo = memory_repo
+        app.state.memory_service = MemoryService(
+            repo=memory_repo,
+            l1=L1SessionStore(get_redis(s), ttl_seconds=s.memory_l1_ttl_seconds),
+            top_k=s.memory_search_top_k,
+            rrf_k=s.memory_rrf_k,
+            half_life_days=s.memory_decay_half_life_days,
+        )
+        app.state.consolidation_pipeline = ConsolidationPipeline(
+            repo=memory_repo,
+            review_repo=memory_repo,
+            llm=get_llm_client(s),
+            llm_model=s.llm_model,
+            confidence_threshold=s.memory_l2_confidence_threshold,
+        )
+        logger.info("memory service/consolidation pipeline wired onto app.state")
+    except Exception:  # noqa: BLE001 ——装配失败应用继续（fail-soft，路由侧 503 明示）
+        logger.exception("memory service/pipeline 装配失败（应用以未装配继续，records 族端点 503）")
     logger.info("gateway started: version=%s profile=%s api_prefix=%s", VERSION, s.deploy_profile, s.api_prefix)
     # TODO(M3)：初始化 L7 客户端（MCP 网关/插件运行时/OTel）；readyz 聚合探活已由
     # services/gateway/health.py 承接（PG/Redis/MinIO，复用本 lifespan 预热的引擎/Redis 单例）

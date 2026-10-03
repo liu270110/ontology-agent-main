@@ -394,3 +394,38 @@ def test_settle_invalid_user_header_ignored(wired):
 def test_promotion_to_layer_2_rejected_422(client):
     resp = client.post("/api/v1/memory/promotions", headers=_h(), json={"record_id": str(uuid.uuid4()), "to_layer": 2})
     assert resp.status_code == 422
+
+
+def test_b7_lifespan装配_state命中_未装配503统一错误体():
+    """B7（联调缺陷台账 2026-10-04）：memory records 族依赖改读 app.state——
+
+    - 装配态（lifespan 挂 memory_service/memory_repo/consolidation_pipeline，测试以 stub 模拟
+      同名属性）：svc/pipe 依赖命中装配实例，端点正常 200（无 dependency_overrides）；
+    - 未装配态（无 lifespan 的裸 app）：503+四字段错误体（code=5004，同审批/候选端口检查
+      先例），不再是裸 HTTPException {"detail": "... not wired"}。
+    """
+    app = create_app()
+    app.state.memory_service = StubService()
+    app.state.memory_repo = StubRepo()
+    app.state.consolidation_pipeline = StubPipeline()
+    client = TestClient(app)
+    resp = client.post(
+        "/api/v1/memory/records",
+        headers=_h(),
+        json={"layer": 2, "record_type": "mem:FactClaim", "content": "A 系统负责人是张三", "confidence": 0.8},
+    )
+    assert resp.status_code == 200 and resp.json()["data"]["state"] == "active"  # svc 命中 app.state
+    resp = client.get("/api/v1/memory/reviews", headers=_h())
+    assert resp.status_code == 200 and len(resp.json()["data"]) == 1  # pipe 依赖命中 (pipeline, repo)
+
+    bare = TestClient(create_app())
+    resp = bare.get("/api/v1/memory/reviews", headers=_h())
+    assert resp.status_code == 503
+    body = resp.json()
+    assert body["code"] == 5004 and "consolidation pipeline" in body["message"] and "trace_id" in body
+    resp = bare.post(
+        "/api/v1/memory/records",
+        headers=_h(),
+        json={"layer": 2, "record_type": "mem:FactClaim", "content": "x", "confidence": 0.8},
+    )
+    assert resp.status_code == 503 and resp.json()["code"] == 5004 and "memory service" in resp.json()["message"]

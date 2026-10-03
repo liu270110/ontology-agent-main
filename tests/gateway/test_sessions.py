@@ -80,7 +80,7 @@ async def test_session_close后追加消息_拒绝4101且事务回滚(gateway_uo
     assert len(page.items) == 1
 
 
-async def test_session_列表分页_offset_limit(gateway_uow, seed):
+async def test_session_列表分页_page_page_size(gateway_uow, seed):
     # Arrange：3 个会话各 1 条消息（保证 last_message_at 参与排序）
     principal, agent_id = seed
     ids = set()
@@ -89,13 +89,14 @@ async def test_session_列表分页_offset_limit(gateway_uow, seed):
         ids.add(s.id)
         r = await send_message(s.id, SendMessageIn(content=f"消息{i}"), principal=principal, uow=gateway_uow)
         await cancel_task(uuid.UUID(r["data"]["task_id"]), principal=principal, uow=gateway_uow)
-    # Act / Assert：offset/limit 两页拼回全集
-    page1 = await list_sessions(principal=principal, uow=gateway_uow, offset=0, limit=2)
-    page2 = await list_sessions(principal=principal, uow=gateway_uow, offset=2, limit=2)
-    assert len(page1.items) == 2
-    assert len(page2.items) == 1
-    assert {s.id for s in page1.items} | {s.id for s in page2.items} == ids
-    assert page1.limit == 2 and page2.offset == 2
+    # Act / Assert：page/page_size 两页拼回全集（api/01 §3.1 信封）
+    page1 = await list_sessions(principal=principal, uow=gateway_uow, page=1, page_size=2)
+    page2 = await list_sessions(principal=principal, uow=gateway_uow, page=2, page_size=2)
+    assert len(page1.data) == 2
+    assert len(page2.data) == 1
+    assert {s.id for s in page1.data} | {s.id for s in page2.data} == ids
+    assert page1.meta.page_size == 2 and page2.meta.page == 2
+    assert page1.meta.total == 3 and page2.meta.total == 3
 
 
 async def test_session_消息游标分页_before_id(gateway_uow, seed):
@@ -121,9 +122,11 @@ async def test_task_列表详情与取消_终态不可逆4102(gateway_uow, seed)
     r = await send_message(s.id, SendMessageIn(content="触发任务"), principal=principal, uow=gateway_uow)
     task_id = uuid.UUID(r["data"]["task_id"])
     run_id = uuid.UUID(r["data"]["run_id"])
-    # 列表 + 详情（聚合内 Run 实体随读）
+    # 列表 + 详情（聚合内 Run 实体随读；api/01 §3.1 信封 + created_at 透出台账 B1④）
     page = await list_tasks(principal=principal, uow=gateway_uow, session_id=s.id)
-    assert [t.id for t in page.items] == [task_id]
+    assert [t.id for t in page.data] == [task_id]
+    assert page.meta.total == 1 and page.meta.page == 1 and page.meta.page_size == 20
+    assert page.data[0].created_at is not None
     detail = await get_task(task_id, principal=principal, uow=gateway_uow)
     assert detail.status == "running"
     assert (detail.runs[0].id, detail.runs[0].status) == (run_id, "queued")

@@ -30,6 +30,7 @@ from services.agent.business.agent_health import record_adapter_health_outcome
 from services.agent.domain.model.agent import Agent, AgentError
 from services.platform.deps import Principal, require_scope
 from services.platform.errors import GatewayError
+from services.platform.schemas import PageMeta
 
 router = APIRouter(prefix="/agents", tags=["agents"])
 
@@ -65,17 +66,23 @@ async def create_agent(body: AgentCreateIn, principal: AgentWriteDep, uow: UowDe
     return agent_from_domain(agent)
 
 
-@router.get("", summary="租户内 agent 列表（分页/状态筛选）")
+@router.get("", summary="租户内 agent 列表（分页/状态筛选；api/01 §3.1 信封）")
 async def list_agents(
     principal: AgentReadDep,
     uow: UowDep,
     agent_status: Annotated[str | None, Query(alias="status", pattern="^(enabled|disabled)$")] = None,
-    offset: Annotated[int, Query(ge=0)] = 0,
-    limit: Annotated[int, Query(ge=1, le=100)] = 20,
+    page: Annotated[int, Query(ge=1)] = 1,
+    page_size: Annotated[int, Query(ge=1, le=100)] = 20,
 ) -> AgentListOut:
+    """偏移分页改 page/page_size（B1 批，api/01 §3.1；offset=(page-1)*page_size 内部换算）。"""
+    offset = (page - 1) * page_size
     async with uow.for_tenant(principal.tenant_id) as tx:
-        items = await tx.agents.list(status=agent_status, offset=offset, limit=limit)
-    return AgentListOut(items=[agent_from_domain(a) for a in items], offset=offset, limit=limit)
+        items = await tx.agents.list(status=agent_status, offset=offset, limit=page_size)
+        total = await tx.agents.count(status=agent_status)
+    return AgentListOut(
+        data=[agent_from_domain(a) for a in items],
+        meta=PageMeta(page=page, page_size=page_size, total=total),
+    )
 
 
 @router.get("/{agent_id}", summary="agent 详情（含适配器绑定信息）")

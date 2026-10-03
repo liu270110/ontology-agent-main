@@ -71,11 +71,13 @@ export function ChatPage() {
    *  无 title（未选会话/缓存未至）回退「对话」。 */
   const sessionTitleQ = useQuery({
     queryKey: qk.session.list(),
-    queryFn: () => api.get<{ items: { id: string; title: string }[] }>('/sessions'),
+    // fe3 信封收口（联调缺陷台账 2026-10-04）：同 key 只读缓存，queryFn 与 SessionList
+    // 保持同源——GET /sessions 已改 {data,meta} 信封，改走 api.list 归一（fe2 F0）。
+    queryFn: () => api.list<{ id: string; title: string }>('/sessions'),
     enabled: false,
     staleTime: Infinity,
   })
-  const sessionTitle = sessionTitleQ.data?.items.find(s => s.id === sessionId)?.title
+  const sessionTitle = sessionTitleQ.data?.data.find(s => s.id === sessionId)?.title
   /** 消息基线失败态（36 §B）：err=原始异常（ErrorState 取 ApiError 码），degraded=已降级警示条。
    *  宿主持有（GET 在此发起），ChatStream 只负责渲染位与互斥门禁。 */
   const [baselineError, setBaselineError] = useState<{ err: unknown; degraded: boolean } | null>(null)

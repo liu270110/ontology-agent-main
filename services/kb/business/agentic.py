@@ -28,7 +28,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 from services.kb.business.kb_extraction import SeedCatalog, load_seed_catalog, match_seed_class
-from services.kb.retrieval.retrieve import SearchHit
+from services.kb.retrieval.retrieve import CHANNEL_WEIGHTS, CHANNEL_WEIGHTS_GRAPH, RRF_K, SearchHit
 
 # ---------------------------------------------------------------- §8.1 冻结契约类型
 
@@ -42,9 +42,15 @@ AgenticDegraded = Literal["agentic_exhausted"]
 
 EXPLAIN_TRACE_PREFIX = "kb-agentic:"  # §8.1：explain_trace_id = 前缀 + uuid（knowledge.explain 回放键）
 
-# 评级阈值（§2.2 G2 规则先行评级）：top1 分低于此值判 score_below_threshold。
-# 0.15 为占位示例值——待 PoC 标定（golden QA 扩展 agentic 用例集后冻结，方案 §7 待办）。
-GRADE_SCORE_THRESHOLD = 0.15
+# 评级阈值（§2.2 G2 规则先行评级）：top1 **归一分**低于此值判 score_below_threshold。
+# 归一分 = top1 RRF 融合分 / 当轮参与通道集理论满分 Σ w_c/(k+1)（与 retrieve.hybrid_search
+# 的 confidence 同口径；RRF_K=60、通道权重沿用 retrieve.py 实际常量 CHANNEL_WEIGHTS[_GRAPH]，
+# 只读 import 不改 retrieval 层）。0.5 为占位值（语义=top1 至少取得当前通道集理论满分一半）
+# ——待 PoC 标定（golden QA 扩展 agentic 用例集后冻结，方案 §7 待办）。
+# 修复背景（OCR F1）：原绝对阈值 0.15 与生产唯一分数口径（RRF 融合分，上界 Σ w_c/(k+1)，
+# k=60：两路≈0.016、含图路≈0.023）相差一个数量级——生产路径恒 fail/score_below_threshold，
+# pass 快速返回成死代码、所有查询以 degraded=agentic_exhausted 收尾且白烧一轮改写。
+GRADE_SCORE_THRESHOLD = 0.5
 
 
 class AgenticRound(BaseModel):
@@ -145,17 +151,39 @@ def decide(query: str) -> tuple[AgenticDecision, AgenticDecisionReason]:
 # ---------------------------------------------------------------- M3 评级（纯规则）
 
 
-def grade(hits: Sequence[SearchHit]) -> tuple[AgenticGrade, AgenticGradeReason]:
+def _theoretical_max_rrf(channels: set[str]) -> float:
+    """当前通道集 RRF 理论满分 Σ w_c/(k+1)（retrieve.hybrid_search confidence 同口径）。
+
+    权重表与 k 沿用 retrieval 层实际常量（只读 import）：含图路用三路权重表，否则两路基线；
+    通道集为空或权重全零（无通道信息，如纯函数/桩调用直接构造 hits）→ 1.0——无法归一时
+    退化为按调用方原分直接比较（等价归一基准=1）。
+    """
+    if not channels:
+        return 1.0
+    weights = CHANNEL_WEIGHTS_GRAPH if "graph" in channels else CHANNEL_WEIGHTS
+    total = sum(weights.get(channel, 0.0) for channel in channels)
+    return total / (RRF_K + 1) if total > 0 else 1.0
+
+
+def grade(
+    hits: Sequence[SearchHit], *, channels: Sequence[str] | None = None
+) -> tuple[AgenticGrade, AgenticGradeReason]:
     """查得好不好（M3 评级，规则先行版；§3 ④。hits 须为融合降序——hybrid_search 输出序）。
 
     - 命中数 0 → fail/hit_count_zero；
-    - top1 score < GRADE_SCORE_THRESHOLD（0.15，待 PoC 标定）→ fail/score_below_threshold；
+    - top1 归一分 < GRADE_SCORE_THRESHOLD → fail/score_below_threshold。归一分 = top1 分 /
+      当轮参与通道集理论满分 Σ w_c/(k+1)（F1 修复：阈值语义与 RRF 融合分口径对齐）。
+      通道集优先取显式 ``channels``（调用方已知当轮参与通道时传入）；缺省从 hits 自带
+      ``channels`` 字段推断（并集≈参与通道集，与 hybrid_search 输出约定一致）；两处均无
+      → 退化按原分比较（理论满分=1.0）；
     - 有命中但 span 全缺（引用无法回指原文位置，出处指针纪律 §5.2）→ fail/span_missing；
     - 否则 pass/pass。
     """
     if not hits:
         return "fail", "hit_count_zero"
-    if hits[0].score < GRADE_SCORE_THRESHOLD:
+    active = set(channels) if channels is not None else {c for hit in hits for c in hit.channels}
+    max_rrf = _theoretical_max_rrf(active)
+    if hits[0].score / max_rrf < GRADE_SCORE_THRESHOLD:
         return "fail", "score_below_threshold"
     if all(hit.span is None for hit in hits):
         return "fail", "span_missing"
@@ -196,7 +224,9 @@ async def rewrite(query: str, *, catalog: SeedCatalog | None = None) -> tuple[st
       存在字面包含关系且尚未等于规范术语（如「变压」⊂「变压器」）→ 替换该段为规范标签；
       「标签 ⊂ 查询词」（规范术语已在查询中，如「馈线F001」含「馈线」）不改写——避免把含
       编号的实体词截断；
-    - 二级（别名/简称启发式，match_seed_class 未命中时）：查询词的字符**按序**含于某规范标签
+    - 二级（别名/简称启发式，match_seed_class 未命中且非「已是规范术语」时——F3 守卫：
+      exact 命中（含英文本地名）或标签 ⊂ 查询词的词段直接跳过二级，不按序包含改写）：
+      查询词的字符**按序**含于某规范标签
       （如「配变」的 配…变 按序含于「配电变压器」——中文「取首字+特征字」构词的简称）→
       替换该段为规范标签。按类声明序取首个命中（确定性）。
 
@@ -210,33 +240,68 @@ async def rewrite(query: str, *, catalog: SeedCatalog | None = None) -> tuple[st
         if len(term) < 2 or term.isdigit() or term in _REWRITE_BLOCKLIST:
             continue
         norm_term = term.lower()  # \w+ 段无空白，lower 即 kb_extraction._norm 语义
-        target = _containment_target(norm_term, cat)  # 一级：字面包含方向裁决
+        seed_hit = match_seed_class(norm_term, cat)  # 一次裁决存变量（一级与 F3 守卫共用）
+        target = _containment_target(norm_term, cat, seed_hit)  # 一级：字面包含方向裁决
         if target is None:
+            if _is_canonical_seed_hit(norm_term, seed_hit, cat):
+                # F3 守卫：已是规范术语（exact 命中，含英文本地名）或规范术语已含于该词段
+                # （标签 ⊂ 查询词）→ 二级简称改写跳过。否则「停电事件」exact 命中 OutageEvent
+                # 后曾被「停电确认事件」按序包含误改写——语义收窄且 trace 谎报别名归一。
+                continue
             target = _subsequence_target(norm_term, cat)  # 二级：别名/简称（字符按序包含）
         if target is None:
             continue
-        rewritten = query.replace(term, target, 1)  # 最左一处（与扫描序一致）
+        # F4：term 源自 _TERM_RE 扫描，裸 str.replace 按子串替换会落在已扫描词段内部
+        # （「配电线路故障，配电」replace「配电」→「配电线路线路故障，配电」）——以首个
+        # 与该词段全等的匹配区间拼接替换。
+        match = next((m for m in _TERM_RE.finditer(query) if m.group() == term), None)
+        if match is None:  # 理论不可达（term 源自同款扫描）；保守跳过该词段，不做子串误替换
+            continue
+        rewritten = query[: match.start()] + target + query[match.end() :]  # 词段级（与扫描序一致）
         if rewritten != query:  # 红线：改写结果必须与原查询不同才返回
             return rewritten, f"term_alias:{target}"
     return None
 
 
-def _containment_target(norm_term: str, catalog: SeedCatalog) -> str | None:
+def _containment_target(
+    norm_term: str, catalog: SeedCatalog, seed_hit: tuple[str, str] | None = None
+) -> str | None:
     """一级字面包含归一（match_seed_class 命中 + 方向裁决）：返回规范标签或 None。
 
     match_seed_class 的 contains 命中不分方向——「查询词 ⊂ 标签」=简称待归一（返回标签）；
     「标签 ⊂ 查询词」=规范术语已在查询中（None，不改写）；exact=已是规范术语（None）。
+    ``seed_hit``=调用方已算好的 match_seed_class 结果（rewrite 主循环一次裁决共用，避免
+    守卫重复调用）；None 时函数内自调。
     """
-    hit = match_seed_class(norm_term, catalog)
-    if hit is None:
+    if seed_hit is None:
+        seed_hit = match_seed_class(norm_term, catalog)
+    if seed_hit is None:
         return None
-    iri, rule = hit
+    iri, rule = seed_hit
     if rule == "exact":
         return None
     label = _label_by_iri(catalog, iri)
     if label is not None and norm_term in label.lower() and norm_term != label.lower():
         return label
     return None
+
+
+def _is_canonical_seed_hit(
+    norm_term: str, seed_hit: tuple[str, str] | None, catalog: SeedCatalog
+) -> bool:
+    """「已是规范术语」守卫（F3）：词段无需归一 → True，二级简称改写跳过。
+
+    两种形态都算已规范：exact 命中（含英文本地名，kb_extraction._norm 同形归一）；
+    或规范术语已字面含于该词段（「标签 ⊂ 查询词」，如「馈线F001」含「馈线」——一级方向
+    裁决不改写，二级按序包含同样不得接手，防止把含规范术语的长词误收窄为子链标签）。
+    """
+    if seed_hit is None:
+        return False
+    _iri, rule = seed_hit
+    if rule == "exact":
+        return True
+    label = _label_by_iri(catalog, seed_hit[0])
+    return label is not None and label.lower() in norm_term
 
 
 def _subsequence_target(norm_term: str, catalog: SeedCatalog) -> str | None:

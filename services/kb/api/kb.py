@@ -863,6 +863,8 @@ async def search(body: KbSearchIn, principal: KbReadDep, request: Request, sessi
         # A0 服务端代跑（AgenticRAG优化方案 §3/§8.1）：编排委托 business/agentic——decide 判别
         # （寒暄 skip 时下方回调永不触发=零召回）→ 每轮走同一套三路召回闭包 → 规则评级 →
         # 术语归一改写纠错（≤body.max_rounds 轮）→ 仍失败 degraded="agentic_exhausted"。
+        last_inner_reasons: list[str] = []  # 末轮运行时降级理由（F2：vector_unavailable 等不丢弃）
+
         async def agentic_once(round_query: str) -> list[SearchHit]:
             inner = await hybrid_search(
                 round_query,
@@ -873,12 +875,19 @@ async def search(body: KbSearchIn, principal: KbReadDep, request: Request, sessi
                 mode=body.mode,
                 entity_type_filter=body.entity_type_filter,
             )
+            last_inner_reasons.clear()  # 只留末轮（与前轮 hits 只保留最后一轮同口径）
+            last_inner_reasons.extend(inner.degraded_reasons)
             return inner.hits
 
         hits, trace = await run_agentic_search(body.query, agentic_once, max_rounds=body.max_rounds)
         mode_used, mode_reason = resolve_mode(body.mode)  # lite 路由口径与 hybrid_search 内部一致
-        degraded = mode_reason is not None
-        degraded_reasons = [mode_reason] if mode_reason is not None else []
+        # F2：degraded 不再只由静态 resolve_mode 重建——末轮 hybrid_search 的运行时降级理由
+        # （vector_unavailable 等）一并透传，与非 agentic 分支及本端点 docstring 语义一致
+        # （寒暄 skip 时回调不触发，此时仅静态路由理由；去重保序防双计 mode_downgraded:*）。
+        degraded = mode_reason is not None or bool(last_inner_reasons)
+        degraded_reasons = list(
+            dict.fromkeys(([mode_reason] if mode_reason is not None else []) + last_inner_reasons)
+        )
         channels = sorted({channel for hit in hits for channel in hit.channels})
         evidence = KbEvidenceOut(graph_paths=[])  # v1 边界：agentic 管线不回图路证据（trace 为解释面）
         answers: list[KbAnswerOut] = []  # v1 边界：抽取式摘要随完整档接入，不因纠错轮拼装误导

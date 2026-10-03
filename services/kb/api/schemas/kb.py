@@ -264,6 +264,10 @@ class KbSearchIn(BaseModel):
     # 匹配文档 meta.source_system 的命中加分排前、不匹配者降序不剔除——软路由不硬过滤，
     # 硬过滤与分组返回 schema 随 v1.5 语境术语表落地）
     source_context: str | None = Field(default=None, max_length=64)
+    # agentic 检索（AgenticRAG优化方案 §8.1 冻结契约）：v1 默认 false=零行为变化红线；
+    # true 走服务端 A0 代跑管线（判别→检索→评级→术语归一改写纠错，纯规则档零 LLM）
+    agentic: bool = False
+    max_rounds: int = Field(default=2, ge=1, le=2)  # 纠错轮上限（§2.3 红线 ≤2，PoC 后标定）
 
 
 class KbHitOut(BaseModel):
@@ -390,6 +394,35 @@ class KbGraphQueryOut(BaseModel):
     rels: list[KbGraphRelOut] = Field(default_factory=list)
 
 
+# ---------------------------------------------------------------- agentic 检索 trace（§8.1 冻结契约）
+
+
+class KbAgenticRoundOut(BaseModel):
+    """单轮时间线条目（前端 AgenticTracePanel 步进数据源；枚举与 §8.1 逐字一致）。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    seq: int  # 1 起步轮号
+    action: Literal["search", "rewrite_search"]
+    query: str  # 本轮实际检索词
+    rewrite_basis: str | None = None  # 改写依据（term_alias:<标签>）；search 轮恒 None
+    grade: Literal["pass", "fail"]
+    grade_reason: Literal["pass", "hit_count_zero", "score_below_threshold", "span_missing"]
+
+
+class KbAgenticTraceOut(BaseModel):
+    """agentic 循环 trace（响应 agentic 块；agentic=false 请求该块恒 None，存量消费方零影响）。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    mode: Literal["rule"] = "rule"  # v1 固定 rule（LLM 档关闭，阈值 PoC 后开 hybrid）
+    decision: Literal["retrieval_required", "retrieval_skipped"]
+    decision_reason: Literal["deterministic_task", "smalltalk_pattern", "default_retrieve"]
+    rounds: list[KbAgenticRoundOut] = Field(default_factory=list)  # 0~2 轮时间线
+    degraded: Literal["agentic_exhausted"] | None = None  # 前端必须显著提示
+    explain_trace_id: str  # "kb-agentic:" + uuid（knowledge.explain 回放键）
+
+
 class KbSearchOut(BaseModel):
     model_config = ConfigDict(extra="forbid")
     query: str
@@ -404,6 +437,7 @@ class KbSearchOut(BaseModel):
     evidence: KbEvidenceOut = Field(default_factory=KbEvidenceOut)
     answers: list[KbAnswerOut] = Field(default_factory=list)
     usage: KbUsageOut = Field(default_factory=KbUsageOut)
+    agentic: KbAgenticTraceOut | None = None  # §8.1：agentic=false 请求恒 None（零行为变化）
 
 
 # ---------------------------------------------------------------- 终审工作台（api/01 §5.4 ★ 三端点）

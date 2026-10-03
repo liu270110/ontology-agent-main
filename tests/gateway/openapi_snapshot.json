@@ -2424,6 +2424,125 @@
         "title": "InstallOut",
         "type": "object"
       },
+      "KbAgenticRoundOut": {
+        "additionalProperties": false,
+        "description": "单轮时间线条目（前端 AgenticTracePanel 步进数据源；枚举与 §8.1 逐字一致）。",
+        "properties": {
+          "action": {
+            "enum": [
+              "search",
+              "rewrite_search"
+            ],
+            "title": "Action",
+            "type": "string"
+          },
+          "grade": {
+            "enum": [
+              "pass",
+              "fail"
+            ],
+            "title": "Grade",
+            "type": "string"
+          },
+          "grade_reason": {
+            "enum": [
+              "pass",
+              "hit_count_zero",
+              "score_below_threshold",
+              "span_missing"
+            ],
+            "title": "Grade Reason",
+            "type": "string"
+          },
+          "query": {
+            "title": "Query",
+            "type": "string"
+          },
+          "rewrite_basis": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rewrite Basis"
+          },
+          "seq": {
+            "title": "Seq",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "seq",
+          "action",
+          "query",
+          "grade",
+          "grade_reason"
+        ],
+        "title": "KbAgenticRoundOut",
+        "type": "object"
+      },
+      "KbAgenticTraceOut": {
+        "additionalProperties": false,
+        "description": "agentic 循环 trace（响应 agentic 块；agentic=false 请求该块恒 None，存量消费方零影响）。",
+        "properties": {
+          "decision": {
+            "enum": [
+              "retrieval_required",
+              "retrieval_skipped"
+            ],
+            "title": "Decision",
+            "type": "string"
+          },
+          "decision_reason": {
+            "enum": [
+              "deterministic_task",
+              "smalltalk_pattern",
+              "default_retrieve"
+            ],
+            "title": "Decision Reason",
+            "type": "string"
+          },
+          "degraded": {
+            "anyOf": [
+              {
+                "const": "agentic_exhausted",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Degraded"
+          },
+          "explain_trace_id": {
+            "title": "Explain Trace Id",
+            "type": "string"
+          },
+          "mode": {
+            "const": "rule",
+            "default": "rule",
+            "title": "Mode",
+            "type": "string"
+          },
+          "rounds": {
+            "items": {
+              "$ref": "#/components/schemas/KbAgenticRoundOut"
+            },
+            "title": "Rounds",
+            "type": "array"
+          }
+        },
+        "required": [
+          "decision",
+          "decision_reason",
+          "explain_trace_id"
+        ],
+        "title": "KbAgenticTraceOut",
+        "type": "object"
+      },
       "KbAnswerOut": {
         "additionalProperties": false,
         "properties": {
@@ -2883,6 +3002,11 @@
       "KbSearchIn": {
         "additionalProperties": false,
         "properties": {
+          "agentic": {
+            "default": false,
+            "title": "Agentic",
+            "type": "boolean"
+          },
           "as_of": {
             "anyOf": [
               {
@@ -2932,6 +3056,13 @@
             "maximum": 3.0,
             "minimum": 0.0,
             "title": "Max Hops",
+            "type": "integer"
+          },
+          "max_rounds": {
+            "default": 2,
+            "maximum": 2.0,
+            "minimum": 1.0,
+            "title": "Max Rounds",
             "type": "integer"
           },
           "mode": {
@@ -2996,6 +3127,16 @@
       "KbSearchOut": {
         "additionalProperties": false,
         "properties": {
+          "agentic": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/KbAgenticTraceOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "answers": {
             "items": {
               "$ref": "#/components/schemas/KbAnswerOut"
@@ -8431,7 +8572,7 @@
     },
     "/api/v1/kb/search": {
       "post": {
-        "description": "OntRAG §5 契约 REST 子集全量：citations 全字段 / evidence.graph_paths / answers+confidence / usage。\n\n降级：嵌入路不可用 → BM25-only（degraded=true, reason=vector_unavailable）；\nmode=global/drift 无社区摘要索引 → local 降级（degraded=true, reason=mode_downgraded:*，二期）；\n图路无已发布本体读模型 → 层次闭包退化为类自身，同类扩展照常（非降级）。\nACL：X-Acl-Tags 头 + OA_KB_ACL_FILTER_ENABLED 开关双条件激活 → 三路同源谓词下推（§4.3）；\n无头 = no-op（调用方未接入标签面，零行为变化红线）。",
+        "description": "OntRAG §5 契约 REST 子集全量：citations 全字段 / evidence.graph_paths / answers+confidence / usage。\n\nagentic=true 走 A0 服务端代跑管线（AgenticRAG优化方案 §3/§8.1，v1 纯规则档零 LLM）：\n判别（寒暄 skip → hits/citations 空数组 + decision 徽标）→ 三路召回 → 规则评级 →\n术语归一改写纠错（≤max_rounds 轮，改写依据进 trace）→ 仍失败 degraded=\"agentic_exhausted\"；\n全程 trace 进响应 agentic 块（false 时恒 None=存量消费方零影响）。\n降级：嵌入路不可用 → BM25-only（degraded=true, reason=vector_unavailable）；\nmode=global/drift 无社区摘要索引 → local 降级（degraded=true, reason=mode_downgraded:*，二期）；\n图路无已发布本体读模型 → 层次闭包退化为类自身，同类扩展照常（非降级）。\nACL：X-Acl-Tags 头 + OA_KB_ACL_FILTER_ENABLED 开关双条件激活 → 三路同源谓词下推（§4.3）；\n无头 = no-op（调用方未接入标签面，零行为变化红线）。",
         "operationId": "search_api_v1_kb_search_post",
         "requestBody": {
           "content": {

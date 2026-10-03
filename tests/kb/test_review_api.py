@@ -280,12 +280,12 @@ async def test_GET_candidates_过滤_分页_quote_violations_透出(wb_env, kb_p
     principal = _principal(env)
     async with kb_pg() as db:
         page = await list_review_candidates(env["document_id"], principal, db)
-        # 缺省=全部三态（4 candidate + 1 rejected + 1 authoritative）
-        assert page.meta.total == 6 and len(page.items) == 6
-        assert page.meta.offset == 0 and page.meta.limit == 50
+        # 缺省=全部三态（4 candidate + 1 rejected + 1 authoritative）；api/01 §3.1 信封
+        assert page.meta.total == 6 and len(page.data) == 6
+        assert page.meta.page == 1 and page.meta.page_size == 50
 
         # quote/violations/align 全量透出（B2 深化产物 = 工作台裁决依据）
-        by_key = {(i.fact_type, i.subject): i for i in page.items}
+        by_key = {(i.fact_type, i.subject): i for i in page.data}
         feed = by_key[("entity", "馈线F001")]
         assert feed.evidence.quote == "馈线 F001 由 城东变电站 供电"
         assert feed.evidence.span == [0, len("馈线 F001 由 城东变电站 供电")]
@@ -303,18 +303,18 @@ async def test_GET_candidates_过滤_分页_quote_violations_透出(wb_env, kb_p
 
         # fact_type / status / confidence 下界过滤（meta.total 同步）
         rel_only = await list_review_candidates(env["document_id"], principal, db, fact_type="relation")
-        assert rel_only.meta.total == 1 and rel_only.items[0].predicate == "suppliedBy"
+        assert rel_only.meta.total == 1 and rel_only.data[0].predicate == "suppliedBy"
         cand = await list_review_candidates(env["document_id"], principal, db, status_filter="candidate")
-        assert cand.meta.total == 4 and all(i.status == "candidate" for i in cand.items)
+        assert cand.meta.total == 4 and all(i.status == "candidate" for i in cand.data)
         high = await list_review_candidates(env["document_id"], principal, db, min_confidence=0.85)
-        assert {i.subject for i in high.items} == {"馈线F001", "变电站S1"}
+        assert {i.subject for i in high.data} == {"馈线F001", "变电站S1"}
 
-        # 分页：offset 推进不重不漏，total 恒定
-        p1 = await list_review_candidates(env["document_id"], principal, db, offset=0, limit=2)
-        p2 = await list_review_candidates(env["document_id"], principal, db, offset=2, limit=2)
+        # 分页：page 推进不重不漏，total 恒定
+        p1 = await list_review_candidates(env["document_id"], principal, db, page=1, page_size=2)
+        p2 = await list_review_candidates(env["document_id"], principal, db, page=2, page_size=2)
         assert p1.meta.total == 6 and p2.meta.total == 6
-        assert len(p1.items) == 2 and len(p2.items) == 2
-        assert not {i.id for i in p1.items} & {i.id for i in p2.items}
+        assert len(p1.data) == 2 and len(p2.data) == 2
+        assert not {i.id for i in p1.data} & {i.id for i in p2.data}
 
 
 async def test_GET_candidates_文档不存在_404(wb_env, kb_pg):

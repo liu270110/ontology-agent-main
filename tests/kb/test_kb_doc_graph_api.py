@@ -491,15 +491,15 @@ async def test_GET_chunks_分页_seq升序_无向量布尔_404(doc_env, kb_pg):
     principal = _principal(env)
     async with kb_pg() as db:
         page = await list_document_chunks(env["document_id"], principal, db)
-        assert page.meta.total == 3 and page.meta.offset == 0 and page.meta.limit == 50
-        assert [c.seq for c in page.items] == [0, 1, 2]  # seq 升序
-        assert page.items[0].span == [0, 10]  # meta.span 高亮偏移透出（FR-KB-03）
-        assert all(c.has_embedding is False for c in page.items)  # 无向量=布尔 False（不回传本体）
-        assert page.items[0].content.startswith("分片0") and page.items[0].token_count == 10
-        p2 = await list_document_chunks(env["document_id"], principal, db, offset=2, limit=2)
-        assert p2.meta.total == 3 and len(p2.items) == 1 and p2.items[0].seq == 2  # offset 边界
-        p3 = await list_document_chunks(env["document_id"], principal, db, offset=99, limit=50)
-        assert p3.meta.total == 3 and p3.items == []  # 越界 offset=空页合法
+        assert page.meta.total == 3 and page.meta.page == 1 and page.meta.page_size == 50  # api/01 §3.1 信封
+        assert [c.seq for c in page.data] == [0, 1, 2]  # seq 升序
+        assert page.data[0].span == [0, 10]  # meta.span 高亮偏移透出（FR-KB-03）
+        assert all(c.has_embedding is False for c in page.data)  # 无向量=布尔 False（不回传本体）
+        assert page.data[0].content.startswith("分片0") and page.data[0].token_count == 10
+        p2 = await list_document_chunks(env["document_id"], principal, db, page=2, page_size=2)
+        assert p2.meta.total == 3 and len(p2.data) == 1 and p2.data[0].seq == 2  # 翻页边界
+        p3 = await list_document_chunks(env["document_id"], principal, db, page=99, page_size=50)
+        assert p3.meta.total == 3 and p3.data == []  # 越界页=空页合法
         with pytest.raises(GatewayError) as exc:
             await list_document_chunks(uuid.uuid4(), principal, db)
     assert exc.value.status_code == 404
@@ -638,19 +638,19 @@ async def test_CREATE_二进制垃圾拒收_415_业务错误_正常文本不受�
 
 @pytest.mark.integration
 async def test_GET_collections_信封_租户隔离(doc_env, kb_pg):
-    """docs/Agent/09 §2.1 工程问题 4（信封漂移）：GET /kb/collections 返回 {code,message,data}
-    信封（对齐 documents 列表），租户 deny-by-default 空列表合法。"""
+    """api/01 §3.1 信封（B1 批统一）：GET /kb/collections 返回 {data, meta:{page,page_size,total}}，
+    {code,message,data} 旧信封废止；租户 deny-by-default 空列表合法。"""
     env = doc_env
     principal = _principal(env)
     async with kb_pg() as db:
         out = await list_collections(principal, db)
-        assert out.code == 0 and out.message == "ok"  # 强信封（前端 apiFetchEnvelope 解包口径）
-        assert out.data.total == 1 and out.data.limit == 50 and out.data.next_cursor is None
-        assert [str(c.id) for c in out.data.items] == [str(env["collection_id"])]
-        assert out.data.items[0].name == "b6-it-库" and out.data.items[0].embedding_model == "bge-m3"
+        assert not hasattr(out, "code")  # 旧信封废止（api/01 §3.1 反例注记）
+        assert out.meta.total == 1 and out.meta.page_size == 50 and out.meta.page == 1
+        assert [str(c.id) for c in out.data] == [str(env["collection_id"])]
+        assert out.data[0].name == "b6-it-库" and out.data[0].embedding_model == "bge-m3"
         # 他人租户不可见（deny-by-default）：随机租户 → 空列表非失败
         other = await list_collections(_principal({**env, "tenant_id": uuid.uuid4()}), db)
-    assert other.code == 0 and other.data.total == 0 and other.data.items == []
+    assert other.meta.total == 0 and other.data == []
 
 
 # ---------------------------------------------------------------- 图三查（GET /kb/graph/search|neighborhood|path）

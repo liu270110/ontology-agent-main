@@ -16,6 +16,8 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from services.platform.schemas import EmptyMeta, PageMeta
+
 
 class CollectionCreateIn(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -34,28 +36,14 @@ class CollectionOut(BaseModel):
     created_at: datetime
 
 
-class CollectionListData(BaseModel):
-    """集合列表 data 面（信封解包后形态；与 DocumentListData 同构：{items,total,next_cursor}
-    + offset/limit，R53 补齐 GET /kb/collections，docs/Agent/09 §2.1 工程问题 4 信封漂移）。"""
+class CollectionListOut(BaseModel):
+    """集合列表（api/01 §3.1 信封：{data, meta:{page,page_size,total}}，B1 批统一——
+    原 {code,message,data} 旧信封废止）。"""
 
     model_config = ConfigDict(extra="forbid")
 
-    items: list[CollectionOut] = Field(default_factory=list)
-    total: int = 0
-    next_cursor: str | None = None  # offset/limit 分页恒 None（前端列表 DTO 契约字段）
-    offset: int = 0
-    limit: int = 50
-
-
-class CollectionListEnvelope(BaseModel):
-    """集合列表成功信封（与 DocumentListEnvelope 同构：{code,message,data}，前端
-    apiFetchEnvelope 强信封解包口径）。"""
-
-    model_config = ConfigDict(extra="forbid")
-
-    code: int = 0
-    message: str = "ok"
-    data: CollectionListData
+    data: list[CollectionOut] = Field(default_factory=list)
+    meta: PageMeta
 
 
 class DocumentCreateIn(BaseModel):
@@ -184,26 +172,14 @@ class DocumentListItem(BaseModel):
     indexed_today: bool = False  # 当日入库（前端规模统计带）
 
 
-class DocumentListData(BaseModel):
-    """列表 data 面（信封解包后形态：{items,total,next_cursor} + offset/limit）。"""
+class DocumentListOut(BaseModel):
+    """文档列表（api/01 §3.1 信封：{data, meta:{page,page_size,total}}，B1 批统一——
+    原 {code,message,data:{items,total,next_cursor,offset,limit}} 旧信封废止，A-5 证据端点）。"""
 
     model_config = ConfigDict(extra="forbid")
 
-    items: list[DocumentListItem] = Field(default_factory=list)
-    total: int = 0
-    next_cursor: str | None = None  # 前端 listDocuments DTO 契约字段（offset/limit 分页恒 None）
-    offset: int = 0
-    limit: int = 50
-
-
-class DocumentListEnvelope(BaseModel):
-    """列表成功信封（live 对账口径：前端 client apiFetchEnvelope 强信封解包——同 R50 注）。"""
-
-    model_config = ConfigDict(extra="forbid")
-
-    code: int = 0
-    message: str = "ok"
-    data: DocumentListData
+    data: list[DocumentListItem] = Field(default_factory=list)
+    meta: PageMeta
 
 
 # ---------------------------------------------------------------- 单文档详情/删除（R17-a/R17-b live 对账增量）
@@ -219,13 +195,12 @@ class DocumentDetailData(DocumentListItem):
 
 
 class DocumentDetailEnvelope(BaseModel):
-    """详情成功信封（R17-a：同列表信封口径，前端 apiFetchEnvelope 强信封解包）。"""
+    """单文档详情（api/01 §3.1 非列表包裹 {data, meta}，meta=空对象；旧 {code,message,data} 信封废止）。"""
 
     model_config = ConfigDict(extra="forbid")
 
-    code: int = 0
-    message: str = "ok"
     data: DocumentDetailData
+    meta: EmptyMeta = Field(default_factory=EmptyMeta)
 
 
 class DocumentDeleteCascade(BaseModel):
@@ -247,13 +222,13 @@ class DocumentDeleteData(BaseModel):
 
 
 class DocumentDeleteEnvelope(BaseModel):
-    """删除成功信封（R17-b：恒 200，deleted 区分命中/幂等未命中）。"""
+    """删除成功信封（R17-b 恒 200 口径保留，包裹形态改契约 {data, meta}——deleted 区分
+    命中/幂等未命中；旧 {code,message,data} 信封废止）。"""
 
     model_config = ConfigDict(extra="forbid")
 
-    code: int = 0
-    message: str = "ok"
     data: DocumentDeleteData
+    meta: EmptyMeta = Field(default_factory=EmptyMeta)
 
 
 class PipelineStartOut(BaseModel):
@@ -395,20 +370,12 @@ class KbChunkOut(BaseModel):
     created_at: datetime
 
 
-class KbChunkPageMetaOut(BaseModel):
-    """分片分页 meta（api/01 §3.1 meta 惯例；offset 分页）。"""
-
-    model_config = ConfigDict(extra="forbid")
-
-    offset: int
-    limit: int
-    total: int
-
-
 class KbChunkPageOut(BaseModel):
+    """分片列表（api/01 §3.1 信封：{data, meta:{page,page_size,total}}，B1 批统一）。"""
+
     model_config = ConfigDict(extra="forbid")
-    items: list[KbChunkOut] = Field(default_factory=list)
-    meta: KbChunkPageMetaOut
+    data: list[KbChunkOut] = Field(default_factory=list)
+    meta: PageMeta
 
 
 # ---------------------------------------------------------------- 图三查（api/01 §5.4 ★ GET /kb/graph/*）
@@ -576,20 +543,12 @@ class ReviewCandidateOut(BaseModel):
     created_at: datetime
 
 
-class ReviewCandidatePageMetaOut(BaseModel):
-    """分页 meta（api/01 §3.1 meta 惯例；offset 分页）。"""
-
-    model_config = ConfigDict(extra="forbid")
-
-    offset: int
-    limit: int
-    total: int
-
-
 class ReviewCandidatePageOut(BaseModel):
+    """终审候选列表（api/01 §3.1 信封：{data, meta:{page,page_size,total}}，B1 批统一）。"""
+
     model_config = ConfigDict(extra="forbid")
-    items: list[ReviewCandidateOut]
-    meta: ReviewCandidatePageMetaOut
+    data: list[ReviewCandidateOut]
+    meta: PageMeta
 
 
 class CandidateDecisionOut(BaseModel):

@@ -3,11 +3,12 @@ import { AlertTriangle, Check, Copy, FileText, ListTree, MessagesSquare, Refresh
 import { useNavigate } from 'react-router-dom'
 import Markdown, { type Components } from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import { useSessionStore, type ChatMessage, type EvidenceChunk } from '@/stores/session-store'
+import { useSessionStore, type ChatMessage, type Evidence, type EvidenceChunk } from '@/stores/session-store'
 import { api, ApiError } from '@/api/client'
 import { EmptyState, ErrorState, SkeletonRows } from '@/components/states'
 import { BASELINE } from '@/lib/toast-templates'
 import { ToolCallCard } from './ToolCallCard'
+import { AgenticDegradedBanner, AgenticTracePanel } from './AgenticTracePanel'
 import type { EvidenceFocus } from './EvidenceSheet'
 
 /** 消息流（画框03）：用户气泡实底蓝、助手气泡玻璃、工具卡、证据 chip（点击开抽屉 IX-CHT-03）、
@@ -169,6 +170,11 @@ function EvidenceChips({
       ))}
     </div>
   )
+}
+
+/** 证据取数：历史消息用附着证据，实时末条用 RETRIEVAL_EVIDENCE 会话级证据（§8.2 F2 集成点） */
+function evidenceFor(m: ChatMessage, evidence: Evidence | null, lastAssistantId: string | undefined): Evidence | null {
+  return m.evidence ?? (evidence && m.id === lastAssistantId ? evidence : null)
 }
 
 /** 助手消息悬停操作条（IX-CHT-07）：复制 / 重新生成 / 赞踩（反馈本地高亮，M4 接 POST 反馈端点）
@@ -487,6 +493,15 @@ export function ChatStream({
                 className="bubble bubble-a rounded-2xl rounded-bl-md border border-separator bg-surface px-4 py-2.5 text-sm"
                 style={{ borderLeft: '3px solid var(--src-system)' }}
               >
+                {/* §8.2 F2：agentic 两轮未命中降级 → 答案区顶部警示条（不误导为权威答案） */}
+                {(() => {
+                  const ev = evidenceFor(m, evidence, lastAssistantId)
+                  return ev?.agentic?.degraded === 'agentic_exhausted' ? (
+                    <div className="mb-1.5">
+                      <AgenticDegradedBanner testid="agentic-answer-banner" />
+                    </div>
+                  ) : null
+                })()}
                 {/* 助手正文：Markdown/代码块渲染（用户气泡保持纯文本）；空内容=流式等待 */}
                 {m.content ? <AssistantMarkdown content={m.content} /> : <span className="text-label-3">思考中…</span>}
                 {running && m.id === messages[messages.length - 1]?.id && <span className="stream-caret ml-0.5 animate-pulse">▍</span>}
@@ -494,12 +509,17 @@ export function ChatStream({
                 {m.finishReason === 'stopped' && (
                   <span data-testid="stopped-mark" className="badge b-gray ml-2 align-middle text-2xs">已手动停止</span>
                 )}
-                {/* 证据 chip：历史消息用附着证据，实时末条用 RETRIEVAL_EVIDENCE */}
+                {/* 检索证据区（§8.2 F2 集成点）：证据 chip + Agentic 检索循环时间线；
+                    agentic 块可选——旧响应/旧帧无此键时面板不渲染（向后兼容红线） */}
                 {(() => {
-                  const ev = m.evidence ?? (evidence && m.id === lastAssistantId ? evidence : null)
-                  return ev ? (
-                    <EvidenceChips chunks={ev.chunks} graphPaths={ev.graph_paths} degraded={ev.degraded} onOpen={onOpenEvidence} />
-                  ) : null
+                  const ev = evidenceFor(m, evidence, lastAssistantId)
+                  if (!ev) return null
+                  return (
+                    <>
+                      <EvidenceChips chunks={ev.chunks} graphPaths={ev.graph_paths} degraded={ev.degraded} onOpen={onOpenEvidence} />
+                      <AgenticTracePanel agentic={ev.agentic} />
+                    </>
+                  )
                 })()}
               </div>
               {/* 产物卡（设计稿 L2424-2427）：载荷携带 artifact 时渲染于气泡之下 */}

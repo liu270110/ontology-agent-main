@@ -1,7 +1,7 @@
 import { http, HttpResponse } from 'msw'
 import type { RunUsageEventData } from '@/sse/events'
 import { groupHandlers } from './group-handlers'
-import { kbHandlers } from './kb-handlers'
+import { agenticBlockFor, kbHandlers } from './kb-handlers'
 import { ontologyHandlers } from './ontology-handlers'
 import { platformHandlers } from './platform-handlers'
 import { adminHandlers } from './admin-handlers'
@@ -250,16 +250,30 @@ const USAGE_GROUPS: RunUsageEventData['groups'] = {
 
 function scriptFor(sessionId: string, question: string): { frames: string[]; ids: { run_id: string; task_id: string } } {
   const ids = { run_id: `r_${Date.now()}`, task_id: `t_${Date.now()}` }
+  // §8.1 agentic 扩展（纯追加）：RETRIEVAL_EVIDENCE 帧附 agentic 块（变体口径单源=kb-handlers.agenticBlockFor）；
+  // 寒暄 skip 变体：不推 TOOL_CALL 帧（未检索）、证据与图谱路径为空、话术改直答——与 agentic 决策自洽。
+  const agentic = agenticBlockFor(question)
+  const skipped = agentic.decision === 'retrieval_skipped'
+  const retrieveSteps: [string, unknown][] = skipped
+    ? []
+    : [
+        ['TOOL_CALL_START', { tool_call_id: `tc_${Date.now()}`, tool_name: 'knowledge.search' }],
+        ['TOOL_CALL_ARGS', { tool_call_id: 'pending-args', delta: '{"mode":"local"}' }],
+        ['TOOL_CALL_END', { tool_call_id: 'pending-args' }],
+        ['TOOL_CALL_RESULT', { tool_call_id: 'pending-args', ok: true, summary: '命中 6 实体 / 2 社区', cost_ms: 612 }],
+      ]
   const steps: [string, unknown][] = [
     ['RUN_STARTED', { run_id: ids.run_id, session_id: sessionId, task_id: ids.task_id }],
     ['TEXT_MESSAGE_START', { message_id: `m_${Date.now()}` }],
-    ['TEXT_MESSAGE_CONTENT', { message_id: 'pending', delta: `收到：「${question}」。我先检索知识库…` }],
-    ['TOOL_CALL_START', { tool_call_id: `tc_${Date.now()}`, tool_name: 'knowledge.search' }],
-    ['TOOL_CALL_ARGS', { tool_call_id: 'pending-args', delta: '{"mode":"local"}' }],
-    ['TOOL_CALL_END', { tool_call_id: 'pending-args' }],
-    ['TOOL_CALL_RESULT', { tool_call_id: 'pending-args', ok: true, summary: '命中 6 实体 / 2 社区', cost_ms: 612 }],
-    ['RETRIEVAL_EVIDENCE', { chunks: [{ doc_id: 'GB/T 36276', chunk_id: 'c_017', quote: '1000 次循环后容量保持率 ≥80%', score: 0.83 }], graph_paths: [{ nodes: ['OutageEvent', 'Feeder'], edges: ['locatedOn'] }], degraded: false }],
-    ['TEXT_MESSAGE_CONTENT', { message_id: 'pending', delta: '检索完成。两条标准的核心差异：测试对象与循环次数要求不同。' }],
+    ['TEXT_MESSAGE_CONTENT', { message_id: 'pending', delta: skipped ? `收到：「${question}」。这是寒暄直答，无需检索知识库。` : `收到：「${question}」。我先检索知识库…` }],
+    ...retrieveSteps,
+    ['RETRIEVAL_EVIDENCE', {
+      chunks: skipped ? [] : [{ doc_id: 'GB/T 36276', chunk_id: 'c_017', quote: '1000 次循环后容量保持率 ≥80%', score: 0.83 }],
+      graph_paths: skipped ? [] : [{ nodes: ['OutageEvent', 'Feeder'], edges: ['locatedOn'] }],
+      degraded: Boolean(agentic.degraded),
+      agentic,
+    }],
+    ['TEXT_MESSAGE_CONTENT', { message_id: 'pending', delta: skipped ? '有什么配网停电分析的问题，我随时可以帮你查证作答。' : '检索完成。两条标准的核心差异：测试对象与循环次数要求不同。' }],
     // run.usage：助手回答完成前推本次上下文用量四分组（api/02 M4 扩展，IX-CHT-04 真数据源）
     ['run.usage', { run_id: 'pending-run', groups: USAGE_GROUPS }],
     ['TEXT_MESSAGE_END', { message_id: 'pending', finish_reason: 'stop' }],

@@ -132,7 +132,9 @@ export function normalizeReview(raw: ReviewTicketRaw): Approval {
     applicant: raw.applicant ?? raw.submitter_id ?? '系统',
     department: raw.department ?? '—',
     submitted_at: raw.submitted_at ?? raw.created_at,
-    status: REVIEW_STATUS_MAP[raw.status] ?? 'pending',
+    // fe1 ocr 发现3：Object.hasOwn 替代 ?? 兜底——防原型链键（如 'constructor'）误判为已知
+    // 状态，显式 undefined 与缺键同归保守 'pending'（Record<string,…> 索引签名下 ?? 不防二者）
+    status: Object.hasOwn(REVIEW_STATUS_MAP, raw.status) ? REVIEW_STATUS_MAP[raw.status] : 'pending',
     high_risk: raw.high_risk ?? HIGH_RISK_TYPES.includes(type),
     payload: raw.payload ?? {},
     chain: raw.chain ?? [],
@@ -150,15 +152,17 @@ export function getReview(id: string) {
 }
 
 /** 审批裁决（api/01 §5.8 POST /admin/reviews/{id}/decision）。R50 后端 DecisionIn 为
- *  {action, note} 且 extra=forbid——意见字段名=note（前端曾发 reason 致 live 422，本批对齐）。 */
-export function decideReview(id: string, action: 'approve' | 'reject', reason?: string) {
+ *  {action, note} 且 extra=forbid——意见字段名=note（前端曾发 reason 致 live 422，已对齐；
+ *  fe1 ocr 发现4：公开参数同步改名 note，调用方位置传参行为不变）。 */
+export function decideReview(id: string, action: 'approve' | 'reject', note?: string) {
   return api.post<{ ticket_id?: string; status?: string }>(`/admin/reviews/${id}/decision`, {
     action,
-    note: reason ?? '',
+    note: note ?? '',
   })
 }
 
-/** 批量审批（预登记端点，IX-APR-02；仅同类型非高危） */
+/** 批量审批（预登记端点，IX-APR-02；仅同类型非高危）。fe1 ocr 发现4：body 仍发 reason
+ *  为有意保留——批量端点后端未实装，字段名以后端落地时为准，暂不随 decision 改名。 */
 export function batchReviews(ids: string[], action: 'approve' | 'reject', reason?: string) {
   return api.post<{ updated: number; ids: string[] }>('/admin/reviews/batch', { ids, action, reason })
 }

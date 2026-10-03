@@ -57,8 +57,9 @@ export function ExplorePage() {
     queryKey: ['kb', 'graph', 'catalog', kbId],
     queryFn: () => graphSearch('', 20),
   })
-  // fe1-F3（live 实测 2026-10-04）：graph/search 裸回 {nodes,rels}（无 items）或错误体时
-  // items 为 undefined——?.[0] 短路为 null，空 q/空结果走下方 explore-empty 空态，不再崩进 ErrorBoundary
+  // fe1-F3（live 实测 2026-10-04）：graphSearch 已在契约边界归一双形态（fe1 ocr 发现1，
+  // api.ts 内 items = res.items ?? res.nodes ?? []），此处 ?. 防护保留只兜真空——
+  // data 未就绪（加载/错误体）时短路为 null，空 q/空结果走下方 explore-empty 空态
   const centerEntity = useMemo(() => searchQ.data?.items?.[0] ?? null, [searchQ.data])
   const [centerId, setCenterId] = useState<string | null>(null)
   useEffect(() => {
@@ -70,8 +71,17 @@ export function ExplorePage() {
   // ---- 实体联想候选（搜索选择器下拉） ----
   const [suggestOpen, setSuggestOpen] = useState(false)
   const suggestions = (searchQ.data?.items ?? []).filter(e => seg === 'all' || segGroup(e.category) === seg)
-  // fe1-F3 空态判定：无可居中实体、且不在加载/错误路径（错误态与加载态各归其位），短路渲染空态
-  const exploreEmpty = !centerEntity && !searchQ.isPending && !searchQ.isError && !nb.loading && !nb.error
+  // fe1-F3 空态判定：无可居中实体、且画布确无内容（fe1 ocr 发现2：centerId 已设或邻域已有
+  // 节点 = 活图在渲染，搜索无结果不得把「暂无图谱数据」叠上——与下方错误/加载兄弟浮层同款
+  // 「仅在画布尚无节点时覆盖」口径）、且不在加载/错误路径（错误态与加载态各归其位）
+  const exploreEmpty =
+    !centerEntity &&
+    !centerId &&
+    (nb.data?.nodes.length ?? 0) === 0 &&
+    !searchQ.isPending &&
+    !searchQ.isError &&
+    !nb.loading &&
+    !nb.error
 
   // ---- 图数据 ----
   const entityById = useMemo(() => {

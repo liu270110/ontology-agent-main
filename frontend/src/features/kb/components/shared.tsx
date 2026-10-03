@@ -67,21 +67,9 @@ export function PipelineStepper({ current, className = '' }: { current: number; 
   )
 }
 
-/** 相对时间（列表更新列；画板「10 分钟前/昨天」口径） */
-export function relativeTime(iso: string): string {
-  const then = new Date(iso).getTime()
-  if (!Number.isFinite(then)) return iso
-  const diff = Date.now() - then
-  const min = Math.round(diff / 60_000)
-  if (min < 1) return '刚刚'
-  if (min < 60) return `${min} 分钟前`
-  const h = Math.round(min / 60)
-  if (h < 24) return `${h} 小时前`
-  const d = Math.round(h / 24)
-  if (d === 1) return '昨天'
-  if (d < 7) return `${d} 天前`
-  return new Date(iso).toLocaleDateString()
-}
+/** 相对时间（列表更新列；画板「10 分钟前/昨天」口径）——单源 lib/reltime（36 §7 收编，
+ *  kb/memory/ontology 三份域内同源实现合一；此处再导出兼容既有域内引用） */
+export { relativeTime } from '@/lib/reltime'
 
 export function formatSize(bytes: number): string {
   if (bytes >= 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(1)}MB`

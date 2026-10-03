@@ -14,20 +14,8 @@ export function FactStatusBadge({ status }: { status: FactStatus }) {
   return <span className={`badge ${cls}`}>{FACT_STATUS_LABEL[status]}</span>
 }
 
-export function relativeTime(iso: string): string {
-  const then = new Date(iso).getTime()
-  if (!Number.isFinite(then)) return iso
-  const diff = Date.now() - then
-  const min = Math.round(diff / 60_000)
-  if (min < 1) return '刚刚'
-  if (min < 60) return `${min} 分钟前`
-  const h = Math.round(min / 60)
-  if (h < 24) return `${h} 小时前`
-  const d = Math.round(h / 24)
-  if (d === 1) return '昨天'
-  if (d < 7) return `${d} 天前`
-  return new Date(iso).toLocaleDateString()
-}
+/** 相对时间——单源 lib/reltime（36 §7 收编，域内不再持有同源实现；再导出兼容既有引用） */
+export { relativeTime } from '@/lib/reltime'
 
 /** 全生命周期时间线（26 篇 IX-MEM-02：产生→摘要→升级→失效，失效边红色）。
  *  variant=full 详情抽屉全宽；mini 升级审核弹窗右侧紧凑态。 */

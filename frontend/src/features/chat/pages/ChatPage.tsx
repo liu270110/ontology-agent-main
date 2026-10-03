@@ -1,4 +1,7 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { MessageSquareDashed, Plus } from 'lucide-react'
+import { toast } from 'sonner'
 import { SessionList } from '../components/SessionList'
 import { ChatStream } from '../components/ChatStream'
 import { MessageInput } from '../components/MessageInput'
@@ -6,11 +9,13 @@ import { ContextMeter } from '../components/ContextMeter'
 import { ContextCollapseButton, ContextPanel, ContextPanelRail } from '../components/ContextPanel'
 import { WorkspacePanel } from '../components/WorkspacePanel'
 import { EvidenceSheet, type EvidenceFocus } from '../components/EvidenceSheet'
+import { EmptyState } from '@/components/states'
 import { useSessionStore } from '@/stores/session-store'
 import { useSessionStream } from '@/sse/useSessionStream'
 import { api } from '@/api/client'
 import type { ChatMessage } from '@/stores/session-store'
 import { CONN_STATE_TEXT } from '@/lib/conn-label'
+import { BASELINE, STOP_GENERATED } from '@/lib/toast-templates'
 
 /** 连接状态中文化（IX 顶栏状态徽标）：running 优先，其余按 SSE 连接态映射（单源=lib/conn-label） */
 const CONNECTION_TEXT = CONN_STATE_TEXT
@@ -34,17 +39,51 @@ export function ChatPage() {
   const setConnection = useSessionStore(s => s.setConnection)
   const connection = useSessionStore(s => s.connection)
   const running = useSessionStore(s => s.running)
+  const navigate = useNavigate()
+  /** 消息基线失败态（36 §B）：err=原始异常（ErrorState 取 ApiError 码），degraded=已降级警示条。
+   *  宿主持有（GET 在此发起），ChatStream 只负责渲染位与互斥门禁。 */
+  const [baselineError, setBaselineError] = useState<{ err: unknown; degraded: boolean } | null>(null)
+  /** 重载计数（「重新加载」→ +1）：ChatStream 依此重挂 hydrating 基线（骨架期盖过错误态） */
+  const [baselineTick, setBaselineTick] = useState(0)
+  /** 降级记忆镜像（§B2：警示条降级后重载成功 → toast「历史消息已加载」；updater 内不做副作用） */
+  const degradedRef = useRef(false)
+
+  // 换会话：清基线错误与降级记忆（baselineTick 重跑不清——供降级后重载成功 toast 判定）
+  useEffect(() => {
+    degradedRef.current = false
+    setBaselineError(null)
+  }, [sessionId])
 
   useEffect(() => {
     if (!sessionId) return
     setActive(sessionId)
     // 历史基线（契约 api/01 §5.2 GET /sessions/{id}/messages，before_id 游标分页；M1 取首页）
-    void api.get<{ items: (ChatMessage & { seq?: number })[] }>(`/sessions/${sessionId}/messages`).then(r => {
-      const items = r.items ?? []
-      const maxSeq = items.reduce((m, x) => Math.max(m, Number(x.seq ?? 0)), 0)
-      seed(items, maxSeq)
-    })
-  }, [sessionId, setActive, seed])
+    // 36 §B：失败立即进错误态（不再伪装成空会话卡 10s 超时）；POST 与 GET 双通道，读失败不阻断写
+    void api.get<{ items: (ChatMessage & { seq?: number })[] }>(`/sessions/${sessionId}/messages`)
+      .then(r => {
+        const items = r.items ?? []
+        const maxSeq = items.reduce((m, x) => Math.max(m, Number(x.seq ?? 0)), 0)
+        seed(items, maxSeq)
+        if (degradedRef.current) {
+          degradedRef.current = false
+          toast.success(BASELINE.reloaded)
+        }
+      })
+      .catch((err: unknown) => {
+        setBaselineError({ err, degraded: false })
+      })
+  }, [sessionId, setActive, seed, baselineTick])
+
+  /** §B1 动作两键①：重新加载——重发 GET；错误态暂留但被 hydrating 骨架盖过（互斥矩阵） */
+  function reloadBaseline() {
+    setBaselineTick(t => t + 1)
+  }
+
+  /** §B1 动作两键②：仍要继续对话——错误态收起为消息流顶部警示条，输入保持可用 */
+  function continueBaseline() {
+    degradedRef.current = true
+    setBaselineError(e => (e ? { ...e, degraded: true } : e))
+  }
 
   useSessionStream({
     sessionId,
@@ -55,10 +94,12 @@ export function ChatPage() {
     onStateChange: setConnection,
   })
 
-  /** IX-CHT-06 停止生成：轻确认（无弹窗单击即停）——取消端点 + 本地终态，已生成部分保留 */
+  /** IX-CHT-06 停止生成：轻确认（无弹窗单击即停）——取消端点 + 本地终态，已生成部分保留。
+   *  36 §B1：补 toast 反馈闭环（已停止生成 · 已生成的部分已保留）。 */
   function handleStop(runId: string | null) {
     if (runId) void api.post(`/sessions/${sessionId}/cancel`, { run_id: runId }).catch(() => {})
     useSessionStore.getState().stopRun()
+    toast.success(STOP_GENERATED.title, { description: STOP_GENERATED.description })
   }
 
   const statusText = running ? '运行中' : CONNECTION_TEXT[connection] ?? connection
@@ -76,7 +117,7 @@ export function ChatPage() {
               {statusText}
             </span>
           ) : (
-            <span className="text-xs text-label-3">← 从左侧选择一个会话开始</span>
+            <span className="text-2xs text-label-3">← 从左侧选择一个会话开始</span>
           )}
           <span className="ml-auto" />
           {sessionId && (
@@ -112,12 +153,31 @@ export function ChatPage() {
               onOpenEvidence={setEvFocus}
               // 产物卡「在工作区查看」→ 切右栏工作区页签（设计稿 L2427 操作接线）
               onOpenWorkspace={() => setRightTab('workspace')}
+              // 36 §B 消息基线错误态：宿主持有错误/重载，ChatStream 承担渲染位与互斥
+              baselineError={baselineError?.err ?? null}
+              baselineDegraded={baselineError?.degraded ?? false}
+              onBaselineReload={reloadBaseline}
+              onBaselineContinue={continueBaseline}
+              baselineTick={baselineTick}
             />
             <ContextMeter used={62_000} limit={128_000} />
             <MessageInput sessionId={sessionId} onStop={handleStop} />
           </>
         ) : (
-          <div className="flex flex-1 items-center justify-center text-sm text-label-3">选择会话后开始对话</div>
+          // 36 §A1 未选中会话：EmptyState hero 替换裸文字（遗留 #2 销账）；主区唯一 btn-p
+          <div className="flex flex-1 items-center justify-center">
+            <EmptyState
+              hero
+              icon={MessageSquareDashed}
+              title="选择一个会话"
+              desc="从左侧列表选择会话继续对话；也可以新建一个。"
+              action={
+                <button type="button" className="btn btn-p" onClick={() => navigate('/chat/new')}>
+                  <Plus size={13} aria-hidden /> 新建会话
+                </button>
+              }
+            />
+          </div>
         )}
       </div>
       {/* 右栏（IX-CHT-04 + 画框23）：上下文面板 / Agent 工作区面板 页签切换，可折叠为窄轨 */}

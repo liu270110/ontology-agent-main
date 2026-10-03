@@ -1,4 +1,5 @@
-/** 相对时间（S6 治理域列表口径；kb/ontology 域内各自持有同源实现，域间不互引） */
+/** 相对时间（全站单源，36 §7 收编：kb/memory/ontology 域 shared 原同源实现已改为本模块再导出）。
+ *  口径：<1min 刚刚 / <60min N 分钟前 / <24h N 小时前 / 昨天 / <7天 N 天前 / 其余本地日期 */
 export function relativeTime(iso: string): string {
   const then = new Date(iso).getTime()
   if (!Number.isFinite(then)) return iso

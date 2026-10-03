@@ -1,7 +1,10 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import {toast} from 'sonner'
 import {SearchX, Check,
   Download,
+  MessageSquarePlus,
   MoreHorizontal,
   Pencil,
   Pin,
@@ -12,6 +15,8 @@ import {SearchX, Check,
   X,} from 'lucide-react'
 import { api, ApiError } from '@/api/client'
 import { qk } from '@/lib/qk'
+import { relativeTime } from '@/lib/reltime'
+import { describeError, EXPORT_MD } from '@/lib/toast-templates'
 import { useSessionStore } from '@/stores/session-store'
 import {ErrorState, SkeletonRows, EmptyState} from '@/components/states'
 import { MenuSurface } from '@/components/popover'
@@ -28,7 +33,8 @@ interface SessionItem {
  *  重命名（行内输入态：↵ 确认 · Esc 取消）/ 导出 Markdown（blob 下载）/ 删除（危险二次确认 + DELETE）。
  *  全部动作经 api/01 §5.2 sessions CRUD（GET/PATCH/DELETE + messages 导出）。 */
 
-/** 导出 Markdown（IX-CHT-01）：历史消息 → blob 下载 .md */
+/** 导出 Markdown（IX-CHT-01）：历史消息 → blob 下载 .md。36 §B：promise 化交给 toast.promise
+ *  三态反馈（loading 带标题 / 成功 / 失败 describeError），消灭静默失败。 */
 async function exportMarkdown(s: SessionItem) {
   const r = await api.get<{ items: { role: 'user' | 'assistant'; content: string }[] }>(`/sessions/${s.id}/messages`)
   const lines = [`# ${s.title}`, '', `> 导出于 ${new Date().toLocaleString('zh-CN')} · ontology-agent`, '']
@@ -45,8 +51,10 @@ async function exportMarkdown(s: SessionItem) {
 }
 
 export function SessionList({ onPicked }: { onPicked?: (id: string) => void }) {
+  const navigate = useNavigate()
   const active = useSessionStore(s => s.activeSessionId)
   const setActive = useSessionStore(s => s.setActiveSession)
+  const searchRef = useRef<HTMLInputElement>(null)
   const qc = useQueryClient()
   const { data, isPending, isError, error, refetch } = useQuery({
     queryKey: qk.session.list(),
@@ -90,24 +98,24 @@ export function SessionList({ onPicked }: { onPicked?: (id: string) => void }) {
     <div className="session-col flex w-60 flex-none flex-col border-r border-separator bg-surface">
       <div className="sc-head flex items-center justify-between px-4 pb-1 pt-3">
         <b className="text-sm">会话</b>
-        {/* 会话创建尚未实现（契约无 POST /sessions，见 api/01 §5.2 会话域）：诚实禁用而非死按钮。
-            title 挂外层 span——disabled 按钮不接收指针事件，tooltip 挂按钮上永不出现 */}
-        <span title="新建会话（即将开放）">
-          <button
-            type="button"
-            className="icobtn rounded-md border border-separator px-1.5 text-label-3 btn-dis"
-            disabled
-            aria-label="新建会话（即将开放）"
-          >
-            <Plus size={12} aria-hidden />
-          </button>
-        </span>
+        {/* 新建会话（36 §A3 解锁，34-R2 销账）：POST /sessions 已实装（35 §2.3②），前端消费
+            走既有深链 /chat/new（与仪表盘「发起新对话」同路径）；api/01 §5.2 消费登记为记账项 */}
+        <button
+          type="button"
+          className="icobtn rounded-md border border-separator px-1.5 text-label-3"
+          aria-label="新建会话"
+          title="新建会话"
+          onClick={() => navigate('/chat/new')}
+        >
+          <Plus size={12} aria-hidden />
+        </button>
       </div>
       {/* 会话搜索（F-04）：按标题过滤 */}
       <div className="px-3 pb-2 pt-1">
         <label className="fakeinput flex items-center gap-1.5 rounded-lg border border-separator bg-surface-2 px-2 py-1.5">
           <Search size={12} className="flex-none text-label-3" aria-hidden />
           <input
+            ref={searchRef}
             data-testid="session-search"
             value={kw}
             onChange={e => setKw(e.target.value)}
@@ -209,7 +217,7 @@ export function SessionList({ onPicked }: { onPicked?: (id: string) => void }) {
                 </div>
                 <div className="text-[11px] text-label-3">
                   {s.pinned ? '已置顶 · ' : ''}
-                  {s.agent_id} · {new Date(s.updated_at).toLocaleString('zh-CN')}
+                  {s.agent_id} · {relativeTime(s.updated_at)}
                 </div>
               </button>
 
@@ -268,7 +276,18 @@ export function SessionList({ onPicked }: { onPicked?: (id: string) => void }) {
                           <Pencil aria-hidden />
                           重命名
                         </div>
-                        <div role="menuitem" className="menu-i" onClick={() => { void exportMarkdown(s); setMenuId(null) }}>
+                        <div
+                          role="menuitem"
+                          className="menu-i"
+                          onClick={() => {
+                            setMenuId(null)
+                            void toast.promise(exportMarkdown(s), {
+                              loading: EXPORT_MD.loading(s.title),
+                              success: EXPORT_MD.success,
+                              error: e => describeError(e),
+                            })
+                          }}
+                        >
                           <Download aria-hidden />
                           导出 Markdown
                           <span className="menu-k">.md</span>
@@ -285,8 +304,41 @@ export function SessionList({ onPicked }: { onPicked?: (id: string) => void }) {
             </div>
           ),
         )}
-        {!isPending && !isError && items.length === 0 && (
-          <EmptyState compact icon={SearchX} title="无匹配会话" />
+        {/* 36 §A3 零会话/无匹配 分支门控（消灭混同；与 isPending/isError 互斥门禁 33 §4）：
+            有搜索词 → SearchX 无匹配（清除搜索，焦点回搜索框）；无搜索词 → MessageSquarePlus 零会话（新建）。
+            主操作每屏唯一：主区 A1 为 btn-p，此处侧栏退 btn-s/btn-g 次动作 */}
+        {!isPending && !isError && items.length === 0 && kw.trim() && (
+          <EmptyState
+            compact
+            icon={SearchX}
+            title="无匹配会话"
+            desc="换个关键词试试，或清除搜索。"
+            action={
+              <button
+                type="button"
+                className="btn btn-g btn-sm"
+                onClick={() => {
+                  setKw('')
+                  searchRef.current?.focus()
+                }}
+              >
+                清除搜索
+              </button>
+            }
+          />
+        )}
+        {!isPending && !isError && items.length === 0 && !kw.trim() && (
+          <EmptyState
+            compact
+            icon={MessageSquarePlus}
+            title="还没有会话"
+            desc="从第一个提问开始。"
+            action={
+              <button type="button" className="btn btn-s btn-sm" onClick={() => navigate('/chat/new')}>
+                <Plus size={12} aria-hidden /> 新建会话
+              </button>
+            }
+          />
         )}
       </div>
     </div>

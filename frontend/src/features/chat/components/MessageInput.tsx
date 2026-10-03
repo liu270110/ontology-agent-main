@@ -3,6 +3,7 @@ import { BookOpen, ChevronDown, Paperclip, Send, Sparkles, Square } from 'lucide
 import { toast } from 'sonner'
 import { useSessionStore } from '@/stores/session-store'
 import { api } from '@/api/client'
+import { SEND_FAILED, sendFailedDescription } from '@/lib/toast-templates'
 
 /** 思考档位（设计稿 p-chat L2445 chipmodel「思考档位」）：点击循环 标准→深度→闪电 */
 const THINK_MODES = ['标准', '深度', '闪电'] as const
@@ -52,6 +53,13 @@ export function MessageInput({ sessionId, onStop }: { sessionId: string; onStop:
         messages: [...s.messages, { id: `local-${Date.now()}`, role: 'user', content }],
       }))
       setText('')
+    } catch (e) {
+      // 36 §B 静默失败治理：发送失败 → error toast（带重试 action，duration 6s）；草稿保留不清空
+      toast.error(SEND_FAILED.title, {
+        description: sendFailedDescription(e),
+        action: { label: SEND_FAILED.retryLabel, onClick: () => void send() },
+        duration: SEND_FAILED.durationMs,
+      })
     } finally {
       setBusy(false)
     }

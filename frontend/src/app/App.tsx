@@ -184,8 +184,17 @@ export function App() {
             </Routes>
       </Suspense>
           </BrowserRouter>
-          {/* 全局 Toast（sonner；S3 起供各域操作反馈；z 层随 --z-toast 令牌） */}
-          <Toaster position="top-center" richColors closeButton />
+          {/* 全局 Toast（sonner；S3 起供各域操作反馈；z 层随 --z-toast 令牌）。
+              v1.1 玻璃主题对齐（36 §B1 收尾）：classNames 映射 elements.css .toast
+              （glass-clear 档 + sh-float，令牌单源禁新 hex）；richColors 撤下——实底类型色
+              会盖掉玻璃配方，图标语义色（success=--green / error=--red 等 33 §3）改由
+              elements.css 的 ol[data-sonner-toaster] 作用域规则绑定令牌（裸类压不过 sonner
+              默认 0,2,0 选择器；勿用 <Toaster id> 充当作用域——sonner 按 id 分发派 toast）。 */}
+          <Toaster
+            position="top-center"
+            closeButton
+            toastOptions={{ classNames: { toast: 'toast', actionButton: 'btn btn-s btn-sm' } }}
+          />
         </QueryClientProvider>
       </ThemeProvider>
     </ErrorBoundary>

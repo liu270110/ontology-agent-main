@@ -222,6 +222,9 @@
 .menu-i svg{width:14px;height:14px;color:var(--label-2)}
 .menu-i:hover{background:rgba(0,0,0,.05)}
 .dark .menu-i:hover{background:rgba(255,255,255,.07)}
+/* 容器托管键序的活动项高亮（36 §C.1）：样式=hover 同款，键盘巡航与鼠标 hover 同一视觉 */
+.menu-i.on{background:rgba(0,0,0,.05)}
+.dark .menu-i.on{background:rgba(255,255,255,.07)}
 .menu-i.danger{color:var(--red)} .menu-i.danger svg{color:var(--red)}
 .menu-sep{height:1px;background:var(--separator);margin:5px 8px}
 .menu-k{margin-left:auto;font-family:var(--mono);font-size:10px;color:var(--label-3)}

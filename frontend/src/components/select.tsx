@@ -8,6 +8,9 @@ import { cn } from '@/lib/cn'
  *  弹层 role=listbox 经 aria-activedescendant 巡航；↑↓/Home/End/首字跳转/Enter 接受/
  *  Esc 关闭归还焦点/Tab 收起；弹层 portal 到 body + fixed 定位 + 视口内上翻
  *  （玻璃堆叠上下文纪律：弹层绝不留在容器内 absolute，见 elements.css v1.3 节）。
+ *  焦点陷阱协作（36 §C.1-5/C.2-3/4）：弹层带 data-focus-scope 并入 Modal 陷阱的 Tab
+ *  循环域；Esc preventDefault+stopPropagation 保持「内层先消费」，不惊动 Modal/Sheet
+ *  的 window 冒泡相 Esc 栈。
  *  兼容契约：镜像隐藏原生 <select>（承接 id/label 关联、name、data-testid、
  *  fireEvent.change 测试路径）；onChange 事件形状与原生同形（e.target.value），
  *  <option> 子元素原样解析——调用点只需换标签名，测试零改动。 */
@@ -293,6 +296,7 @@ export function Select({
             role="listbox"
             id={listId}
             aria-label={ariaLabel}
+            data-focus-scope
             className={cn('sel-pop', pos.up && 'up')}
             style={{
               left: pos.left,

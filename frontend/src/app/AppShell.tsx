@@ -11,6 +11,9 @@ import { SidebarResizer } from './SidebarResizer'
 import { UserMenu } from './UserMenu'
 import { Logo } from '@/design-system/brand/Logo'
 
+/** 工作区类页面全幅判定：单聊/群聊/轨迹（/chat 前缀）+ 工作流编辑器（/workflows/:id）。 */
+const FULLBLEED = /^(\/chat(\/|$)|\/workflows\/[^/]+$)/
+
 /** 应用壳（16 篇 §5.2 / 03 篇 AppLayout）：液态玻璃壳层——根容器挂 .app-stage 静态双光斑底
  *  （board.css .app 配方，玻璃折射的彩色来源），侧边栏 .glass-side（board.css .sb 配方）、
  *  顶栏 .material-bar（board.css .bbar 配方）。
@@ -125,7 +128,9 @@ export function AppShell() {
           <NotificationBell />
           <UserMenu displayName={user?.displayName} email={user?.email} onLogout={() => void onLogout()} />
         </header>
-        <main className={location.pathname === '/chat' ? 'min-h-0 flex-1 overflow-hidden' : 'min-h-0 flex-1 overflow-auto p-6'}>
+        {/* 工作区类页面全幅（对话/群聊/轨迹/工作流编辑器）：聊天与画布类页面不做 p-6 留白，
+            与 16 篇「工作区页面=操作面」口径一致；列表/卡片页保留留白。 */}
+        <main className={FULLBLEED.test(location.pathname) ? 'min-h-0 flex-1 overflow-hidden' : 'min-h-0 flex-1 overflow-auto p-6'}>
           <Outlet />
         </main>
       </div>

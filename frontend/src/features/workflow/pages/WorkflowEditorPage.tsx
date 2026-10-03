@@ -158,7 +158,7 @@ export function WorkflowEditorPage() {
     /* 全幅出逃：抵消壳层 main 的 p-6（负 margin + 高宽各 +48px），编辑器铺满 main 内容区，
        画布获得最大可读面积；overflow-hidden 兜悬浮件裁切 */
     <div
-      className="relative -m-6 flex h-[calc(100%+48px)] w-[calc(100%+48px)] flex-col overflow-hidden"
+      className="relative flex h-full min-h-0 flex-col overflow-hidden"
       data-testid="wf-editor-page"
     >
       {/* 48px 工具栏（唯一一条，无第二行工具条） */}

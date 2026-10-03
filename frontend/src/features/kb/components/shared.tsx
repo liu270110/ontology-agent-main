@@ -23,6 +23,7 @@ const TYPE_LABEL: Record<KbDocument['doc_type'], string> = {
   Word: 'Word',
   Excel: 'Excel',
   CSV: 'CSV',
+  文本: '文本',
   图片: '图片',
 }
 

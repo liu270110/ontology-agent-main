@@ -2,6 +2,8 @@
 
 端点（api/01 登记册 kb 行；OntRAG §5 检索契约 REST 子集）：
     POST /kb/collections                      建库
+    GET  /kb/collections                      集合列表（R53 补齐：信封形态对齐 documents
+                                              列表，{items,total,next_cursor,offset,limit}）
     GET  /kb/documents                        文档列表（R51 联调补齐：信封 + 前端
                                               KbDocument DTO；status/type/q 可选过滤 +
                                               offset/limit 分页，limit 缺省 50 上限 200）
@@ -66,6 +68,8 @@ from services.kb.api.schemas.kb import (
     CandidateDecisionIn,
     CandidateDecisionOut,
     CollectionCreateIn,
+    CollectionListData,
+    CollectionListEnvelope,
     CollectionOut,
     DocumentCreateIn,
     DocumentDeleteCascade,
@@ -249,6 +253,47 @@ async def create_collection(body: CollectionCreateIn, principal: KbWriteDep, ses
         status=collection.status,
         created_at=collection.created_at,
     )
+
+
+@router.get("/collections", summary="知识库集合列表（R53 补齐：{code,message,data} 信封对齐 documents 列表）")
+async def list_collections(
+    principal: KbReadDep,
+    session: SessionDep,
+    offset: Annotated[int, Query(ge=0)] = 0,
+    limit: Annotated[int, Query(ge=1, le=200)] = 50,
+) -> CollectionListEnvelope:
+    """当前租户集合分页（created_at 降序；offset/limit 缺省 50 上限 200）。
+
+    信封形态与 GET /kb/documents 同构（{code,message,data:{items,total,next_cursor,offset,
+    limit}}，前端 client apiFetchEnvelope 强信封解包）；空列表合法。租户 deny-by-default。
+    """
+    conds = [KbCollection.tenant_id == principal.tenant_id]
+    total = (await session.execute(select(func.count()).select_from(KbCollection).where(*conds))).scalar_one()
+    rows = (
+        (
+            await session.execute(
+                select(KbCollection)
+                .where(*conds)
+                .order_by(KbCollection.created_at.desc())
+                .offset(offset)
+                .limit(limit)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    items = [
+        CollectionOut(
+            id=row.id,
+            name=row.name,
+            description=row.description,
+            embedding_model=row.embedding_model,
+            status=row.status,
+            created_at=row.created_at,
+        )
+        for row in rows
+    ]
+    return CollectionListEnvelope(data=CollectionListData(items=items, total=int(total), offset=offset, limit=limit))
 
 
 # 摄取入口两层防御（docs/Agent/09 §2.1 工程问题 3「二进制健壮性」）：M2 唯一通道是 JSON

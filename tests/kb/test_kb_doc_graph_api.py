@@ -50,11 +50,12 @@ from services.kb.api.kb import (
     expand_neighborhood,
     find_graph_path,
     get_document,
+    list_collections,
     list_document_chunks,
     retry_pipeline,
     search_graph_entities,
 )
-from services.kb.api.schemas.kb import DocumentCreateIn, KbGraphQueryOut
+from services.kb.api.schemas.kb import DocumentCreateIn, KbGraphQueryOut, doc_type_of
 from services.kb.data.orm import Document as DocumentORM
 from services.kb.data.orm import DocumentChunk as DocumentChunkORM
 from services.kb.data.orm import KbCollection as KbCollectionORM
@@ -90,6 +91,17 @@ def _seed_hierarchy():
             (SUBSTATION, "变电站", [EQUIPMENT]),
         ]
     )
+
+
+def test_doc_type_of_文本类收敛_不再误判图片():
+    """docs/Agent/09 §2.1 工程问题 4：text/*（markdown/plain/json）收敛「文本」；CSV 先于
+    text/* 通配比对；未登记类型兜底「图片」不变。"""
+    assert doc_type_of("设备手册.md", "text/markdown") == "文本"
+    assert doc_type_of("无扩展名文档", "text/plain") == "文本"  # mime 兜底
+    assert doc_type_of("接口定义", "application/json") == "文本"
+    assert doc_type_of("台账", "text/csv") == "CSV"  # CSV 优先于 text/* 通配（不被文本吞并）
+    assert doc_type_of("扫描件", None) == "图片"  # 未登记兜底不变（mock 同款）
+    assert doc_type_of("报表.xlsx", None) == "Excel"  # 既有五类判定零回归
 
 
 # ---------------------------------------------------------------- 图引擎纯函数（零外部依赖，恒跑）
@@ -619,6 +631,26 @@ async def test_CREATE_二进制垃圾拒收_415_业务错误_正常文本不受�
             )
         ).scalar_one()
     assert n_rows == 2
+
+
+# ---------------------------------------------------------------- 集合列表（GET /kb/collections，R53 补齐）
+
+
+@pytest.mark.integration
+async def test_GET_collections_信封_租户隔离(doc_env, kb_pg):
+    """docs/Agent/09 §2.1 工程问题 4（信封漂移）：GET /kb/collections 返回 {code,message,data}
+    信封（对齐 documents 列表），租户 deny-by-default 空列表合法。"""
+    env = doc_env
+    principal = _principal(env)
+    async with kb_pg() as db:
+        out = await list_collections(principal, db)
+        assert out.code == 0 and out.message == "ok"  # 强信封（前端 apiFetchEnvelope 解包口径）
+        assert out.data.total == 1 and out.data.limit == 50 and out.data.next_cursor is None
+        assert [str(c.id) for c in out.data.items] == [str(env["collection_id"])]
+        assert out.data.items[0].name == "b6-it-库" and out.data.items[0].embedding_model == "bge-m3"
+        # 他人租户不可见（deny-by-default）：随机租户 → 空列表非失败
+        other = await list_collections(_principal({**env, "tenant_id": uuid.uuid4()}), db)
+    assert other.code == 0 and other.data.total == 0 and other.data.items == []
 
 
 # ---------------------------------------------------------------- 图三查（GET /kb/graph/search|neighborhood|path）

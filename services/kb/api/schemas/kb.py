@@ -34,6 +34,30 @@ class CollectionOut(BaseModel):
     created_at: datetime
 
 
+class CollectionListData(BaseModel):
+    """集合列表 data 面（信封解包后形态；与 DocumentListData 同构：{items,total,next_cursor}
+    + offset/limit，R53 补齐 GET /kb/collections，docs/Agent/09 §2.1 工程问题 4 信封漂移）。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    items: list[CollectionOut] = Field(default_factory=list)
+    total: int = 0
+    next_cursor: str | None = None  # offset/limit 分页恒 None（前端列表 DTO 契约字段）
+    offset: int = 0
+    limit: int = 50
+
+
+class CollectionListEnvelope(BaseModel):
+    """集合列表成功信封（与 DocumentListEnvelope 同构：{code,message,data}，前端
+    apiFetchEnvelope 强信封解包口径）。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    code: int = 0
+    message: str = "ok"
+    data: CollectionListData
+
+
 class DocumentCreateIn(BaseModel):
     model_config = ConfigDict(extra="forbid")
     collection_id: uuid.UUID
@@ -57,7 +81,8 @@ class DocumentOut(BaseModel):
 # ---------------------------------------------------------------- 文档列表（R51 联调补齐 GET /kb/documents）
 
 KbDocUiStatus = Literal["pending", "extracting", "indexed", "failed"]  # 前端 KbDocStatus 四态
-KbDocType = Literal["PDF", "Word", "Excel", "CSV", "图片"]  # 前端 FileTypeBadge 五类
+# 前端 FileTypeBadge 六类；「文本」=docs/Agent/09 §2.1 工程问题 4（text/* 收敛，不再误判图片）
+KbDocType = Literal["PDF", "Word", "Excel", "CSV", "文本", "图片"]
 
 # 后端 documents.status 八态（database/01 DDL）→ 前端四态收敛：
 # 抽取中=preprocessed/extracting/aligning/validating；等待=pending_review（候选待人工终审，
@@ -98,6 +123,7 @@ DOCUMENT_TYPE_FILTER: dict[KbDocType, tuple[tuple[str, ...], tuple[str, ...]]] =
     "Word": (("%.doc", "%.docx"), ("%msword%", "%wordprocessingml%")),
     "Excel": (("%.xls", "%.xlsx"), ("%ms-excel%", "%spreadsheetml%")),
     "CSV": (("%.csv",), ("text/csv%",)),
+    "文本": (("%.md", "%.markdown", "%.txt", "%.json"), ("text/%", "application/json%")),
     "图片": (("%.png", "%.jpg", "%.jpeg", "%.gif", "%.webp", "%.bmp", "%.svg"), ("image/%",)),
 }
 
@@ -108,7 +134,9 @@ def ui_status_of(document_status: str) -> KbDocUiStatus:
 
 
 def doc_type_of(title: str, mime_type: str | None) -> KbDocType:
-    """标题扩展名优先、mime 兜底的文档类型投影（mock 同款兜底=图片）。"""
+    """标题扩展名优先、mime 兜底的文档类型投影（docs/Agent/09 §2.1 工程问题 4：text/* 收敛
+    「文本」，markdown/plain/json 不再误判「图片」；CSV 先于 text/* 通配比对；未登记类型
+    兜底=图片，mock 同款）。"""
     ext = title.rsplit(".", 1)[-1].upper() if "." in title else ""
     if ext == "PDF" or "pdf" in (mime_type or "").lower():
         return "PDF"
@@ -118,6 +146,10 @@ def doc_type_of(title: str, mime_type: str | None) -> KbDocType:
         return "Excel"
     if ext == "CSV" or "csv" in (mime_type or "").lower():
         return "CSV"
+    if ext in ("MD", "MARKDOWN", "TXT", "TEXT", "JSON") or (mime_type or "").lower().startswith(
+        ("text/", "application/json")
+    ):
+        return "文本"
     return "图片"
 
 

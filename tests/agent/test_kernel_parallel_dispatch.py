@@ -400,3 +400,30 @@ async def test_段长不超过并发度上限_超限部分另起段且严格按�
     finish_idx = next(i for i, e in enumerate(events) if e.event_type == "kernel.group_finished")
     gated3_idx = next(i for i, e in enumerate(events) if e.event_type == "kernel.gated" and e.data["step_seq"] == 3)
     assert finish_idx < gated3_idx  # 段间严格按序：前段结算完才进下一段
+
+
+async def test_步预算剩余小于段长_段截断至剩余步_尾部步不执行_预算耗尽优雅终止():
+    # arrange：max_steps=2（段前预算剩余 2）；3 个可并行 READ 步成单段 ⇒ 段截断为前 2 步
+    probe: dict[str, object] = {}
+    tools = [
+        _ProbeTool(_iri(1), sleep_s=0.05, probe=probe),
+        _ProbeTool(_iri(2), sleep_s=0.05, probe=probe),
+        _ProbeTool(_iri(3), sleep_s=0.05, probe=probe),
+    ]
+    kernel = _kernel_with(make_candidate(tuple(_par_step(seq) for seq in (1, 2, 3))), tools)
+    # act
+    outcome = await kernel.run(make_task(), make_ctx(), budget=Budget(max_steps=2, duration_s=30))
+    # assert：仅前 2 步触达工具（截断防段内超发，第 3 步不执行）；run 走既有预算耗尽优雅终态
+    assert outcome.status == str(RunStatus.FAILED)
+    assert outcome.reason_code == int(ErrorCode.RETRY_BUDGET_EXHAUSTED)
+    assert [len(t.calls) for t in tools] == [1, 1, 0]
+    assert probe["completed"] == [1, 2]
+    statuses = {s.seq: s.status for s in outcome.terminal_states}
+    assert statuses[1] is StepStatus.VALIDATED
+    assert statuses[2] is StepStatus.VALIDATED
+    assert statuses[3] is StepStatus.CANCELLED  # 未执行尾步落取消终态（与串行预算耗尽同口径）
+    ledger = kernel.last_ledger
+    assert ledger is not None
+    assert ledger.open_call_ids() == ()
+    interrupted = _events(kernel, "kernel.interrupted")
+    assert interrupted and "预算耗尽" in interrupted[0].data["reason"]

@@ -171,7 +171,13 @@ class AgentKernel:
                         rc.tracker.add_step()  # 步数预算记账（步后累计，下一步检查点生效）
                     else:  # 多步段：段前预算检查点一次，段执行器负责门禁先行+池执行+声明序收口
                         rc.tracker.check()
+                        remaining = rc.tracker.remaining_steps
+                        planned = len(group)
+                        # 段截断至剩余步预算：尾部步不执行=与串行逐步检查点语义等价（预算耗尽后串行同样不执行它们）
+                        group = group if remaining is None else group[:remaining]
                         await self._tool_dispatch.run_group(rc, candidate, group, parallelism=self._tool_parallelism)
+                        if len(group) < planned:  # 尾部步被截断=计划仍有未执行步：补段边界检查点（步数已耗尽必抛）
+                            rc.tracker.check()
                 return await self._stage_settlement(rc, candidate)
         except BudgetExhaustedError as exc:  # 须先于 KernelError（子类）
             return await self._finalize_interrupted(

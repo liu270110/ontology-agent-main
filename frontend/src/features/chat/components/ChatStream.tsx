@@ -173,7 +173,7 @@ function EvidenceChips({
 }
 
 /** 证据取数：历史消息用附着证据，实时末条用 RETRIEVAL_EVIDENCE 会话级证据（§8.2 F2 集成点） */
-function evidenceFor(m: ChatMessage, evidence: Evidence | null, lastAssistantId: string | undefined): Evidence | null {
+function evidenceFor(m: ChatMessage, evidence: Evidence | null, lastAssistantId: string | null | undefined): Evidence | null {
   return m.evidence ?? (evidence && m.id === lastAssistantId ? evidence : null)
 }
 

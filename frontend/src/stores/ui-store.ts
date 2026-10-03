@@ -21,8 +21,8 @@ export const useUiStore = create<UiState>()(
     set => ({
       sidebarCollapsed: false,
       commandOpen: false,
-      sidebarWidth: 240,
-      setSidebarWidth: w => set({ sidebarWidth: Math.min(360, Math.max(200, Math.round(w))) }),
+      sidebarWidth: 200,
+      setSidebarWidth: w => set({ sidebarWidth: Math.min(320, Math.max(176, Math.round(w))) }),
       collapsedGroups: [],
       toggleSidebar: () => set(s => ({ sidebarCollapsed: !s.sidebarCollapsed })),
       setCommandOpen: v => set({ commandOpen: v }),

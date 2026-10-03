@@ -16,21 +16,13 @@ export default defineConfig({
   },
   server: { port: 5173 },
   build: {
-    // S8 性能预算（22 篇 §4/30 篇 §10）：重库拆 chunk 懒加载；react 系留主包（拆分致 default export 互操作断裂，实测 useState undefined）
-    rollupOptions: {
-      output: {
-        manualChunks(id: string) {
-          if (id.includes('node_modules')) {
-            if (id.includes('echarts')) return 'vendor-echarts'
-            if (id.includes('@codemirror') || id.includes('lezer')) return 'vendor-codemirror'
-            if (id.includes('@xyflow')) return 'vendor-xyflow'
-            if (id.includes('@rjsf') || id.includes('ajv')) return 'vendor-rjsf'
-            if (id.includes('@headless-tree')) return 'vendor-tree'
-            if (id.includes('react-markdown') || id.includes('remark') || id.includes('rehype') || id.includes('unified') || id.includes('shiki') || id.includes('highlight.js')) return 'vendor-markdown'
-          }
-        },
-      },
-    },
+    // S8 性能预算（22 篇 §4/30 篇 §10）：路由级 lazy（App.tsx）已让重库全部落在异步 chunk，
+    // 交给 rollup 自然分包——2026-10-04 实测（docs/frontend/06）曾用 manualChunks 按
+    // node_modules 子串分 vendor 组，结果 react/react-dom 作为 vendor 组模块的共享依赖被
+    // rollup 吞进 vendor-markdown/vendor-xyflow，入口被迫静态加载 311KB xyflow+162KB
+    // markdown（首屏 JS 230KB gzip）。移除后 react 系自然留主包（勿再拆 react vendor：
+    // 拆分致 default export 互操作断裂，实测 useState undefined），重库各自成异步共享
+    // chunk（xyflow+d3/codemirror/rjsf/markdown），首屏 JS 127KB gzip（-45%）。
   },
   test: {
     environment: 'jsdom',

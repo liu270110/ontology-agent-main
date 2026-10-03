@@ -111,6 +111,16 @@ export function ChatPage() {
       const r = apply(evt)
       return r === 'gap' ? 'gap' : undefined
     },
+    // F7（C-7）：SSE 跳号 → GET messages 历史补齐到该 seq（store.backfill 并入历史并重放
+    // pending 帧）；返回 true=该 seq 已覆盖，hook 以其为续传基线重连；失败=false 走
+    // ?last_event_id= 重连由服务端补发兜底（store 按 seq 对账去重）。
+    onGapBackfill: evt => {
+      if (!sessionId) return Promise.resolve(false)
+      return api
+        .get<{ items: (ChatMessage & { seq?: number })[] }>(`/sessions/${sessionId}/messages`)
+        .then(r => useSessionStore.getState().backfill(r.items ?? [], evt))
+        .catch(() => false)
+    },
     onStateChange: setConnection,
   })
 

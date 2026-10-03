@@ -7,11 +7,14 @@ import type { SseEvent } from '@/sse/events'
 /** useSessionStream 单测（对账 2026-09-27 §8.4 修复三行为，api/02 §4 重连语义）：
  *  ① 鉴权兜底：连接 URL 带 ?access_token=（api/01 §2.2，EventSource 无法自定义 header）；
  *  ② 事件驱动 seq 基线：收到 lastEventId=7 帧后常规断线，重连 URL 携带 last_event_id=7；
- *  ③ 跳号补发：handler 对 seq=9 返回 'gap' → 主动 close 旧连接，新连接 URL 携带
- *     last_event_id=9（不是 0/缺失——原实现 lastSeq 从不回写导致补发空转，已修复）；
+ *  ③ 跳号补发（F7 修法定稿）：handler 对 seq=9 返回 'gap' → 不前移续传基线：
+ *     - 未提供 onGapBackfill：以最后已应用 seq 重连（服务端从缺口补发，store 去重兜底）；
+ *     - 提供 onGapBackfill 且补齐成功：以该帧 seq=9 重连（缺口已被历史覆盖）；
+ *     - onGapBackfill 返回 false：仍以最后已应用 seq 重连；
  *  ④ 无令牌时 URL 不含 access_token 参数。
- *  jsdom 无 EventSource：以 FakeEventSource 桩注入全局——构造时记录 URL + 静态实例注册表，
- *  提供 emit（按具名事件分发一帧）/ fail（模拟 onerror）/ open 辅助与 close 断言。 */
+ *  jsdom 无 EventSource：以 FakeEventSource 桩注入全局（台账 C-7 同款 shim）——构造时记录
+ *  URL + 静态实例注册表，提供 emit（按具名事件分发一帧）/ fail（模拟 onerror）/ open 辅助
+ *  与 close 断言。 */
 class FakeEventSource {
   static instances: FakeEventSource[] = []
   static reset() {
@@ -39,8 +42,10 @@ class FakeEventSource {
     this.closed = true
   }
 
-  /** 测试辅助：推一帧具名事件（data 序列化为 JSON，lastEventId 即 SSE id: 行 = seq） */
+  /** 测试辅助：推一帧具名事件（data 序列化为 JSON，lastEventId 即 SSE id: 行 = seq）。
+   *  close 后不再投递（对齐真 EventSource：手动 close 后帧不再到达）。 */
   emit(type: string, data: Record<string, unknown>, lastEventId = '') {
+    if (this.closed) return
     for (const fn of [...(this.listeners.get(type) ?? [])]) {
       fn(new MessageEvent(type, { data: JSON.stringify(data), lastEventId }))
     }
@@ -115,7 +120,7 @@ describe('useSessionStream（对账 §8.4：鉴权兜底 + last_event_id 续传/
     expect(FakeEventSource.instances[1].url).toContain('last_event_id=7')
   })
 
-  it('③ 跳号补发：handler 对 seq=9 返回 gap → close 旧连接，新连接 URL 带 last_event_id=9', () => {
+  it('③ 跳号不前移基线：handler 对 seq=9 返回 gap → close 旧连接，重连 URL 不带越缺口的 last_event_id', () => {
     vi.useFakeTimers()
     const onEvent: (evt: SseEvent) => 'gap' | void = evt => (evt.seq === 9 ? 'gap' : undefined)
     renderStream(onEvent)
@@ -128,14 +133,59 @@ describe('useSessionStream（对账 §8.4：鉴权兜底 + last_event_id 续传/
     expect(first.closed).toBe(true)
 
     act(() => {
-      vi.advanceTimersByTime(50) // gap 重连延迟 50ms
+      vi.advanceTimersByTime(50) // gap 重连延迟 50ms（无补齐回调的原生兜底路径）
     })
 
     expect(FakeEventSource.instances).toHaveLength(2)
     const second = FakeEventSource.instances[1]
     expect(second.closed).toBe(false)
-    expect(second.url).toContain('last_event_id=9')
+    // F7（C-7）：基线未越缺口——不带 last_event_id（最后已应用 seq=0），服务端从缺口处补发
+    expect(second.url).not.toContain('last_event_id=9')
     expect(second.url).not.toContain('last_event_id=0')
+  })
+
+  it('③-b F7 补齐成功：onGapBackfill 返回 true → 以该帧 seq=9 重连（缺口已被历史覆盖）', async () => {
+    vi.useFakeTimers()
+    const onEvent: (evt: SseEvent) => 'gap' | void = evt => (evt.seq === 9 ? 'gap' : undefined)
+    const onGapBackfill = vi.fn(() => true)
+    renderHook(() => useSessionStream({ sessionId: 's-1', onEvent, onGapBackfill }))
+    const first = FakeEventSource.instances[0]
+
+    act(() => {
+      first.emit('TEXT_MESSAGE_START', {}, '9')
+    })
+    expect(first.closed).toBe(true)
+
+    // 补齐 promise 微任务 + 0ms 重连定时器一并推进
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0)
+    })
+    expect(onGapBackfill).toHaveBeenCalledWith({ name: 'TEXT_MESSAGE_START', seq: 9, data: {} })
+
+    expect(FakeEventSource.instances).toHaveLength(2)
+    expect(FakeEventSource.instances[1].url).toContain('last_event_id=9')
+  })
+
+  it('③-c F7 补齐失败：onGapBackfill 返回 false/异常 → 以最后已应用 seq 重连（服务端补发兜底）', async () => {
+    vi.useFakeTimers()
+    const onEvent: (evt: SseEvent) => 'gap' | void = evt => (evt.seq === 9 ? 'gap' : undefined)
+    const onGapBackfill = vi.fn(() => Promise.reject(new Error('network down')))
+    renderHook(() => useSessionStream({ sessionId: 's-1', onEvent, onGapBackfill }))
+    const first = FakeEventSource.instances[0]
+
+    act(() => {
+      first.emit('TEXT_MESSAGE_START', {}, '9') // gap（基线保持 0）
+      first.emit('RUN_FINISHED', {}, '10') // close 后帧不投递（shim 对齐真 EventSource）
+    })
+    expect(first.closed).toBe(true)
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0)
+    })
+
+    expect(FakeEventSource.instances).toHaveLength(2)
+    expect(FakeEventSource.instances[1].url).not.toContain('last_event_id=9')
+    expect(FakeEventSource.instances[1].url).not.toContain('last_event_id=10')
   })
 
   it('④ 无令牌时 URL 不含 access_token 参数', () => {

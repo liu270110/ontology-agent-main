@@ -472,9 +472,14 @@ def _hit_out(hit: L2Hit) -> SearchHitOut:
 # 测试经 dependency_overrides 覆盖（tests/gateway/test_memory_api.py）。
 
 
-def get_memory_service() -> MemoryService:
-    """真实装配在 app.py 生命周期里替换（依赖 Redis/PG 连接）；测试经 dependency_overrides 覆盖本函数。"""
-    raise HTTPException(status_code=503, detail="memory service not wired")
+def get_memory_service(request: Request) -> MemoryService:
+    """组合根装配面（B7 接线 2026-10-04）：lifespan 装配 app.state.memory_service（参数面同
+    memory.business.tasks.build_dependencies 进程装配先例），本依赖只读取；未装配=503+5004
+    统一错误体（fail-closed，同 kb._tickets/审批端口检查先例；测试经 dependency_overrides 覆盖）。"""
+    svc = getattr(request.app.state, "memory_service", None)
+    if svc is None:
+        raise GatewayError(5004, "memory service 未装配", status_code=503)
+    return svc  # type: ignore[no-any-return]
 
 
 def tenant_id(x_tenant_id: Annotated[str, Header(alias="X-Tenant-Id")]) -> uuid.UUID:
@@ -489,9 +494,15 @@ Svc = Annotated[MemoryService, Depends(get_memory_service)]
 Tid = Annotated[uuid.UUID, Depends(tenant_id)]
 
 
-def get_pipeline() -> tuple:
-    """返回 (ConsolidationPipeline, MemoryRepository)；真实装配在 lifespan 替换。"""
-    raise HTTPException(status_code=503, detail="consolidation pipeline not wired")
+def get_pipeline(request: Request) -> tuple:
+    """沉淀管线装配面（B7 接线 2026-10-04）：lifespan 装配 app.state.consolidation_pipeline +
+    memory_repo（同一 PgMemoryRepository 实例双角色：记录仓储 + 待复核仓储）；未装配=503+5004
+    统一错误体（fail-closed；测试经 dependency_overrides 覆盖）。"""
+    pipeline = getattr(request.app.state, "consolidation_pipeline", None)
+    repo = getattr(request.app.state, "memory_repo", None)
+    if pipeline is None or repo is None:
+        raise GatewayError(5004, "consolidation pipeline 未装配", status_code=503)
+    return pipeline, repo
 
 
 Pipe = Annotated[tuple, Depends(get_pipeline)]

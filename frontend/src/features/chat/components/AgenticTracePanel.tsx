@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
-import { AlertTriangle, Check, ChevronDown, PenLine, Search, Waypoints, X } from 'lucide-react'
+import { Check, ChevronDown, PenLine, Search, Waypoints, X } from 'lucide-react'
 import type { AgenticBlock, AgenticGradeReason } from '@/api/contracts'
+import { AgenticDegradedBanner } from './AgenticDegradedBanner'
 import { NextActionsCard } from './NextActionsCard'
 
 /** AgenticTracePanel（AgenticRAG优化方案.md §8 F1，v1）：检索循环时间线。
@@ -10,7 +11,10 @@ import { NextActionsCard } from './NextActionsCard'
  *  「多轮检索未命中，以下为降级结果」，语义警示色小剂量）。
  *  风格：玻璃 Clear 档（design-system/glass.css .glass-clear）；默认折叠一行摘要，展开看时间线；
  *  framer-motion 步进入场（stagger 80ms ≈ motion.css .stagger 节奏），prefers-reduced-motion 直切；
- *  颜色/圆角/字号全走令牌（tokens.css），零硬编码色值。agentic 缺省（旧响应）→ 不渲染任何节点。 */
+ *  颜色/圆角/字号全走令牌（tokens.css），零硬编码色值。agentic 缺省（旧响应）→ 不渲染任何节点。
+ *  2026-10-04 perf 批：本组件是全仓唯一 framer-motion 使用点，ChatStream 改 React.lazy
+ *  异步挂载（degraded 横幅拆出 AgenticDegradedBanner.tsx 静态首载），framer-motion 家族
+ *  （motion-dom 等 ~130KB min）随之剥离 ChatPage 首包进异步 chunk。 */
 
 const DECISION_REASON_TEXT: Record<AgenticBlock['decision_reason'], string> = {
   deterministic_task: '确定性任务，无需检索',
@@ -23,23 +27,6 @@ const GRADE_REASON_TEXT: Record<AgenticGradeReason, string> = {
   hit_count_zero: '零命中',
   score_below_threshold: '得分低于阈值',
   span_missing: '证据跨度缺失',
-}
-
-/** degraded 警示条（§8.2 F2「不误导用户当权威答案」）：orange 语义色小剂量。
- *  底色用 --orange-soft 令牌内联（tailwind 配置无 orange-soft 键，且 var 色 + alpha 修饰符会被
- *  Tailwind 3 静默降为实底——循 EvidenceSheet HighlightedQuote 既有先例）。 */
-export function AgenticDegradedBanner({ testid = 'agentic-degraded-banner' }: { testid?: string }) {
-  return (
-    <div
-      data-testid={testid}
-      role="alert"
-      className="flex items-center gap-1.5 rounded-lg border border-separator px-2.5 py-1.5 text-2xs text-orange"
-      style={{ background: 'var(--orange-soft)' }}
-    >
-      <AlertTriangle size={11} className="flex-none" aria-hidden />
-      多轮检索未命中，以下为降级结果
-    </div>
-  )
 }
 
 /** rounds 步进条子项 variants（stagger 由父级编排；reduce-motion 时不挂载动画属性） */

@@ -1,4 +1,4 @@
-import { memo, useEffect, useRef, useState } from 'react'
+import { lazy, memo, Suspense, useEffect, useRef, useState } from 'react'
 import { AlertTriangle, Check, Copy, FileText, ListTree, MessagesSquare, RefreshCw, ThumbsDown, ThumbsUp } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import Markdown, { type Components } from 'react-markdown'
@@ -8,8 +8,12 @@ import { api, ApiError } from '@/api/client'
 import { EmptyState, ErrorState, SkeletonRows } from '@/components/states'
 import { BASELINE } from '@/lib/toast-templates'
 import { ToolCallCard } from './ToolCallCard'
-import { AgenticDegradedBanner, AgenticTracePanel } from './AgenticTracePanel'
+import { AgenticDegradedBanner } from './AgenticDegradedBanner'
 import type { EvidenceFocus } from './EvidenceSheet'
+
+// 2026-10-04 perf 批：面板（全仓唯一 framer-motion 使用点）异步挂载，家族 ~130KB 剥离
+// ChatPage 首包；证据消息才触发加载，fallback 空占位（折叠摘要 arrive 前无布局跳动）。
+const AgenticTracePanel = lazy(() => import('./AgenticTracePanel').then(m => ({ default: m.AgenticTracePanel })))
 
 /** 消息流（画框03）：用户气泡实底蓝、助手气泡玻璃、工具卡、证据 chip（点击开抽屉 IX-CHT-03）、
  *  流式光标、助手消息悬停操作条（IX-CHT-07：复制/重新生成/赞踩——复制真实剪贴板，
@@ -517,7 +521,9 @@ export function ChatStream({
                   return (
                     <>
                       <EvidenceChips chunks={ev.chunks} graphPaths={ev.graph_paths} degraded={ev.degraded} onOpen={onOpenEvidence} />
-                      <AgenticTracePanel agentic={ev.agentic} />
+                      <Suspense fallback={null}>
+                        <AgenticTracePanel agentic={ev.agentic} />
+                      </Suspense>
                     </>
                   )
                 })()}

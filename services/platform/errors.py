@@ -21,6 +21,11 @@ class ErrorCode(IntEnum):
     TOKEN_MISSING = 1001
     TOKEN_INVALID = 1002
     TOKEN_EXPIRED = 1003
+    # 2026-10-04 be1 批登记（docs/评审/联调缺陷台账-2026-10-04（主仓本地）B-⑥：FastAPI 默认
+    # 404/405 错误体 {detail} 不合统一四字段契约——网关全局 http_exception_handler 转四字段时
+    # 既有族无「路由不存在/方法不允许」专用码，就近 1xxx 网关段新增；02 §7 表格回填随文档批）
+    ROUTE_NOT_FOUND = 1004
+    METHOD_NOT_ALLOWED = 1005
     SCOPE_INSUFFICIENT = 2001
     ROLE_FORBIDDEN = 2002
     TENANT_MISMATCH = 2003

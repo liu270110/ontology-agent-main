@@ -495,17 +495,22 @@ def build_chat_result_sink(uow: AsyncUnitOfWork) -> Callable[[ChatOutcome], Awai
             session = await tx.sessions.get(outcome.session_id)
             if session is None:
                 return
-            seq = session.append_message("assistant", outcome.answer)  # assistant 不触发状态迁移
-            await tx.sessions.append_message(
-                outcome.session_id,
-                Message(
-                    session_id=outcome.session_id,
-                    seq=seq,
-                    role="assistant",
-                    agent_id=outcome.agent_id,  # 群聊发言归属（27 篇 X15）
-                    content=outcome.answer,
-                ),
-            )
+            # B-④ 联调修复：失败 run（error_code 非空）或空答案不落史——对齐编排器 L1
+            # 「if outcome.answer」守卫口径（chat_orchestrator 步骤④回写）；此前失败路径
+            # 无条件 append_message 产生空 assistant 行，污染历史消息流。run 终态审计
+            # 事件与 task/run 行回写不受影响（失败仍留痕）。
+            if outcome.error_code is None and outcome.answer:
+                seq = session.append_message("assistant", outcome.answer)  # assistant 不触发状态迁移
+                await tx.sessions.append_message(
+                    outcome.session_id,
+                    Message(
+                        session_id=outcome.session_id,
+                        seq=seq,
+                        role="assistant",
+                        agent_id=outcome.agent_id,  # 群聊发言归属（27 篇 X15）
+                        content=outcome.answer,
+                    ),
+                )
             finished = outcome.error_code is None
             await tx.tasks.append_event(
                 outcome.task_id,

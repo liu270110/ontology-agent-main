@@ -94,7 +94,10 @@ class JWTAuthMiddleware(BaseHTTPMiddleware):
 
         settings: Settings = request.app.state.settings
         try:
-            claims = decode_token(token, settings.jwt_secret)
+            # S-① 联调修复：本链只放行 access（refresh 专用 /auth/refresh 匿名端点，api/01 §5.9；
+            # 先例=auth.refresh 的 expected_typ="refresh"）——不校验 typ 时 refresh 可当 access
+            # 打受保护端点（越权面），typ 不符 → 1002。
+            claims = decode_token(token, settings.jwt_secret, expected_typ="access")
         except TokenError as exc:
             code = ErrorCode.TOKEN_EXPIRED if exc.expired else ErrorCode.TOKEN_INVALID
             return error_response(request, code, str(exc), status_code=401)

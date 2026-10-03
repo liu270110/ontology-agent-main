@@ -153,9 +153,12 @@ async def refresh(body: RefreshRequest, request: Request, session: SessionDep) -
 
 @router.post("/logout", status_code=204, summary="登出：所持令牌 jti 写吊销黑名单（认证即可）")
 async def logout(
-    body: LogoutRequest | None,
     request: Request,
     principal: Annotated[Principal, Depends(get_current_principal)],
+    # B-⑤ 联调修复：body 补 =None 默认（api/01 §5.9「认证即可」，body 全可省）——
+    # 无默认时 FastAPI 视为必填体，空 body logout 被 422 挡回而非 204；
+    # 形参后置满足 Python「带默认值不前置」语法（FastAPI 按注解解析，次序无语义）。
+    body: LogoutRequest | None = None,
 ) -> Response:
     if body and body.refresh_token:  # best-effort：附带的 refresh 一并吊销（失效不阻断登出）
         try:

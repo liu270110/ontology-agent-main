@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import { ArrowRight, Check } from 'lucide-react'
-import { getPreferences, putPreferences } from '@/features/settings/api'
+import { getPreferences, putPreferences } from '@/lib/preferences'
 
 /** 新手引导 · 三步上手（宿主 p-dashboard 新手引导卡；S-AD 切片）：
  *  三步 checklist——①完成首次对话 ②创建本体项目 ③导入知识库文档；完成态判定用

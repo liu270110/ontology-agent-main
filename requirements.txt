@@ -3,7 +3,7 @@ fastmcp>=2.12.5,<3  # 4.x 需 starlette>=1.0 与 fastapi starlette<0.51 冲突�
 fastapi>=0.115
 uvicorn[standard]>=0.30
 alembic>=1.13
-sqlalchemy>=2.0
+sqlalchemy[asyncio]>=2.0  # asyncio extra 拉 greenlet（与 pyproject 同步）
 psycopg[binary]>=3.1
 pydantic>=2.7
 pydantic-settings>=2.2

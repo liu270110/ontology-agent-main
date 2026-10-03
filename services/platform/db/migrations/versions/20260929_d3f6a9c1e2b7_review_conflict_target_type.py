@@ -34,14 +34,17 @@ _TARGET_TYPES_V1 = (
 )
 # 物理终名（m1 建表迁移 op.f("ck_review_tickets_target_type") 产物）；op.f() 标记「已是终名」，
 # 防 alembic 对显式名再套一层 naming_convention 渲染出双前缀错名（agent_degraded_state 同款）。
-_CK_NAME = op.f("ck_review_tickets_target_type")
+# 注意 op.f 依赖运行期代理，只能在 upgrade/downgrade 体内调用——模块级调用会让
+# heads/history 的脚本加载期（代理未建立）直接 NameError（2026-10-04 基线清账）。
 
 
 def upgrade() -> None:
+    _CK_NAME = op.f("ck_review_tickets_target_type")
     op.drop_constraint(_CK_NAME, "review_tickets", type_="check")
     op.create_check_constraint(_CK_NAME, "review_tickets", _TARGET_TYPES_V2)
 
 
 def downgrade() -> None:
+    _CK_NAME = op.f("ck_review_tickets_target_type")
     op.drop_constraint(_CK_NAME, "review_tickets", type_="check")
     op.create_check_constraint(_CK_NAME, "review_tickets", _TARGET_TYPES_V1)

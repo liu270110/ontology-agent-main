@@ -22,7 +22,7 @@ from pyshacl import validate  # noqa: E402
 from rdflib import Graph  # noqa: E402
 
 TASK_TTL = REPO / "docs/研究整理/07a-任务本体草案/task-ontology.ttl"
-PWR_TTL = REPO / "seeds/power_seed.ttl"
+PWR_TTL = REPO / "services/seeds/power_seed.ttl"
 
 
 def build_abox(n_feeders: int) -> Graph:

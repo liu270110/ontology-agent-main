@@ -2,7 +2,7 @@
 """规则候选抽取通道用例（波次④切片 v1）：时序流程型文本 → 规则草案（OB2 规则层）。
 
 - 纯内存：确定性 LLM 桩（FakeModelPort 式，恒返回预置结构化输出，零网络）+ 真种子 catalog
-  （seeds/power_seed.ttl 经 load_seed_catalog）+ rdflib/pySHACL 同步自检；
+  （services/seeds/power_seed.ttl 经 load_seed_catalog）+ rdflib/pySHACL 同步自检；
 - 落库用例跑 aiosqlite（生产同一 ORM/会话路径；JSONB/UUID 经本文件 @compiles shim 降编译，
   同 tests/kb/test_connector.py 先例；aiosqlite 未装则仅落库用例 skip）；
 - 断言目标：结构化抽取解析（模板 rule_id/系统自留字段剥离/confidence 收敛）、risk_flag 恒

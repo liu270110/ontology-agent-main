@@ -10,7 +10,7 @@
 - L3：fake model 合格产物过确定性校验（surface=O1/action_iri 落种子集）；越界 action_iri
   拒绝并重试；重试耗尽（1+2 次）=失败且工单保持 draft 零副作用；
 - envelope 写回完整性（既有键保留）与重跑幂等（覆盖 draft_artifact）；
-- 非缺口轨工单拒绝起草；种子行动类装载（真实 seeds/power_seed.ttl）。
+- 非缺口轨工单拒绝起草；种子行动类装载（真实 services/seeds/power_seed.ttl）。
 """
 
 from __future__ import annotations
@@ -43,7 +43,7 @@ from services.rsi.whitelist import ImprovementType
 TENANT = uuid.UUID("00000000-0000-0000-0000-0000000000a1")
 NOW = datetime(2026, 9, 29, 12, 0, 0, tzinfo=UTC)
 
-# 种子域行动类（seeds/power_seed.ttl 的 pw: 命名空间；literal 集使用例不依赖种子文件内容漂移）
+# 种子域行动类（services/seeds/power_seed.ttl 的 pw: 命名空间；literal 集使用例不依赖种子文件内容漂移）
 PW_NS = "http://ontology-agent.local/o/t1/power#"
 SEED_ACTIONS = frozenset(
     {
@@ -501,7 +501,7 @@ async def test_重跑幂等_同工单重起草覆盖draft_artifact() -> None:
 
 
 def test_种子行动类装载_真实种子文件() -> None:
-    actions = load_seed_actions()  # 缺省 seeds/power_seed.ttl（DEFAULT_SEED_PATH）
+    actions = load_seed_actions()  # 缺省 services/seeds/power_seed.ttl（DEFAULT_SEED_PATH）
     assert {f"{PW_NS}DispatchRepair", f"{PW_NS}IsolateFault", f"{PW_NS}RestorePower"} <= actions
     assert all(iri.startswith(PW_NS) for iri in actions)
 

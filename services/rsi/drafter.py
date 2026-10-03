@@ -5,7 +5,7 @@ G1 在 G0 开出的缺口工单（trigger=gap、status=draft、evidence 含簇�
 如实降级）：
 
 - **L1 组合既有工具**（确定性，零 LLM）：按工单 action_iri 在**种子本体行动类**
-  （seeds/power_seed.ttl 的 ob2:Action 子类闭包）与**平台既有工具绑定**
+  （services/seeds/power_seed.ttl 的 ob2:Action 子类闭包）与**平台既有工具绑定**
   （writeback ConnectorRegistry 的 action_iris，注入形）中找**同域（同命名空间）行动类**，
   编排为计划模板草案；
 - **L2 市场能力包检索**（确定性检索）：经 plugin 市场列表/检索面
@@ -51,8 +51,8 @@ from services.platform.ports.model_port import ModelPort, ModelPortError
 from services.rsi.proposal import Proposal, TriggerTrack
 from services.rsi.surfaces import EvolutionSurface
 
-# 种子本体行动类装载缺省位（仓库根 seeds/power_seed.ttl，09 §13.3 G1 定稿路径）
-DEFAULT_SEED_PATH = Path(__file__).resolve().parents[2] / "seeds" / "power_seed.ttl"
+# 种子本体行动类装载缺省位（services/seeds/power_seed.ttl，09 §13.3 G1 定稿路径随种子落位调整）
+DEFAULT_SEED_PATH = Path(__file__).resolve().parents[1] / "seeds" / "power_seed.ttl"
 
 # L3 重试预算硬上限（初始 1 次 + 重试 ≤2 = 至多 3 次调用；耗尽=该工单本轮起草失败）
 L3_MAX_RETRIES = 2
@@ -191,7 +191,7 @@ def seed_actions_from_graph(graph: Graph) -> frozenset[str]:
 
 
 def load_seed_actions(path: Path | str = DEFAULT_SEED_PATH) -> frozenset[str]:
-    """种子 Turtle（缺省 seeds/power_seed.ttl）→ 行动类 IRI 集（复用 ontology.core 既有装载器）。"""
+    """种子 Turtle（缺省 services/seeds/power_seed.ttl）→ 行动类 IRI 集（复用 ontology.core 既有装载器）。"""
     graph = load_turtle(Path(path).read_text(encoding="utf-8"))
     return seed_actions_from_graph(graph)
 

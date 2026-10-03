@@ -116,7 +116,7 @@ _SMALLTALK_TERMS = frozenset(
 _SMALLTALK_TAIL_PARTICLES = "呀啊哈呢哦噢喔呗啦咯喽哟捏嘛吧您"
 
 # 工单号模式（确定性任务判别，§2.2 G1「任务本体先判」的 v1 词面版）：
-# OO-\d{6} 与种子本体 R004 SHACL pattern ^OO-[0-9]{6}$ 同款（seeds/power_seed.ttl）；
+# OO-\d{6} 与种子本体 R004 SHACL pattern ^OO-[0-9]{6}$ 同款（services/seeds/power_seed.ttl）；
 # GD-\d{8}-\d{4} = 故障工单（停电分析 wedge 场景约定）。大小写敏感（与 SHACL pattern 一致）。
 _TICKET_NO_RE = re.compile(r"GD-\d{8}-\d{4}|OO-\d{6}")
 
@@ -232,7 +232,7 @@ async def rewrite(query: str, *, catalog: SeedCatalog | None = None) -> tuple[st
 
     只取最左一个可归一段（v1 单术语改写）。返回 (改写后查询, 依据="term_alias:<规范标签>")；
     无归一点或改写结果与原查询相同 → None（调用方据此降级，不空转重查同一查询）。
-    ``catalog``=注入种子目录（测试/调用方装配用；None=懒加载 seeds/power_seed.ttl 进程内单例）。
+    ``catalog``=注入种子目录（测试/调用方装配用；None=懒加载 services/seeds/power_seed.ttl 进程内单例）。
     简称启发式为 PoC 档占位——正式别名以术语表（主文档 §4.3#3 aliases）承载后取代。
     """
     cat = catalog if catalog is not None else await _default_catalog()

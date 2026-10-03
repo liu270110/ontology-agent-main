@@ -1,6 +1,6 @@
 """检索质量评估执行器（08 §7.3 评估结果契约 v1；OntRAG §6.9 评估驱动）。
 
-golden 集=seeds/golden/power_retrieval_golden.jsonl（30 例：local 12/global 10/drift 8，
+golden 集=services/seeds/golden/power_retrieval_golden.jsonl（30 例：local 12/global 10/drift 8，
 benchmark_version='power-golden-30@v1'）。逐例调 KnowledgeSearchService.search（mode 透传）：
 
 - 指标：hit@k（首个期望文档进前 k 引用）、MRR（首个期望文档排名倒数均值）、
@@ -35,7 +35,7 @@ if TYPE_CHECKING:  # 仅类型注解（避免 business 内模块环）
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_GOLDEN_PATH: Final = Path(__file__).resolve().parents[3] / "seeds" / "golden" / "power_retrieval_golden.jsonl"
+DEFAULT_GOLDEN_PATH: Final = Path(__file__).resolve().parents[2] / "seeds" / "golden" / "power_retrieval_golden.jsonl"
 GOLDEN_VERSION: Final = "power-golden-30@v1"
 DELTA_BLOCK_THRESHOLD: Final = -0.02  # 劣化>2% 阻断（08 §7.2）
 _DOC_EXTENSIONS: Final = (".md", ".txt", ".pdf", ".docx")

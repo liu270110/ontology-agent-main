@@ -6,7 +6,7 @@
      parse_json_loose）已落地（本分支已合入，脚本按其真实 API 适配）；
   2. 对话模型端点可用：优先 services.infra.config 的 llm_base_url / llm_model / llm_api_key
      （OA_ 环境变量同源），未配置时给出明确提示退出；
-  3. 金标集 seeds/golden/power_triples_golden.jsonl（582 条）与语料 seeds/samples/power/（18 篇）。
+  3. 金标集 services/seeds/golden/power_triples_golden.jsonl（582 条）与语料 services/seeds/samples/power/（18 篇）。
 
 它做什么：
   逐文档构造抽取消息（复用 build_extraction_messages：固定输出结构 + 种子类清单 grounding
@@ -59,8 +59,8 @@ REPO_ROOT: Final = Path(__file__).resolve().parents[2]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-GOLDEN_PATH: Final = REPO_ROOT / "seeds" / "golden" / "power_triples_golden.jsonl"
-CORPUS_DIR: Final = REPO_ROOT / "seeds" / "samples" / "power"
+GOLDEN_PATH: Final = REPO_ROOT / "services" / "seeds" / "golden" / "power_triples_golden.jsonl"
+CORPUS_DIR: Final = REPO_ROOT / "services" / "seeds" / "samples" / "power"
 OUTPUT_PATH: Final = Path(__file__).resolve().parent / "poc2_calibration.json"
 CANDIDATES_PATH: Final = Path(__file__).resolve().parent / "poc2_candidates.jsonl"
 

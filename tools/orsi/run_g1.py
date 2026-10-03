@@ -53,7 +53,7 @@ from services.rsi.sinks import LedgerFailureSink  # noqa: E402
 
 DEFAULT_STORE_DIR = ".orsi-g1"
 
-# 种子域 demo 簇行动类（命名空间对齐 seeds/power_seed.ttl 的 pw:，L1 同域组合可命中）
+# 种子域 demo 簇行动类（命名空间对齐 services/seeds/power_seed.ttl 的 pw:，L1 同域组合可命中）
 DEMO_SEED_DOMAIN_ACTION = "http://ontology-agent.local/o/t1/power#ComposeOutageReport"
 # 跨域 demo 簇行动类（run_g0 --demo 主簇同款；L1 无同域候选 → 降 L2 演示 ② 通道）
 DEMO_CROSS_DOMAIN_ACTION = "https://onto.example/ob2/QueryPowerOutageRange"
@@ -75,7 +75,9 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default=DEFAULT_STORE_DIR,
         help=f"GapStore 目录（默认 {DEFAULT_STORE_DIR}；共享口径见模块 docstring）",
     )
-    parser.add_argument("--seed", type=str, default=None, help="种子本体 Turtle 路径（缺省 seeds/power_seed.ttl）")
+    parser.add_argument(
+        "--seed", type=str, default=None, help="种子本体 Turtle 路径（缺省 services/seeds/power_seed.ttl）"
+    )
     parser.add_argument("--window-days", type=int, default=30, help="滑窗天数（默认 30，§13.3 G0）")
     parser.add_argument("--threshold", type=int, default=5, help="开单阈值：簇规模 ≥ threshold（默认 5，§13.3 G0）")
     parser.add_argument("--limit", type=int, default=200, help="--live 单轮拉取台账行上限（默认 200）")

@@ -24,7 +24,7 @@
 提示词治理（standards/01 §5.1 / 18 篇 §1）：抽取模板为版本化资产，正文落
 business/prompts/ 包（active=extract_v2，v1→v2 变更=新增 evidence 逐字引语要求），运行期经
 business/prompts 注册表按 template_ref 取用（version pin：同一 job 全程同版本，未知 ref 明确
-抛错），ref 随 kb_facts.meta 与审核信封落库可追溯；种子本体 = seeds/power_seed.ttl（电力停电
+抛错），ref 随 kb_facts.meta 与审核信封落库可追溯；种子本体 = services/seeds/power_seed.ttl（电力停电
 wedge，M2 出口条件）。评审票据写入经 CandidateReviewPort（review.data 模块私有，见端口 docstring）。
 """
 
@@ -60,8 +60,8 @@ logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------- 种子本体目录（本体引导 + shapes）
 
-SEED_TTL_PATH = Path(__file__).resolve().parents[3] / "seeds" / "power_seed.ttl"
-_SHAPES_REF = "seeds/power_seed.ttl@v1"  # validate/align 结论回写的 shapes 版本指针
+SEED_TTL_PATH = Path(__file__).resolve().parents[2] / "seeds" / "power_seed.ttl"
+_SHAPES_REF = "services/seeds/power_seed.ttl@v1"  # validate/align 结论回写的 shapes 版本指针
 _KB_FACT_NS = "http://ontology-agent.local/kb/fact/"  # ABox 实例命名空间（校验期临时节点）
 
 

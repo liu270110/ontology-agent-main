@@ -2,7 +2,7 @@
 """M2 验收口径 demo：建模 → 抽取 → 终审 → 检索 端到端（锚点 §7「建模→抽取→检索 demo 跑通」）。
 
 链路（全部真实组件，仅两处按底线口径模拟）：
-- 建模：种子本体资产 seeds/power_seed.ttl（load_seed_catalog；本体引导清单注入抽取提示词）；
+- 建模：种子本体资产 services/seeds/power_seed.ttl（load_seed_catalog；本体引导清单注入抽取提示词）；
 - 抽取：真实三步 run_extract（种子目录进 user prompt）→ run_align（术语对齐）→
   run_validate（SHACL 门禁，subClassOf 闭包由 _gate_candidate 内置）；
 - 终审：模拟人工（candidate → authoritative；底线 1：candidate 不参与检索）；

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """PoC3 索引成本标定（锚点 docs/architecture/01 §7 PoC③；OntRAG 知识库GraphRAG设计 §2/§3/§4.0）。
 
-对 seeds/samples/power/ 实测三件事，并按 §3 公式外推完整 GraphRAG 成本：
+对 services/seeds/samples/power/ 实测三件事，并按 §3 公式外推完整 GraphRAG 成本：
   1. chunk_document 语义分块统计：chunk 数 / token 总量（token 口径 = len(text)//2 中文近似，
      与 services.semantic.knowledge.chunking.estimate_tokens 同源，随本 PoC 冻结）；
   2. bge-m3 实测嵌入吞吐（POST {ollama}/api/embed，批量 32，记录 tokens/s 与总耗时；
@@ -34,7 +34,7 @@ REPO_ROOT: Final = Path(__file__).resolve().parents[2]
 if str(REPO_ROOT) not in sys.path:  # 工具层脚本：引导仓库根以复用 services.*
     sys.path.insert(0, str(REPO_ROOT))
 
-CORPUS_DIR: Final = REPO_ROOT / "seeds" / "samples" / "power"
+CORPUS_DIR: Final = REPO_ROOT / "services" / "seeds" / "samples" / "power"
 RESULT_PATH: Final = Path(__file__).resolve().parent / "poc3_results.json"
 
 EMBED_MODEL: Final = "bge-m3"

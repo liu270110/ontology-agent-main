@@ -3,7 +3,7 @@
 
 流程：
 1. 线程内 Ollama→TEI 协议 shim（/api/embed → TEI /embed；零产品改动，纯评估夹具）；
-2. 干净租户 + 集合，灌入 seeds/samples/power 18 篇（chunk_document + TEI 嵌入，status=indexed）；
+2. 干净租户 + 集合，灌入 services/seeds/samples/power 18 篇（chunk_document + TEI 嵌入，status=indexed）；
 3. run_retrieval_eval 全量 30 例（落 evaluation_runs；RRF k=60/权重 0.4/0.4/0.6 现行值下）；
 4. 消融三组：bm25-only / vector-only / RRF 混合（同 top_k=8，hit@8/MRR）；
 5. 引用率：30 例检索 citations 非空占比（§10 条款 50 问为初始规模示例值，本批 30 例集口径）；
@@ -31,8 +31,8 @@ sys.path.insert(0, str(REPO))
 
 asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
-CORPUS = REPO / "seeds" / "samples" / "power"
-GOLDEN = REPO / "seeds" / "golden" / "power_retrieval_golden.jsonl"
+CORPUS = REPO / "services" / "seeds" / "samples" / "power"
+GOLDEN = REPO / "services" / "seeds" / "golden" / "power_retrieval_golden.jsonl"
 OUT = Path(__file__).resolve().parent / "kbe1_results.json"
 TOP_K = 8
 

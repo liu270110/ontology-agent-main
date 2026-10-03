@@ -46,7 +46,7 @@ M5+ 启动（权威=architecture/09）。
 - `DraftArtifact`（path/surface/content/action_iri/execution_mode/confidence/rationale）：
   产物写回 `envelope["draft_artifact"]`（JSONB 整体重赋值），**候选状态保持 draft**——
   迁移唯一入口仍为 RsiService/Proposal.transition（G2/G3 本批不做不 stub）；
-- 种子行动类装载 `load_seed_actions`（seeds/power_seed.ttl 的 ob2:Action 子类闭包，
+- 种子行动类装载 `load_seed_actions`（services/seeds/power_seed.ttl 的 ob2:Action 子类闭包，
   复用 ontology.core.tbox 装载器，只读）；
 - 运行入口 `tools/orsi/run_g1.py`（`--demo` 合成两簇演示三级命中/降级 / `--live` OA_
   配置骨架；Markdown 报告含逐级尝试留痕；首跑实录=docs/rsi/G1-首次运行-2026-09-29.md，

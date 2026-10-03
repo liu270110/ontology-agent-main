@@ -93,6 +93,25 @@ class _ProbeTool:
             completed.append(call.step_seq)  # type: ignore[attr-defined]
 
 
+class _CancelAwareTool(_ProbeTool):
+    """取消观测桩（FakeTool 捕获 CancelledError 既有模式）：invoke 收到取消登记步号后重抛，任务必终结。"""
+
+    async def invoke(
+        self,
+        call: ToolCall,
+        ctx: TenantContext,
+        *,
+        approval: ApprovalTicket | None = None,
+        timeout_ms: int = 30_000,
+    ) -> ToolResult:
+        try:
+            return await super().invoke(call, ctx, approval=approval, timeout_ms=timeout_ms)
+        except asyncio.CancelledError:
+            cancelled = self.probe.setdefault("cancelled", [])
+            cancelled.append(call.step_seq)  # type: ignore[attr-defined]
+            raise
+
+
 class _SeqRejectGate:
     """包 gate 桩：仅对指定 seq 拒绝（驱动「段内单步拒绝不炸整段」场景）。"""
 
@@ -427,3 +446,28 @@ async def test_步预算剩余小于段长_段截断至剩余步_尾部步不执
     assert ledger.open_call_ids() == ()
     interrupted = _events(kernel, "kernel.interrupted")
     assert interrupted and "预算耗尽" in interrupted[0].data["reason"]
+
+
+async def test_取消中止在途段_段任务显式收取消_收口有界且零悬挂():
+    # arrange：三步全慢（30s 假自然时长=最坏拖尾量级）；派发后在途取消
+    probe: dict[str, object] = {}
+    tools = [_CancelAwareTool(_iri(seq), sleep_s=30.0, probe=probe) for seq in (1, 2, 3)]
+    kernel = _kernel_with(make_candidate(tuple(_par_step(seq) for seq in (1, 2, 3))), tools)
+    run_task = asyncio.create_task(kernel.run(make_task(), make_ctx(), budget=Budget(max_steps=10, duration_s=60)))
+    await asyncio.sleep(0.1)  # 段已派发、三调用在途
+    assert probe["active"] == 3
+    # act
+    started = time.monotonic()
+    run_task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await run_task  # 取消语义保留：收尾完毕后重抛
+    closing_s = time.monotonic() - started
+    # assert：工具任务全部收到取消并终结（不等 30s 自然结束）；收口有界（不断言具体毫秒，只对齐清单 5s 纪律）
+    assert closing_s < 5.0
+    assert probe["cancelled"] == [1, 2, 3]
+    assert probe["active"] == 0  # 三任务全部 terminated，零悬挂
+    ledger = kernel.last_ledger
+    assert ledger is not None
+    assert ledger.open_call_ids() == ()
+    assert all(rec.closed_as_cancelled for rec in ledger.tool_calls)
+    assert ledger.residuals == ()

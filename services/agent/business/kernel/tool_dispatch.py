@@ -105,6 +105,8 @@ class ToolGroupDispatcher:
             try:
                 await asyncio.gather(*tasks)
             except asyncio.CancelledError:
+                for t in tasks:
+                    t.cancel()  # 父任务取消不传播到子任务：显式取消在途步，收尾时间才有界（对齐 §2.4 清单 5s 纪律）
                 await asyncio.gather(*tasks, return_exceptions=True)  # 段任务走完取消路径再上抛（零悬挂）
                 raise
         for step in steps:  # 声明序收口：observation＋步数记账（与串行执行完全一致的顺序）

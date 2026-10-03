@@ -495,7 +495,7 @@ export function ChatStream({
               >
                 {/* §8.2 F2：agentic 两轮未命中降级 → 答案区顶部警示条（不误导为权威答案） */}
                 {(() => {
-                  const ev = evidenceFor(m, evidence, lastAssistantId)
+                  const ev = evidenceFor(m, evidence, lastAssistantId ?? undefined)
                   return ev?.agentic?.degraded === 'agentic_exhausted' ? (
                     <div className="mb-1.5">
                       <AgenticDegradedBanner testid="agentic-answer-banner" />
@@ -512,7 +512,7 @@ export function ChatStream({
                 {/* 检索证据区（§8.2 F2 集成点）：证据 chip + Agentic 检索循环时间线；
                     agentic 块可选——旧响应/旧帧无此键时面板不渲染（向后兼容红线） */}
                 {(() => {
-                  const ev = evidenceFor(m, evidence, lastAssistantId)
+                  const ev = evidenceFor(m, evidence, lastAssistantId ?? undefined)
                   if (!ev) return null
                   return (
                     <>

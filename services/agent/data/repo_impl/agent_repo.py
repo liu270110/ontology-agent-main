@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import uuid
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from services.agent.data.orm import Agent as AgentORM
@@ -96,6 +96,12 @@ class PgAgentRepository:
         stmt = stmt.order_by(AgentORM.created_at.desc(), AgentORM.id.desc()).offset(offset).limit(limit)
         rows = (await self._db.execute(stmt)).scalars().all()
         return [_agent_to_domain(r) for r in rows]
+
+    async def count(self, *, status: str | None = None) -> int:
+        stmt = select(func.count()).select_from(AgentORM).where(AgentORM.tenant_id == self._tenant_id)
+        if status is not None:
+            stmt = stmt.where(AgentORM.status == status)
+        return int((await self._db.execute(stmt)).scalar_one())
 
     async def get_adapter(self, adapter_id: uuid.UUID) -> AgentAdapterInfo | None:
         row = await self._db.get(AgentAdapterORM, adapter_id)

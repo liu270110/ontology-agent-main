@@ -13,6 +13,7 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict, Field
 
 from services.agent.domain.model.agent import Agent, AgentAdapterInfo
+from services.platform.schemas import PageMeta
 
 _AGENT_TOOL_PATTERN = "^(builtin|claude)$"
 
@@ -66,10 +67,11 @@ class AgentDetailOut(AgentOut):
 
 
 class AgentListOut(BaseModel):
+    """agent 列表（api/01 §3.1 信封：{data, meta:{page,page_size,total}}，B1 批统一）。"""
+
     model_config = ConfigDict(extra="forbid")
-    items: list[AgentOut]
-    offset: int
-    limit: int
+    data: list[AgentOut]
+    meta: PageMeta
 
 
 class AgentHealthOut(BaseModel):

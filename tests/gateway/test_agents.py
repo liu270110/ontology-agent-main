@@ -84,11 +84,14 @@ async def test_agent_注册_列表_详情_全层贯通(gateway_uow, extra_agent_
     principal = agent_principal(principal)
     agent = await _new_agent(gateway_uow, principal, created, config={"model": "qwen3", "temperature": 0.2})
     assert agent.status == "enabled" and agent.agent_tool == "builtin"
-    # 列表（含状态筛选）
-    listing = await list_agents(principal=principal, uow=gateway_uow, offset=0, limit=20)
-    assert agent.id in {a.id for a in listing.items}
-    disabled_only = await list_agents(principal=principal, uow=gateway_uow, offset=0, limit=20, agent_status="disabled")
-    assert agent.id not in {a.id for a in disabled_only.items}
+    # 列表（含状态筛选；api/01 §3.1 信封 {data, meta:{page,page_size,total}}）
+    listing = await list_agents(principal=principal, uow=gateway_uow, page=1, page_size=20)
+    assert agent.id in {a.id for a in listing.data}
+    assert listing.meta.page == 1 and listing.meta.page_size == 20 and listing.meta.total >= 1
+    disabled_only = await list_agents(
+        principal=principal, uow=gateway_uow, page=1, page_size=20, agent_status="disabled"
+    )
+    assert agent.id not in {a.id for a in disabled_only.data}
     # 详情：平台级适配器绑定投影（ensure_platform_adapter 版本=platform）
     detail = await get_agent(agent.id, principal=principal, uow=gateway_uow)
     assert detail.adapter is not None

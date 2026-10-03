@@ -23,7 +23,7 @@ from services.ontology.domain.model.ontology import (
     OntologyVersionRef,
 )
 
-SEED_PATH = Path(__file__).resolve().parents[2] / "seeds" / "power_seed.ttl"
+SEED_PATH = Path(__file__).resolve().parents[2] / "services" / "seeds" / "power_seed.ttl"
 PWR = "http://ontology-agent.local/o/t1/power#"
 OB2 = "https://ontology-agent.dev/ns/ob2#"
 TASK = "https://ontology-agent.dev/ns/task#"

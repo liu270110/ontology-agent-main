@@ -13,7 +13,11 @@ import pytest
 
 def test_seed_migration_idempotent():
     for _ in range(2):  # 连续两次 upgrade：第二次必须 no-op 成功
-        r = subprocess.run([sys.executable, "-m", "alembic", "upgrade", "head"], capture_output=True, text=True)
+        r = subprocess.run(
+            [sys.executable, "-m", "alembic", "-c", "services/alembic.ini", "upgrade", "head"],
+            capture_output=True,
+            text=True,
+        )
         if r.returncode != 0 and "Can't locate revision" in (r.stdout + r.stderr):
             pytest.skip("DB alembic_version 指向的修订不在当前工作区脚本目录（环境错位），跳过种子幂等用例")
         assert r.returncode == 0, r.stderr

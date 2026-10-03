@@ -46,7 +46,7 @@ from services.platform.config import Settings
 if sys.platform == "win32":
     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
-SEED_PATH = Path(__file__).resolve().parents[2] / "seeds" / "power_seed.ttl"
+SEED_PATH = Path(__file__).resolve().parents[2] / "services" / "seeds" / "power_seed.ttl"
 PWR = "http://ontology-agent.local/o/t1/power#"
 
 

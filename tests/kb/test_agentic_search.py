@@ -218,7 +218,7 @@ async def test_rewrite_不可归一_返回None(query: str) -> None:
 
 
 async def test_rewrite_真实种子_规范查询不改写_返回None() -> None:
-    # 默认种子（seeds/power_seed.ttl）下的回归护栏：规范术语/含编号实体不被误改
+    # 默认种子（services/seeds/power_seed.ttl）下的回归护栏：规范术语/含编号实体不被误改
     assert await rewrite("馈线F001停电") is None
     assert await rewrite("变压器 故障") is None  # 故障在否定词表（泛词不升类名）
 
@@ -329,7 +329,7 @@ async def test_run_不可改写_单轮即降级不空转() -> None:
         calls.append(q)
         return []
 
-    # Act（catalog 不注入=懒加载 seeds/power_seed.ttl 单例）
+    # Act（catalog 不注入=懒加载 services/seeds/power_seed.ttl 单例）
     hits, trace = await run_agentic_search("完全无关词", search_fn, max_rounds=2)
     # Assert
     assert calls == ["完全无关词"] and hits == []

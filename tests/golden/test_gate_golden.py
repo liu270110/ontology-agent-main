@@ -1,7 +1,7 @@
 # tests/golden/test_gate_golden.py
 """golden 30 例门禁评估集（计划 2.1 残尾）：服务端硬门禁 run_changeset_gate 的结论确定性评估。
 
-构成：15 合法 + 15 非法，全部参数化；合法例从种子本体（seeds/power_seed.ttl）的类/属性/规则
+构成：15 合法 + 15 非法，全部参数化；合法例从种子本体（services/seeds/power_seed.ttl）的类/属性/规则
 裁剪为最小 TTL 片段（用例注释标注种子出处），非法例覆盖 ≥9 类违规：
 
 | 类别 | 违规码/约束组件 | 用例 |

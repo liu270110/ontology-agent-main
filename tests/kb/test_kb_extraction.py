@@ -298,7 +298,7 @@ async def test_align_matches_seed_classes_and_keeps_miss_pending(
         "tier": 1,
         "status": "aligned",
         "reason": None,
-        "ref": "seeds/power_seed.ttl@v1",
+        "ref": "services/seeds/power_seed.ttl@v1",
         "template_ref": "kb_align@v1",
     }
     assert feeder.status == "candidate"
@@ -353,7 +353,7 @@ async def test_validate_shacl_gate_rejects_violations_and_writes_gate_result(
     assert order.violations and any("InConstraintComponent" in (v.get("constraint") or "") for v in order.violations)
     gate = ticket.payload["gate_result"]
     assert gate["conforms"] is False and gate["violation_count"] == len(order.violations)
-    assert gate["shapes"] == "seeds/power_seed.ttl@v1" and gate["checked_at"]
+    assert gate["shapes"] == "services/seeds/power_seed.ttl@v1" and gate["checked_at"]
     assert ticket.status == "pending_review"  # 仍留人工终审队列
 
 

@@ -3,7 +3,7 @@
 
 与 tools/poc1_owl_benchmark.py 的关系：本脚本是该初版的**迁移增强版**（初版原样保留，
 作为通用标本图基准）。差异四点：
-  1. 合成图换成「设备—故障—工单」电力模板（类/属性与 seeds/power_seed.ttl 同构：
+  1. 合成图换成「设备—故障—工单」电力模板（类/属性与 services/seeds/power_seed.ttl 同构：
      馈线/开关/变压器/区段/工单/停电事件 + inSection/servesCustomer/dispatchedTo +
      orderNo/hasStatus 数据属性），使基准负载贴近真实电力本体工作面；
   2. 规模档扩为 1k / 5k / 10k / 100k 四档；
@@ -421,8 +421,9 @@ def collect_meta() -> dict[str, object]:
         "scale_budget_s": SCALE_BUDGET_S,
         "sla_targets": SLA_TARGETS,
         "measurement_notes": [
-            "数据形态=电力模板（设备-故障-工单）：TBox 与 seeds/power_seed.ttl 同构（含 Transformer×Meter 互斥、"
-            "inSection/hasDevice inverseOf 对）；ABox 单元=设备+工单+停电确认事件各 1 实例共 11 三元组，"
+            "数据形态=电力模板（设备-故障-工单）：TBox 与 services/seeds/power_seed.ttl 同构"
+            "（含 Transformer×Meter 互斥、inSection/hasDevice inverseOf 对）；"
+            "ABox 单元=设备+工单+停电确认事件各 1 实例共 11 三元组，"
             "每 100 工单 1 个 orderNo 违规、每 97 工单 1 个状态违规（确定性注入）",
             "三阶段均在独立子进程中执行：进程级硬超时可终止；tracemalloc 仅第一轮且仅 ≤10k 档开启"
             "（追踪开销实测约 6.6x，见初版 poc1_owl_benchmark.py）",

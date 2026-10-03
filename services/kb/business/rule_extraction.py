@@ -3,7 +3,7 @@
 独立于既有四类候选（entity|relation|attribute|event，见 kb_extraction.py——本模块只读
 import 其公共纯函数，绝不改动其行为）：研究整理 03 §3.1 时序流程型抽取目标含「动作、前置
 条件、状态流转、互斥规则」，其中约束/规则类产物在平台既有通道中缺失——规则只以两种形态
-存在：校验依据（SHACL 门禁，kb_extraction.validate 步）与专家资产（seeds/power_seed.ttl
+存在：校验依据（SHACL 门禁，kb_extraction.validate 步）与专家资产（services/seeds/power_seed.ttl
 九条 ob2:Rule + sh:NodeShape）。「从文本解析规则草案」由此通道承载（OntRAG 主文档
 「时序流程型」行 + 本体核心设计 §2：时序流程型产物分别落为行动类定义/前置条件属性/状态
 流转属性/R3 规则）。

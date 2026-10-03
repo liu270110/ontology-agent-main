@@ -50,7 +50,7 @@ _SUPER_ADMIN_ADDED_SCOPES = ("prompt:read", "admin:read", "admin:write")
 
 def _run_alembic(*args: str) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
-        [sys.executable, "-m", "alembic", *args],
+        [sys.executable, "-m", "alembic", "-c", "services/alembic.ini", *args],
         capture_output=True,
         text=True,
         cwd=_REPO_ROOT,

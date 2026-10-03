@@ -184,10 +184,14 @@ def _acl_tags_from_request(request: Request) -> list[str] | None:
 
 
 def _embedder(state: object) -> OllamaEmbedder:
-    """进程内复用的嵌入客户端（挂 app.state；base_url=config.ollama_base_url）。"""
+    """进程内复用的嵌入客户端（挂 app.state；base_url/协议=config.ollama_base_url/embed_protocol，
+    组合根装配点：OA_EMBED_PROTOCOL=tei 切换 TEI 协议，docs/Agent/09 §2.1 工程问题 2）。"""
     cached = getattr(state, "_kb_embedder", None)
     if cached is None:
-        cached = OllamaEmbedder(state.settings.ollama_base_url)  # type: ignore[attr-defined]
+        cached = OllamaEmbedder(
+            state.settings.ollama_base_url,  # type: ignore[attr-defined]
+            protocol=state.settings.embed_protocol,  # type: ignore[attr-defined]
+        )
         state._kb_embedder = cached  # type: ignore[attr-defined]
     return cached
 

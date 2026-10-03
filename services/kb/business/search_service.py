@@ -92,9 +92,16 @@ class KnowledgeSearchService:
         hierarchy_ttl_s: float = _HIERARCHY_TTL_SECONDS,
         acl_filter_enabled: bool | None = None,
         usage_store: UsageStore | None = None,
+        embed_protocol: str | None = None,
     ) -> None:
         self._session_factory = session_factory
-        self._embedder = OllamaEmbedder(ollama_base_url)
+        if embed_protocol is None:
+            # 嵌入协议（docs/Agent/09 §2.1 工程问题 2）：缺省读统一配置层 OA_EMBED_PROTOCOL——
+            # 组合根零改动即可切换 TEI（acl_filter_enabled 同款缺省读全局先例）
+            from services.platform.config import get_settings
+
+            embed_protocol = get_settings().embed_protocol
+        self._embedder = OllamaEmbedder(ollama_base_url, protocol=embed_protocol)
         self._hierarchy_ttl_s = hierarchy_ttl_s
         self._hierarchy_cache: dict[str, tuple[float, ClassHierarchy]] = {}
         # ACL 预过滤开关透传（OntRAG §4.3；本类仅透传，缺省读统一配置层 OA_ 环境变量——

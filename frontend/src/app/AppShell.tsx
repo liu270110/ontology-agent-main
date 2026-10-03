@@ -9,6 +9,7 @@ import { ROLE_LABEL } from '@/lib/invite'
 import { SidebarGroups } from './sidebar/SidebarGroups'
 import { SidebarResizer } from './SidebarResizer'
 import { UserMenu } from './UserMenu'
+import { Logo } from '@/design-system/brand/Logo'
 
 /** 应用壳（16 篇 §5.2 / 03 篇 AppLayout）：液态玻璃壳层——根容器挂 .app-stage 静态双光斑底
  *  （board.css .app 配方，玻璃折射的彩色来源），侧边栏 .glass-side（board.css .sb 配方）、
@@ -53,17 +54,21 @@ export function AppShell() {
         className={`glass-side flex flex-col flex-none py-4 transition-[background,box-shadow] ${collapsed ? 'w-16' : ''}`}
         style={{ width: collapsed ? 64 : undefined, flexBasis: collapsed ? 64 : width }}
       >
-        <div className="flex items-center gap-2 px-4 pb-4">
+        <div className="flex items-center gap-2 px-3.5 pb-4">
           <button
             type="button"
-            aria-label="回主页"
-            title="回主页"
+            aria-label="ontology-agent · 回主页"
+            title="ontology-agent · 本体智能体平台"
             onClick={() => navigate('/')}
-            className="flex h-7 w-7 flex-none items-center justify-center rounded-lg bg-accent-soft text-accent hover:brightness-95"
+            className="flex h-8 w-8 flex-none items-center justify-center rounded-[9px] border border-separator bg-surface-2 shadow-sm transition-transform hover:scale-105"
           >
-            ◆
+            <Logo size={19} />
           </button>
-          {!collapsed && <b className="truncate text-sm">ontology-agent</b>}
+          {!collapsed && (
+            <b className="truncate text-sm tracking-tight" title="ontology-agent · 本体智能体平台">
+              OntA
+            </b>
+          )}
         </div>
         <SidebarGroups collapsed={collapsed} />
         <div className="mt-auto flex items-center gap-2 px-4 pt-3">

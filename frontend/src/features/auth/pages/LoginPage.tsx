@@ -3,6 +3,7 @@ import { Navigate, useNavigate, useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { useAuthStore, isTokenPair } from '@/stores/auth-store'
 import { describeError } from '@/lib/errors'
+import { Logo } from '@/components/brand/Logo'
 import { ROLE_LABEL, joinInviteLink, previewInviteLink } from '@/lib/invite'
 import { MfaStepCard } from '../components/MfaStepCard'
 
@@ -10,8 +11,9 @@ import { MfaStepCard } from '../components/MfaStepCard'
  *  流程：zod 前置校验 → POST /auth/login → 成功写 auth-store → 按 ?next= 回跳（缺省 /）；
  *  返回 200 {mfa_required:true, mfa_token}（X17 预登记，后端 M1 未实现，live 不触发）→ MfaStepCard 二步。
  *  错误：1002 统一「邮箱或密码错误」防枚举；1005/429 限速提示含剩余时间（lib/errors 单点映射）。
- *  链接邀请（2026-09-28 ★ invite-links 切片）：?join=<token> 页顶提示条——GET preview（retry:false）
- *  成功显绿条（租户/角色），410/未命中显红条；登录成功后 fire-and-forget 调 join 端点自动加入。 */
+ *  链接邀请（2026-09-28 ★ invite-links 切片；2026-10-04 路径迁移 /invites，32 篇 §二）：
+ *  ?join=<token> 页顶提示条——GET /invites/preview?token=（retry:false）成功显绿条（租户/角色），
+ *  410/未命中显红条；登录成功后 fire-and-forget 调 POST /invites/join（token 入 body）自动加入。 */
 
 /** 版本脚注（画板 p-login 基线同款；版本单源=package.json 经 vite define 注入；日期取本地时区，ISO 直接截串会有 UTC 偏差） */
 const VERSION_FOOTER = `v${__APP_VERSION__} · build ${new Date(__BUILD_TIME__).toLocaleDateString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit' }).replaceAll('/', '')}`
@@ -117,7 +119,9 @@ export function LoginPage() {
         </div>
       )}
       <form onSubmit={onSubmit} className="login-card glass glass-sheen-loop w-[360px] max-w-[92vw] rounded-3xl p-8">
-        <div className="login-logo flex h-10 w-10 items-center justify-center rounded-xl bg-accent-soft text-accent">◆</div>
+        <div className="login-logo flex h-12 w-12 items-center justify-center">
+          <Logo variant="gradient" size={48} />
+        </div>
         <h1 className="mt-4 text-lg font-bold">ontology-agent</h1>
         <p className="lsub mb-5 text-xs text-label-3">以本体为语义基座的智能体平台</p>
         {error && (

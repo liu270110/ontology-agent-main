@@ -890,9 +890,11 @@ export const adminHandlers = [
     }, 201)
   }),
 
-  // ---- ★ 邀请链接（§5.8 invite-links 五端点，2026-09-28 链接邀请切片：Dify 式链接自助加入） ----
-  // 内存数组存链接；status 派生：未撤销但过 expires_at → expired；撤销终态不可逆（重复撤销 409）
-  http.post('*/api/v1/admin/invite-links', async ({ request }) => {
+  // ---- ★ 邀请链接（§5.8 invites 五端点；2026-10-04 路径迁移 /admin/invite-links → /invites（iam 域，
+  //      32 篇 §二）：匿名 preview 走固定路径+query 读 token、join token 入 body（免改网关匿名中间件
+  //      通配）；响应不含 url——绝对链接由前端拼 {origin}/login?join={token}。旧路径 handlers 已改道，
+  //      避免双源。内存数组存链接；status 派生：未撤销但过 expires_at → expired；撤销终态不可逆（重复撤销 409） ----
+  http.post('*/api/v1/invites', async ({ request }) => {
     const body = (await request.json()) as { role?: string; expires_in_hours?: number }
     if (!body.role?.trim()) return err(3001, '角色必填', 422)
     const hours = body.expires_in_hours ?? 24
@@ -900,7 +902,6 @@ export const adminHandlers = [
     const token = `inv-${Math.random().toString(36).slice(2, 12)}${Math.random().toString(36).slice(2, 6)}`
     const link: InviteLink = {
       id: `il-${String(++inviteLinkSeq).padStart(2, '0')}`,
-      url: `/login?join=${token}`,
       token,
       role: body.role,
       expires_at: new Date(Date.now() + hours * 3_600_000).toISOString(),
@@ -911,11 +912,11 @@ export const adminHandlers = [
     return ok(link, 201)
   }),
 
-  http.get('*/api/v1/admin/invite-links', () =>
+  http.get('*/api/v1/invites', () =>
     ok({ items: INVITE_LINKS.map(l => ({ ...l, status: derivedLinkStatus(l) })), next_cursor: null })),
 
   // 契约钉死 200+信封体 {id,status:'revoked'}（禁 204 空体：apiFetchEnvelope 对 null body 抛错）
-  http.delete('*/api/v1/admin/invite-links/:id', ({ params }) => {
+  http.delete('*/api/v1/invites/:id', ({ params }) => {
     const link = INVITE_LINKS.find(x => x.id === String(params.id))
     if (!link) return err(4041, '邀请链接不存在', 404)
     if (link.status === 'revoked') return err(3409, '邀请链接已撤销，不可重复撤销', 409)
@@ -923,22 +924,23 @@ export const adminHandlers = [
     return ok({ id: link.id, status: 'revoked' })
   }),
 
-  // 匿名预览：未命中 / 已撤销 / 已过期 → 410 {code:3410}
-  http.get('*/api/v1/admin/invite-links/:token/preview', ({ params }) => {
-    const link = INVITE_LINKS.find(x => x.token === String(params.token))
+  // 匿名预览（固定路径 + query 读 token）：未命中 / 已撤销 / 已过期 → 410 {code:3410}
+  http.get('*/api/v1/invites/preview', ({ request }) => {
+    const token = new URL(request.url).searchParams.get('token') ?? ''
+    const link = INVITE_LINKS.find(x => x.token === token)
     if (!link || link.status !== 'active' || Date.now() > new Date(link.expires_at).getTime()) {
       return err(3410, '邀请链接已失效或已过期', 410)
     }
     return ok({ tenant_name: INVITE_TENANT_NAME, role: link.role, valid: true })
   }),
 
-  // 匿名加入：幂等（既有账号不重复建）；落 USERS 行（invited_via:'link'、角色=链接角色）
-  http.post('*/api/v1/admin/invite-links/:token/join', async ({ request, params }) => {
-    const link = INVITE_LINKS.find(x => x.token === String(params.token))
+  // 匿名加入（固定路径，token 入 body）：幂等（既有账号不重复建）；落 USERS 行（invited_via:'link'、角色=链接角色）
+  http.post('*/api/v1/invites/join', async ({ request }) => {
+    const body = (await request.json()) as { token?: string; email?: string; display_name?: string }
+    const link = INVITE_LINKS.find(x => x.token === body.token)
     if (!link || link.status !== 'active' || Date.now() > new Date(link.expires_at).getTime()) {
       return err(3410, '邀请链接已失效或已过期', 410)
     }
-    const body = (await request.json()) as { email?: string; display_name?: string }
     const email = (body.email ?? '').trim().toLowerCase()
     if (!email.includes('@')) return err(3001, '邮箱格式不正确', 422)
     if (!USERS.some(u => u.email === email)) {
@@ -1023,7 +1025,8 @@ export const adminHandlers = [
 ]
 
 // ============================================================
-// §5.8 ★ invite-links —— 链接邀请（内存态与派生工具）
+// §5.8 ★ invites —— 链接邀请（内存态与派生工具；2026-10-04 路径迁移 /admin/invite-links → /invites，
+// 响应不含 url——绝对链接 {origin}/login?join={token} 由前端拼装，32 篇 §一/§二）
 // ============================================================
 
 /** 受邀方展示用租户名（电力语境，与画板 ix-08 口径一致） */
@@ -1031,7 +1034,6 @@ const INVITE_TENANT_NAME = '配网停电分析工作区'
 
 export interface InviteLink {
   id: string
-  url: string
   token: string
   role: string
   expires_at: string
@@ -1041,8 +1043,8 @@ export interface InviteLink {
 
 const INVITE_LINKS: InviteLink[] = [
   // 种子：一条生效（join 提示条绿态演示/截图基线）+ 一条已过期（列表过期态演示）
-  { id: 'il-seed-01', url: '/login?join=inv-seed-01', token: 'inv-seed-01', role: 'member', expires_at: new Date(Date.now() + 6 * 86_400_000).toISOString(), created_by: '刘以在（管理员）', status: 'active' },
-  { id: 'il-seed-02', url: '/login?join=inv-seed-02', token: 'inv-seed-02', role: 'curator', expires_at: new Date(Date.now() - 86_400_000).toISOString(), created_by: '刘以在（管理员）', status: 'active' },
+  { id: 'il-seed-01', token: 'inv-seed-01', role: 'member', expires_at: new Date(Date.now() + 6 * 86_400_000).toISOString(), created_by: '刘以在（管理员）', status: 'active' },
+  { id: 'il-seed-02', token: 'inv-seed-02', role: 'curator', expires_at: new Date(Date.now() - 86_400_000).toISOString(), created_by: '刘以在（管理员）', status: 'active' },
 ]
 let inviteLinkSeq = 0
 

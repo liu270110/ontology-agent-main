@@ -1,16 +1,18 @@
 import { useSearchParams } from 'react-router-dom'
-import { Activity, type LucideIcon } from 'lucide-react'
+import { Activity, BarChart3, type LucideIcon } from 'lucide-react'
 import { useAuthStore } from '@/stores/auth-store'
 import { UsersTab } from '../components/UsersTab'
 import { GroupsTab } from '../components/GroupsTab'
 import { RolesTab } from '../components/RolesTab'
 import { ModelsTab } from '../components/ModelsTab'
 import { AuditTab } from '../components/AuditTab'
+import { AnalyticsTab } from '../components/AnalyticsTab'
 import { TenantsTab } from '../components/TenantsTab'
 import { SystemLogsTab } from '../components/SystemLogsTab'
 
-/** /admin 系统管理（宿主 p-admin + p-auditlog；26 篇 §10.2）：Tab 深链 ?tab=users|groups|
- *  roles|models|audit|logs（租户 Tab 仅 super_admin 可见）。roles=admin/super_admin（routes meta）。 */
+/** /admin 系统管理（宿主 p-admin + p-auditlog + p-analytics；26 篇 §10.2）：Tab 深链
+ *  ?tab=users|groups|roles|models|audit|analytics|logs（租户 Tab 仅 super_admin 可见）。
+ *  roles=admin/super_admin（routes meta）。 */
 
 type TabDef = { key: string; label: string; icon?: LucideIcon }
 const TABS: TabDef[] = [
@@ -19,6 +21,7 @@ const TABS: TabDef[] = [
   { key: 'roles', label: '角色' },
   { key: 'models', label: '模型渠道' },
   { key: 'audit', label: '审计日志' },
+  { key: 'analytics', label: '数据分析', icon: BarChart3 }, // p-analytics 轻量版（39 号对账 §2.14）
   { key: 'logs', label: '系统日志', icon: Activity }, // S9 系统日志切片（设计稿 20b p-syslogs）
 ]
 
@@ -59,6 +62,7 @@ export function AdminPage() {
         {tab === 'roles' && <RolesTab />}
         {tab === 'models' && <ModelsTab />}
         {tab === 'audit' && <AuditTab />}
+        {tab === 'analytics' && <AnalyticsTab />}
         {tab === 'logs' && <SystemLogsTab />}
         {tab === 'tenants' && <TenantsTab />}
       </div>

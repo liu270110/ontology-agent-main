@@ -2,6 +2,7 @@ import '@testing-library/jest-dom/vitest'
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, describe, expect, it } from 'vitest'
 import { App } from '../App'
+import { ErrorBoundary } from '../ErrorBoundary'
 import { useAuthStore } from '@/stores/auth-store'
 
 // MSW 生命周期归全局 setupFiles（src/mocks/node-setup.ts）：listen/resetHandlers/close 均由其接管，
@@ -77,4 +78,35 @@ describe('S8 信息架构双区改造', () => {
     expect(within(mainNav).getByTestId('standalone-nav-console')).toHaveAttribute('href', '/console')
     expect(within(mainNav).getByTestId('standalone-nav-settings')).toHaveAttribute('href', '/settings')
   }, 30_000)
+})
+
+/** S8 全局状态页（39 号对账批 C：p-status G-S1/G-S2，2026-10-04）：
+ *  ① 未知路径不再静默重定向——独立 404 页渲染且展示用户输入路径（诊断价值）；
+ *  ② 500 错误态默认收起堆栈（p-empty-skel 红线），「查看技术详情」展开后可见。 */
+describe('S8 全局状态页（p-status 对账批 C）', () => {
+  it('① 未知路径渲染 404 页且含用户输入路径文本', async () => {
+    await loginAndGo('/definitely/not-exist-404')
+    const empty = await screen.findByTestId('empty-state', {}, { timeout: 10_000 })
+    expect(empty).toHaveTextContent('页面走丢了')
+    expect(screen.getByTestId('notfound-path')).toHaveTextContent('/definitely/not-exist-404')
+    expect(screen.getByRole('link', { name: '返回主页' })).toHaveAttribute('href', '/')
+  }, 30_000)
+
+  it('② 500 错误态默认不显示堆栈，点开「查看技术详情」可见', () => {
+    function Boom(): never {
+      throw new Error('渲染爆炸：ontology 推理核心不可用')
+    }
+    render(
+      <ErrorBoundary>
+        <Boom />
+      </ErrorBoundary>,
+    )
+    expect(screen.getByRole('alert')).toHaveTextContent('页面出现异常')
+    // 红线：堆栈默认不在 DOM（受控折叠），仅摘要与动作位
+    expect(screen.queryByTestId('error-stack')).not.toBeInTheDocument()
+    expect(screen.getByTestId('error-tech-toggle')).toHaveAttribute('aria-expanded', 'false')
+    fireEvent.click(screen.getByTestId('error-tech-toggle'))
+    expect(screen.getByTestId('error-stack')).toHaveTextContent('渲染爆炸：ontology 推理核心不可用')
+    expect(screen.getByTestId('error-tech-toggle')).toHaveAttribute('aria-expanded', 'true')
+  })
 })

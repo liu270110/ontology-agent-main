@@ -25,6 +25,12 @@ TOOL_CALL_RESULT 收口（task_worker._drain_orchestrator 落库的 SSE 投影�
 TOOL_CALL_INTERRUPTED（5007，platform/errors 本批登记）与 ``interrupted=true`` +
 ``tool_call_id``；步行 = kernel.interrupted + kernel.step_failed（等价 A2 合法迁移
 executing→failed 的落账形态，replay/投影消费方按既有形态可读）。
+
+输入契约（ocr 整改 B-② 显式化）：:func:`plan_interrupted_closures` 隐含要求
+**任务级全量、无截断**的投影窗口——START/RESULT 必须成对落在窗口内（跨边界截断会把
+已收口调用误判撕裂、重复合成失败 close），Run 级收敛行必须位于其收编的步行之后
+（seq 有序保证收敛判定）；纯函数零 IO、对截断窗口无法自检，调用方须分页取全量
+（履行点：``task_worker._repair_orphan_projection`` 的 after_seq 游标续页）。
 """
 
 from __future__ import annotations
@@ -60,6 +66,12 @@ def plan_interrupted_closures(
     tenant_id: uuid.UUID | None = None,
 ) -> list[TaskEvent]:
     """扫描 task_events 投影行 → 输出待合成的闭合行（纯函数，零 IO，可单测）。
+
+    输入契约（调用方义务，本函数无截断自检能力）：``events`` 须为**任务级全量、
+    无截断**的投影窗口——TOOL_CALL_START/RESULT 必须成对落在窗口内（RESULT 落窗口
+    外的跨边界调用会被误判撕裂、重复合成失败 close），Run 级收敛行必须位于其收编
+    的步行之后（seq 有序）；截断窗口下无法自检，调用方须分页取全量（task_worker
+    ._repair_orphan_projection 的 after_seq 游标续页即此义务的履行点）。
 
     ``events``：某 Run 的投影行（list_events 取回，按 seq 有序；内部再稳定排序防御）。
     ``run_id``：步规则的目标 Run（None=调用方已自扫 Scope，kernel 行不按 run 隔离）。

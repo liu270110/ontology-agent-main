@@ -104,12 +104,16 @@ def build_kernel_ledger_sink_factory(
     每轮对话经 factory(task_id, run_id) 取得闭包 sink；内核账本在终态前排水
     （先落库后终态，C1 可追溯口径）。落库失败由内核账本结构化转义（审计不阻断主流程）。
     本函数是编排器（业务层）与 UoW 之间的注入边界——编排器自身不 import ORM/UoW。
+    投影 data 一致性注入（只补缺不覆盖）：run_id（对账四元组）+ trace_id（ocr 整改
+    B-②：KernelEvent 顶层必填 trace_id 落进行 data，崩溃恢复合成行经 resume_repair
+    回声投影行 trace，C2 链在崩溃恢复行上不断链；SSE 投影行不受影响）。
     """
 
     def factory(task_id: uuid.UUID, run_id: uuid.UUID) -> Callable[[KernelEvent], Awaitable[None]]:
         async def sink(event: KernelEvent) -> None:
             data = dict(event.data)
             data.setdefault("run_id", str(run_id))
+            data.setdefault("trace_id", event.trace_id)  # C2：只补缺不覆盖，resume_repair 回声源
             async with uow.for_tenant(event.tenant_id) as tx:
                 # H-0b 接线：approval_pending 锚点事件 → task.payload（审批呈现端点的核验锚，
                 # approval_service PENDING_KEY 同款键；人工批准后 worker resume 通道携票消费该锚）

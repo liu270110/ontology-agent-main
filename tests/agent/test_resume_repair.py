@@ -167,11 +167,13 @@ class ClockStub:
 
 
 class FakeTaskRepo:
-    """任务仓储桩：append_event 按仓储语义分配 seq（max+1，PgTaskRepository 同口径）。"""
+    """任务仓储桩：append_event 按仓储语义分配 seq（max+1，PgTaskRepository 同口径）；
+    list_events 落实 after_seq 游标语义（seq > after_seq 升序截断，PgTaskRepository 同口径）。"""
 
     def __init__(self) -> None:
         self.tasks: dict[uuid.UUID, Task] = {}
         self.events: dict[uuid.UUID, list[TaskEvent]] = {}
+        self.list_calls: list[tuple[uuid.UUID, int | None, int]] = []  # (task_id, after_seq, limit)
 
     async def get(self, task_id: uuid.UUID) -> Task | None:
         return self.tasks.get(task_id)
@@ -185,8 +187,14 @@ class FakeTaskRepo:
         rows.append(event)
         return event.seq
 
-    async def list_events(self, task_id: uuid.UUID, **_: Any) -> list[TaskEvent]:
-        return sorted(self.events.get(task_id, []), key=lambda r: r.seq if r.seq is not None else 0)
+    async def list_events(
+        self, task_id: uuid.UUID, *, after_seq: int | None = None, limit: int = 100
+    ) -> list[TaskEvent]:
+        self.list_calls.append((task_id, after_seq, limit))
+        rows = sorted(self.events.get(task_id, []), key=lambda r: r.seq if r.seq is not None else 0)
+        if after_seq is not None:
+            rows = [r for r in rows if r.seq is not None and r.seq > after_seq]
+        return rows[:limit]
 
 
 class FakeTx:
@@ -342,3 +350,67 @@ async def test_worker常驻接线不回归_stop后退出():
     stop = asyncio.Event()
     stop.set()  # 常驻循环接线冒烟（立即退出）
     await asyncio.wait_for(worker.run(stop), timeout=2.0)
+
+
+async def test_worker孤儿修复_分页取全量_窗口外撕裂闭合且跨边界零重复合成():
+    # Arrange：607 行投影——首个 500 行窗口含 START(cx) 但其 RESULT 落窗口外（跨边界
+    # 已收口调用），真撕裂（ct 调用 + 在途步7）全在窗口外。一次性 limit=500 截断窗口下：
+    # cx 会被误判撕裂重复合成失败 close（污染账本）、窗口外撕裂漏修且 repaired 误报。
+    worker, uow, task, run_id = seeded_orphan_env()
+    bulk = [row(i, "TEXT_MESSAGE_CONTENT", {"delta": "filler"}) for i in range(1, 450)]
+    bulk.append(row(450, "TOOL_CALL_START", {"tool_call_id": "cx", "tool_name": "t"}))  # 窗口内 open
+    bulk.extend(row(i, "TEXT_MESSAGE_CONTENT", {"delta": "filler"}) for i in range(451, 605))
+    bulk.append(row(605, "TOOL_CALL_RESULT", {"tool_call_id": "cx", "ok": True, "summary": "ok"}))  # 窗口外收口
+    bulk.append(row(606, "TOOL_CALL_START", {"tool_call_id": "ct", "tool_name": "t"}))  # 窗口外真撕裂调用
+    bulk.append(
+        row(607, "kernel.gated", {"step_seq": 7, "verdict": "allow", "stage": "gate"}, run_id=str(run_id))
+    )  # 窗口外在途步
+    uow.task_repo.events[task.id] = bulk
+    # Act
+    assert await worker.sweep_once() == 1
+    # Assert：分页两批（首批 500 行、批尾 seq=500 游标续页；次批 107 行 < 页长即止）
+    assert [(c[1], c[2]) for c in uow.task_repo.list_calls] == [(None, 500), (500, 500)]
+    events = uow.task_repo.events[task.id]
+    interrupted_closes = [e for e in events if e.event_type == "TOOL_CALL_RESULT" and e.data.get("interrupted")]
+    # Assert：跨边界已收口 cx 零重复合成；真撕裂 ct 恰一闭合
+    assert [c.data["tool_call_id"] for c in interrupted_closes] == ["ct"]
+    assert [e.data["step_seq"] for e in events if e.event_type == "kernel.interrupted"] == [7]  # 窗口外撕裂步被闭合
+    audit = events[-1]
+    assert audit.event_type == "run.orphan_recovered" and audit.data["repaired"] == 3  # 计数如实（1 close + 2 步行）
+
+
+async def test_组合根sink投影行补trace_id_崩溃恢复合成行回声链路成立():
+    # Arrange：真实组合根 sink（api/sessions.build_kernel_ledger_sink_factory）+ 内存仓储；
+    # 生产写入方常态：KernelEvent data 不带 trace_id（顶层必填字段才是权威源）。
+    from services.agent.api.sessions import build_kernel_ledger_sink_factory
+    from services.agent.domain.model.kernel_context import KernelEvent
+
+    uow = FakeUow()
+    task_id, run_id = uuid.uuid4(), uuid.uuid4()
+    sink = build_kernel_ledger_sink_factory(uow)(task_id, run_id)
+    # Act：缺 trace_id 补齐；data 已带则不覆盖（只补缺不覆盖）
+    await sink(
+        KernelEvent(
+            event_type="kernel.gated",
+            tenant_id=_TENANT,
+            run_id=run_id,
+            trace_id=_TRACE,
+            data={"step_seq": 1, "verdict": "allow"},
+        )
+    )
+    await sink(
+        KernelEvent(
+            event_type="kernel.gated",
+            tenant_id=_TENANT,
+            run_id=run_id,
+            trace_id="trace-other",
+            data={"step_seq": 2, "verdict": "allow", "trace_id": "trace-in-data"},
+        )
+    )
+    # Assert：投影行带 trace_id（C2 链）；撕裂投影经规划器回声 → 合成行带 trace_id
+    stored = uow.task_repo.events[task_id]
+    assert stored[0].data["trace_id"] == _TRACE
+    assert stored[1].data["trace_id"] == "trace-in-data"  # 已有值不被覆盖
+    synthetic = plan_interrupted_closures(stored, run_id=run_id)
+    assert len(synthetic) == 4  # 两个在途步 ×（interrupted + step_failed）
+    assert all(item.data["trace_id"] == _TRACE for item in synthetic)  # 回声投影行 trace（seq 有序首个）

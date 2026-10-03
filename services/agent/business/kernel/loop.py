@@ -3,7 +3,8 @@
 七阶段（LoopStage 枚举，术语对照 02 §2 A1）：
 ① grounding 感知＝装载（Grounding+确认）→ ② retrieval 检索＝上下文组装（绝对预算裁剪）
 → ③ planning 规划（策略/模型回退，三层校验）→ ④ gate 门禁（基线 B1 先、包 gate 后）
-→ ⑤ execution 执行（tools.bindings / execution.backends，B5 审批路由；见 execution.py）
+→ ⑤ execution 执行（tools.bindings / execution.backends，B5 审批路由；见 execution.py；
+   B-① 增补：parallelizable READ 步按段并行调度，见 tool_dispatch.py）
 → ⑥ observation 观察（后验 gates.post＋漂移对账＋写回）
 → ⑦ settlement 沉淀（闭环落账：assert_no_open_calls＋事件汇＋B2 判据求值）。
 
@@ -32,12 +33,14 @@ from services.agent.business.kernel.ledger import KernelLedger, LedgerSink
 from services.agent.business.kernel.run_context import RunContext
 from services.agent.business.kernel.spill import SpillStore
 from services.agent.business.kernel.subagent import ParentBindable
+from services.agent.business.kernel.tool_dispatch import ToolGroupDispatcher, segment_steps
 from services.agent.domain.model.kernel_actions import ActionDecision, ApprovalTicket, ExecutionMode
 from services.agent.domain.model.kernel_context import ContextBlock, KernelEvent, TaskRef, TenantContext
 from services.agent.domain.model.kernel_gates import GateFinding, GateReport, GateVerdict, RunOutcome
 from services.agent.domain.model.kernel_planning import PlanCandidate, PlanStep
 from services.agent.domain.model.step_state import LoopStage, StepState, StepStatus
 from services.agent.domain.model.task import RunStatus
+from services.platform.config import get_settings
 from services.platform.errors import ErrorCode
 
 logger = logging.getLogger(__name__)
@@ -83,17 +86,28 @@ class AgentKernel:
         clock: Callable[[], float] = time.monotonic,
         tool_timeout_s: float = _TOOL_TIMEOUT_S,
         spill_store: SpillStore | None = None,
+        tool_parallelism: int | None = None,
     ) -> None:
         self._dispatcher = dispatcher
         self._baseline = BaselineGate()
         self._evaluator = CriterionEvaluator()
         self._clock = clock
         self._tool_timeout_s = tool_timeout_s
+        # B-① 并行段并发度：显式注入优先，缺省读 Settings（T6 唯一事实源；=1 退化为串行）
+        self._tool_parallelism = (
+            tool_parallelism if tool_parallelism is not None else get_settings().kernel_tool_parallelism
+        )
         self._last_ledger: KernelLedger | None = None
         # 阶段执行器（内核私有；依赖注入同一分发器，禁直连能力实现）
         self._context_stage = ContextAssemblyStage(dispatcher, self._emit)
         self._execution_stage = ExecutionStage(
             dispatcher, self._emit, tool_timeout_s=tool_timeout_s, spill_store=spill_store
+        )
+        self._tool_dispatch = ToolGroupDispatcher(
+            self._execution_stage,
+            self._emit,
+            gate=self._stage_gate,
+            observe=self._stage_observation,
         )
 
     @property
@@ -144,15 +158,20 @@ class AgentKernel:
                 }
                 for state in rc.states.values():
                     rc.ledger.record_step(state)  # 每阶段产出 StepState：计划态入账
-                for step in candidate.steps:
-                    rc.tracker.check()  # A4 检查点：步前预算断言（超限优雅终止）
-                    state = rc.states[step.seq]
-                    await self._stage_gate(rc, candidate, step)
-                    if state.status is StepStatus.GATED:
-                        await self._execution_stage.run(rc, step)
-                    if state.status is StepStatus.EXECUTING:
-                        await self._stage_observation(rc, step)
-                    rc.tracker.add_step()  # 步数预算记账（步后累计，下一步检查点生效）
+                for group in segment_steps(candidate.steps, parallelism=self._tool_parallelism):
+                    if len(group) == 1:  # 单步段=完全现状串行路径（B-① 零行为差异面）
+                        step = group[0]
+                        rc.tracker.check()  # A4 检查点：步前预算断言（超限优雅终止）
+                        state = rc.states[step.seq]
+                        await self._stage_gate(rc, candidate, step)
+                        if state.status is StepStatus.GATED:
+                            await self._execution_stage.run(rc, step)
+                        if state.status is StepStatus.EXECUTING:
+                            await self._stage_observation(rc, step)
+                        rc.tracker.add_step()  # 步数预算记账（步后累计，下一步检查点生效）
+                    else:  # 多步段：段前预算检查点一次，段执行器负责门禁先行+池执行+声明序收口
+                        rc.tracker.check()
+                        await self._tool_dispatch.run_group(rc, candidate, group, parallelism=self._tool_parallelism)
                 return await self._stage_settlement(rc, candidate)
         except BudgetExhaustedError as exc:  # 须先于 KernelError（子类）
             return await self._finalize_interrupted(

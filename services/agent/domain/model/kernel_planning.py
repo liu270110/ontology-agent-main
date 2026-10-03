@@ -34,6 +34,9 @@ class PlanStep(BaseModel):
     parameters: dict[str, Any] = Field(default_factory=dict)
     parameter_schema: dict[str, Any] = Field(default_factory=dict)  # 参数域 Schema（B1 校验依据）
     required_scopes: tuple[str, ...] = ()  # 授权唯一依据（MCP annotations 不参与授权）
+    # 规划策略显式声明该步与后续步无依赖、可入并行段（B-① 调度器依据；默认 False=零行为变化，
+    # 规划器侧标记生成为后续批次）
+    parallelizable: bool = False
     description: str = ""
 
 

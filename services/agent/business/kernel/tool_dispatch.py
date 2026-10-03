@@ -1,0 +1,138 @@
+"""B-① Run 内并行工具调度器（docs/Agent/10 §3/§4）：分段与段执行，A1 执行段增补。
+
+分段（:func:`segment_steps`）：连续步并入同一并行段当且仅当全部满足——① 规划显式声明
+``parallelizable``；② ``execution_mode`` 为 READ（EXTERNAL_WRITE/CODE 恒串行，天然
+barrier；③ 审批需求被 ② 蕴含）；④ 段大小 ≤ 并发度上限。不满足任一条件的步单步成段
+（loop 走现状串行路径，零行为差异）。段间严格按序：前一段全部结算后才进下一段。
+
+段执行不变式（§4）：
+- 门禁先行：段内每步顺序过 ``gate``；被拒步 FAILED 留在段外（单步拒绝不炸整段）；
+- 池执行：``asyncio.Semaphore`` 包住每步既有完整执行管线（复用 ExecutionStage，不复制
+  其逻辑）；每步独立收敛，一步异常=该步结构化失败、其余步不受影响（禁异常逃逸）；
+- 顺序确定性：任务按声明序创建＋信号量 FIFO ⇒ open_tool_call 按声明序落；close_tool_call
+  各自完成时落；段全部完成后按声明序逐步跑 observation 与步数记账（与串行同序）；
+- 取消：invoke 任务仍经 coordinator.track_tool_task 挂清单；段任务在取消时收尾后才上抛，
+  未闭合调用由清单以取消错误闭合（§2.4，assert_no_open_calls 零悬挂）；
+- 审计：kernel.group_started / kernel.group_finished（transport-only，不含工具输出正文）。
+"""
+
+from __future__ import annotations
+
+import asyncio
+import logging
+from collections.abc import Awaitable, Callable, Sequence
+
+from services.agent.business.kernel.execution import ExecutionStage
+from services.agent.business.kernel.run_context import Emit, RunContext
+from services.agent.domain.model.kernel_actions import ExecutionMode
+from services.agent.domain.model.kernel_planning import PlanCandidate, PlanStep
+from services.agent.domain.model.step_state import LoopStage, StepStatus
+from services.platform.errors import ErrorCode
+
+logger = logging.getLogger(__name__)
+
+# 内核阶段函数签名（loop 注入，状态主权仍在内核 T2）
+GateFn = Callable[[RunContext, PlanCandidate, PlanStep], Awaitable[None]]
+ObserveFn = Callable[[RunContext, PlanStep], Awaitable[None]]
+
+
+def segment_steps(steps: Sequence[PlanStep], *, parallelism: int) -> list[tuple[PlanStep, ...]]:
+    """把计划步切成调度段（确定性纯函数）：可并行 READ 步的连续游程入段，段长 ≤ 上限。
+
+    其余步（非 parallelizable / 非 READ / 段满）单步成段=天然 barrier；返回顺序=声明顺序。
+    """
+    groups: list[tuple[PlanStep, ...]] = []
+    current: list[PlanStep] = []
+    for step in steps:
+        if step.parallelizable and step.execution_mode is ExecutionMode.READ and len(current) < parallelism:
+            current.append(step)
+            continue
+        if current:
+            groups.append(tuple(current))
+            current = []
+        groups.append((step,))
+    if current:
+        groups.append(tuple(current))
+    return groups
+
+
+class ToolGroupDispatcher:
+    """并行段执行器：门禁先行 → 有界并发池复用单步管线 → 声明序收口（§4 不变式载体）。"""
+
+    def __init__(self, execution_stage: ExecutionStage, emit: Emit, *, gate: GateFn, observe: ObserveFn) -> None:
+        self._execution_stage = execution_stage
+        self._emit = emit
+        self._gate = gate
+        self._observe = observe
+
+    async def run_group(
+        self, rc: RunContext, candidate: PlanCandidate, steps: tuple[PlanStep, ...], *, parallelism: int
+    ) -> None:
+        """执行一个并行调度段：被拒步留段外，入池步并发跑既有管线，完成后声明序收口。"""
+        ctx = rc.ctx
+        admitted: list[PlanStep] = []
+        for step in steps:  # 门禁先行（顺序过 gate，事件/快照与串行同序）
+            await self._gate(rc, candidate, step)
+            if rc.states[step.seq].status is StepStatus.GATED:
+                admitted.append(step)
+        concurrency = max(1, min(parallelism, len(admitted)))
+        self._emit(
+            rc.ledger,
+            ctx,
+            rc.task.run_id,
+            "kernel.group_started",
+            {
+                "step_seqs": [s.seq for s in steps],
+                "admitted_seqs": [s.seq for s in admitted],
+                "concurrency": concurrency,
+                "stage": str(LoopStage.EXECUTION),
+            },
+        )
+        if admitted:
+            semaphore = asyncio.Semaphore(concurrency)
+
+            async def _run_one(step: PlanStep) -> None:
+                async with semaphore:
+                    try:
+                        await self._execution_stage.run(rc, step)  # 既有单步完整管线（B3/C3/截断/spill/记账）
+                    except asyncio.CancelledError:
+                        raise  # 取消传播：在途调用由取消清单以取消错误闭合（§2.4 步骤 2）
+                    except Exception as exc:  # 一步异常=该步结构化失败，其余步不受影响
+                        self._structure_step_failure(rc, step, exc)
+
+            # 声明序创建 ⇒ 各任务首片（至 open_tool_call）按声明序执行 ⇒ 落账序确定
+            tasks = [asyncio.create_task(_run_one(s), name=f"kernel.group[{s.seq}]") for s in admitted]
+            try:
+                await asyncio.gather(*tasks)
+            except asyncio.CancelledError:
+                await asyncio.gather(*tasks, return_exceptions=True)  # 段任务走完取消路径再上抛（零悬挂）
+                raise
+        for step in steps:  # 声明序收口：observation＋步数记账（与串行执行完全一致的顺序）
+            if rc.states[step.seq].status is StepStatus.EXECUTING:
+                await self._observe(rc, step)
+            rc.tracker.add_step()
+        self._emit(
+            rc.ledger,
+            ctx,
+            rc.task.run_id,
+            "kernel.group_finished",
+            {
+                "step_seqs": [s.seq for s in steps],
+                "statuses": {str(s.seq): rc.states[s.seq].status.value for s in steps},
+                "concurrency": concurrency,
+                "stage": str(LoopStage.OBSERVATION),
+            },
+        )
+
+    @staticmethod
+    def _structure_step_failure(rc: RunContext, step: PlanStep, exc: Exception) -> None:
+        """池内单步异常收敛：状态落 FAILED＋该步在途未闭合调用兜底闭合（零悬挂，§4 不变式 b）。"""
+        logger.warning("并行段步 %s 执行异常转义: %s", step.seq, exc)
+        state = rc.states[step.seq]
+        if state.status is StepStatus.EXECUTING:
+            state.transition(StepStatus.FAILED, stage=LoopStage.EXECUTION)
+            state.error = f"{int(ErrorCode.INTERNAL_ERROR)} 段内步执行异常: {type(exc).__name__}"
+            rc.ledger.record_step(state)
+        for record in rc.ledger.tool_calls:  # 正常管线已闭合；此处只兜底异常逃逸路径
+            if record.step_seq == step.seq and not record.closed:
+                rc.ledger.close_tool_call(record.call_id, error_code=int(ErrorCode.INTERNAL_ERROR))

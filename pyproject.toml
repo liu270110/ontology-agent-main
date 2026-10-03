@@ -251,6 +251,7 @@ ignore_imports = [
     "services.agent.business.kernel.execution -> services.platform.errors",
     "services.agent.business.kernel.gate_baseline -> services.platform.errors",
     "services.agent.business.kernel.loop -> services.platform.errors",
+    "services.agent.business.kernel.tool_dispatch -> services.platform.errors",  # B-① 并行段执行器同款接缝
 ]
 
 [[tool.importlinter.contracts]]

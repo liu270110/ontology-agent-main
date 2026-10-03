@@ -238,3 +238,34 @@ async def test_refresh_轮换流转_旧件重放触发全家吊销(auth_env):
     assert replay.json()["code"] == 1002
     revoked = await client.post("/api/v1/auth/refresh", json={"refresh_token": second["refresh_token"]})
     assert revoked.status_code == status.HTTP_401_UNAUTHORIZED
+
+
+@pytest.mark.integration
+async def test_refresh_token_冒充access打受保护端点_401且1002(auth_env):
+    """S-① 联调修复：网关 JWT 中间件 decode 补 expected_typ=access。
+
+    refresh 专用通道=/auth/refresh 匿名端点（api/01 §5.9；先例=refresh 路由
+    expected_typ="refresh"）——此前中间件不校验 typ，refresh 可当 Bearer 打受保护端点
+    （越权面）；修复后 typ 不符按无效处理（08 §2.1）→ 401+1002，请求不进下游。
+    """
+    client, env = auth_env
+    # Arrange：登录取 refresh token
+    login_resp = await client.post("/api/v1/auth/login", json={"email": env["email"], "password": env["password"]})
+    refresh_token = login_resp.json()["refresh_token"]
+    # Act：refresh 冒充 access 打受保护端点（logout：认证即可，api/01 §5.9）
+    resp = await client.post("/api/v1/auth/logout", headers={"Authorization": f"Bearer {refresh_token}"})
+    # Assert：中间件层拒绝（typ 不符 → 1002，非依赖层 1001 口径）
+    assert resp.status_code == status.HTTP_401_UNAUTHORIZED
+    body = resp.json()
+    assert body["code"] == 1002 and body["message"] and "trace_id" in body
+
+
+@pytest.mark.integration
+async def test_access_token_正常认证路径_logout_204(auth_env):
+    """S-① 对照组：access 过 typ 校验走正常路径（logout 成功态=204，api/01 §5.9）。"""
+    client, env = auth_env
+    login_resp = await client.post("/api/v1/auth/login", json={"email": env["email"], "password": env["password"]})
+    access = login_resp.json()["access_token"]
+    # Act / Assert
+    resp = await client.post("/api/v1/auth/logout", headers={"Authorization": f"Bearer {access}"})
+    assert resp.status_code == status.HTTP_204_NO_CONTENT

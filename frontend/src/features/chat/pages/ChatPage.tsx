@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useQuery } from '@tanstack/react-query'
 import { MessageSquareDashed, Plus } from 'lucide-react'
 import { toast } from 'sonner'
 import { SessionList } from '../components/SessionList'
@@ -10,15 +11,24 @@ import { ContextCollapseButton, ContextPanel, ContextPanelRail } from '../compon
 import { WorkspacePanel } from '../components/WorkspacePanel'
 import { EvidenceSheet, type EvidenceFocus } from '../components/EvidenceSheet'
 import { EmptyState } from '@/components/states'
+import { api } from '@/api/client'
+import { qk } from '@/lib/qk'
 import { useSessionStore } from '@/stores/session-store'
 import { useSessionStream } from '@/sse/useSessionStream'
-import { api } from '@/api/client'
 import type { ChatMessage } from '@/stores/session-store'
 import { CONN_STATE_TEXT } from '@/lib/conn-label'
 import { BASELINE, STOP_GENERATED } from '@/lib/toast-templates'
 
 /** 连接状态中文化（IX 顶栏状态徽标）：running 优先，其余按 SSE 连接态映射（单源=lib/conn-label） */
 const CONNECTION_TEXT = CONN_STATE_TEXT
+
+/** 连接徽标色（C-2 贴稿：绿=已连接/运行中 · 橙=连接中/重连中 · 红=已断开；档位=令牌徽标类） */
+const CONN_BADGE: Record<string, string> = {
+  open: 'b-green',
+  reconnecting: 'b-orange',
+  offline: 'b-red',
+  connecting: 'b-gray',
+}
 
 /** 对话页（画框03 / 16 篇 §5.2 增量批次）：三栏=会话列表｜消息流｜上下文面板（可折叠）。
  *  数据流（16 篇 §3.2）：选会话 → GET messages 拉历史基线 → 开 SSE → 事件经 session-store.apply 归约；
@@ -40,6 +50,16 @@ export function ChatPage() {
   const connection = useSessionStore(s => s.connection)
   const running = useSessionStore(s => s.running)
   const navigate = useNavigate()
+  /** C-1 顶栏会话标题：标题在会话列表查询缓存（SessionItem），store 不持元数据——
+   *  同 key 只读缓存（enabled=false 不重发），SessionList 增删改失效重拉后此处随缓存刷新；
+   *  无 title（未选会话/缓存未至）回退「对话」。 */
+  const sessionTitleQ = useQuery({
+    queryKey: qk.session.list(),
+    queryFn: () => api.get<{ items: { id: string; title: string }[] }>('/sessions'),
+    enabled: false,
+    staleTime: Infinity,
+  })
+  const sessionTitle = sessionTitleQ.data?.items.find(s => s.id === sessionId)?.title
   /** 消息基线失败态（36 §B）：err=原始异常（ErrorState 取 ApiError 码），degraded=已降级警示条。
    *  宿主持有（GET 在此发起），ChatStream 只负责渲染位与互斥门禁。 */
   const [baselineError, setBaselineError] = useState<{ err: unknown; degraded: boolean } | null>(null)
@@ -103,7 +123,8 @@ export function ChatPage() {
   }
 
   const statusText = running ? '运行中' : CONNECTION_TEXT[connection] ?? connection
-  // 宪法「语义色只用令牌」：裸 tailwind 色板（bg-green-500 等）→ 令牌点变体 .dot d-*（elements.css）
+  // 宪法「语义色只用令牌」：dot 用令牌变体（running 附 pulse）；徽标底色用 CONN_BADGE 映射
+  const statusBadge = running ? 'b-green' : CONN_BADGE[connection] ?? 'b-gray'
   const statusDot = running ? 'd-green animate-pulse' : connection === 'open' ? 'd-green' : connection === 'offline' ? 'd-red' : 'd-orange'
 
   return (
@@ -111,10 +132,11 @@ export function ChatPage() {
       <SessionList onPicked={setPicked} />
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="flex h-12 flex-none items-center gap-3 border-b border-separator bg-surface px-5">
-          <span className="text-sm font-semibold">对话</span>
+          {/* C-1：顶栏标题=活动会话标题（多会话方位感）；无选中回退「对话」 */}
+          <b className="max-w-[240px] truncate text-sm" data-testid="chat-title">{sessionTitle ?? '对话'}</b>
           {sessionId ? (
-            <span data-testid="conn-status" className="badge flex items-center gap-1.5 rounded-full border border-separator px-2 py-0.5 text-2xs text-label-2">
-              <span className={`dot h-1.5 w-1.5 ${statusDot}`} />
+            <span data-testid="conn-status" className={`badge flex items-center gap-1.5 rounded-full border border-separator px-2 py-0.5 text-2xs ${statusBadge}`}>
+              <span className={`dot h-1.5 w-1.5 ${statusDot}`} aria-hidden />
               {statusText}
             </span>
           ) : (

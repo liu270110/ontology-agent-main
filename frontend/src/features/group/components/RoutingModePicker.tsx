@@ -78,7 +78,7 @@ export function RoutingModePicker({
         }}
       >
         <Crown size={12} style={{ color: 'var(--purple)' }} aria-hidden />
-        _routing: {ROUTING_LABEL[routing]}
+        编排：{ROUTING_LABEL[routing]}
         <ChevronDown size={11} aria-hidden />
       </button>
       <FloatingCard open={open} anchor={anchor} onClose={() => setOpen(false)} width={352}>

@@ -1,11 +1,14 @@
 import '@testing-library/jest-dom/vitest'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { afterEach, beforeAll, afterAll, describe, expect, it } from 'vitest'
+import { afterEach, beforeAll, describe, expect, it } from 'vitest'
 import { delay, http, HttpResponse } from 'msw'
 import { App } from '@/app/App'
 import { server } from '@/mocks/node'
 import { useAuthStore } from '@/stores/auth-store'
 
+// MSW 生命周期归全局 setupFiles（src/mocks/node-setup.ts）：listen/resetHandlers/close 均由其接管。
+// 本文件原 beforeAll(server.listen)/afterAll(server.close) 与全局接管冲突（双重 listen 抛 Invariant
+// Violation，对账批 A 门禁发现），迁移至新测试基建（口径同 s8-dashboard.test.tsx）；xyflow 垫片保留。
 beforeAll(() => {
   // xyflow（图谱画布）在 jsdom 需要 ResizeObserver / DOMMatrixReadOnly 垫片（s4 先例·官方指引）
   class RO {
@@ -24,7 +27,6 @@ beforeAll(() => {
     }
   }
   ;(globalThis as unknown as { DOMMatrixReadOnly: unknown }).DOMMatrixReadOnly ??= DOMMatrixReadOnlyMock
-  server.listen({ onUnhandledRequest: 'bypass' })
 })
 afterEach(() => {
   server.resetHandlers()
@@ -32,7 +34,6 @@ afterEach(() => {
   localStorage.clear()
   useAuthStore.getState().clearSession()
 })
-afterAll(() => server.close())
 
 /** S8 状态切片 · 图谱浏览（s8-states）：MSW 注入延迟（不动 src/mocks/handlers.ts）。
  *  图数据延迟 → 画布转圈占位先出现 → 数据到达后占位退场。

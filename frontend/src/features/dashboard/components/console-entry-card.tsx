@@ -14,6 +14,8 @@ export function ConsoleEntryCard({
   isPending: boolean
   isError: boolean
 }) {
+  // D-1 待审批醒目警示（画板 L192 语义）：pending>0 橙框 + b-orange「需要您处理」徽标
+  const warn = pendingTotal > 0 && !isPending && !isError
   return (
     <Link
       to="/console"
@@ -25,20 +27,24 @@ export function ConsoleEntryCard({
           void bridge.openConsole()
         }
       }}
-      className="card glass-interactive flex flex-none items-center gap-3 rounded-xl border border-separator bg-surface px-4 py-3 hover:border-accent"
+      className="card glass-interactive flex flex-none items-center gap-3 rounded-xl border bg-surface px-4 py-3 hover:border-accent"
+      style={warn ? { borderColor: 'var(--orange)', borderWidth: 1.5 } : { borderColor: 'var(--separator)' }}
     >
       <span className="flex h-9 w-9 flex-none items-center justify-center rounded-lg bg-accent text-white">
         <ShieldCheck size={17} aria-hidden />
       </span>
       <span className="min-w-0">
-        <b className="flex items-center gap-1 text-sm">管理控制台</b>
-        <small className="block text-[11px] text-label-3">
-          {pendingTotal > 0 && !isPending && !isError
-            ? `${pendingTotal} 项待审批 · 治理/配置/观测`
-            : '治理 · 能力配置 · 观测'}
+        <b className="flex items-center gap-1.5 text-sm">
+          管理控制台
+          {warn && (
+            <span className="badge b-orange" data-testid="console-entry-warn">需要您处理</span>
+          )}
+        </b>
+        <small className="block text-[11px]" style={warn ? { color: 'var(--orange)' } : undefined}>
+          {warn ? `${pendingTotal} 项待审批 · 治理/配置/观测` : '治理 · 能力配置 · 观测'}
         </small>
       </span>
-      <ArrowRight size={14} aria-hidden className="flex-none text-label-3" />
+      <ArrowRight size={14} aria-hidden className={`flex-none ${warn ? 'text-orange' : 'text-label-3'}`} />
     </Link>
   )
 }

@@ -87,9 +87,6 @@ class AgentKernel:
         self._baseline = BaselineGate()
         self._evaluator = CriterionEvaluator()
         self._clock = clock
-        # B-③ 批（docs/Agent/10 §8.2）：缺省 None=运行期从配置层解析（Settings 唯一事实
-        # 源）；显式注入优先（测试与组合根直传通道，D2/F-4 同款纪律）。
-        self._tool_timeout_s = tool_timeout_s
         # B-① 并行段并发度：显式注入优先，缺省读 Settings（T6 唯一事实源；=1 退化为串行）
         self._tool_parallelism = (
             tool_parallelism if tool_parallelism is not None else get_settings().kernel_tool_parallelism
@@ -97,6 +94,9 @@ class AgentKernel:
         self._last_ledger: KernelLedger | None = None
         # 阶段执行器（内核私有；依赖注入同一分发器，禁直连能力实现）
         self._context_stage = ContextAssemblyStage(dispatcher, self._emit)
+        # B-③ 批（docs/Agent/10 §8.2）：tool_timeout_s 直传执行阶段——显式注入优先
+        # （测试与组合根直传通道，D2/F-4 同款纪律），缺省 None 由 ExecutionStage
+        # 运行期读 Settings（配置层唯一事实源）。
         self._execution_stage = ExecutionStage(
             dispatcher, self._emit, tool_timeout_s=tool_timeout_s, spill_store=spill_store
         )

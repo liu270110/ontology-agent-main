@@ -1,4 +1,5 @@
 import { Link, useNavigate } from 'react-router-dom'
+import { MessageSquare } from 'lucide-react'
 import { describeError } from '@/lib/errors'
 import { relativeTime } from '@/lib/reltime'
 import { ErrorState, SkeletonRows } from '@/components/states'
@@ -59,7 +60,10 @@ export function RecentSessions({
           onClick={() => navigate('/chat')}
           className="flex w-full items-center gap-3 border-b border-separator py-2.5 text-left last:border-0 hover:bg-black/[.03] dark:hover:bg-white/[.04]"
         >
-          <span className="flex h-8 w-8 flex-none items-center justify-center rounded-lg bg-accent-soft text-sm text-accent">💬</span>
+          {/* deslop 黑名单「emoji 当图标」：💬 换 lucide 线性图标（语义=会话，与启动台对话卡同源） */}
+          <span className="flex h-8 w-8 flex-none items-center justify-center rounded-lg bg-accent-soft text-accent">
+            <MessageSquare size={14} aria-hidden />
+          </span>
           <span className="min-w-0 flex-1">
             <span className="block truncate text-[13px]">{s.title || '未命名会话'}</span>
             <span className="block text-[11px] text-label-3">{relativeTime(s.updated_at ?? s.created_at ?? '')}</span>

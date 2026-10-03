@@ -45,7 +45,8 @@ async function exportMarkdown(s: SessionItem) {
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url
-  a.download = `${s.title}.md`
+  // 文件名消毒：标题含路径/非法字符（/ \ : 等）会导致下载失败或改名
+  a.download = `${s.title.replace(/[\\/:*?"<>|]/g, '_')}.md`
   a.click()
   URL.revokeObjectURL(url)
 }
@@ -121,7 +122,8 @@ export function SessionList({ onPicked }: { onPicked?: (id: string) => void }) {
       </div>
       {/* 会话搜索（F-04）：按标题过滤 */}
       <div className="px-3 pb-2 pt-1">
-        <label className="fakeinput flex items-center gap-1.5 rounded-lg border border-separator bg-surface-2 px-2 py-1.5">
+        {/* 焦点可见（ui-audit）：容器托管 focus 光晕（.input:focus 同语言），输入 outline-none 有替代 */}
+        <label className="fakeinput flex items-center gap-1.5 rounded-lg border border-separator bg-surface-2 px-2 py-1.5 focus-within:border-accent focus-within:shadow-[0_0_0_3px_var(--accent-soft)]">
           <Search size={12} className="flex-none text-label-3" aria-hidden />
           <input
             ref={searchRef}
@@ -201,7 +203,8 @@ export function SessionList({ onPicked }: { onPicked?: (id: string) => void }) {
                 }}
               >
                 <div className="flex min-h-[22px] items-center gap-1 pr-[26px]">
-                  {s.pinned && <Pin size={11} className="flex-none text-orange" aria-label="已置顶" />}
+                  {/* 装饰性重复：置顶状态已由下方「已置顶 · 」文本承载，图标 aria-hidden（读屏不重复播报） */}
+                  {s.pinned && <Pin size={11} className="flex-none text-orange" aria-hidden />}
                   <span className="min-w-0 flex-1 truncate text-[13px] font-medium">{s.title}</span>
                 </div>
                 <div className="text-[11px] text-label-3">

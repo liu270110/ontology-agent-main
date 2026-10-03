@@ -2,6 +2,8 @@ import { useMemo, useState } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { RotateCcw, Save } from 'lucide-react'
 import { toast } from 'sonner'
+import { ApiError } from '@/api/client'
+import { ErrorState, SkeletonRows } from '@/components/states'
 import { getRoleMatrix, saveRoleMatrix } from '../api'
 
 /** 角色 Tab（26 篇 §10.2 p-roles）：IX-ADM-04 RBAC 矩阵（角色 × 权限点勾选格）——
@@ -11,7 +13,7 @@ import { getRoleMatrix, saveRoleMatrix } from '../api'
 interface Change { role: string; permission: string; granted: boolean }
 
 export function RolesTab() {
-  const { data, isLoading, refetch } = useQuery({ queryKey: ['admin', 'roles', 'matrix'], queryFn: getRoleMatrix })
+  const { data, isLoading, isError, error, refetch } = useQuery({ queryKey: ['admin', 'roles', 'matrix'], queryFn: getRoleMatrix })
   /** 乐观更新层：`role|perm` → 勾选值（保存成功后清空对齐服务端） */
   const [changes, setChanges] = useState<Record<string, boolean>>({})
 
@@ -55,8 +57,22 @@ export function RolesTab() {
     onError: e => toast.error(e.message),
   })
 
+  // 状态完备（S8 切片同款）：失败 → ErrorState 可重试（原实现失败永锁「加载中」）；
+  // 加载走 SkeletonRows 基元（.empty 是空态模式，不用于加载态）
+  if (isError) {
+    return (
+      <div className="mt-3">
+        <ErrorState
+          title="权限矩阵加载失败"
+          message={error instanceof Error ? error.message : undefined}
+          code={error instanceof ApiError ? error.code : undefined}
+          onRetry={() => void refetch()}
+        />
+      </div>
+    )
+  }
   if (isLoading || !matrix) {
-    return <div className="empty"><div className="t">加载中…</div></div>
+    return <div className="card mt-3 px-4 py-3"><SkeletonRows rows={6} rowHeight={30} /></div>
   }
 
   return (
@@ -95,6 +111,7 @@ export function RolesTab() {
                   const granted = valueOf(r.key, p.key)
                   return (
                     <td key={r.key} className="perm px-3 py-2 text-center">
+                      {/* 变更高亮改 box-shadow：outline 语义留给 focus-visible 焦点环（阶段1全局 :focus-visible），二者不再互相遮挡 */}
                       <input
                         type="checkbox"
                         aria-label={`${r.label} ${p.label}`}
@@ -105,7 +122,7 @@ export function RolesTab() {
                           setChanges(prev => ({ ...prev, [keyOf(r.key, p.key)]: e.target.checked }))
                         }}
                         style={changed
-                          ? { outline: `2px solid ${granted ? 'var(--green)' : 'var(--red)'}`, outlineOffset: 2, borderRadius: 3 }
+                          ? { boxShadow: `0 0 0 2px ${granted ? 'var(--green)' : 'var(--red)'}`, borderRadius: 4 }
                           : undefined}
                       />
                     </td>

@@ -64,6 +64,8 @@ export function RoutingModePicker({
       <button
         type="button"
         data-testid="grp-routing-open"
+        aria-haspopup="dialog"
+        aria-expanded={open}
         className="flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold"
         style={{
           color: isOrchestrator ? 'var(--accent)' : 'var(--label-2)',

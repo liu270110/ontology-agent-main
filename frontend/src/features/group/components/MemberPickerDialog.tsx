@@ -57,7 +57,10 @@ export function MemberPickerDialog({
     if (!open) return
     setErrMsg(null)
     setPicked([])
-    void listPickableSlots().then(r => setSlots(r.items ?? []))
+    // 状态完备（36 §B）：候选加载失败不再静默空列表 → 行内错误提示（重开弹窗或重试触发重拉）
+    void listPickableSlots()
+      .then(r => setSlots(r.items ?? []))
+      .catch(e => setErrMsg(e instanceof ApiError ? `成员候选加载失败：${e.message}` : '成员候选加载失败，请关闭后重试'))
   }, [open, mode])
 
   const existing = useMemo(() => new Set((session?.members ?? []).map(m => m.slot_id)), [session])
@@ -107,6 +110,8 @@ export function MemberPickerDialog({
     <Modal open={open} onClose={onClose} title={mode === 'create' ? '新建群聊 · 选择成员' : '选择群成员'} width={600}>
       <div className="mb-3 text-xs text-label-2">
         {mode === 'create' ? (
+          // a11y 注记：外层 <label> 包裹 input 已构成隐式关联（读屏播报「群名称」），
+          // field-label 保持 span——label 内不再嵌 label（非法嵌套反伤语义）
           <label className="field mb-0">
             <span className="field-label">群名称</span>
             <input className="input" data-testid="grp-title-input" value={title} onChange={e => setTitle(e.target.value)} />
@@ -153,7 +158,8 @@ export function MemberPickerDialog({
                     <span className="badge b-orange">跨租户 · 需审批</span>
                   ) : (
                     <span className={`badge ${STATUS_BADGE[s.status].cls}`}>
-                      <span className={`dot ${s.status === 'running' ? 'd-green' : 'd-gray'}`} style={{ width: 6, height: 6 }} />
+                      {/* 缺陷修复：d-gray 类无定义 → 令牌内联兜底（同 MemberPanel 状态点） */}
+                      <span className="dot" style={{ width: 6, height: 6, background: s.status === 'running' ? 'var(--green)' : 'var(--label-3)' }} />
                       {STATUS_BADGE[s.status].txt}
                     </span>
                   )}
@@ -212,7 +218,7 @@ export function MemberPickerDialog({
                 className="flex h-6 w-6 flex-none items-center justify-center rounded-md text-label-3 hover:bg-surface-2"
                 onClick={() => setPicked(prev => prev.filter(x => x.slot.id !== p.slot.id))}
               >
-                <X size={12} />
+                <X size={12} aria-hidden />
               </button>
             </div>
           ))}

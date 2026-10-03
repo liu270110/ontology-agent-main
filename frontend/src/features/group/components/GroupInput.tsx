@@ -2,7 +2,7 @@ import { useMemo, useRef, useState } from 'react'
 import { Send, Square } from 'lucide-react'
 import { FloatingCard } from '@/components/popover'
 import { useGroupStreamStore } from '../group-store'
-import { sendGroupMessage, type GroupMember, type RoutingMode } from '../api'
+import { ROUTING_LABEL, sendGroupMessage, type GroupMember, type RoutingMode } from '../api'
 import { AgentAvatar } from './shared'
 
 /** 输入栏（输入栏五件套 M1 子集 + MentionMenu 简版，27 篇 §2）：@ 触发浮层列群成员
@@ -73,8 +73,20 @@ export function GroupInput({
         </div>
       )}
       <div className="relative flex items-center gap-2">
-        <span className="icobtn flex h-8 w-8 flex-none cursor-pointer items-center justify-center rounded-lg border border-separator text-label-2" title="附件（随 F-01/F-02 批）">＋</span>
-        <span className="fakeinput flex flex-1 items-center rounded-xl border border-separator bg-surface-2 px-3">
+        {/* ui-audit 反模式「div/span 当按钮」：span 假钮 → 真 button 诚实禁用（title 挂外层 span——
+            disabled 不接收指针事件，tooltip 挂按钮上永不出现；分享钮同款模式） */}
+        <span title="附件（随 F-01/F-02 批开放）">
+          <button
+            type="button"
+            aria-label="附件（即将开放）"
+            disabled
+            className="icobtn btn-dis flex h-8 w-8 flex-none items-center justify-center rounded-lg border border-separator text-label-2"
+          >
+            ＋
+          </button>
+        </span>
+        {/* 焦点可见（ui-audit 禁裸 outline-none 无替代）：容器托管 focus 光晕（.input:focus 同语言） */}
+        <span className="fakeinput flex flex-1 items-center rounded-xl border border-separator bg-surface-2 px-3 focus-within:border-accent focus-within:shadow-[0_0_0_3px_var(--accent-soft)]">
           <textarea
             ref={taRef}
             data-testid="grp-input"
@@ -91,21 +103,29 @@ export function GroupInput({
             }}
           />
         </span>
-        <span className="chipmodel">群 · {routing}</span>
+        {/* 文案中文化：路由英文枚举裸奔 → ROUTING_LABEL（与 MemberPanel/RoutingModePicker 同源） */}
+        <span className="chipmodel">群 · {ROUTING_LABEL[routing]}</span>
         <button
           type="button"
           className="sendbtn flex h-9 w-9 flex-none items-center justify-center rounded-full text-white disabled:opacity-40"
           style={{ background: 'var(--accent)' }}
           disabled={!text.trim() || busy || running}
+          aria-label={running ? '运行中（终止随 F-02 批开放）' : '发送'}
           title={running ? '运行中（⏹ 终止随 F-02 批）' : '发送（Enter）'}
           data-testid="grp-send"
           onClick={() => void send()}
         >
-          {running ? <Square size={14} /> : <Send size={14} />}
+          {running ? <Square size={14} aria-hidden /> : <Send size={14} aria-hidden />}
         </button>
 
-        {/* MentionMenu 简版（GRP 画板：@ 提及对象=群内成员） */}
-        <FloatingCard open={mentionOpen} anchor={taRef.current?.getBoundingClientRect() ?? null} onClose={() => setMentionOpen(false)} width={260}>
+        {/* MentionMenu 简版（GRP 画板：@ 提及对象=群内成员）；
+            perf（ui-audit）：anchor 仅 open 时读取 getBoundingClientRect，非每次渲染强制布局 */}
+        <FloatingCard
+          open={mentionOpen}
+          anchor={mentionOpen ? taRef.current?.getBoundingClientRect() ?? null : null}
+          onClose={() => setMentionOpen(false)}
+          width={260}
+        >
           <div className="mb-1.5 text-2xs font-bold tracking-wide text-label-3">提及群成员</div>
           {agents.map(m => (
             <button key={m.id} type="button" className="rov-item w-full" data-testid={`grp-mention-${m.id}`} onClick={() => pickMention(m)}>

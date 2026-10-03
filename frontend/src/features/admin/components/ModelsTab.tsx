@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Check, Plus, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { ApiError } from '@/api/client'
-import { ErrorState, SkeletonRows } from '@/components/states'
+import { EmptyState, ErrorState, SkeletonRows } from '@/components/states'
 import { Modal } from '@/components/modal'
 import { Select } from '@/components/select'
 import {
@@ -52,6 +52,14 @@ export function ModelsTab() {
             </tr>
           </thead>
           <tbody>
+            {/* 状态完备：成功空列表 → 空态行（与加载/错误态互斥门控） */}
+            {!isLoading && !isError && channels.length === 0 && (
+              <tr>
+                <td colSpan={7}>
+                  <EmptyState compact title="还没有模型渠道" desc="接入第一个渠道后，Agent 插槽即可绑定模型。" />
+                </td>
+              </tr>
+            )}
             {channels.map(c => (
               <tr key={c.id} className="hairline-b" data-testid={`adm-model-${c.id}`}>
                 <td className="px-4 py-2.5"><b>{c.name}</b><span className="mono block text-2xs text-label-3">{c.api_key_masked}</span></td>
@@ -161,6 +169,7 @@ function AddChannelModal({ onClose }: { onClose: () => void }) {
               key={p.key}
               type="button"
               data-testid={`adm-model-provider-${p.key}`}
+              aria-pressed={provider === p.key}
               onClick={() => { setProvider(p.key); setTest({ phase: 'idle' }) }}
               className={`rounded-xl border p-3 text-left transition-colors ${provider === p.key ? 'border-accent bg-accent-soft' : 'border-separator hover:border-label-3'}`}
             >

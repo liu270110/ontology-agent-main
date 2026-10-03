@@ -79,14 +79,16 @@ export function MessageInput({ sessionId, onStop }: { sessionId: string; onStop:
       >
         <Paperclip size={14} aria-hidden />
       </button>
-      {/* 七件套②挂载知识库：知识库选择器组件尚缺（无现成组件可接），禁用态 + title 说明 */}
+      {/* 七件套②挂载知识库：知识库选择器组件尚缺（无现成组件可接），禁用态 + title 说明；
+          点击给同款轻提示（与附件钮一致，非静默死钮） */}
       <button
         type="button"
         data-testid="chat-kb-mount"
         aria-label="挂载知识库"
         aria-disabled="true"
         title="挂载知识库 — 选择器随 M4 批开放（引用文档现于上下文面板查看）"
-        className="icobtn flex h-7 w-7 flex-none items-center justify-center rounded-lg text-label-3 opacity-50"
+        onClick={() => toast.info('知识库选择器随 M4 批开放，敬请期待')}
+        className="icobtn flex h-7 w-7 flex-none items-center justify-center rounded-lg text-label-3 opacity-50 transition-colors hover:text-label"
       >
         <BookOpen size={14} aria-hidden />
       </button>
@@ -103,7 +105,9 @@ export function MessageInput({ sessionId, onStop }: { sessionId: string; onStop:
         {thinkMode}
         <ChevronDown size={10} aria-hidden />
       </button>
-      <span className="fakeinput flex flex-1 items-center">
+      {/* 焦点可见（ui-audit 禁裸 outline-none 无替代）：fakeinput 无样式定义，容器托管 focus 光晕
+          （.input:focus 同语言：3px accent-soft，令牌引用），textarea 的 outline-none 有替代 */}
+      <span className="fakeinput flex flex-1 items-center rounded-lg focus-within:shadow-[0_0_0_3px_var(--accent-soft)]">
         <textarea
           className="max-h-32 min-h-[38px] w-full resize-none bg-transparent text-sm outline-none"
           placeholder="继续提问，或输入 / 调用技能…"

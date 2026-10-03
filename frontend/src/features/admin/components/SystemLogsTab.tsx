@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import { ChevronDown, ChevronRight, Download, Search } from 'lucide-react'
 import { toast } from 'sonner'
 import { ApiError } from '@/api/client'
-import { ErrorState, SkeletonRows } from '@/components/states'
+import { EmptyState, ErrorState, SkeletonRows } from '@/components/states'
 import { Select } from '@/components/select'
 import { getReadyz, listSystemLogs, type ReadyzCheck, type SysLogRow, type SysLogSpanStep } from '../api'
 
@@ -144,7 +144,10 @@ export function SystemLogsTab() {
           </div>
         )}
         {!isLoading && !isError && rows.length === 0 && (
-          <div className="px-4 py-6 text-center text-xs text-label-3">无匹配日志 · 请调整级别 / 服务 / 时间档后重试</div>
+          // 状态完备：空态走 EmptyState 基元（icon+title+desc 四段式），不再是裸灰字
+          <div className="px-4 py-5">
+            <EmptyState compact title="无匹配日志" desc="请调整级别 / 服务 / 时间档后重试。" />
+          </div>
         )}
       </div>
 

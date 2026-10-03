@@ -172,7 +172,8 @@ export function DocumentsPage() {
           { num: `+${stats.today}`, label: '今日入库', accent: true },
         ].map(s => (
           <div key={s.label} className="card px-4 py-3" style={s.accent ? { border: '1.5px solid var(--accent)' } : undefined} title={s.title}>
-            <div className={`text-2xl font-bold ${s.accent ? 'text-accent' : ''}`}>{s.num}</div>
+            {/* 排版（deslop）：数字列 tabular-nums，计数跳动不挤宽 */}
+            <div className={`text-2xl font-bold tabular-nums ${s.accent ? 'text-accent' : ''}`}>{s.num}</div>
             <div className="mt-0.5 text-[11px] text-label-3">{s.label}</div>
           </div>
         ))}
@@ -233,7 +234,7 @@ export function DocumentsPage() {
             {table.getHeaderGroups().map(hg => (
               <tr key={hg.id}>
                 {hg.headers.map(h => (
-                  <th key={h.id}>{h.isPlaceholder ? null : flexRender(h.column.columnDef.header, h.getContext())}</th>
+                  <th key={h.id} scope="col">{h.isPlaceholder ? null : flexRender(h.column.columnDef.header, h.getContext())}</th>
                 ))}
               </tr>
             ))}

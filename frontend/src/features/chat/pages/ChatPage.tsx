@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { MessageSquareDashed, Plus } from 'lucide-react'
 import { toast } from 'sonner'
 import { SessionList } from '../components/SessionList'
@@ -13,11 +13,13 @@ import { EvidenceSheet, type EvidenceFocus } from '../components/EvidenceSheet'
 import { EmptyState } from '@/components/states'
 import { api } from '@/api/client'
 import { qk } from '@/lib/qk'
+import { describeError } from '@/lib/toast-templates'
 import { useSessionStore } from '@/stores/session-store'
 import { useSessionStream } from '@/sse/useSessionStream'
 import type { ChatMessage } from '@/stores/session-store'
 import { CONN_STATE_TEXT } from '@/lib/conn-label'
 import { BASELINE, STOP_GENERATED } from '@/lib/toast-templates'
+import { createDefaultSession } from '../api'
 
 /** 连接状态中文化（IX 顶栏状态徽标）：running 优先，其余按 SSE 连接态映射（单源=lib/conn-label） */
 const CONNECTION_TEXT = CONN_STATE_TEXT
@@ -50,6 +52,20 @@ export function ChatPage() {
   const connection = useSessionStore(s => s.connection)
   const running = useSessionStore(s => s.running)
   const navigate = useNavigate()
+  const qc = useQueryClient()
+  /** F5（C-3）：/chat/new 空态「新建会话」=POST /sessions create mutation——建成功就地选中
+   *  （无 /chat/:id 路由，选中态=picked；URL 归位 /chat 防深链残留），失败 toast。 */
+  const createSession = useMutation({
+    mutationFn: createDefaultSession,
+    onSuccess: s => {
+      setActive(s.id)
+      setPicked(s.id)
+      setBaselineError(null)
+      void qc.invalidateQueries({ queryKey: qk.session.list() })
+      if (location.pathname !== '/chat') navigate('/chat', { replace: true })
+    },
+    onError: e => toast.error(`新建会话失败：${describeError(e)}`),
+  })
   /** C-1 顶栏会话标题：标题在会话列表查询缓存（SessionItem），store 不持元数据——
    *  同 key 只读缓存（enabled=false 不重发），SessionList 增删改失效重拉后此处随缓存刷新；
    *  无 title（未选会话/缓存未至）回退「对话」。 */
@@ -202,7 +218,8 @@ export function ChatPage() {
             <MessageInput sessionId={sessionId} onStop={handleStop} />
           </>
         ) : (
-          // 36 §A1 未选中会话：EmptyState hero 替换裸文字（遗留 #2 销账）；主区唯一 btn-p
+          // 36 §A1 未选中会话：EmptyState hero 替换裸文字（遗留 #2 销账）；主区唯一 btn-p。
+          // F5（C-3）：按钮=真正建会话（POST /sessions create mutation），非 /chat/new 自环导航
           <div className="flex flex-1 items-center justify-center">
             <EmptyState
               hero
@@ -210,7 +227,13 @@ export function ChatPage() {
               title="选择一个会话"
               desc="从左侧列表选择会话继续对话；也可以新建一个。"
               action={
-                <button type="button" className="btn btn-p" onClick={() => navigate('/chat/new')}>
+                <button
+                  type="button"
+                  className="btn btn-p"
+                  data-testid="chat-new-create"
+                  disabled={createSession.isPending}
+                  onClick={() => createSession.mutate()}
+                >
                   <Plus size={13} aria-hidden /> 新建会话
                 </button>
               }

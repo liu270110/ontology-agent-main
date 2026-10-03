@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
 import { getPreferences, putPreferences } from '../api'
-import { ROUTING_LABEL } from '@/features/group/api'
+import { ROUTING_LABEL } from '@/lib/routing'
 import { Select } from '@/components/select'
 
 /** IX-SET 对话偏好 Tab（宿主 p-settings「对话偏好」卡；S-AD 切片）：默认模型渠道 +

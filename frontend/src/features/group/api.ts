@@ -1,14 +1,14 @@
 import { api } from '@/api/client'
+import { type RoutingMode } from '@/lib/routing'
 
 /** 群聊域 API（契约=api/01 §5.2 sessions 群聊扩展，X15 预登记；DTO 手写过渡，
  *  TODO: 后端 /meta/openapi 可用后 gen:api 生成）。与 mocks/group-handlers.ts 一一对应。 */
 
-export type RoutingMode = 'mention' | 'round_robin' | 'all' | 'orchestrator'
+// 发言编排词表下沉共享层 src/lib/routing（设置页对话偏好跨域复用；02 篇 §4）——
+// 域内经此再导出，引用面不变（16 篇 §1 架构守卫：features 域间禁止横向 import）
+export { ROUTING_LABEL, type RoutingMode } from '@/lib/routing'
 export type MemberRole = 'coordinator' | 'speaker' | 'observer'
 
-export const ROUTING_LABEL: Record<RoutingMode, string> = {
-  mention: '@点名', round_robin: '轮询', all: '多答对比', orchestrator: '协调者',
-}
 export const ROLE_LABEL: Record<MemberRole, string> = {
   coordinator: '协调者', speaker: '发言者', observer: '观察者',
 }

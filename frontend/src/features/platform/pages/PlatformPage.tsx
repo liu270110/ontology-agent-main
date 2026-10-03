@@ -2,10 +2,7 @@ import { useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { ArrowRight, Bot, Plug, Puzzle, Sparkles, Wrench, type LucideIcon } from 'lucide-react'
 import { toast } from 'sonner'
-import { listPlugins } from '@/features/market/api'
-import { listSkills, listTools } from '@/features/tools/api'
-import { listServers } from '@/features/mcp/api'
-import { listAgents } from '@/features/agents/api'
+import { listPluginOverview, listToolOverview, listSkillOverview, listMcpServerOverview, listAgentOverview } from '@/lib/platform-overview'
 
 /** 平台能力总览（四区 IA 2026-10-01，画板 p-platform）：用户浏览与获取平台能力的统一入口——
  *  ① 四能力入口卡（插件市场/工具与技能/MCP 接入/Agent 目录，计数复用各域既有 queryKey 取数，
@@ -29,12 +26,13 @@ interface Capability {
 export function PlatformPage() {
   const navigate = useNavigate()
 
-  // 计数取数：与各域页面同 queryKey/queryFn（缓存共享，进出子页不重复请求）；失败/加载中不显示
-  const market = useQuery({ queryKey: ['market', 'list'], queryFn: listPlugins })
-  const tools = useQuery({ queryKey: ['tools'], queryFn: listTools })
-  const skills = useQuery({ queryKey: ['skills', 'list'], queryFn: listSkills })
-  const mcp = useQuery({ queryKey: ['mcp', 'list'], queryFn: listServers })
-  const agents = useQuery({ queryKey: ['agents', 'list'], queryFn: listAgents })
+  // 计数取数：经共享层 lib/platform-overview（端点/queryKey 与各域页面一致，缓存共享，
+  // 进出子页不重复请求；域间不互引见 lib 头注）；失败/加载中不显示
+  const market = useQuery({ queryKey: ['market', 'list'], queryFn: listPluginOverview })
+  const tools = useQuery({ queryKey: ['tools'], queryFn: listToolOverview })
+  const skills = useQuery({ queryKey: ['skills', 'list'], queryFn: listSkillOverview })
+  const mcp = useQuery({ queryKey: ['mcp', 'list'], queryFn: listMcpServerOverview })
+  const agents = useQuery({ queryKey: ['agents', 'list'], queryFn: listAgentOverview })
 
   const installed = market.data?.items.filter(p => p.installed).length
   const marketCount =

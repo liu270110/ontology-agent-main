@@ -111,7 +111,7 @@ export function GroupChatPage() {
   return (
     <div className="flex h-full min-h-0" data-testid="group-page">
       {/* 左栏：群会话列表（260px 档） */}
-      <aside className="session-col flex w-[236px] flex-none flex-col border-r border-separator bg-surface">
+      <aside className="session-col flex w-60 flex-none flex-col border-r border-separator bg-surface">
         <div className="sc-head flex items-center justify-between px-4 py-3">
           <b className="text-sm">群会话</b>
           <button

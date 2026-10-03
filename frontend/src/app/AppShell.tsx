@@ -12,7 +12,7 @@ import { UserMenu } from './UserMenu'
 import { Logo } from '@/design-system/brand/Logo'
 
 /** 工作区类页面全幅判定：单聊/群聊/轨迹（/chat 前缀）+ 工作流编辑器（/workflows/:id）。 */
-const FULLBLEED = /^(\/chat(\/|$)|\/workflows\/[^/]+$)/
+const FULLBLEED = /^(\/chat(\/|$)|\/workflows\/[^/]+$|\/ontology\/[^/]+$|\/kb\/explore\/)/
 
 /** 应用壳（16 篇 §5.2 / 03 篇 AppLayout）：液态玻璃壳层——根容器挂 .app-stage 静态双光斑底
  *  （board.css .app 配方，玻璃折射的彩色来源），侧边栏 .glass-side（board.css .sb 配方）、

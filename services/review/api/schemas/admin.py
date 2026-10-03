@@ -11,6 +11,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from services.platform.schemas import PageMeta
+
 # 与 review_tickets CheckConstraint 同词汇表（database/01 DDL 权威；ORM=services/review/data/orm.py）
 # conflict = KB-G1a 冲突分诊 T2 工单（OntRAG §8.1 冲突分诊四型；KB-G1a 批扩展）
 TargetTypeFilter = Literal[
@@ -87,34 +89,12 @@ class AdminReviewOut(BaseModel):
     created_at: datetime
 
 
-class AdminReviewPageOut(BaseModel):
-    """工单分页（items/offset/limit，同 plugin PluginPageOut 口径）。"""
+class AdminReviewListOut(BaseModel):
+    """审核工单列表（api/01 §3.1 信封：{data, meta:{page,page_size,total}}，B1 批统一——
+    原 {code,message,data:{items,total,offset,limit,next_cursor}} 旧信封废止，A-5 证据端点；
+    R50 前端别名 pending/done 的 status 过滤面保留不变）。"""
 
     model_config = ConfigDict(extra="forbid")
 
-    items: list[AdminReviewOut]
-    offset: int
-    limit: int
-
-
-class AdminReviewPageData(BaseModel):
-    """工单分页 data 面（R50 联调对齐前端 listReviews：{items,next_cursor} + total/offset/limit）。"""
-
-    model_config = ConfigDict(extra="forbid")
-
-    items: list[AdminReviewOut] = Field(default_factory=list)
-    total: int = 0  # 当前过滤口径总数（信封契约：审批工作台徽标计数）
-    offset: int = 0
-    limit: int = 20
-    next_cursor: str | None = None  # 前端 listReviews DTO 契约字段（offset/limit 分页恒 None）
-
-
-class AdminReviewPageEnvelope(BaseModel):
-    """列表成功信封（live 对账口径：{code,message,data}；api/01 §3.1 反例注记与此处 live
-    客户端强信封解包并存，本端点按 live 前端 client 契约返回信封——见 R50 交付报告）。"""
-
-    model_config = ConfigDict(extra="forbid")
-
-    code: int = 0
-    message: str = "ok"
-    data: AdminReviewPageData
+    data: list[AdminReviewOut] = Field(default_factory=list)
+    meta: PageMeta

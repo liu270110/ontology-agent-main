@@ -1,6 +1,27 @@
 {
   "components": {
     "schemas": {
+      "AdminReviewListOut": {
+        "additionalProperties": false,
+        "description": "审核工单列表（api/01 §3.1 信封：{data, meta:{page,page_size,total}}，B1 批统一——\n原 {code,message,data:{items,total,offset,limit,next_cursor}} 旧信封废止，A-5 证据端点；\nR50 前端别名 pending/done 的 status 过滤面保留不变）。",
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/AdminReviewOut"
+            },
+            "title": "Data",
+            "type": "array"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/PageMeta"
+          }
+        },
+        "required": [
+          "meta"
+        ],
+        "title": "AdminReviewListOut",
+        "type": "object"
+      },
       "AdminReviewOut": {
         "additionalProperties": false,
         "description": "审核工单条目（admin 队列视图）。",
@@ -88,71 +109,6 @@
           "created_at"
         ],
         "title": "AdminReviewOut",
-        "type": "object"
-      },
-      "AdminReviewPageData": {
-        "additionalProperties": false,
-        "description": "工单分页 data 面（R50 联调对齐前端 listReviews：{items,next_cursor} + total/offset/limit）。",
-        "properties": {
-          "items": {
-            "items": {
-              "$ref": "#/components/schemas/AdminReviewOut"
-            },
-            "title": "Items",
-            "type": "array"
-          },
-          "limit": {
-            "default": 20,
-            "title": "Limit",
-            "type": "integer"
-          },
-          "next_cursor": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Next Cursor"
-          },
-          "offset": {
-            "default": 0,
-            "title": "Offset",
-            "type": "integer"
-          },
-          "total": {
-            "default": 0,
-            "title": "Total",
-            "type": "integer"
-          }
-        },
-        "title": "AdminReviewPageData",
-        "type": "object"
-      },
-      "AdminReviewPageEnvelope": {
-        "additionalProperties": false,
-        "description": "列表成功信封（live 对账口径：{code,message,data}；api/01 §3.1 反例注记与此处 live\n客户端强信封解包并存，本端点按 live 前端 client 契约返回信封——见 R50 交付报告）。",
-        "properties": {
-          "code": {
-            "default": 0,
-            "title": "Code",
-            "type": "integer"
-          },
-          "data": {
-            "$ref": "#/components/schemas/AdminReviewPageData"
-          },
-          "message": {
-            "default": "ok",
-            "title": "Message",
-            "type": "string"
-          }
-        },
-        "required": [
-          "data"
-        ],
-        "title": "AdminReviewPageEnvelope",
         "type": "object"
       },
       "AgentAdapterOut": {
@@ -6844,7 +6800,7 @@
   "paths": {
     "/api/v1/admin/reviews": {
       "get": {
-        "description": "分页列出本租户工单（最新优先）；审批工作台缺省看 pending_review。\n\nR50 联调修复（2026-09-28）：① status 接受前端别名 pending/done；② 返回\n{code,message,data:{items,total,offset,limit,next_cursor}} 信封（前端 client\napiFetchEnvelope 强信封解包，live 对账契约；空列表合法）。",
+        "description": "分页列出本租户工单（最新优先）；审批工作台缺省看 pending_review。\n\nR50 联调修复（2026-09-28）：status 接受前端别名 pending/done（别名面保留不变）。\nB1 批（2026-10-04）：信封改 api/01 §3.1 {data, meta:{page,page_size,total}}——废止\n{code,message,data} 旧信封（A-5 证据端点）；offset/limit 参数改 page/page_size。",
         "operationId": "list_reviews_api_v1_admin_reviews_get",
         "parameters": [
           {
@@ -6893,24 +6849,24 @@
           },
           {
             "in": "query",
-            "name": "offset",
+            "name": "page",
             "required": false,
             "schema": {
-              "default": 0,
-              "minimum": 0,
-              "title": "Offset",
+              "default": 1,
+              "minimum": 1,
+              "title": "Page",
               "type": "integer"
             }
           },
           {
             "in": "query",
-            "name": "limit",
+            "name": "page_size",
             "required": false,
             "schema": {
               "default": 20,
               "maximum": 100,
               "minimum": 1,
-              "title": "Limit",
+              "title": "Page Size",
               "type": "integer"
             }
           }
@@ -6920,7 +6876,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/AdminReviewPageEnvelope"
+                  "$ref": "#/components/schemas/AdminReviewListOut"
                 }
               }
             },
@@ -6937,7 +6893,7 @@
             "description": "Validation Error"
           }
         },
-        "summary": "审核工单列表（open 待审队列；target_type/status 过滤）",
+        "summary": "审核工单列表（open 待审队列；target_type/status 过滤；api/01 §3.1 信封）",
         "tags": [
           "admin"
         ]

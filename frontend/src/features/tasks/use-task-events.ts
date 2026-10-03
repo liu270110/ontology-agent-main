@@ -1,17 +1,31 @@
 import { useEffect, useState } from 'react'
+import { ApiError, authHeaders, sseUrl } from '@/api/client'
+import { useAuthStore } from '@/stores/auth-store'
 import type { TaskEvent } from './api'
 
 /** 任务事件流订阅（api/01 §5.2 GET /tasks/{id}/events，Accept: text/event-stream）：
  *  fetch 流式读 + SSE 帧解析（id/event/data，对齐 api/02 §2）；seq 对账去重后按序推进。
  *  用 fetch 而非 EventSource：jsdom 无 EventSource，vitest 下经 MSW 可测（S6 ⑥用例依赖）。
  *  取消用 cancelled 标志 + reader.cancel()，不向 fetch 传 AbortSignal——jsdom 的 AbortSignal
- *  与 Node(undici) fetch 不同类，传参会在 jsdom 测试环境直接抛错（S6 联调实录）。 */
-export function useTaskEvents(taskId: string | null): TaskEvent[] {
+ *  与 Node(undici) fetch 不同类，传参会在 jsdom 测试环境直接抛错（S6 联调实录）。
+ *  F4（联调 2026-10-04，B:A-10）：URL 经 client.sseUrl 拼 API_BASE（替代硬编码 /api/v1）；
+ *  补 Authorization 头（原裸 fetch 无令牌，鉴权部署下时间线必空）；错误不再静默吞——
+ *  HTTP 非 2xx / 网络失败置 error 返回，抽屉渲染错误行而非永远「等待事件推送…」。 */
+
+export interface TaskEventStream {
+  events: TaskEvent[]
+  /** 流建立失败（401/404/5xx/网络）：非 null 时时间线不可用，消费方渲染错误态 */
+  error: ApiError | Error | null
+}
+
+export function useTaskEvents(taskId: string | null): TaskEventStream {
   const [events, setEvents] = useState<TaskEvent[]>([])
+  const [error, setError] = useState<TaskEventStream['error']>(null)
 
   useEffect(() => {
     if (!taskId) {
       setEvents([])
+      setError(null)
       return
     }
     let cancelled = false
@@ -22,9 +36,19 @@ export function useTaskEvents(taskId: string | null): TaskEvent[] {
 
     async function run() {
       try {
-        const res = await fetch(`/api/v1/tasks/${taskId}/events`, {
-          headers: { Accept: 'text/event-stream' },
+        const res = await fetch(sseUrl(`/tasks/${taskId}/events`), {
+          headers: {
+            Accept: 'text/event-stream',
+            ...authHeaders(useAuthStore.getState().accessToken),
+          },
         })
+        if (cancelled) return
+        if (!res.ok) {
+          // 错误信封优先取登记文案；非 JSON（裸 404 等）回落 HTTP 状态（F8①同口径：不编造业务码）
+          const body = (await res.json().catch(() => null)) as { code?: number; message?: string } | null
+          setError(new ApiError(body?.code ?? -1, body?.message ?? `HTTP ${res.status}`, res.status))
+          return
+        }
         reader = res.body?.getReader() ?? null
         if (!reader) return
         const decoder = new TextDecoder()
@@ -43,8 +67,9 @@ export function useTaskEvents(taskId: string | null): TaskEvent[] {
             } catch { /* 半帧容错 */ }
           }
         }
-      } catch {
-        /* 网络错误 / 取消：组件卸载或断流，静默 */
+      } catch (e) {
+        // 网络错误：非取消场景不再静默——置错误态（取消=组件卸载/换任务，保持静默）
+        if (!cancelled) setError(e instanceof Error ? e : new Error(String(e)))
       }
     }
     void run()
@@ -54,5 +79,5 @@ export function useTaskEvents(taskId: string | null): TaskEvent[] {
     }
   }, [taskId])
 
-  return events
+  return { events, error }
 }

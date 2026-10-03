@@ -1,11 +1,15 @@
 import { useEffect, useState } from 'react'
+import { authHeaders, sseUrl } from '@/api/client'
+import { useAuthStore } from '@/stores/auth-store'
 import type { TrajFrame } from './lib/timeline'
 
 /** 轨迹回放段拉取（api/01 §5.2 GET /sessions/{id}/events，Accept: text/event-stream）：
  *  读 use-task-events 的 fetch 流解析模式（jsdom 无 EventSource，vitest 经 MSW 可测）——
  *  SSE 帧（id/event/data）→ {seq,name,data}[]，seq 对账去重升序。回放页只读不推进订阅，
  *  断流/卸载即静默终止（已收到的帧保留）；mock 侧经 framesBySession 缓冲原样回放
- *  （08 篇：回放、审计、恢复共享同一事件流）。 */
+ *  （08 篇：回放、审计、恢复共享同一事件流）。
+ *  F4（联调 2026-10-04）：URL 经 client.sseUrl 拼 API_BASE（替代硬编码 /api/v1），
+ *  补 Authorization 头（对齐 client 同源鉴权模式，原裸 fetch 无令牌在鉴权部署下必 401）。 */
 export function useTrajectoryFrames(sessionId: string | null): TrajFrame[] {
   const [frames, setFrames] = useState<TrajFrame[]>([])
 
@@ -22,8 +26,11 @@ export function useTrajectoryFrames(sessionId: string | null): TrajFrame[] {
 
     async function run() {
       try {
-        const res = await fetch(`/api/v1/sessions/${sessionId}/events`, {
-          headers: { Accept: 'text/event-stream' },
+        const res = await fetch(sseUrl(`/sessions/${sessionId}/events`), {
+          headers: {
+            Accept: 'text/event-stream',
+            ...authHeaders(useAuthStore.getState().accessToken),
+          },
         })
         reader = res.body?.getReader() ?? null
         if (!reader) return

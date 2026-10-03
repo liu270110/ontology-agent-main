@@ -27,6 +27,80 @@ export class ApiError extends Error {
 
 const BASE = import.meta.env.VITE_API_BASE ?? '/api/v1'
 
+/** F4（联调 2026-10-04 §4/C-2/C-6/B:A-10）：API 基址单一事实源导出——SSE 流/裸 fetch 一律
+ *  经此拼绝对路径（替代四处散落的硬编码相对 /api/v1，VITE_API_BASE 部署口径不再失联）。 */
+export const API_BASE = BASE
+
+/** SSE/流式 URL 构造（api/01 §2.2 + api/02 §4）：路径拼 API_BASE；EventSource 无法自定义
+ *  header，鉴权以 ?access_token= 兜底（api/01 §2.2 登记的 query 兜底参数）；断线续传附
+ *  ?last_event_id=（api/02 §4 登记参数名，2026-09-27 对账 §8 裁决）。fetch 流式读场景
+ *  只取 BASE 拼接（鉴权走 Authorization 头，对齐 client 同源模式），opts 可全缺省。 */
+export function sseUrl(
+  path: string,
+  opts?: { accessToken?: string | null; lastEventId?: number | string | null },
+): string {
+  const params = new URLSearchParams()
+  if (opts?.accessToken) params.set('access_token', opts.accessToken)
+  const last = Number(opts?.lastEventId ?? 0)
+  if (Number.isFinite(last) && last > 0) params.set('last_event_id', String(last))
+  const qs = params.toString()
+  return `${API_BASE}${path}${qs ? `?${qs}` : ''}`
+}
+
+/** 认证请求头片段（fetch 流式读用，对齐 apiFetchEnvelope 的 Authorization 注入口径） */
+export function authHeaders(token?: string | null): Record<string, string> {
+  return token ? { Authorization: `Bearer ${token}` } : {}
+}
+
+/** ---- F0（联调 2026-10-04 §4，B1 双轨联动）：列表响应三形态归一化 ----
+ *  迁移窗口内后端并存三种列表形态：
+ *  ① {items:[...], offset|limit|next_cursor...}（M1 现状裸分页体，/sessions /tasks 等）
+ *  ② {data:[...], meta:{page,page_size,total...}}（B1 目标形态，信封内层或裸 200）
+ *  ③ 裸数组 [...]（少量端点）
+ *  归一输出统一口径 = { data: T[]; meta: ListMeta }（选型=B1 目标形态；meta 恒存在、
+ *  缺省补空对象——页面只认一种形状，消费端迁移 api.list 渐进替换 api.get，旧路径不动）。 */
+export interface ListMeta {
+  page?: number
+  page_size?: number
+  total?: number
+  offset?: number
+  limit?: number
+  next_cursor?: string | null
+  [k: string]: unknown
+}
+
+export interface NormalizedList<T> {
+  data: T[]
+  meta: ListMeta
+}
+
+export function normalizeList<T>(payload: unknown): NormalizedList<T> {
+  // 形态③：裸数组
+  if (Array.isArray(payload)) return { data: payload as T[], meta: {} }
+  if (payload != null && typeof payload === 'object') {
+    const o = payload as Record<string, unknown>
+    // 形态①：{items,...}——除 items 外的标量字段全部收进 meta
+    if (Array.isArray(o.items)) {
+      const { items, ...rest } = o
+      return { data: items as T[], meta: rest as ListMeta }
+    }
+    // 形态②：{data:[...], meta?}（apiFetch 已剥信封，此处为裸 200 的 B1 内层）
+    if (Array.isArray(o.data)) return { data: o.data as T[], meta: (o.meta ?? {}) as ListMeta }
+    // 兜底：apiFetch 对未包信封端点包过一层 {data:body}——再剥一层数组/分页体
+    if (o.data != null && typeof o.data === 'object') {
+      const inner = o.data as Record<string, unknown>
+      if (Array.isArray(inner)) return { data: inner as T[], meta: {} }
+      if (Array.isArray(inner.items)) {
+        const { items, ...rest } = inner
+        return { data: items as T[], meta: rest as ListMeta }
+      }
+      if (Array.isArray(inner.data)) return { data: inner.data as T[], meta: (inner.meta ?? {}) as ListMeta }
+    }
+  }
+  // 未知/空形态：空列表兜底（宁空勿炸，与 F8 错误态兜底同语义）
+  return { data: [], meta: {} }
+}
+
 /** 走 401 刷新重放的路径白名单：认证端点自身不再触发刷新（防递归）。 */
 const AUTH_PATHS = ['/auth/login', '/auth/refresh', '/auth/logout']
 
@@ -168,6 +242,10 @@ export function trySilentRefresh(): Promise<boolean> {
 
 export const api = {
   get: <T>(path: string) => apiFetch<T>(path),
+  /** F0：列表请求三形态归一化（{items,..}/{data,meta}/裸数组 → 统一 {data,meta}）。
+   *  页面渐进迁移用；错误语义与 get 完全一致（4xx/5xx 照抛 ApiError，不吞）。 */
+  list: async <T>(path: string, init?: RequestInit): Promise<NormalizedList<T>> =>
+    normalizeList<T>(await apiFetch<unknown>(path, init)),
   post: <T>(path: string, body?: unknown) =>
     apiFetch<T>(path, { method: 'POST', body: body === undefined ? undefined : JSON.stringify(body) }),
   /** 同 post，但返回完整信封（含与 data 同级的 meta——§6.2 kb/search 样例）。 */

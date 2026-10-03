@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { useAuthStore } from '@/stores/auth-store'
+import { sseUrl } from '@/api/client'
 import type { ConnState } from '@/lib/conn-label'
 
 /** 群聊 SSE 流：useSessionStream（src/sse/）同款模式轻量复制——具名事件监听 + 断线指数退避
@@ -64,12 +65,13 @@ export function useGroupStream({ sessionId, onEvent, onStateChange }: GroupStrea
     function connect() {
       if (closed) return
       stateCb.current?.(retry === 0 ? 'connecting' : 'reconnecting')
-      const params = new URLSearchParams()
-      const token = useAuthStore.getState().accessToken
-      if (token) params.set('access_token', token) // api/01 §2.2：EventSource 无 header 兜底
-      if (lastSeq > 0) params.set('last_event_id', String(lastSeq))
-      const qs = params.toString()
-      es = new EventSource(`/api/v1/sessions/${sessionId}/events${qs ? `?${qs}` : ''}`)
+      // F4（联调 2026-10-04）：URL 经 client.sseUrl 拼接（API_BASE 单源，替代硬编码 /api/v1）
+      es = new EventSource(
+        sseUrl(`/sessions/${sessionId}/events`, {
+          accessToken: useAuthStore.getState().accessToken, // api/01 §2.2：EventSource 无 header 兜底
+          lastEventId: lastSeq,
+        }),
+      )
       es.onopen = () => {
         retry = 0
         stateCb.current?.('open')

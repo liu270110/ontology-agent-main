@@ -43,6 +43,10 @@ class ErrorCode(IntEnum):
     RETRY_BUDGET_EXHAUSTED = 5005  # 2026-09-26 缺口核查修复补登记（5xxx 段）
     # 2026-09-29 H-0c 批登记（孤儿 Run 回收：running 悬挂超时→对账回收；02 §7 表格回填随文档批）
     ORPHAN_RUN_RECOVERED = 5006
+    # 2026-10-03 B-② 批登记（中断账本合成闭合：崩溃恢复对撕裂投影合成 close/步终态的中断语义码；
+    # 既有族无「工具被中断」码——4101 是用户取消清单口径，5003 是工具超时口径，均不复用；
+    # 依据 docs/Agent/10 §4.1 ②，02 §7 表格回填随文档批）
+    TOOL_CALL_INTERRUPTED = 5007
     INTERNAL_ERROR = 5999
 
 

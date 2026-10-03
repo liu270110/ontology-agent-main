@@ -10,10 +10,11 @@
   attempt≤3 耗尽 → ``task.fail()``（running→failed，04 §3「Run failed 且重试耗尽」）+
   RUN_ERROR 5005（RETRY_BUDGET_EXHAUSTED）先落库事件；
 - **孤儿回收 sweep**（H-0c ①，2026-09-29 批）：常驻同进程节拍扫描 running 悬挂超阈值
-  （``updated_at`` 超过 task_orphan_running_timeout_s 未刷新）的 Run → run.fail(5006
-  ORPHAN_RUN_RECOVERED) + run.orphan_recovered 审计行 → attempt<3 交既有重试监督自然
-  重试（不另建通道）。watchdog 分工就此收敛：**进程死=孤儿回收 sweep 兜底**（本批）；
-  **运行中 hang=duration_s 预算兜底**（内核 A4 总预算耗尽→5001，步级租约心跳随 D4）。
+  （``updated_at`` 超过 task_orphan_running_timeout_s 未刷新）的 Run → **先修复撕裂投影**
+  （B-② 中断账本合成闭合：resume_repair 纯规划合成 close/步终态行，同事务先落）→
+  run.fail(5006 ORPHAN_RUN_RECOVERED) + run.orphan_recovered 审计行 → attempt<3 交既有
+  重试监督自然重试（不另建通道）。watchdog 分工就此收敛：**进程死=孤儿回收 sweep 兜底**
+  （本批）；**运行中 hang=duration_s 预算兜底**（内核 A4 总预算耗尽→5001，步级租约心跳随 D4）。
 - **对账续跑 v1**（H-0c ②）：重放路径重建 ChatCommand 时，若前序 Run 存在
   kernel.step_validated 投影（task_events），注入 continuation 系统注记「以下步骤前次
   已完成并验证，勿重做」，锚点摘要同步写 task.payload（可观测）。内核级步跳过
@@ -37,6 +38,7 @@ from datetime import UTC, datetime
 from typing import Any, Protocol
 
 from services.agent.business.chat_events import ChatCommand, ChatEventName, ChatOutcome
+from services.agent.business.resume_repair import plan_interrupted_closures
 from services.agent.domain.model.kernel_actions import ApprovalTicket
 from services.agent.domain.model.task import RunStatus, TaskEvent, TaskStatus
 from services.platform.errors import ErrorCode
@@ -49,6 +51,7 @@ _MAX_ATTEMPTS = 3  # ≤3 含首次（与 domain/model/task.py._MAX_TASK_ATTEMPT
 # trust_level/claimed_trust_level/stage + 投影 sink 注入的 run_id；loop.py _stage_observation）
 _STEP_VALIDATED_EVENT = "kernel.step_validated"
 _CONTINUATION_MAX_STEPS = 20  # 注记锚点上限（防超长上下文；超出截断留可观测）
+_REPAIR_PAGE_SIZE = 500  # 孤儿修复投影回放页长（对齐既有 limit=500 口径；after_seq 游标续页取全量）
 
 
 def _utcnow() -> datetime:
@@ -218,6 +221,11 @@ class TaskRunWorker:
             if run is None or run.status is not RunStatus.RUNNING:
                 return False  # 幂等护栏：已被接管或已终态（含 waiting_tool 合法长等，不在回收面）
             hang_s = float(getattr(claim, "hang_s", 0.0) or 0.0)
+            # B-② 中断账本合成闭合（docs/Agent/10 §4）：先修复撕裂投影（合成 close/步终态行），
+            # 后落 5006 终态——顺序不可反（先修复账本、后落终态，与先落库后推送同序）；
+            # 同一 uow 事务内写入，合成行与 run.fail 原子生效。修复失败则整项回收本轮放弃
+            # （异常上抛交 sweep_once fail-soft，下轮重扫从头再修——合成幂等零重复）。
+            repaired = await self._repair_orphan_projection(tx, claim)
             run.fail(
                 {
                     "code": int(ErrorCode.ORPHAN_RUN_RECOVERED),
@@ -247,13 +255,61 @@ class TaskRunWorker:
                         "timeout_s": self._orphan_running_timeout_s,
                         "attempt_count": task.attempt_count,
                         "will_retry": will_retry,
+                        "repaired": repaired,
                     },
                 ),
             )
         logger.warning(
-            "孤儿 Run 已回收：task=%s run=%s hang=%.0fs will_retry=%s", claim.task_id, claim.run_id, hang_s, will_retry
+            "孤儿 Run 已回收：task=%s run=%s hang=%.0fs will_retry=%s repaired=%d行",
+            claim.task_id,
+            claim.run_id,
+            hang_s,
+            will_retry,
+            repaired,
         )
         return True
+
+    async def _repair_orphan_projection(self, tx: Any, claim: Any) -> int:
+        """撕裂投影修复（B-② 中断账本合成闭合，docs/Agent/10 §4）：返回合成行数。
+
+        投影回放**分页取全量**（ocr 整改 B-②）：``list_events(after_seq=…)`` 游标续页
+        （每批 ``_REPAIR_PAGE_SIZE`` 行、批尾 seq 续页，末批不足页长或取空即止）——
+        一次性 limit=500 截断窗口会漏修窗口外撕裂行并误报 repaired 计数，且窗口内
+        START 的 RESULT 落窗口外时会对已收口调用重复合成失败 close（污染账本）；
+        ``plan_interrupted_closures`` 的输入契约即任务级全量。防御：批内任一行 seq
+        缺失、或游标未前进（仓储不支持 after_seq 语义的兜底）即终止分页，按已取回
+        行如实处理（plan 侧对截断/乱序的容忍见其 docstring）。
+
+        纯规划（resume_repair.plan_interrupted_closures）+ 既有仓储写入路径
+        （tx.tasks.append_event，与调用方 run.fail 同一 uow 事务）。读取/写入失败一律
+        上抛（本轮回收放弃、下轮重扫从头再修，合成幂等零重复）——不得先落终态再补账，
+        「先修复账本、后落终态」顺序不可反。trace_id 无法从聚合恢复（worker 重放期才
+        构造），传 None 由规划器回声投影行或省略；租户一致性取 claim（行级另有
+        for_tenant 事务隔离兜底）。
+        """
+        rows: list[TaskEvent] = []
+        after_seq: int | None = None
+        while True:
+            batch = await tx.tasks.list_events(claim.task_id, after_seq=after_seq, limit=_REPAIR_PAGE_SIZE)
+            if not batch:
+                break
+            rows.extend(batch)
+            tail_seq = batch[-1].seq
+            if len(batch) < _REPAIR_PAGE_SIZE or tail_seq is None or any(r.seq is None for r in batch):
+                break  # 末批不足页长 / 行 seq 缺失：终止分页，按已取回行如实处理
+            nxt = int(tail_seq)
+            if after_seq is not None and nxt <= after_seq:
+                break  # 游标未前进（仓储缺 after_seq 语义的兜底）：防死循环
+            after_seq = nxt
+        synthetic = plan_interrupted_closures(
+            rows,
+            run_id=claim.run_id,
+            reason="orphan_recovered",
+            tenant_id=claim.tenant_id,
+        )
+        for row in synthetic:
+            await tx.tasks.append_event(claim.task_id, row)
+        return len(synthetic)
 
     # ── 认领执行 ──────────────────────────────────────────────────────────
     async def _execute_claimed(self, claim: Any) -> bool:

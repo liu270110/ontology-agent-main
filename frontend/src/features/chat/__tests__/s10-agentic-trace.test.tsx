@@ -131,13 +131,51 @@ describe('S10② 旧响应兼容', () => {
     expect(screen.queryByTestId('agentic-trace-panel')).not.toBeInTheDocument()
     expect(screen.queryByTestId('agentic-trace-toggle')).not.toBeInTheDocument()
   })
+
+  it('P1 畸形 agentic 载荷（{} / rounds 非数组 / rounds:null）：不崩溃，rounds 归一空容错态', () => {
+    for (const malformed of [
+      {} as unknown as AgenticBlock,
+      { decision: 'retrieval_required', rounds: 'not-an-array' } as unknown as AgenticBlock,
+      { decision: 'retrieval_required', rounds: null } as unknown as AgenticBlock,
+    ]) {
+      const { unmount } = render(<AgenticTracePanel agentic={malformed} />)
+      expect(screen.getByTestId('agentic-trace-panel')).toBeInTheDocument()  // 容错态而非崩溃
+      fireEvent.click(screen.getByTestId('agentic-trace-toggle'))
+      expect(screen.getByTestId('agentic-rounds-empty')).toBeInTheDocument()
+      expect(screen.queryByTestId('agentic-rounds')).not.toBeInTheDocument()
+      unmount()
+    }
+  })
+
+  it('P1 残余 rounds:[null, 合法轮, junk]：数组内非对象项剔除，仅渲染合法轮', () => {
+    const malformed = {
+      ...DEGRADED,
+      rounds: [
+        null,
+        { seq: 1, action: 'search', query: 'q', grade: 'fail', grade_reason: 'hit_count_zero' },
+        'junk',
+        undefined,
+      ],
+    } as unknown as AgenticBlock
+    render(<AgenticTracePanel agentic={malformed} />)
+    fireEvent.click(screen.getByTestId('agentic-trace-toggle'))
+    expect(screen.getByTestId('agentic-round-1')).toBeInTheDocument()
+    expect(screen.queryByTestId('agentic-round-2')).not.toBeInTheDocument()
+  })
+
+  it('P3 showBanner=false：面板内不渲染第二条降级警示（answer-top 横幅去重）', () => {
+    render(<AgenticTracePanel agentic={DEGRADED} showBanner={false} />)
+    expect(screen.queryByTestId('agentic-degraded-banner')).not.toBeInTheDocument()
+    expect(screen.getByTestId('agentic-decision-badge')).toHaveTextContent('降级')  // 徽标仍示降级
+  })
 })
 
 describe('S10③ NextActionsCard 骨架（F4）', () => {
   it('禁用标注 + 行动标签 + 审批级别徽标 + 证据链折叠', () => {
     render(<NextActionsCard />)
     const card = screen.getByTestId('next-actions-card')
-    expect(card).toHaveAttribute('aria-disabled', 'true')
+    // P6 a11y：容器不挂 aria-disabled（内部证据按钮可交互，违例已除）——WIP 徽标表达禁用语义
+    expect(card).not.toHaveAttribute('aria-disabled')
     expect(screen.getByTestId('next-actions-wip')).toHaveTextContent('v1.5 待后端接入')
     expect(screen.getByTestId('next-action-label-0')).toHaveTextContent('为停电事件 E-0901 补录影响用户数')
     expect(screen.getByTestId('next-action-approval-0')).toHaveTextContent('团队确认')
@@ -213,6 +251,16 @@ describe('S10④ MSW kb/search agentic 四变体', () => {
 })
 
 describe('S10⑤ session-store RETRIEVAL_EVIDENCE 透传', () => {
+  it('P2 畸形 agentic 帧（{} / rounds 非数组 / 字符串 / 数字）→ 入仓归一为 null（信任边界）', () => {
+    const st = useSessionStore.getState()
+    for (const bad of [{}, { rounds: 'no' }, 'junk', 42]) {
+      st.apply({ seq: 1, name: 'RETRIEVAL_EVIDENCE', data: { chunks: [{ doc_id: 'd', chunk_id: 'c', quote: 'q', score: 1 }], graph_paths: [], degraded: false, agentic: bad } as never })
+      const ev = useSessionStore.getState().evidence
+      expect(ev?.agentic).toBeNull()          // 畸形块不入仓
+      expect(ev?.chunks).toHaveLength(1)      // chunks 归约不受影响
+    }
+  })
+
   it('帧带 agentic 块 → evidence.agentic 透传；旧帧无 agentic → null', () => {
     const st = useSessionStore.getState()
     st.apply({ seq: 1, name: 'RETRIEVAL_EVIDENCE', data: { chunks: [], graph_paths: [], degraded: false, agentic: SKIP } } as SseEvent)

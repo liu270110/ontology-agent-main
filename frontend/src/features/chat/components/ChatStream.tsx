@@ -537,7 +537,10 @@ export function ChatStream({
                     <>
                       <EvidenceChips chunks={ev.chunks} graphPaths={ev.graph_paths} degraded={ev.degraded} onOpen={onOpenEvidence} />
                       <Suspense fallback={null}>
-                        <AgenticTracePanel agentic={ev.agentic} />
+                        <AgenticTracePanel
+                            agentic={ev.agentic}
+                            showBanner={ev.agentic?.degraded !== 'agentic_exhausted'}
+                          />
                       </Suspense>
                     </>
                   )

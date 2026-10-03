@@ -10,8 +10,7 @@ export function AgenticDegradedBanner({ testid = 'agentic-degraded-banner' }: { 
     <div
       data-testid={testid}
       role="alert"
-      className="flex items-center gap-1.5 rounded-lg border border-separator px-2.5 py-1.5 text-2xs text-orange"
-      style={{ background: 'var(--orange-soft)' }}
+      className="flex items-center gap-1.5 rounded-lg border border-separator bg-[var(--orange-soft)] px-2.5 py-1.5 text-2xs text-orange"
     >
       <AlertTriangle size={11} className="flex-none" aria-hidden />
       多轮检索未命中，以下为降级结果

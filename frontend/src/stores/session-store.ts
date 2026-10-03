@@ -257,7 +257,10 @@ export const useSessionStore = create<SessionState>((set, get) => ({
         break
       }
       case 'RETRIEVAL_EVIDENCE':
-        set({ evidence: { chunks: d.chunks ?? [], graph_paths: d.graph_paths ?? [], degraded: Boolean(d.degraded), agentic: d.agentic ?? null } })
+        const a = d.agentic
+        // P2 信任边界归一：agentic 来自不可信 SSE 帧——仅「对象且 rounds 为数组」收下，畸形一律 null
+        const agentic = a != null && typeof a === 'object' && Array.isArray(a.rounds) ? a : null
+        set({ evidence: { chunks: d.chunks ?? [], graph_paths: d.graph_paths ?? [], degraded: Boolean(d.degraded), agentic } })
         break
       case 'RUN_FINISHED': {
         const rid = String(d.run_id ?? '')

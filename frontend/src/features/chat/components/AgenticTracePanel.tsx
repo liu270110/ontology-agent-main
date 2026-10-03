@@ -35,13 +35,27 @@ const roundItem = {
   show: { opacity: 1, y: 0 },
 }
 
-export function AgenticTracePanel({ agentic, className = '' }: { agentic?: AgenticBlock | null; className?: string }) {
+export function AgenticTracePanel({
+  agentic,
+  className = '',
+  showBanner = true,
+}: {
+  agentic?: AgenticBlock | null
+  className?: string
+  /** P3 双警示去重：调用方已渲染 answer-top 横幅时置 false，面板内不再出第二条 */
+  showBanner?: boolean
+}) {
   const [open, setOpen] = useState(false)
   const reduceMotion = useReducedMotion()
   // 旧响应兼容红线：无 agentic 块（null/undefined）→ 面板整体不渲染，绝不报错
   if (!agentic) return null
   const skipped = agentic.decision === 'retrieval_skipped'
   const degraded = agentic.degraded === 'agentic_exhausted'
+  // P1 形状守卫：agentic 来自不可信 SSE 载荷——rounds 非数组归空、数组内 null/非对象项剔除
+  //（复评残余：rounds:[null] 曾穿透双侧守卫在时间线渲染期崩溃，违「绝不报错」红线）
+  const rounds = Array.isArray(agentic.rounds)
+    ? agentic.rounds.filter((r): r is NonNullable<typeof r> => r != null && typeof r === 'object')
+    : []
 
   return (
     <div data-testid="agentic-trace-panel" className={`glass-clear mt-2 rounded-xl ${className}`}>
@@ -64,10 +78,10 @@ export function AgenticTracePanel({ agentic, className = '' }: { agentic?: Agent
             data-testid="agentic-decision-badge"
             className={`badge flex-none px-[7px] py-px text-2xs ${degraded ? 'b-orange' : 'b-green'}`}
           >
-            检索 {agentic.rounds.length} 轮{degraded ? ' · 降级' : ''}
+            检索 {rounds.length} 轮{degraded ? ' · 降级' : ''}
           </span>
         )}
-        <span className="min-w-0 flex-1 truncate text-2xs text-label-2">{DECISION_REASON_TEXT[agentic.decision_reason]}</span>
+        <span className="min-w-0 flex-1 truncate text-2xs text-label-2">{(agentic.decision_reason && DECISION_REASON_TEXT[agentic.decision_reason]) ?? '—'}</span>
         <ChevronDown
           size={12}
           aria-hidden
@@ -76,7 +90,7 @@ export function AgenticTracePanel({ agentic, className = '' }: { agentic?: Agent
       </button>
 
       {/* degraded 警示条：不随折叠隐藏（§8.2 F2「不误导用户当权威答案」）；orange 语义色小剂量 */}
-      {degraded && (
+      {degraded && showBanner && (
         <div className="mx-2.5 mb-1.5">
           <AgenticDegradedBanner />
         </div>
@@ -95,7 +109,7 @@ export function AgenticTracePanel({ agentic, className = '' }: { agentic?: Agent
             className="overflow-hidden"
           >
             <div className="border-t border-separator px-3 pb-2.5 pt-2">
-              {agentic.rounds.length === 0 ? (
+              {rounds.length === 0 ? (
                 <div data-testid="agentic-rounds-empty" className="py-0.5 text-2xs text-label-3">
                   规则判定跳过检索，本轮无检索轮次。
                 </div>
@@ -111,7 +125,7 @@ export function AgenticTracePanel({ agentic, className = '' }: { agentic?: Agent
                         variants: { show: { transition: { staggerChildren: 0.08 } } },
                       })}
                 >
-                  {agentic.rounds.map(r => (
+                  {rounds.map(r => (
                     <motion.li
                       key={r.seq}
                       data-testid={`agentic-round-${r.seq}`}
@@ -150,7 +164,7 @@ export function AgenticTracePanel({ agentic, className = '' }: { agentic?: Agent
               )}
               {/* 全程可追溯（设计宪法 5）：解释链 trace id + 决策档位 */}
               <div className="mt-2 truncate font-mono text-2xs text-label-3">
-                trace {agentic.explain_trace_id} · mode {agentic.mode}
+                trace {agentic.explain_trace_id ?? '—'} · mode {agentic.mode ?? '—'}
               </div>
               {/* F4 骨架：next_actions 建议卡（v1.5 待后端接入，mock 数据驱动，禁用态） */}
               <NextActionsCard className="mt-2" />

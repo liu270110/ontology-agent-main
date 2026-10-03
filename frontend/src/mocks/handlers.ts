@@ -254,13 +254,15 @@ function scriptFor(sessionId: string, question: string): { frames: string[]; ids
   // 寒暄 skip 变体：不推 TOOL_CALL 帧（未检索）、证据与图谱路径为空、话术改直答——与 agentic 决策自洽。
   const agentic = agenticBlockFor(question)
   const skipped = agentic.decision === 'retrieval_skipped'
+  // P5 降级变体叙事一致：TOOL_CALL_RESULT 与答案文案改未命中口径，与 UI 降级警示自洽
+  const degradedVariant = agentic.degraded === 'agentic_exhausted'
   const retrieveSteps: [string, unknown][] = skipped
     ? []
     : [
         ['TOOL_CALL_START', { tool_call_id: `tc_${Date.now()}`, tool_name: 'knowledge.search' }],
         ['TOOL_CALL_ARGS', { tool_call_id: 'pending-args', delta: '{"mode":"local"}' }],
         ['TOOL_CALL_END', { tool_call_id: 'pending-args' }],
-        ['TOOL_CALL_RESULT', { tool_call_id: 'pending-args', ok: true, summary: '命中 6 实体 / 2 社区', cost_ms: 612 }],
+        ['TOOL_CALL_RESULT', { tool_call_id: 'pending-args', ok: true, summary: degradedVariant ? '两轮检索未命中，降级输出' : '命中 6 实体 / 2 社区', cost_ms: 612 }],
       ]
   const steps: [string, unknown][] = [
     ['RUN_STARTED', { run_id: ids.run_id, session_id: sessionId, task_id: ids.task_id }],
@@ -273,7 +275,9 @@ function scriptFor(sessionId: string, question: string): { frames: string[]; ids
       degraded: Boolean(agentic.degraded),
       agentic,
     }],
-    ['TEXT_MESSAGE_CONTENT', { message_id: 'pending', delta: skipped ? '有什么配网停电分析的问题，我随时可以帮你查证作答。' : '检索完成。两条标准的核心差异：测试对象与循环次数要求不同。' }],
+    ['TEXT_MESSAGE_CONTENT', { message_id: 'pending', delta: skipped ? '有什么配网停电分析的问题，我随时可以帮你查证作答。' : degradedVariant
+          ? '两轮检索均未命中达标，以下为降级结果（未达证据标准，请谨慎采信）。'
+          : '检索完成。两条标准的核心差异：测试对象与循环次数要求不同。' }],
     // run.usage：助手回答完成前推本次上下文用量四分组（api/02 M4 扩展，IX-CHT-04 真数据源）
     ['run.usage', { run_id: 'pending-run', groups: USAGE_GROUPS }],
     ['TEXT_MESSAGE_END', { message_id: 'pending', finish_reason: 'stop' }],

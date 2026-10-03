@@ -1,5 +1,10 @@
 import { ApiError, api, trySilentRefresh } from '@/api/client'
+import type { AgenticBlock } from '@/api/contracts'
 import { useAuthStore } from '@/stores/auth-store'
+
+// AgenticRAG §8.1 契约类型单源在 api 层（跨域共享；chat/trace 等 feature 经 @/api/contracts 消费），
+// 此处 re-export 维持 kb 域消费方既有 import 路径不变。
+export type { AgenticBlock, AgenticDecision, AgenticDecisionReason, AgenticGrade, AgenticGradeReason, AgenticRound, AgenticRoundAction } from '@/api/contracts'
 
 /** kb 域 API（契约=api/01 §5.4 + §6.2；DTO 手写过渡，TODO: 后端 /meta/openapi 可用后 gen:api 生成）。
  *  与 mocks/kb-handlers.ts 的 mock 形状一一对应；切 live 只换 VITE_ENABLE_MOCK=0。
@@ -84,6 +89,8 @@ export interface KbGraphEdge {
   label: string
 }
 
+// ---------------------------------------------------------------- AgenticRAG 检索（§8.1 契约类型见 @/api/contracts）
+
 export interface KbSearchResult {
   /** 答案摘要 markdown；[^n] 脚注 = 引用角标（react-markdown + remark-gfm 渲染 sup） */
   answers: string
@@ -93,6 +100,8 @@ export interface KbSearchResult {
   graph: { nodes: KbGraphNode[]; edges: KbGraphEdge[] }
   confidence: number
   degraded: boolean
+  /** §8.1 冻结契约：仅请求 agentic=true 时返回；旧响应无此键/为 null 均合法（前端可选消费） */
+  agentic?: AgenticBlock | null
 }
 
 export interface KbSearchMeta {
@@ -269,8 +278,15 @@ export function listChunks(id: string) {
   return api.get<{ items: KbChunk[]; next_cursor: string | null }>(`/kb/documents/${id}/chunks`)
 }
 
-/** POST /kb/search —— GraphRAG 检索（§6.2：meta 与 data 在信封同级，走 postEnvelope 取完整信封） */
-export function search(body: { query: string; mode: 'local' | 'global' | 'drift'; top_k?: number }) {
+/** POST /kb/search —— GraphRAG 检索（§6.2：meta 与 data 在信封同级，走 postEnvelope 取完整信封）。
+ *  §8.1：agentic=true 走服务端 agentic 管线（A0 档），max_rounds 1~2 缺省 2；v1 默认 false=零行为变化红线。 */
+export function search(body: {
+  query: string
+  mode: 'local' | 'global' | 'drift'
+  top_k?: number
+  agentic?: boolean
+  max_rounds?: 1 | 2
+}) {
   return api.postEnvelope<{ data: KbSearchResult; meta: KbSearchMeta }>('/kb/search', body)
 }
 

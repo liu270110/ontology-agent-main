@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import type { AgenticBlock } from '@/api/contracts'
 import type { RunUsageEventData, SseEvent } from '@/sse/events'
 
 /** 会话域全局态（16 篇 §2.2 session-store）+ 事件归约（§3.3）+ seq 对账（§3.2）。
@@ -52,6 +53,8 @@ export interface Evidence {
   chunks: EvidenceChunk[]
   graph_paths: { nodes: string[]; edges: string[] }[]
   degraded: boolean
+  /** AgenticRAG §8.1：检索循环 agentic 块（RETRIEVAL_EVIDENCE 帧可选携带）；旧帧无此键 → null，UI 不渲染面板 */
+  agentic?: AgenticBlock | null
 }
 
 /** workspace.file.* 事件 Feed 条目（31 篇）：会话级环形缓冲最近 20 条 */
@@ -183,6 +186,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       chunks?: Evidence['chunks']
       graph_paths?: Evidence['graph_paths']
       degraded?: boolean
+      agentic?: Evidence['agentic']
       messages?: ChatMessage[]
       path?: string
       name?: string
@@ -253,7 +257,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
         break
       }
       case 'RETRIEVAL_EVIDENCE':
-        set({ evidence: { chunks: d.chunks ?? [], graph_paths: d.graph_paths ?? [], degraded: Boolean(d.degraded) } })
+        set({ evidence: { chunks: d.chunks ?? [], graph_paths: d.graph_paths ?? [], degraded: Boolean(d.degraded), agentic: d.agentic ?? null } })
         break
       case 'RUN_FINISHED': {
         const rid = String(d.run_id ?? '')

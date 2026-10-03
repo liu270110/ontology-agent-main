@@ -1,4 +1,5 @@
 import { http, HttpResponse } from 'msw'
+import type { AgenticBlock } from '@/api/contracts'
 
 /** S3 知识域 mock（30 篇 §2 S3；契约=api/01 §5.4 + §6.2 检索）。独立文件注册，
  *  经 handlers.ts 展开——避免与并行 S2 会话在同一文件大范围冲突。
@@ -203,6 +204,56 @@ function jsonErr(code: number, message: string, status: number) {
   return HttpResponse.json({ code, message, data: null }, { status })
 }
 
+// ---- AgenticRAG 检索 mock（AgenticRAG优化方案.md §8.1 冻结契约；四变体：skip/单轮 pass/rewrite 后 pass/两轮 degraded）----
+// 变体触发按 query 关键词（与 kb-handlers 既有「文件名含失败→异常」哨兵同模式，确定性可测）：
+//   寒暄开头（你好/hi/在吗/谢谢…）→ retrieval_skipped（直答，hits/citations 空）；
+//   query 含「改写」或「别名」→ rewrite 后 pass（两步 rounds，带 rewrite_basis）；
+//   query 含「降级」或「未命中」→ 两轮均 fail → degraded='agentic_exhausted'（仍有降级结果）；
+//   其余 agentic=true → 单轮 pass。agentic!==true → 不返回 agentic 块（旧响应兼容红线）。
+const GREETING_RE = /^(你好|您好|嗨|哈喽|hi|hello|在吗|谢谢|再见)\s*[!！.。~～?？]*$/i
+
+let agenticTraceSeq = 4100
+function agenticTraceId(): string {
+  agenticTraceSeq += 1
+  return `kb-agentic:01J${agenticTraceSeq.toString(16).padStart(8, '0')}`
+}
+
+/** 按 query 派生 agentic 块（kb search 与 SSE RETRIEVAL_EVIDENCE 帧共用，变体口径单源） */
+export function agenticBlockFor(query: string): AgenticBlock {
+  const q = query.trim()
+  if (GREETING_RE.test(q)) {
+    return {
+      mode: 'rule', decision: 'retrieval_skipped', decision_reason: 'smalltalk_pattern',
+      rounds: [], degraded: null, explain_trace_id: agenticTraceId(),
+    }
+  }
+  if (/改写|别名/.test(q)) {
+    return {
+      mode: 'rule', decision: 'retrieval_required', decision_reason: 'default_retrieve',
+      rounds: [
+        { seq: 1, action: 'search', query: q, grade: 'fail', grade_reason: 'hit_count_zero' },
+        { seq: 2, action: 'rewrite_search', query: '配电变压器 T-2093 台账参数', rewrite_basis: 'term_alias:配变→配电变压器', grade: 'pass', grade_reason: 'pass' },
+      ],
+      degraded: null, explain_trace_id: agenticTraceId(),
+    }
+  }
+  if (/降级|未命中/.test(q)) {
+    return {
+      mode: 'rule', decision: 'retrieval_required', decision_reason: 'default_retrieve',
+      rounds: [
+        { seq: 1, action: 'search', query: q, grade: 'fail', grade_reason: 'score_below_threshold' },
+        { seq: 2, action: 'rewrite_search', query: `${q}（近义扩展）`, rewrite_basis: 'term_rewrite:同义术语扩展', grade: 'fail', grade_reason: 'span_missing' },
+      ],
+      degraded: 'agentic_exhausted', explain_trace_id: agenticTraceId(),
+    }
+  }
+  return {
+    mode: 'rule', decision: 'retrieval_required', decision_reason: 'default_retrieve',
+    rounds: [{ seq: 1, action: 'search', query: q, grade: 'pass', grade_reason: 'pass' }],
+    degraded: null, explain_trace_id: agenticTraceId(),
+  }
+}
+
 // ---- 回收站（B3-Q 转实；软删 7 天保留期 → 恢复 / 彻底删除，契约=api/01 §5.4 追加行）----
 const DAY_MS = 86_400_000
 
@@ -339,12 +390,44 @@ export const kbHandlers = [
     HttpResponse.json({ code: 0, message: 'ok', data: { items: KB_CHUNKS[String(params.id)] ?? [], next_cursor: null } }),
   ),
 
-  // GraphRAG 检索（§6.2：三模式同端点参数区分；degraded=false）
+  // GraphRAG 检索（§6.2：三模式同端点参数区分；degraded=false）。
+  // §8.1 agentic 扩展（纯追加）：agentic=true 时按 query 派生四变体 agentic 块；
+  // agentic=false/缺省 → agentic:null（契约原文），存量消费方零影响。
   http.post('*/api/v1/kb/search', async ({ request }) => {
-    const body = (await request.json()) as { query?: string; mode?: string; top_k?: number; kb_id?: string }
+    const body = (await request.json()) as { query?: string; mode?: string; top_k?: number; kb_id?: string; agentic?: boolean }
     const mode = body.mode === 'global' || body.mode === 'drift' || body.mode === 'local' ? body.mode : 'local'
-    const graph = graphForMode(mode)
     await new Promise(r => setTimeout(r, 550))
+    // 寒暄直答变体：无检索 → hits/citations/graph 全空，答案不带引用角标
+    if (body.agentic === true) {
+      const block = agenticBlockFor(body.query ?? '')
+      if (block.decision === 'retrieval_skipped') {
+        return HttpResponse.json({
+          code: 0, message: 'ok',
+          data: {
+            answers: `你好！这个问题无需检索知识库——寒暄直答（未检索）。有什么配网停电分析的问题随时问我。`,
+            hits: [], citations: [], graph_paths: [], graph: { nodes: [], edges: [] },
+            confidence: 1, degraded: false, agentic: block,
+          },
+          meta: { elapsed_ms: 18, trace_id: `req_${Math.random().toString(16).slice(2, 8)}` },
+        })
+      }
+      const graph = graphForMode(mode)
+      return HttpResponse.json({
+        code: 0, message: 'ok',
+        data: {
+          answers: searchAnswers(mode, body.query ?? ''),
+          hits: searchHits(),
+          citations: searchCitations(),
+          graph_paths: [{ nodes: graph.nodes.map(n => n.label), edges: graph.edges.map(e => e.label) }],
+          graph,
+          confidence: block.degraded ? 0.42 : 0.91,
+          degraded: Boolean(block.degraded),
+          agentic: block,
+        },
+        meta: { elapsed_ms: 552 + Math.round(Math.random() * 90), trace_id: `req_${Math.random().toString(16).slice(2, 8)}` },
+      })
+    }
+    const graph = graphForMode(mode)
     return HttpResponse.json({
       code: 0, message: 'ok',
       data: {
@@ -355,6 +438,7 @@ export const kbHandlers = [
         graph,
         confidence: mode === 'drift' ? 0.78 : 0.91,
         degraded: false,
+        agentic: null,
       },
       meta: { elapsed_ms: 552 + Math.round(Math.random() * 90), trace_id: `req_${Math.random().toString(16).slice(2, 8)}` },
     })

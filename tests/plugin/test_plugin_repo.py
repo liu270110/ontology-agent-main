@@ -10,7 +10,7 @@ import uuid
 from typing import TYPE_CHECKING
 
 import pytest
-from helpers import publisher_signed_fields
+from tests.plugin.helpers import publisher_signed_fields
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from services.platform.security import PLATFORM_SIG_PREFIX, PluginSigner

@@ -44,6 +44,7 @@ from services.kb.api.schemas.kb import (
     KbSearchOut,
     KbUsageOut,
 )
+from services.kb.business import search_service as kb_search_service_module
 from services.kb.business.agentic import (
     EXPLAIN_TRACE_PREFIX,
     GRADE_SCORE_THRESHOLD,
@@ -59,7 +60,8 @@ from services.kb.business.search_service import KnowledgeSearchService
 from services.kb.data.orm import Document as DocumentORM
 from services.kb.data.orm import DocumentChunk as DocumentChunkORM
 from services.kb.data.orm import KbCollection as KbCollectionORM
-from services.kb.retrieval.retrieve import SearchHit
+from services.kb.retrieval.graph import ClassHierarchy
+from services.kb.retrieval.retrieve import HybridSearchResult, SearchHit
 from services.platform.config import Settings
 from services.platform.db import registry as orm_registry  # noqa: F401  全模块 ORM 入 metadata（FK 解析）
 from services.platform.deps import Principal
@@ -78,6 +80,13 @@ MINI_CATALOG = SeedCatalog(
 
 def _hit(score: float, span: list[int] | None) -> SearchHit:
     return SearchHit(chunk_id=uuid.uuid4(), document_id=uuid.uuid4(), content="x", score=score, span=span)
+
+
+def _ch_hit(score: float, span: list[int] | None, channels: list[str]) -> SearchHit:
+    """带通道标记的命中（hybrid_search 输出形态：channels 由 RRF 融合回填，评级据此归一）。"""
+    return SearchHit(
+        chunk_id=uuid.uuid4(), document_id=uuid.uuid4(), content="x", score=score, span=span, channels=channels
+    )
 
 
 # ── 纯函数：decide / grade / rewrite（零外部依赖）─────────────────────────────
@@ -147,6 +156,44 @@ def test_grade_分数与span齐备_判pass() -> None:
     assert grade([_hit(0.5, [0, 3]), _hit(0.2, None)]) == ("pass", "pass")  # top1 有 span 即可
 
 
+# ── F1 回归：归一化评级（RRF 分口径对齐，OCR 缺陷 F1）──────────────────────────
+
+
+def test_grade_F1两路RRF量级_归一满分判pass() -> None:
+    # 两路（bm25+vector 各 0.5，k=60）top1 双通道 rank1：RRF 分 = 1.0/61 ≈ 0.0164（生产可达量级）。
+    # 修复前按绝对阈值 0.15 恒 fail/score_below_threshold（pass 快速返回成死代码）。
+    hit = _ch_hit(1.0 / 61, [0, 1], ["bm25", "vector"])
+    assert grade([hit]) == ("pass", "pass")
+
+
+def test_grade_F1归一化后低分_判score_below_threshold() -> None:
+    # 0.001 相对两路理论满分 1.0/61 归一 ≈ 0.061 < 0.5 → fail（阈值仍拦截真实低分）
+    hit = _ch_hit(0.001, [0, 1], ["bm25", "vector"])
+    assert grade([hit]) == ("fail", "score_below_threshold")
+
+
+def test_grade_F1嵌入路降级单路通道_归一满分判pass() -> None:
+    # BM25-only（vector_unavailable 降级）：通道集单路 → 理论满分 0.5/61，top1 rank1 归一 = 1.0 → pass
+    # （降级场景评级不因换算基准漂移恒挂，降级事实由 degraded_reasons 透传表达）
+    hit = _ch_hit(0.5 / 61, [0, 1], ["bm25"])
+    assert grade([hit]) == ("pass", "pass")
+
+
+def test_grade_F1含图路三路权重表_归一满分判pass() -> None:
+    # 图路命中 → 权重表切三路（0.4/0.4/0.6，Σ=1.4）：top1 全通道 rank1 = 1.4/61 → 归一 1.0 → pass
+    hit = _ch_hit(1.4 / 61, [0, 1], ["bm25", "vector", "graph"])
+    assert grade([hit]) == ("pass", "pass")
+
+
+def test_grade_F1显式通道参数优先于hits推断() -> None:
+    # 调用方已知当轮参与通道时显式传入（覆盖 hits 自带 channels 的近似推断）：
+    # 同一 top1 分（单路 rank1=0.5/61），按两路满分归一=1.0 → pass；按三路满分（Σw=1.4）归一
+    # ≈0.357 < 0.5 → fail——归一基准随通道集变化，阈值语义统一。
+    hit = _ch_hit(0.5 / 61, [0, 1], ["bm25"])
+    assert grade([hit], channels=["bm25", "vector"]) == ("pass", "pass")
+    assert grade([hit], channels=["bm25", "vector", "graph"]) == ("fail", "score_below_threshold")
+
+
 async def test_rewrite_别名归一命中_配变归一配电变压器() -> None:
     # 任务点名方向：「配变」字符按序含于规范标签「配电变压器」→ 替换 + 依据带标签
     assert await rewrite("配变 停电原因", catalog=MINI_CATALOG) == ("配电变压器 停电原因", "term_alias:配电变压器")
@@ -174,6 +221,29 @@ async def test_rewrite_真实种子_规范查询不改写_返回None() -> None:
     # 默认种子（seeds/power_seed.ttl）下的回归护栏：规范术语/含编号实体不被误改
     assert await rewrite("馈线F001停电") is None
     assert await rewrite("变压器 故障") is None  # 故障在否定词表（泛词不升类名）
+
+
+# ── F3/F4 回归：规范术语不改写守卫 + 词段级替换定位（OCR 缺陷 F3/F4）─────────────
+
+
+@pytest.mark.parametrize("query", ["停电事件", "停电事件，请确认"])
+async def test_rewrite_F3真实种子_规范术语exact命中_不落二级误改写(query: str) -> None:
+    # 「停电事件」exact 命中 OutageEvent 后曾被二级按序包含误改写为「停电确认事件」
+    # （语义收窄 + trace 谎报别名归一）——F3 守卫后整词段跳过二级，返回 None 不改写。
+    assert await rewrite(query) is None
+
+
+async def test_rewrite_F3真实种子_英文本地名exact_不改写() -> None:
+    # 「OutageEvent」exact 命中 pw:OutageEvent 英文本地名（kb_extraction._norm 同形归一）→ 守卫跳过
+    assert await rewrite("OutageEvent 已确认") is None
+
+
+async def test_rewrite_F4真实种子_词段级替换定位_不破坏已扫描词段() -> None:
+    # 「配电」需归一为「配电线路」，但裸 str.replace(term, target, 1) 按子串替换会落在
+    # 首词段「配电线路故障」内部 → 「配电线路线路故障，配电」（重复拼接）。
+    # F4 改为 _TERM_RE.finditer 首个全等词段区间拼接替换；首词段「配电线路故障」因
+    # 「标签 ⊂ 查询词」守卫（F3 扩展）不改写。
+    assert await rewrite("配电线路故障，配电") == ("配电线路故障，配电线路", "term_alias:配电线路")
 
 
 # ── 服务级：run_agentic_search 编排（stub 注入检索回调，零外部依赖）──────────────
@@ -289,8 +359,74 @@ async def test_run_explain_trace_id_前缀加uuid() -> None:
     )  # 每次 trace 独立生成
 
 
+async def test_run_F1两路RRF量级命中_单轮pass不烧改写轮() -> None:
+    # F1 编排级回归：top1 RRF 分 1.0/61≈0.0164（两路 rank1，生产可达量级）在归一化评级下
+    # 单轮 pass 快速返回；修复前按绝对阈值 0.15 恒 fail → 白烧一轮改写后 agentic_exhausted。
+    calls: list[str] = []
+
+    async def search_fn(q: str) -> list[SearchHit]:
+        calls.append(q)
+        return [_ch_hit(1.0 / 61, [0, 4], ["bm25", "vector"])]
+
+    hits, trace = await run_agentic_search("配变 停电原因", search_fn, max_rounds=2, catalog=MINI_CATALOG)
+    assert calls == ["配变 停电原因"]  # 修复前 calls 两条（改写轮被空烧）
+    assert [(r.seq, r.action, r.grade, r.grade_reason) for r in trace.rounds] == [(1, "search", "pass", "pass")]
+    assert trace.degraded is None and len(hits) == 1
+
+
 async def _never_search(q: str) -> list[SearchHit]:  # pragma: no cover - 寒暄路径不应触达
     raise AssertionError(f"寒暄 skip 不应触发检索回调: {q}")
+
+
+# ── F2 回归：运行时降级理由透传（KnowledgeSearchService，stub 注入零外部依赖）──────
+
+
+class _NullSession:
+    """最小会话桩：once 回调内的装配点（层次/AclPushdown/hybrid）均已 stub，会话对象不被触碰。"""
+
+    async def __aenter__(self) -> _NullSession:
+        return self
+
+    async def __aexit__(self, *exc: object) -> bool:
+        return False
+
+
+async def test_服务级_F2_agentic_true_运行时降级理由透传(monkeypatch: pytest.MonkeyPatch) -> None:
+    """F2：末轮 hybrid_search 的运行时降级理由（vector_unavailable 等）透传 result.degraded。
+
+    修复前 _search_agentic 恒 degraded=False（与 api/kb.py 静态 resolve_mode 重建同一缺陷，
+    两入口两套语义）——本用例同时钉：静态路由理由 + 运行时理由合并去重。
+    """
+    service = KnowledgeSearchService(
+        _NullSession,  # type: ignore[arg-type] once 内装配点全 stub，会话不被触碰
+        ollama_base_url="http://localhost:9",
+        acl_filter_enabled=False,  # 显式关闭：AclPushdown.prepare 短路，不触 SQL
+    )
+
+    async def _fake_hierarchy(db: object, tenant_id: uuid.UUID) -> ClassHierarchy:
+        return ClassHierarchy()  # 空层次：闭包退化非失败（与生产无发布本体时同形）
+
+    async def _fake_hybrid(query: str, **_: object) -> HybridSearchResult:
+        # 模拟 hybrid_search 真实降级形态：mode=global 路由降级 + 嵌入路不可用，命中两路 RRF 量级
+        hit = _ch_hit(1.0 / 61, [0, 1], ["bm25", "vector"])
+        return HybridSearchResult(
+            query=query,
+            mode="global",
+            degraded=True,
+            channels=["bm25", "vector"],
+            hits=[hit],
+            mode_used="local",
+            degraded_reasons=["mode_downgraded:global", "vector_unavailable"],
+        )
+
+    monkeypatch.setattr(service, "_class_hierarchy", _fake_hierarchy)
+    monkeypatch.setattr(kb_search_service_module, "hybrid_search", _fake_hybrid)
+
+    result = await service.search(tenant_id=uuid.uuid4(), query="馈线停电", agentic=True, mode="global")
+    assert result.degraded is True  # 修复前恒 False（嵌入路不可用时响应谎报未降级）
+    assert result.degraded_reasons == ["mode_downgraded:global", "vector_unavailable"]  # 静态+运行时合并去重
+    assert result.agentic is not None and result.agentic.degraded is None  # trace pass ≠ 基础设施降级
+    assert len(result.citations) == 1 and result.channels == ["bm25", "vector"]
 
 
 # ── 请求/响应模型契约（§8.1 可选字段；旧客户端零影响）───────────────────────────
@@ -486,3 +622,25 @@ async def test_端点级_agentic_false_响应agentic恒None(ag_pg: async_session
         )
     assert out.agentic is None
     assert len(out.hits) == 1  # 现状检索路径照常
+
+
+async def test_端点级_F2_agentic_true_嵌入路不可用_degraded透传运行时理由(
+    ag_pg: async_sessionmaker[AsyncSession], ag_seeded: dict
+) -> None:
+    """F2 端点侧回归：Ollama 9 端口不可达 → vector 路抛 EmbeddingUnavailableError →
+    agentic=true 响应 degraded=true 且 degraded_reasons 含 vector_unavailable。
+
+    修复前 degraded 仅由静态 resolve_mode 重建（mode=auto 无路由降级）→ 恒 False，与端点
+    docstring「嵌入路不可用 → BM25-only（degraded=true, reason=vector_unavailable）」矛盾。
+    """
+    async with ag_pg() as session:
+        body = KbSearchIn(query=QUERY, kb_id=ag_seeded["collection_id"], top_k=10, agentic=True)
+        out = await kb_search_route(
+            body=body, principal=_principal(ag_seeded["tenant_id"]), request=_fake_request(), session=session
+        )
+    assert out.degraded is True  # 修复前 False（运行时降级被吞）
+    assert "vector_unavailable" in out.degraded_reasons
+    assert out.agentic is not None
+    # BM25-only 单路命中 → 归一满分（F1 口径）→ 首轮评级 pass（不被降级事实误杀）
+    assert [(r.grade, r.grade_reason) for r in out.agentic.rounds] == [("pass", "pass")]
+    assert len(out.hits) == 1  # BM25 照常命中种子文档

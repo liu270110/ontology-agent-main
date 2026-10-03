@@ -32,7 +32,7 @@ from services.kb.business.agentic import AgenticTrace, run_agentic_search
 from services.kb.business.usage_service import UsageStore
 from services.kb.retrieval.embed import AclPushdown, OllamaEmbedder, bm25_search, vector_search
 from services.kb.retrieval.graph import ClassHierarchy, build_class_hierarchy, expand_graph
-from services.kb.retrieval.retrieve import GraphPath, SearchHit, hybrid_search
+from services.kb.retrieval.retrieve import GraphPath, SearchHit, hybrid_search, resolve_mode
 from services.ontology.business.hierarchy_service import get_class_hierarchy
 
 logger = logging.getLogger(__name__)
@@ -140,9 +140,9 @@ class KnowledgeSearchService:
         **False=现状路径逐行不变（零行为变化红线，结果 agentic 恒 None）**；True 时
         decide 判别（寒暄 skip 零召回）→ 每轮独立短会话三路召回 → 规则评级 → 术语归一改写
         纠错（≤``max_rounds`` 轮）→ 仍失败 degraded="agentic_exhausted"；全程 trace 进
-        结果 agentic 块。agentic 管线内嵌路降级不再置 result.degraded（语义保留给基础设施
-        降级链），循环解释以 trace 为唯一事实源（v1 边界：graph_paths 恒空、channels 取
-        最终命中并集）。
+        结果 agentic 块。基础设施降级（vector_unavailable / mode_downgraded:*，F2）与
+        POST /kb/search agentic 分支同口径透传 result.degraded(+reasons)；循环解释以
+        trace 为事实源（v1 边界：graph_paths 恒空、channels 取最终命中并集）。
         """
         started = time.perf_counter()
         if agentic:  # A0 管线支路：不触碰下方现状路径（零行为变化红线）
@@ -237,8 +237,11 @@ class KnowledgeSearchService:
         - 每轮检索回调自开短只读会话即用即弃（03 §6.1 检索在事务外；轮数 ≤ max_rounds ≤ 2）；
         - 寒暄判别 skip 时 search_fn 永不触发 → 零召回零会话（§5 场景 1）；
         - source_context 软路由对最终命中照常生效（None=零开销）；
-        - 证据图路 v1 不带回（graph_paths 恒空）——循环解释以 trace 为事实源。
+        - 证据图路 v1 不带回（graph_paths 恒空）——循环解释以 trace 为事实源；
+        - 基础设施降级理由（F2）：末轮 hybrid_search 的 degraded_reasons 透传 result.degraded，
+          与 api/kb.py agentic 分支同口径（寒暄 skip 时仅静态路由理由）。
         """
+        last_inner_reasons: list[str] = []  # 末轮运行时降级理由（F2：vector_unavailable 等不丢弃）
 
         async def once(round_query: str) -> list[SearchHit]:
             async with self._session_factory() as db:
@@ -276,9 +279,18 @@ class KnowledgeSearchService:
                     mode=mode,
                     entity_type_filter=entity_type_filter,
                 )
+                last_inner_reasons.clear()  # 只留末轮（与前轮 hits 只保留最后一轮同口径）
+                last_inner_reasons.extend(result.degraded_reasons)
                 return result.hits
 
         hits, trace = await run_agentic_search(query, once, max_rounds=max_rounds)
+        mode_reason = resolve_mode(mode)[1]  # 静态路由理由（与 api/kb.py agentic 分支同口径）
+        # F2：degraded = 静态路由降级 or 末轮运行时降级（去重保序防双计 mode_downgraded:*）——
+        # 基础设施降级语义与 agentic 纠错降级（trace.degraded）分离但不再互相吞没。
+        degraded = mode_reason is not None or bool(last_inner_reasons)
+        degraded_reasons = list(
+            dict.fromkeys(([mode_reason] if mode_reason is not None else []) + last_inner_reasons)
+        )
         if source_context and hits:  # 软路由（§5.2）：仅对最终命中重排；空/None 零 SQL
             async with self._session_factory() as db:
                 hits = await rerank_hits_by_source_context(db, hits, source_context=source_context)
@@ -288,8 +300,8 @@ class KnowledgeSearchService:
         )
         return KnowledgeSearchResult(
             query=query,
-            degraded=False,  # 基础设施降级语义不与 agentic 纠错混用（见 search docstring v1 边界）
-            degraded_reasons=[],
+            degraded=degraded,
+            degraded_reasons=degraded_reasons,
             channels=sorted({channel for hit in hits for channel in hit.channels}),
             citations=citations,
             graph_paths=[],

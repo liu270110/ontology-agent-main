@@ -8,6 +8,7 @@ dependencies = [
     "fastmcp>=2.12.5,<3",  # 4.x 需 starlette>=1.0 与 fastapi starlette<0.51 冲突——禁解锁
     "fastapi>=0.115", "uvicorn[standard]>=0.30", "sqlalchemy[asyncio]>=2.0", "alembic>=1.13",  # asyncio extra 拉 greenlet（异步引擎缺它起不来，2026-10-03 实测）
   "psycopg[binary]>=3.1", "docker>=7.1", "pydantic>=2.7", "pydantic-settings>=2.2", "redis>=5",
+  "arq>=0.28",  # memory 域分布式任务队列（services/memory/business/tasks.py；约束 redis<6，2026-10-04 补声明：代码在用而依赖缺失）
   "pyjwt>=2.8",  # M1 网关 JWT 签发/校验（08 §2.1 claims；HS256 起，RS256/JWKS 随 M3）
   # 2026-09-27 工程 P2：UUIDv7 选型 = uuid-utils（Rust 实现，compat 子模块返回标准 uuid.UUID）；
   # PyPI `uuid7` 包无 compat 兼容层且维护弱，故不选（标注于 services/data/orm/base.py）

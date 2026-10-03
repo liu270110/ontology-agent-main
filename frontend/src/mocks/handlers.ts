@@ -428,6 +428,24 @@ export const handlers = [
     }),
   ),
 
+  // POST /sessions（api/01 §5.2：创建会话（绑定 agent）201——F5 前端消费的对位 mock；
+  // 建群 type=group 由 group-handlers 先行匹配（重叠处放行口径见其头注）。live 实测
+  // agent_id 必填（缺省 422 3001），title 可选（新会话 null，首条消息后服务端定题）
+  http.post('*/api/v1/sessions', async ({ request }) => {
+    const body = (await request.json().catch(() => ({}))) as { agent_id?: string; title?: string; type?: string }
+    if (!body.agent_id) return jsonErr(3001, '参数校验失败：agent_id 必填', 422)
+    if (body.type === 'group') return undefined // 群聊建会话走 group-handlers（X15 口径）
+    const s: (typeof SESSIONS)[number] = {
+      id: `s-${Date.now().toString(36)}`,
+      title: body.title?.trim() ?? '', // 与 live 一致：新会话无题（展示层兜底「新会话」）
+      agent_id: body.agent_id,
+      updated_at: new Date().toISOString(),
+    }
+    SESSIONS.push(s)
+    HISTORY[s.id] = []
+    return HttpResponse.json({ code: 0, message: 'ok', data: { ...s, status: 'created', type: 'single' } }, { status: 201 })
+  }),
+
   // PATCH /sessions/:id（api/01 §5.2 预登记行：元信息更新=重命名/置顶，不含归档）
   http.patch('*/api/v1/sessions/:id', async ({ request, params }) => {
     const body = (await request.json()) as { title?: string; pinned?: boolean }

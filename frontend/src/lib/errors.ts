@@ -27,6 +27,10 @@ export function describeError(e: unknown): string {
   if (e instanceof ApiError) {
     // 限速族（含 Retry-After 时给出剩余时间）
     if (e.code === 1005 || e.code === 2005 || e.httpStatus === 429) return rateLimitText(e.retryAfter)
+    // F8①（B:A-15）：HTTP 状态优先定文案——非信封 404（{detail:"Not Found"}，无业务码）与
+    // 信封误带校验码（3001）的历史 404 形态，一律按状态回落「资源不存在」，不再兜底成
+    // 「参数校验失败」（404=资源缺失语义，与参数错误是两回事）
+    if (e.httpStatus === 404) return MESSAGES[4041]
     return MESSAGES[e.code] ?? e.message
   }
   if (e instanceof Error) return e.message

@@ -113,6 +113,11 @@ interface SessionState {
   setActiveSession: (id: string | null) => void
   /** 历史基线（订阅前 GET /sessions/{id}/messages，§3.2），对齐 lastSeq */
   seed: (messages: ChatMessage[], lastSeq?: number) => void
+  /** F7（C-7）：跳号历史补齐——并入 GET /sessions/{id}/messages 历史（按 id 去重，历史按 seq
+   *  升序在前、实时消息在后），lastSeq 推进至 max(历史最大 seq, pending.seq-1)，再重放 pending
+   *  帧走 apply 正常归约；返回该 seq 是否已被覆盖（applied/dup=true，仍 gap=false → 调用方
+   *  回落 ?last_event_id= 重连补发）。 */
+  backfill: (history: (ChatMessage & { seq?: number })[], pending: SseEvent) => boolean
   setConnection: (c: SessionState['connection']) => void
   /** 停止生成（IX-CHT-06）：流终止、保留已生成部分，末条助手消息追加「已手动停止」标记 */
   stopRun: () => void
@@ -149,6 +154,36 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     set(s => ({ draftInserts: [...s.draftInserts, { text, seq: ++draftSeq }].slice(-20) })),
 
   seed: (messages, lastSeq = 0) => set({ messages, lastSeq }),
+
+  backfill(history, pending) {
+    const s = get()
+    const histById = new Map(history.filter(m => m.id).map(m => [m.id, m]))
+    // upsert：本地同 id 实时残缺消息（无 seq=直播中 START 出来的半条）被历史完成态覆盖——
+    // 缺口帧（CONTENT 尾段）不再到达，历史是持久化完整事实源（「不丢」半边）；
+    // 本地带 seq 的既有历史不动
+    const upserted = s.messages.map(m => {
+      const h = m.id ? histById.get(m.id) : undefined
+      return h && m.seq === undefined && h.seq !== undefined ? h : m
+    })
+    const known = new Set(upserted.map(m => m.id).filter(Boolean))
+    const fresh = history.filter(m => m.id && !known.has(m.id))
+    // 历史（带 seq）升序在前、实时（无 seq）在后——补齐消息与既有历史合并排序
+    if (fresh.length > 0) {
+      const histOld = upserted.filter(m => m.seq !== undefined)
+      const live = upserted.filter(m => m.seq === undefined)
+      const mergedHist = [...histOld, ...fresh].sort((a, b) => (a.seq ?? 0) - (b.seq ?? 0))
+      set({ messages: [...mergedHist, ...live] })
+    } else {
+      set({ messages: upserted })
+    }
+    // 基线推进到 max(合并历史最大 seq, pending.seq-1)（「补齐到该 seq」语义）：
+    // 历史已含 pending 载荷时 apply 判 dup（文本恰 1 次）；未含时判 applied（由帧归约上屏）
+    const cur = get()
+    const maxHist = cur.messages.reduce((mx, m) => Math.max(mx, Number(m.seq ?? 0)), 0)
+    set({ lastSeq: Math.max(cur.lastSeq, maxHist, pending.seq - 1) })
+    const r = get().apply(pending)
+    return r !== 'gap'
+  },
 
   setConnection: connection => set({ connection }),
 
@@ -205,11 +240,19 @@ export const useSessionStore = create<SessionState>((set, get) => ({
         break
       }
       case 'TEXT_MESSAGE_START':
-        set(s => ({ messages: [...s.messages, { id: String(d.message_id ?? ''), role: 'assistant', content: '' }] }))
+        // F7 防双行：历史补齐已并入同 id 完成态消息时，重放的 START 不再追加（保「恰 1 次」）
+        set(s =>
+          s.messages.some(m => m.id === String(d.message_id ?? ''))
+            ? {}
+            : { messages: [...s.messages, { id: String(d.message_id ?? ''), role: 'assistant', content: '' }] },
+        )
         break
       case 'TEXT_MESSAGE_CONTENT':
+        // F7 防双写：带 seq 的历史补齐消息内容已完整，重放的 delta 不再追加（保「恰 1 次」）
         set(s => ({
-          messages: s.messages.map(m => (m.id === d.message_id ? { ...m, content: m.content + (d.delta ?? '') } : m)),
+          messages: s.messages.map(m =>
+            m.id === d.message_id && m.seq === undefined ? { ...m, content: m.content + (d.delta ?? '') } : m,
+          ),
         }))
         break
       case 'TEXT_MESSAGE_END':

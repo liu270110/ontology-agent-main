@@ -428,7 +428,9 @@ export const groupHandlers = [
 
   // ---- 建群（GRP-01：POST /sessions body.type=group + members + routing；X15） ----
   http.post('*/api/v1/sessions', async ({ request }) => {
-    const body = (await request.json()) as {
+    // clone 读：重叠链路（handlers.ts F5 单会话 POST /sessions 注册于本 handler 之后）——
+    // Request 体一次性流，不 clone 会让后续 handler 读到已消费的空体（实测 3001 agent_id 必填误报）
+    const body = (await request.clone().json().catch(() => ({}))) as {
       type?: string; title?: string
       routing?: RoutingMode
       members?: { slot_id: string; routing_role: MemberRole }[]

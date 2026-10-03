@@ -1,4 +1,4 @@
-import { api } from '@/api/client'
+import { api, ApiError } from '@/api/client'
 
 /** 当前用户偏好（/me/preferences，api/01 §5.13 me 预登记；DTO 与 mocks/admin-handlers.ts
  *  PREFS 一一对应）。跨域消费（工作台新手引导卡 onboarding-card + 设置各 Tab）→
@@ -31,5 +31,39 @@ export interface Preferences {
   memory_clear_via_invalidate?: boolean
 }
 
-export const getPreferences = () => api.get<Preferences>('/me/preferences')
+/** 深隔离默认偏好工厂（ocr 整改 fe2 发现6）：浅拷贝 { ...PREFERENCES_DEFAULTS } 会共享
+ *  嵌套 notifications 对象——任一降级实例原地改 notifications 即污染全部默认实例。
+ *  降级路径一律经此工厂取全新实例；既有常量改由工厂派生，保持外部引用面不变。 */
+export function createDefaultPreferences(): Preferences {
+  return {
+    display_name: '',
+    email: '',
+    department: '',
+    language: 'zh-CN',
+    timezone: 'Asia/Shanghai',
+    totp_enabled: false,
+    notifications: {},
+  }
+}
+
+/** 本地默认偏好（F8⑥ B:A-9 前端半：/me/preferences 404——后端 me 域未挂载（live 实测
+ *  2026-10-04 裸 404 {detail}）→ 降级本地默认值继续渲染，设置页不再永挂「加载中…」。
+ *  display_name/email 留空由消费方以 auth-store 用户信息兜底；PUT 在降级态下仍可发起
+ *  （后端上线后自然转正），保存失败照常 toast 不静默。 */
+export const PREFERENCES_DEFAULTS: Preferences = createDefaultPreferences()
+
+export const getPreferences = async (): Promise<Preferences> => {
+  try {
+    return await api.get<Preferences>('/me/preferences')
+  } catch (e) {
+    // 降级集收窄为 {404, 501}（ocr 整改 fe2 发现5，主会话后端裁决）：me2 批已把实现端点
+    // 的 503 规范化为 5004 四字段错误体、/me/preferences 未实现返回 404——故 503=瞬时故障，
+    // 若仍降级默认值，消费者全量 PUT 会用默认偏好覆盖服务端真实偏好（静默数据丢失链）；
+    // 仅对「端点不存在/未实现」降级；鉴权失败（401/1003）与瞬时故障（503 等）照抛不吞
+    if (e instanceof ApiError && (e.httpStatus === 404 || e.httpStatus === 501)) {
+      return createDefaultPreferences()
+    }
+    throw e
+  }
+}
 export const putPreferences = (body: Partial<Preferences>) => api.put<Preferences>('/me/preferences', body)

@@ -635,8 +635,22 @@ const SYS_LOGS: {
 
 export const platformHandlers = [
   // ---------- §5.5 memory ----------
-  // R 预登记：GET /memory/l1 列表（契约仅单条 GET /memory/l1/{session_id}，IX-MEM-03 需要会话集合）
+  // R 预登记：GET /memory/l1 列表（仅供分层容量卡计数；视图层已改契约单条，见下——F8⑤/B:A-11）
   http.get('*/api/v1/memory/l1', () => ok({ items: L1_SESSIONS })),
+  // F8⑤ 对位：GET /memory/l1/{session_id}（契约单条 §5.5；由 L1_SESSIONS 种子转 contract
+  // 形态——blocks dict / window 近期消息；未登记会话 404 与 live 行为一致）
+  http.get('*/api/v1/memory/l1/:sid', ({ params }) => {
+    const seed = L1_SESSIONS.find(x => x.session_id === String(params.sid))
+    if (!seed) return err(4041, '该会话没有 L1 工作记忆', 404)
+    return ok({
+      layer: 'l1',
+      session_id: seed.session_id,
+      blocks: Object.fromEntries(seed.blocks.map(b => [b.key, b.value])),
+      window: [{ role: 'user', content: `${seed.title}（会话进行中）` }],
+      state: null,
+      degraded: false,
+    })
+  }),
   http.get('*/api/v1/memory/facts', ({ request }) => {
     const url = new URL(request.url)
     const layer = url.searchParams.get('layer')

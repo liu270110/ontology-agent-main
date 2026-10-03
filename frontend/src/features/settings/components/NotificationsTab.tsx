@@ -18,7 +18,11 @@ export function NotificationsTab() {
   const [dirty, setDirty] = useState(false)
 
   useEffect(() => {
-    void getPreferences().then(p => setMatrix(p.notifications))
+    // F8⑥（B:A-9）：404 由 getPreferences 降级默认值；此处再兜非 404 异常（网络等），
+    // 通知矩阵退本地默认（全关+锁定行），不再永挂「加载中…」
+    void getPreferences()
+      .then(p => setMatrix(p.notifications ?? {}))
+      .catch(() => setMatrix({}))
   }, [])
 
   const rows = useMemo(() => [...EVENT_ROWS.map(r => ({ ...r, locked: false })), {

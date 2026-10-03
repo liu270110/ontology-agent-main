@@ -1,5 +1,4 @@
 import { useRef, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {toast} from 'sonner'
 import {SearchX, Check,
@@ -21,6 +20,7 @@ import { describeError, EXPORT_MD } from '@/lib/toast-templates'
 import { useSessionStore } from '@/stores/session-store'
 import {ErrorState, SkeletonRows, EmptyState} from '@/components/states'
 import {MenuItem, MenuSep, MenuSurface} from '@/components/popover'
+import { createDefaultSession } from '../api'
 
 interface SessionItem {
   id: string
@@ -38,7 +38,8 @@ interface SessionItem {
  *  三态反馈（loading 带标题 / 成功 / 失败 describeError），消灭静默失败。 */
 async function exportMarkdown(s: SessionItem) {
   const r = await api.get<{ items: { role: 'user' | 'assistant'; content: string }[] }>(`/sessions/${s.id}/messages`)
-  const lines = [`# ${s.title}`, '', `> 导出于 ${new Date().toLocaleString('zh-CN')} · ontology-agent`, '']
+  const title = s.title || '新会话' // F5：live 新建会话 title=null，导出文件名/头行兜底
+  const lines = [`# ${title}`, '', `> 导出于 ${new Date().toLocaleString('zh-CN')} · ontology-agent`, '']
   for (const m of r.items ?? []) {
     lines.push(m.role === 'user' ? '**用户**' : '**助手**', '', m.content, '', '---', '')
   }
@@ -53,7 +54,6 @@ async function exportMarkdown(s: SessionItem) {
 }
 
 export function SessionList({ onPicked }: { onPicked?: (id: string) => void }) {
-  const navigate = useNavigate()
   const active = useSessionStore(s => s.activeSessionId)
   const setActive = useSessionStore(s => s.setActiveSession)
   const searchRef = useRef<HTMLInputElement>(null)
@@ -82,6 +82,17 @@ export function SessionList({ onPicked }: { onPicked?: (id: string) => void }) {
   }
 
   const invalidate = () => void qc.invalidateQueries({ queryKey: qk.session.list() })
+  // F5（C-3）：新建会话=POST /sessions（api/01 §5.2，绑定 Agent 201）——建成功选中并跳转，
+  // 失败 toast（原实现仅 navigate /chat/new 深链，未消费创建端点）
+  const createSession = useMutation({
+    mutationFn: createDefaultSession,
+    onSuccess: s => {
+      setActive(s.id)
+      onPicked?.(s.id)
+      invalidate()
+    },
+    onError: e => toast.error(`新建会话失败：${describeError(e)}`),
+  })
   const patchSession = useMutation({
     mutationFn: ({ id, body }: { id: string; body: { title?: string; pinned?: boolean } }) =>
       api.patch(`/sessions/${id}`, body),
@@ -103,20 +114,24 @@ export function SessionList({ onPicked }: { onPicked?: (id: string) => void }) {
     },
   })
 
-  const items = (data?.items ?? []).filter(s => !kw.trim() || s.title.toLowerCase().includes(kw.trim().toLowerCase()))
+  // F5：live POST /sessions 新会话 title=null（首条消息后服务端才定题）——展示与过滤统一兜底
+  const titleOf = (s: SessionItem) => s.title || '新会话'
+  const items = (data?.items ?? []).filter(s => !kw.trim() || titleOf(s).toLowerCase().includes(kw.trim().toLowerCase()))
 
   return (
     <div className="session-col flex w-60 flex-none flex-col border-r border-separator bg-surface">
       <div className="sc-head flex items-center justify-between px-4 pb-1 pt-3">
         <b className="text-sm">会话</b>
-        {/* 新建会话（36 §A3 解锁，34-R2 销账）：POST /sessions 已实装（35 §2.3②），前端消费
-            走既有深链 /chat/new（与仪表盘「发起新对话」同路径）；api/01 §5.2 消费登记为记账项 */}
+        {/* 新建会话（36 §A3 解锁，34-R2 销账）：POST /sessions 已实装（35 §2.3②），F5 接
+            create mutation（建成功选中新会话）；/chat/new 深链保留给仪表盘等外部入口 */}
         <button
           type="button"
           className="icobtn rounded-md border border-separator px-1.5 text-label-3"
           aria-label="新建会话"
           title="新建会话"
-          onClick={() => navigate('/chat/new')}
+          data-testid="session-create"
+          disabled={createSession.isPending}
+          onClick={() => createSession.mutate()}
         >
           <Plus size={12} aria-hidden />
         </button>
@@ -204,7 +219,7 @@ export function SessionList({ onPicked }: { onPicked?: (id: string) => void }) {
                 }}
               >
                 <div className="flex min-h-[22px] items-center gap-1 pr-[26px]">
-                  <span className="min-w-0 flex-1 truncate text-[13px] font-medium">{s.title}</span>
+                  <span className="min-w-0 flex-1 truncate text-[13px] font-medium">{titleOf(s)}</span>
                   {/* C-3 贴稿（画板 L2534）：置顶=标题行徽标（替代 Pin 图标+副行前缀文字） */}
                   {s.pinned && <span className="badge b-gray flex-none" style={{ fontSize: 9, padding: '0 6px' }}>置顶</span>}
                 </div>
@@ -215,7 +230,7 @@ export function SessionList({ onPicked }: { onPicked?: (id: string) => void }) {
               </button>
               <button
                 type="button"
-                aria-label={`会话操作 ${s.title}`}
+                aria-label={`会话操作 ${titleOf(s)}`}
                 aria-haspopup="menu"
                 aria-expanded={menuId === s.id}
                 data-testid={`session-menu-${s.id}`}
@@ -252,7 +267,7 @@ export function SessionList({ onPicked }: { onPicked?: (id: string) => void }) {
                   setMenuId(null)
                   setConfirmId(null)
                 }}
-                label={`会话菜单 ${s.title}`}
+                label={`会话菜单 ${titleOf(s)}`}
                 initialActive={menuInit}
                 activeResetKey={confirmId === s.id ? 'confirm' : 'list'}
                 tabMode={confirmId === s.id ? 'cycle' : 'close'}
@@ -272,7 +287,7 @@ export function SessionList({ onPicked }: { onPicked?: (id: string) => void }) {
                         <div className="menu-i danger pointer-events-none h-auto items-start gap-1.5">
                           <Trash2 size={14} className="mt-0.5 flex-none" aria-hidden />
                           <span className="text-xs leading-5">
-                            删除「{s.title}」？将同时清除其消息与证据引用，不可恢复。
+                            删除「{titleOf(s)}」？将同时清除其消息与证据引用，不可恢复。
                           </span>
                         </div>
                         <div className="mt-1.5 flex gap-1.5">
@@ -307,7 +322,7 @@ export function SessionList({ onPicked }: { onPicked?: (id: string) => void }) {
                           icon={<Pencil aria-hidden />}
                           onSelect={() => {
                             setRenamingId(s.id)
-                            setRenameText(s.title)
+                            setRenameText(titleOf(s))
                             setMenuId(null)
                           }}
                         >
@@ -319,7 +334,7 @@ export function SessionList({ onPicked }: { onPicked?: (id: string) => void }) {
                           onSelect={() => {
                             setMenuId(null)
                             void toast.promise(exportMarkdown(s), {
-                              loading: EXPORT_MD.loading(s.title),
+                              loading: EXPORT_MD.loading(titleOf(s)),
                               success: EXPORT_MD.success,
                               error: e => describeError(e),
                             })
@@ -368,7 +383,13 @@ export function SessionList({ onPicked }: { onPicked?: (id: string) => void }) {
             title="还没有会话"
             desc="从第一个提问开始。"
             action={
-              <button type="button" className="btn btn-s btn-sm" onClick={() => navigate('/chat/new')}>
+              <button
+                type="button"
+                className="btn btn-s btn-sm"
+                data-testid="session-create-empty"
+                disabled={createSession.isPending}
+                onClick={() => createSession.mutate()}
+              >
                 <Plus size={12} aria-hidden /> 新建会话
               </button>
             }

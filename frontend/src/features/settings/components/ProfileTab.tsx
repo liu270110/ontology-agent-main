@@ -29,10 +29,28 @@ export function ProfileTab() {
   const email = useAuthStore(s => s.user?.email ?? '')
 
   useEffect(() => {
-    void getPreferences().then(p =>
-      setPrefs({ display_name: p.display_name, email: p.email, department: p.department, language: p.language, timezone: p.timezone }),
-    )
-  }, [])
+    // F8⑥（B:A-9）：preferences 404 已由 getPreferences 降级本地默认值；此处再兜网络失败等
+    // 非 404 异常——display_name/email 以 auth-store 当前用户回填，不再永挂「加载中…」
+    void getPreferences()
+      .then(p =>
+        setPrefs({
+          display_name: p.display_name || (email.split('@')[0] ?? ''),
+          email: p.email || email,
+          department: p.department,
+          language: p.language,
+          timezone: p.timezone,
+        }),
+      )
+      .catch(() =>
+        setPrefs({
+          display_name: email.split('@')[0] ?? '',
+          email,
+          department: '',
+          language: 'zh-CN',
+          timezone: 'Asia/Shanghai',
+        }),
+      )
+  }, [email])
 
   // 页面加载时恢复本地头像（M4 换头像端点后改拉服务端）
   useEffect(() => {

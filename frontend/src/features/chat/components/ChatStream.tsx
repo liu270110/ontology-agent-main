@@ -521,8 +521,19 @@ export function ChatStream({
                     </div>
                   ) : null
                 })()}
-                {/* 助手正文：Markdown/代码块渲染（用户气泡保持纯文本）；空内容=流式等待 */}
-                {m.content ? <AssistantMarkdown content={m.content} /> : <span className="text-label-3">思考中…</span>}
+                {/* 助手正文：Markdown/代码块渲染（用户气泡保持纯文本）。
+                    F6（C-5）：空内容区分「流式进行中」与「历史空记录」——仅活跃流末条显示
+                    「思考中…」；历史空 assistant（中断/异常导致无正文）渲染灰占位，不再伪装思考中 */}
+                {(() => {
+                  const isStreamingTail = running && m.id === messages[messages.length - 1]?.id
+                  if (m.content) return <AssistantMarkdown content={m.content} />
+                  if (isStreamingTail) return <span className="text-label-3">思考中…</span>
+                  return (
+                    <span data-testid="chat-empty-assistant" className="text-label-3">
+                      {m.finishReason === 'stopped' ? '（已手动停止，无内容）' : '（无内容 · 已中断）'}
+                    </span>
+                  )
+                })()}
                 {running && m.id === messages[messages.length - 1]?.id && <span className="stream-caret ml-0.5 animate-pulse">▍</span>}
                 {/* IX-CHT-06：手动停止后保留已生成部分 + 标记 */}
                 {m.finishReason === 'stopped' && (

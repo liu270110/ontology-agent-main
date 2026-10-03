@@ -25,10 +25,10 @@
 3. **PG 迁移到 head**（两副本共享业务库；首次执行一次即可，可在宿主机跑，也可借镜像跑）：
 
    ```bash
-   # 宿主机（.env 缺省值即可）：alembic upgrade head
+   # 宿主机（.env 缺省值即可，仓库根执行）：alembic -c services/alembic.ini upgrade head
    # 或借压测镜像（与 compose 同 env）：
    docker compose -f deploy/docker-compose.yml -f deploy/test/sse-dual-replica/docker-compose.sse-dual.yml \
-     run --rm gateway-a alembic upgrade head
+     run --rm gateway-a alembic -c services/alembic.ini upgrade head
    ```
 
 4. **测试账号与令牌**（api/02 §6：SSE 与 REST 同一 JWT；脚本内自动走登录通道）：

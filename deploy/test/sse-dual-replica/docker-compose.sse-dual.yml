@@ -25,7 +25,7 @@ name: onto-agent  # 与 base 同项目：三存储复用同一组卷与默认网
 services:
   gateway-a:
     build:
-      context: ..  # 仓库根（COPY requirements.txt / alembic.ini / services）
+      context: ..  # 仓库根（COPY requirements.txt / services/alembic.ini / services）
       dockerfile: deploy/test/sse-dual-replica/Dockerfile.gateway
     image: onto-agent-gateway:sse-dual
     environment:

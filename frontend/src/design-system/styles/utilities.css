@@ -15,6 +15,9 @@
   background-size:200% 100%;-webkit-background-clip:text;background-clip:text;color:transparent;
   animation:oa-text-shimmer 3.2s linear infinite}
 @keyframes oa-text-shimmer{from{background-position:200% 0}to{background-position:-200% 0}}
+/* reduce-motion 定格在中点相位：全局 .01ms 开关会把它冻在任意相位（color:transparent
+   全靠背景显字），定格 50% 恰好露出 var(--label) 实色段，文字全对比可读 */
+@media (prefers-reduced-motion:reduce){.text-shimmer{animation:none;background-position:50% 0}}
 /* 边框光束：conic-gradient 旋转描边（重点卡/进行中容器用；@property 驱动角度，
    不支持 @property 的浏览器静置为静态弧光，reduce-motion 全局开关冻结） */
 @property --beam-angle{syntax:'<angle>';inherits:false;initial-value:0deg}
@@ -56,6 +59,10 @@
 .dark .skel{background:rgba(255,255,255,.08)}
 .visually-hidden{position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;
   clip:rect(0 0 0 0);white-space:nowrap;border:0}
+/* 触屏双击缩放抑制（audit「touch-action:manipulation」）：交互基元统一声明，
+   快速连点不再触发浏览器双击缩放 */
+.btn,.btn-gl,.btn-gl-p,.seg-btn,.menu-i,.sel-opt,.rov-item,.acc-h,.sugg .sg,
+.ev-chip,.ctx-compact,.term-copy,.sel-toolbar .st-b,.upzone{touch-action:manipulation}
 @media (prefers-reduced-motion:reduce){
   /* .01ms 为 reduce-motion 终止开关，刻意不用时长令牌 */
   *,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;

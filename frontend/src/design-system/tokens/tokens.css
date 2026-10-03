@@ -93,6 +93,12 @@
   --glass-tinted:rgba(10,132,255,.6);
   --glass-tinted-border:rgba(255,255,255,.25);
   --glass-halo:rgba(0,0,0,.6);
+  /* Aurora/追光暗色成对（audit「亮暗成对」）：色相跟随 .dark 已有的 accent/indigo/teal
+     暗变体，透明度较亮色收敛——黑底上等值发光会过曝；spotlight 白光 .35→.16 防眩 */
+  --aurora-1:rgba(10,132,255,.42);
+  --aurora-2:rgba(125,122,255,.34);
+  --aurora-3:rgba(64,200,224,.4);
+  --spotlight:rgba(255,255,255,.16);
   --sh-card:0 2px 8px rgba(0,0,0,.3),0 8px 24px rgba(0,0,0,.35);
   --sh-float:0 4px 12px rgba(0,0,0,.4),0 16px 48px rgba(0,0,0,.55);
   --edge:rgba(255,255,255,.22);

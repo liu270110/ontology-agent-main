@@ -143,11 +143,13 @@ export function createTenant(body: { name: string; namespace: string; tier: stri
   return api.post<TenantCreated>('/admin/tenants', body)
 }
 
-// ---- 邀请链接（§5.8 ★ invite-links 五端点；2026-09-28 链接邀请切片：Dify 式链接自助加入，与邮箱邀请并列双模式） ----
+// ---- 邀请链接（§5.8 ★ invites 五端点；2026-10-04 路径迁移 /admin/invite-links → /invites（iam 域，
+//      32 篇 §二裁定：匿名 preview/join 走固定路径 + query/body 带 token，免改网关匿名中间件通配；
+//      后端只管 token 不回传 URL——绝对链接由前端拼 {origin}/login?join={token}，origin=管理员
+//      访问平台所用地址，局域网 IP/域名天然自洽）） ----
 export interface InviteLink {
   id: string
-  /** 完整站内路径 /login?join={token}，复制即分享 */
-  url: string
+  /** 链接凭证明文（后端库只存 sha256(token)）；绝对 URL 由前端拼装 {origin}/login?join={token} */
   token: string
   role: string
   expires_at: string
@@ -156,16 +158,18 @@ export interface InviteLink {
   status: 'active' | 'revoked' | 'expired'
 }
 
+/** 邀请链接绝对 URL（32 篇 §一：base=展示关注点由前端拼接，默认 window.location.origin） */
+export const inviteUrlOf = (token: string) => `${window.location.origin}/login?join=${encodeURIComponent(token)}`
 
-/** 生成邀请链接（角色 + 有效期 24h/7d/30d） */
+/** 生成邀请链接（角色 + 有效期 24h/7d/30d；201 不回传 url 字段） */
 export function createInviteLink(body: { role: string; expires_in_hours: 24 | 168 | 720 }) {
-  return api.post<InviteLink>('/admin/invite-links', body)
+  return api.post<InviteLink>('/invites', body)
 }
 export const listInviteLinks = () =>
-  api.get<{ items: InviteLink[]; next_cursor: null }>('/admin/invite-links')
+  api.get<{ items: InviteLink[]; next_cursor: null }>('/invites')
 /** 撤销（终态不可逆；200+信封体 {id,status:'revoked'}，同 api-keys revoke 非空体口径；重复撤销 409） */
 export const revokeInviteLink = (id: string) =>
-  api.delete<{ id: string; status: 'revoked' }>(`/admin/invite-links/${id}`)
+  api.delete<{ id: string; status: 'revoked' }>(`/invites/${id}`)
 
 export { previewInviteLink, joinInviteLink } from '@/lib/invite'
 export type { InviteLinkPreview } from '@/lib/invite'

@@ -8,7 +8,7 @@ import { Modal } from '@/components/modal'
 import { relativeTime } from '@/lib/reltime'
 import { Select } from '@/components/select'
 import {
-  ROLE_BADGE, ROLE_LABEL, createInviteLink, disableUser, inviteUsers, listInviteLinks, listUsers,
+  ROLE_BADGE, ROLE_LABEL, createInviteLink, disableUser, inviteUsers, inviteUrlOf, listInviteLinks, listUsers,
   revokeInviteLink, updateUser,
   type AdminUser, type InviteLink,
 } from '../api'
@@ -167,6 +167,8 @@ function countdownText(expiresAt: string): string {
 
 /** IX-ADM-01 邀请成员（520px）：双模式 seg（邮箱邀请｜链接邀请，2026-09-28 链接邀请切片——
  *  Dify 式链接自助加入：角色/有效期 → 生成 → 复制分享，成员经 /login?join= 自助加入）。
+ *  2026-10-04 链接绝对化（32 篇 §一）：展示/复制一律 {origin}/login?join={token} 绝对 URL——
+ *  origin=管理员访问平台所用地址（局域网 IP/域名/公网域名天然自洽），后端只管 token 不回传 URL。
  *  邮箱分支（chip 化批量 Enter/逗号/批量粘贴解析 + 角色下拉 + 附言 + 已存在账号检测）原样保留。 */
 function InviteModal({ onClose }: { onClose: () => void }) {
   const qc = useQueryClient()
@@ -229,7 +231,8 @@ function InviteModal({ onClose }: { onClose: () => void }) {
   const copyLink = async () => {
     if (!createdLink) return
     try {
-      await navigator.clipboard.writeText(createdLink.url)
+      // 绝对 URL（32 篇 §一）：复制完整 {origin}/login?join={token}，同事在他机直接打开
+      await navigator.clipboard.writeText(inviteUrlOf(createdLink.token))
       setCopied(true)
       window.setTimeout(() => setCopied(false), 2000)
     } catch { /* clipboard 异常静默（jsdom / 非 https 降级） */ }
@@ -354,9 +357,10 @@ function InviteModal({ onClose }: { onClose: () => void }) {
           </button>
           {createdLink && (
             <div className="mt-3 rounded-xl border border-separator bg-surface-2 p-3" data-testid="adm-invite-link-result">
-              <div className="flex items-center gap-2">
-                <code className="mono min-w-0 flex-1 truncate text-[11px] text-label-2" data-testid="adm-invite-link-url" title={createdLink.url}>
-                  {createdLink.url}
+              <div className="flex items-start gap-2">
+                {/* 绝对 URL（mono 可换行展示，title 存全文） */}
+                <code className="mono min-w-0 flex-1 break-all text-[11px] leading-4 text-label-2" data-testid="adm-invite-link-url" title={inviteUrlOf(createdLink.token)}>
+                  {inviteUrlOf(createdLink.token)}
                 </code>
                 <button type="button" className="btn btn-g btn-sm flex-none" data-testid="adm-invite-link-copy" onClick={() => void copyLink()}>
                   {copied ? '已复制 ✓' : '复制链接'}
@@ -364,6 +368,9 @@ function InviteModal({ onClose }: { onClose: () => void }) {
               </div>
               <div className="mt-1.5 text-[11px] text-label-3" data-testid="adm-invite-link-countdown">
                 {ROLE_LABEL[createdLink.role] ?? createdLink.role} · {countdownText(createdLink.expires_at)} · 成员经链接注册后自助加入
+              </div>
+              <div className="mt-1 text-[11px] text-label-3" data-testid="adm-invite-link-note">
+                链接对访问平台所用的地址生效——局域网内同事使用同一地址即可打开；公网部署时使用平台域名
               </div>
             </div>
           )}
@@ -381,7 +388,7 @@ function InviteModal({ onClose }: { onClose: () => void }) {
           <div className="mt-2 space-y-1.5">
             {links.map(l => (
               <div key={l.id} className="flex items-center gap-2 rounded-lg bg-surface-2 px-2.5 py-1.5" data-testid={`adm-invite-link-row-${l.id}`}>
-                <code className="mono min-w-0 flex-1 truncate text-[11px] text-label-3" title={l.url}>{l.url}</code>
+                <code className="mono min-w-0 flex-1 truncate text-[11px] text-label-3" title={inviteUrlOf(l.token)}>{inviteUrlOf(l.token)}</code>
                 <span className={`badge flex-none ${ROLE_BADGE[l.role] ?? 'b-gray'}`}>{ROLE_LABEL[l.role] ?? l.role}</span>
                 <span className="flex-none text-[11px] text-label-3">{countdownText(l.expires_at)}</span>
                 <span className={`badge flex-none ${l.status === 'active' ? 'b-green' : l.status === 'expired' ? 'b-orange' : 'b-gray'}`}>

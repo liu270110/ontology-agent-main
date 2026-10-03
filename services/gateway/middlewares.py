@@ -67,6 +67,9 @@ _ANON_EXACT = frozenset(
         "/openapi.json",
         "/api/v1/auth/login",
         "/api/v1/auth/refresh",  # api/01 §5.9：refresh 匿名（body 携 refresh token）
+        # 邀请链接匿名面（架构设计/32 §二：固定路径设计正是为适配本精确匹配机制，token 走 query/body）
+        "/api/v1/invites/preview",
+        "/api/v1/invites/join",
     }
 )
 _JTI_BLACKLIST_KEY = "auth:bl:{jti}"  # jti 全局唯一，平台级键（08 §2.1 TTL=剩余有效期）

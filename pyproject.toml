@@ -56,6 +56,8 @@ ignore_imports = [
     "services.platform.db.uow -> services.agent.domain.repo.session_repo",
     "services.platform.db.uow -> services.agent.data.repo_impl.agent_repo",  # 2026-09-27 agents CRUD 批（TODO(M4) 收口同批）
     "services.platform.db.uow -> services.agent.domain.repo.agent_repo",
+    "services.platform.db.uow -> services.agent.data.repo_impl.prompt_repo",  # 2026-09-29 H-1 提示词工程治理批（TODO(M4) 收口同批）
+    "services.platform.db.uow -> services.agent.domain.repo.prompt_repo",
     "services.platform.db.registry -> services.agent.data.orm",
     "services.platform.db.registry -> services.iam.data.orm",
     "services.platform.db.registry -> services.kb.data.orm",
@@ -101,9 +103,11 @@ ignore_imports = [
     "services.gateway.middlewares -> services.iam.data.orm",
     # 路由挂载边（gateway→<模块>.api 为契约许可面；其间接链经模块内部分层属合法，逐边豁免）
     "services.gateway.app -> services.iam.api.auth",
+    "services.gateway.app -> services.iam.api.invites",  # 2026-10-01 邀请链接五端点（架构设计/32；挂载边同 auth 先例）
     "services.gateway.app -> services.agent.api.sessions",
     "services.gateway.app -> services.agent.api.agents",  # 2026-09-27 agents CRUD 批（挂载边同 sessions 先例）
     "services.gateway.app -> services.agent.api.tasks",
+    "services.gateway.app -> services.agent.api.prompts",  # 2026-09-29 H-1 提示词工程治理批（挂载边同 agents 先例）
     "services.gateway.app -> services.kb.api.kb",
     "services.gateway.app -> services.ontology.api.ontology",
     "services.gateway.app -> services.memory.api.memory",  # 计划 3.3：memory 六端点挂载边（同上逐边豁免）
@@ -112,6 +116,8 @@ ignore_imports = [
     "services.platform.db.uow -> services.agent.domain.repo.session_repo",
     "services.platform.db.uow -> services.agent.data.repo_impl.agent_repo",  # 2026-09-27 agents CRUD 批
     "services.platform.db.uow -> services.agent.domain.repo.agent_repo",
+    "services.platform.db.uow -> services.agent.data.repo_impl.prompt_repo",  # 2026-09-29 H-1 提示词工程治理批（同上）
+    "services.platform.db.uow -> services.agent.domain.repo.prompt_repo",
     "services.gateway.app -> services.agent.business.task_worker",  # 任务执行 worker 组合根装配（2026-09-27 批，mcp.bootstrap 单边豁免同款）
     "services.gateway.app -> services.agent.data.repo_impl.task_poller",  # 任务 worker 轮询器组合根装配（同上）
     "services.gateway.app -> services.agent.domain.model.task",  # RunRetryPolicy 组合根注入（同上）
@@ -135,6 +141,7 @@ forbidden_modules = ["services.iam.data"]
 ignore_imports = [
     "services.gateway.middlewares -> services.iam.data.orm",  # TODO(M4) 审计收口
     "services.gateway.app -> services.iam.api.auth",  # 挂载边豁免
+    "services.gateway.app -> services.iam.api.invites",  # 挂载边豁免（邀请链接，架构设计/32）
     "services.mcp.bootstrap -> services.iam.data.orm",  # P1-1 收口：MCP 审计 PG 汇随共享工厂（gateway/独立进程共用）
 ]
 
@@ -152,6 +159,7 @@ ignore_imports = [
     "services.gateway.app -> services.platform.db.uow",
     "services.platform.db.uow -> services.agent.data.repo_impl.session_repo",  # TODO(M4) 收口
     "services.platform.db.uow -> services.agent.data.repo_impl.agent_repo",  # 同上（agents CRUD 批）
+    "services.platform.db.uow -> services.agent.data.repo_impl.prompt_repo",  # 同上（H-1 提示词工程治理批，2026-09-29）
     "services.gateway.app -> services.agent.data.repo_impl.task_poller",  # 任务 worker 轮询器装配（writeback_repo 同款豁免，2026-09-27 批）
     # spill 存储装配边（2026-09-27 批）：sessions 组合根持有 LocalDirSpillStore（ontology 本地目录先例，
     # M4 切 MinIO）；mcp.a2a 经 sessions 的传递链由本边豁免

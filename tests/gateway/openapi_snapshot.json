@@ -1392,6 +1392,33 @@
         "title": "ConsolidateOut",
         "type": "object"
       },
+      "CreateInviteIn": {
+        "additionalProperties": false,
+        "description": "POST /invites 请求体（32 篇 §二：role + expires_in_hours 三档）。",
+        "properties": {
+          "expires_in_hours": {
+            "default": 24,
+            "enum": [
+              24,
+              168,
+              720
+            ],
+            "title": "Expires In Hours",
+            "type": "integer"
+          },
+          "role": {
+            "maxLength": 32,
+            "minLength": 1,
+            "title": "Role",
+            "type": "string"
+          }
+        },
+        "required": [
+          "role"
+        ],
+        "title": "CreateInviteIn",
+        "type": "object"
+      },
       "DecisionIn": {
         "additionalProperties": false,
         "description": "审批裁决请求（api/01 §5.8 POST /admin/reviews/{id}/decision；approve=通过，reject=驳回附理由）。\n\n「驳回必附理由」在 DTO 前置校验（08 §4 REJ 回边；校验失败→3001 统一错误体），\n避免服务层留痕后回滚产生悬挂 approvals 记录。",
@@ -2489,6 +2516,222 @@
           "tools"
         ],
         "title": "InstallOut",
+        "type": "object"
+      },
+      "InviteCreatedOut": {
+        "additionalProperties": false,
+        "description": "201 生成响应（32 篇 §二：不回传 URL，base 由前端 location.origin 拼接）。",
+        "properties": {
+          "created_by": {
+            "format": "uuid",
+            "title": "Created By",
+            "type": "string"
+          },
+          "expires_at": {
+            "format": "date-time",
+            "title": "Expires At",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "role": {
+            "title": "Role",
+            "type": "string"
+          },
+          "status": {
+            "default": "active",
+            "title": "Status",
+            "type": "string"
+          },
+          "token": {
+            "title": "Token",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "token",
+          "role",
+          "expires_at",
+          "created_by"
+        ],
+        "title": "InviteCreatedOut",
+        "type": "object"
+      },
+      "InviteItemOut": {
+        "additionalProperties": false,
+        "description": "列表项：status 为派生态（active/expired/revoked，撤销优先于过期）。",
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "created_by": {
+            "format": "uuid",
+            "title": "Created By",
+            "type": "string"
+          },
+          "expires_at": {
+            "format": "date-time",
+            "title": "Expires At",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "role": {
+            "title": "Role",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "used_count": {
+            "title": "Used Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "role",
+          "status",
+          "expires_at",
+          "created_by",
+          "used_count",
+          "created_at"
+        ],
+        "title": "InviteItemOut",
+        "type": "object"
+      },
+      "InviteListOut": {
+        "additionalProperties": false,
+        "description": "GET /invites 响应（列表信封 {items, next_cursor} 与 admin 列表端点同款口径）。",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/InviteItemOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_cursor": {
+            "title": "Next Cursor",
+            "type": "null"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "InviteListOut",
+        "type": "object"
+      },
+      "InvitePreviewOut": {
+        "additionalProperties": false,
+        "description": "GET /invites/preview?token= 响应（匿名；登录页受邀提示条校验面）。",
+        "properties": {
+          "role": {
+            "title": "Role",
+            "type": "string"
+          },
+          "tenant_name": {
+            "title": "Tenant Name",
+            "type": "string"
+          },
+          "valid": {
+            "default": true,
+            "title": "Valid",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "tenant_name",
+          "role"
+        ],
+        "title": "InvitePreviewOut",
+        "type": "object"
+      },
+      "InviteRevokeOut": {
+        "additionalProperties": false,
+        "description": "DELETE /invites/{id} 200 信封体（禁 204：{id, status:\"revoked\"}，api-keys revoke 同款）。",
+        "properties": {
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "status"
+        ],
+        "title": "InviteRevokeOut",
+        "type": "object"
+      },
+      "JoinIn": {
+        "additionalProperties": false,
+        "description": "POST /invites/join 请求体（匿名；token 固定走 body，32 篇 §二路径设计）。",
+        "properties": {
+          "display_name": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Display Name"
+          },
+          "email": {
+            "maxLength": 256,
+            "minLength": 3,
+            "title": "Email",
+            "type": "string"
+          },
+          "token": {
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Token",
+            "type": "string"
+          }
+        },
+        "required": [
+          "token",
+          "email"
+        ],
+        "title": "JoinIn",
+        "type": "object"
+      },
+      "JoinOut": {
+        "additionalProperties": false,
+        "description": "POST /invites/join 响应（幂等：同租户既有账号原样返回 joined=true）。",
+        "properties": {
+          "joined": {
+            "title": "Joined",
+            "type": "boolean"
+          },
+          "tenant_name": {
+            "title": "Tenant Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "joined",
+          "tenant_name"
+        ],
+        "title": "JoinOut",
         "type": "object"
       },
       "KbAgenticRoundOut": {
@@ -7530,6 +7773,197 @@
         "summary": "Healthz",
         "tags": [
           "probe"
+        ]
+      }
+    },
+    "/api/v1/invites": {
+      "get": {
+        "operationId": "list_invites_api_v1_invites_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InviteListOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "邀请链接列表（status 派生 active/expired/revoked）",
+        "tags": [
+          "iam"
+        ]
+      },
+      "post": {
+        "description": "32 篇 §二：入库存 sha256(token)，不回传 URL（base 由前端 location.origin 拼接）。",
+        "operationId": "create_invite_api_v1_invites_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateInviteIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InviteCreatedOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "生成邀请链接（明文 token 仅本次返回）",
+        "tags": [
+          "iam"
+        ]
+      }
+    },
+    "/api/v1/invites/join": {
+      "post": {
+        "description": "email 未注册→建用户（随机密码）+绑角色；同租户幂等补授；他租户 409（32 篇 §二语义表）。",
+        "operationId": "join_invite_api_v1_invites_join_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/JoinIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JoinOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "受邀加入（匿名；建用户/幂等补授/他租户 409）",
+        "tags": [
+          "iam"
+        ]
+      }
+    },
+    "/api/v1/invites/preview": {
+      "get": {
+        "description": "登录页 /login?join={token} 提示条校验面；未命中/过期/撤销一律 410（防 token 枚举）。",
+        "operationId": "preview_invite_api_v1_invites_preview_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "token",
+            "required": true,
+            "schema": {
+              "maxLength": 256,
+              "minLength": 1,
+              "title": "Token",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvitePreviewOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "受邀预览（匿名；失效统一 410+3410）",
+        "tags": [
+          "iam"
+        ]
+      }
+    },
+    "/api/v1/invites/{invite_id}": {
+      "delete": {
+        "operationId": "revoke_invite_api_v1_invites__invite_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "invite_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Invite Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InviteRevokeOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "撤销邀请链接（revoked 终态不可逆）",
+        "tags": [
+          "iam"
         ]
       }
     },

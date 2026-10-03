@@ -79,7 +79,9 @@ async def _row_count(seed: PlatformSeed) -> int:
     async with seed.factory() as db:
         from services.platform.llm.orm import LlmCall
 
-        return int((await db.execute(select(func.count()).select_from(LlmCall))).scalar_one())
+        # 共享 PG 只数本租户（与 llm_seed 清理同口径，orm.py tenant_id 字段）：并发会话写入 llm_calls 不影响断言
+        stmt = select(func.count()).select_from(LlmCall).where(LlmCall.tenant_id == seed.tenant_id)
+        return int((await db.execute(stmt)).scalar_one())
 
 
 async def test_满N条触发flush_批量落库(llm_seed):
@@ -122,11 +124,12 @@ async def test_flush失败_不抛错原序回队_恢复后全量落库(llm_seed)
     # Act：PG 恢复后再 flush
     flaky.fail = False
     assert await buffer.flush() == 2
-    # Assert：按 created_at 保序落库
+    # Assert：按 created_at 保序落库（共享 PG 只查本租户，与 _row_count 同口径）
     async with llm_seed.factory() as db:
         from services.platform.llm.orm import LlmCall
 
-        rows = (await db.execute(select(LlmCall.token_in).order_by(LlmCall.created_at))).scalars().all()
+        stmt = select(LlmCall.token_in).where(LlmCall.tenant_id == llm_seed.tenant_id).order_by(LlmCall.created_at)
+        rows = (await db.execute(stmt)).scalars().all()
     assert rows == [100, 101]
 
 

@@ -11,7 +11,7 @@ import uuid
 from typing import TYPE_CHECKING, Any
 
 import pytest
-from helpers import publisher_signed_fields
+from tests.plugin.helpers import publisher_signed_fields
 from starlette.requests import Request as StarletteRequest
 
 from services.gateway.app import create_app

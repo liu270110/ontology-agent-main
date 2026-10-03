@@ -6,7 +6,7 @@ import uuid
 from typing import Any
 
 import pytest
-from helpers import published_plugin
+from tests.plugin.helpers import published_plugin
 
 from services.platform.kernel import DomainError
 from services.plugin.domain.model.plugin import Plugin, PluginKind, PluginVersion

@@ -11,7 +11,7 @@ import copy
 import uuid
 
 import pytest
-from helpers import CHECKSUM, VALID_SERVER_JSON, FakeReviewPort, FakeTierReader
+from tests.plugin.helpers import CHECKSUM, VALID_SERVER_JSON, FakeReviewPort, FakeTierReader
 
 from services.platform import security
 from services.platform.kernel import DomainError

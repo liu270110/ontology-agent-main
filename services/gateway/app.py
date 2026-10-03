@@ -100,13 +100,18 @@ _LLM_AUDIT_MAX_BATCH = 100
 _LLM_AUDIT_FLUSH_INTERVAL_S = 1.0
 _LLM_BUDGET_WINDOW_TOKENS = 500_000
 _LLM_BUDGET_WINDOW_S = 3600
+# 本地渠道（vLLM 等 OpenAI 兼容服务端）无密钥时的占位 Bearer：客户端构造期拒绝 None/空串
+# （services/platform/llm/gateway.py OpenAICompatibleModelPort.__init__），服务端接受任意非空串。
+_LLM_KEY_PLACEHOLDER = "EMPTY"
 
 
 def _build_model_port(s: Settings) -> ModelPort | None:
-    """模型端口装配（14 篇 §9 单渠道直连）：无 llm 配置返回 None——不阻塞启动，
+    """模型端口装配（14 篇 §9 单渠道直连）：无 llm_base_url 返回 None——不阻塞启动，
     extract 步以 5002 LLM_UNAVAILABLE 失败（步级重试耗尽冻结，配置后可重跑）。
+    本地渠道无密钥可用：llm_api_key 留空（None/空串）不阻塞装配，传占位符 "EMPTY"
+    构造（.env 口径「本地渠道 OA_LLM_API_KEY 留空即可」）。
     计划 3.3：外层包 AuditedModelPort（预算 5005 前置 + llm_calls 批量审计）。"""
-    if not (s.llm_base_url and s.llm_api_key):
+    if not s.llm_base_url:
         return None
     from services.platform.deps import get_redis, get_session_factory
     from services.platform.llm.audit import LlmCallAuditBuffer
@@ -116,7 +121,7 @@ def _build_model_port(s: Settings) -> ModelPort | None:
 
     inner: ModelPort = OpenAICompatibleModelPort(
         base_url=s.llm_base_url,
-        api_key=s.llm_api_key,
+        api_key=s.llm_api_key or _LLM_KEY_PLACEHOLDER,
         model=s.llm_model,
         timeout_s=_LLM_TIMEOUT_S,
     )

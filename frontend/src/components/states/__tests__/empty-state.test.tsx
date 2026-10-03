@@ -29,4 +29,11 @@ describe('EmptyState 空状态基元', () => {
     expect(screen.getByTestId('empty-state').className).toContain('sm')
     expect(document.querySelector('.empty svg')).toBeNull()
   })
+
+  it('hero 档（36 §A1/A2）：挂 hero 类，图标坐落 .empty-ic 图标座', () => {
+    render(<EmptyState hero icon={Inbox} title="选择一个会话" desc="从左侧列表选择会话继续对话；也可以新建一个。" />)
+    expect(screen.getByTestId('empty-state').className).toContain('hero')
+    expect(document.querySelector('.empty-ic svg')).not.toBeNull()
+    expect(screen.getByRole('status')).toBeInTheDocument()
+  })
 })

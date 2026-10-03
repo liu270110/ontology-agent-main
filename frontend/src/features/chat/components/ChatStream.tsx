@@ -1,11 +1,12 @@
 import { memo, useEffect, useRef, useState } from 'react'
-import { Check, Copy, FileText, ListTree, RefreshCw, ThumbsDown, ThumbsUp } from 'lucide-react'
+import { AlertTriangle, Check, Copy, FileText, ListTree, MessagesSquare, RefreshCw, ThumbsDown, ThumbsUp } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import Markdown, { type Components } from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { useSessionStore, type ChatMessage, type EvidenceChunk } from '@/stores/session-store'
-import { api } from '@/api/client'
-import { SkeletonRows } from '@/components/states'
+import { api, ApiError } from '@/api/client'
+import { EmptyState, ErrorState, SkeletonRows } from '@/components/states'
+import { BASELINE } from '@/lib/toast-templates'
 import { ToolCallCard } from './ToolCallCard'
 import type { EvidenceFocus } from './EvidenceSheet'
 
@@ -246,6 +247,35 @@ function MessageActions({ m, sessionId, regenerateContent }: { m: ChatMessage; s
 /** workspace.file.* 系统行动词（31 篇：创建/更新/删除按事件区分） */
 const WS_VERB: Record<NonNullable<ChatMessage['wsAction']>, string> = { created: '创建', modified: '更新', deleted: '删除' }
 
+/** A2 空线程示例问题（36 §A2，wedge 电力场景口径）：点击 → draftInserts 信号入队
+ *  （MessageInput 既有消费链路追加进草稿）+ 对焦输入栏——「动作即示例 chips」，无按钮。 */
+const EXAMPLE_PROMPTS = [
+  '分析 220kV 滨海线的停电影响范围',
+  '滨海 2 号主变上个月的检修记录有哪些',
+  '生成本周停电工单的摘要',
+] as const
+
+function ExampleChips() {
+  return (
+    <div className="sugg justify-center">
+      {EXAMPLE_PROMPTS.map(p => (
+        <button
+          key={p}
+          type="button"
+          className="sg"
+          onClick={() => {
+            useSessionStore.getState().pushDraftInsert(p)
+            // 36 §A2：点击后焦点必须落到输入框（chat-input）；经 store 信号或 DOM 取简者
+            document.querySelector<HTMLTextAreaElement>('textarea[data-testid="chat-input"]')?.focus()
+          }}
+        >
+          {p}
+        </button>
+      ))}
+    </div>
+  )
+}
+
 /** 助手消息头元信息（设计稿 p-chat L2411-2413）：Agent 名称（粗体）+ 模型徽标（b-gray）+
  *  角色徽标（b-purple 主答）+ 时间（mono label-3）。消息载荷无时间戳（M4 帧未下发），
  *  时间取消息到达/挂载时刻 HH:mm 兜底展示。 */
@@ -299,11 +329,25 @@ export function ChatStream({
   sessionId,
   onOpenEvidence,
   onOpenWorkspace,
+  baselineError = null,
+  baselineDegraded = false,
+  onBaselineReload,
+  onBaselineContinue,
+  baselineTick = 0,
 }: {
   sessionId: string
   onOpenEvidence: (f: EvidenceFocus) => void
   /** 产物卡「在工作区查看」→ 宿主切右栏工作区页签（ChatPage rightTab 最小接线） */
   onOpenWorkspace?: () => void
+  /** 消息基线失败态（36 §B，宿主 ChatPage 持有）：非空 → 错误态/警示条（与空态互斥） */
+  baselineError?: unknown | null
+  /** 已点「仍要继续对话」降级 → 顶部警示条形态 */
+  baselineDegraded?: boolean
+  /** §B1 动作两键：重新加载（宿主重发 GET）/ 仍要继续对话（降级） */
+  onBaselineReload?: () => void
+  onBaselineContinue?: () => void
+  /** 重载计数：变化 → 重挂 hydrating 基线（骨架期盖过错误态，互斥矩阵） */
+  baselineTick?: number
 }) {
   const messages = useSessionStore(s => s.messages)
   const toolCalls = useSessionStore(s => s.toolCalls)
@@ -314,7 +358,8 @@ export function ChatStream({
 
   // S8 状态切片：历史基线加载中（宿主 GET /sessions/{id}/messages → seed）。基线等待窗口内
   // messages 引用必跳两次：第 1 次=宿主 setActive 重置（恒空数组），第 2 次=seed 落库（空历史
-  // 亦为新引用）；内容非空也可直接判就绪。拉取失败由超时兜底退场（回原空流渲染，不阻塞输入）。
+  // 亦为新引用）；内容非空也可直接判就绪。36 §B：基线失败由宿主 catch 立即推进错误态（见下），
+  // 10s 超时兜底只留给「慢而未败」。baselineTick 变化（重新加载）→ 重挂基线。
   const [hydrating, setHydrating] = useState(false)
   const baseline = useRef<{ sid: string; ref: ChatMessage[]; changes: number } | null>(null)
   useEffect(() => {
@@ -323,9 +368,9 @@ export function ChatStream({
     setHydrating(true)
     const t = window.setTimeout(() => setHydrating(false), 10_000)
     return () => window.clearTimeout(t)
-    // 仅在换会话时重挂基线；messages 为订阅快照，不作为依赖
+    // 仅在换会话/重载时重挂基线；messages 为订阅快照，不作为依赖
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sessionId])
+  }, [sessionId, baselineTick])
   useEffect(() => {
     const b = baseline.current
     if (!b || b.sid !== sessionId || messages === b.ref) return
@@ -335,11 +380,22 @@ export function ChatStream({
       setHydrating(false)
     }
   }, [messages, sessionId])
+  // 36 §B hydrating 联动：catch 到错误立即退场进错误态（失败不再伪装成空会话等满 10s）
+  useEffect(() => {
+    if (baselineError) setHydrating(false)
+  }, [baselineError])
 
   useEffect(() => {
     // jsdom 无 scrollIntoView（可选调用兜底），浏览器端平滑滚到流底
     bottomRef.current?.scrollIntoView?.({ behavior: 'smooth' })
   }, [messages])
+
+  // 三态互斥矩阵（36 §A.2/§B.1，同一渲染位只出一态）：hydrating > baselineError > 空态 A2 > 消息流
+  const showSkeleton = hydrating && messages.length === 0
+  const showError = !hydrating && baselineError != null && !baselineDegraded && messages.length === 0
+  // 降级警示条：显式降级，或错误未降级但用户已能发消息（写通道不被读失败阻断）
+  const showBanner = !hydrating && baselineError != null && (baselineDegraded || messages.length > 0)
+  const showEmptyThread = !hydrating && baselineError == null && messages.length === 0
 
   const lastAssistantId = [...messages].reverse().find(m => m.role === 'assistant')?.id
   const failedRun = Object.values(runs).find(r => r.status === 'failed')
@@ -353,7 +409,46 @@ export function ChatStream({
 
   return (
     <div className="msgs flex flex-1 flex-col gap-4 overflow-auto px-6 py-4">
-      {hydrating && messages.length === 0 && <SkeletonRows rows={3} rowHeight={40} className="pt-2" />}
+      {showSkeleton && <SkeletonRows rows={3} rowHeight={40} className="pt-2" />}
+      {showBanner && (
+        // 36 §B1 降级版式：顶部警示条（err-banner 令牌样式同 failedRun 横幅）+ 输入保持可用
+        <div className="err-banner flex items-center gap-2 rounded-lg border border-red/40 bg-red/10 px-3 py-2 text-xs text-red">
+          <AlertTriangle size={13} className="flex-none" aria-hidden />
+          <span className="min-w-0 flex-1">{BASELINE.banner}</span>
+          <button type="button" className="btn btn-g btn-sm flex-none" onClick={onBaselineReload}>
+            {BASELINE.reloadLabel}
+          </button>
+        </div>
+      )}
+      {showError && (
+        // 36 §B1 主版式：ErrorState 基元居中（role=alert 自带），两键=重新加载 + 仍要继续对话
+        <div className="flex flex-1 items-center justify-center">
+          <ErrorState
+            title={BASELINE.errorTitle}
+            message={BASELINE.errorDesc}
+            code={baselineError instanceof ApiError ? baselineError.code : undefined}
+            retryLabel={BASELINE.reloadLabel}
+            onRetry={onBaselineReload}
+            secondaryAction={
+              <button type="button" className="btn btn-g btn-sm" onClick={onBaselineContinue}>
+                {BASELINE.continueLabel}
+              </button>
+            }
+          />
+        </div>
+      )}
+      {showEmptyThread && (
+        // 36 §A2 空线程 hero 档（遗留 #1 销账）：动作=示例 chips（点击填入输入框并对焦），无按钮
+        <div className="flex flex-1 items-center justify-center">
+          <EmptyState
+            hero
+            icon={MessagesSquare}
+            title="开始这段对话"
+            desc="向 Agent 提问即可开始。回答会引用知识库与本体证据，可点击查看来源。"
+            action={<ExampleChips />}
+          />
+        </div>
+      )}
       {messages.map(m =>
         m.role === 'user' ? (
           <div key={m.id} className="msg flex justify-end gap-2">

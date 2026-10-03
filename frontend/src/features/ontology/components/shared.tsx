@@ -26,21 +26,8 @@ export function ChangeCountChips({ stats, className = '' }: { stats: { add: numb
   )
 }
 
-/** 相对时间（列表口径同 kb 域；域内重写避免跨域引用） */
-export function relativeTime(iso: string): string {
-  const then = new Date(iso).getTime()
-  if (!Number.isFinite(then)) return iso
-  const diff = Date.now() - then
-  const min = Math.round(diff / 60_000)
-  if (min < 1) return '刚刚'
-  if (min < 60) return `${min} 分钟前`
-  const h = Math.round(min / 60)
-  if (h < 24) return `${h} 小时前`
-  const d = Math.round(h / 24)
-  if (d === 1) return '昨天'
-  if (d < 7) return `${d} 天前`
-  return new Date(iso).toLocaleDateString()
-}
+/** 相对时间（列表口径同 kb 域）——单源 lib/reltime（36 §7 收编；再导出兼容既有引用） */
+export { relativeTime } from '@/lib/reltime'
 
 /** 命名空间 IRI zod 校验共用正则（必须为绝对 IRI 且以 # 或 / 结尾） */
 export const NAMESPACE_IRI_REGEX = /^https?:\/\/[^\s]+[#/]$/

@@ -593,8 +593,16 @@ def _principal(tenant_id: uuid.UUID) -> Principal:
 
 
 def _fake_request() -> Request:
-    """最小 Request 桩：app.state 挂 settings（Ollama 9 端口不可达 → 端点向量路自动降级）。"""
-    state = SimpleNamespace(settings=SimpleNamespace(ollama_base_url="http://localhost:9", kb_acl_filter_enabled=False))
+    """最小 Request 桩：app.state 挂 settings（Ollama 9 端口不可达 → 端点向量路自动降级）。
+
+    embed_protocol 同步真实 Settings 契约（config.py 缺省 ollama；2026-10-04 门禁修复：
+    OA_EMBED_PROTOCOL 批给 _embedder 新增该读取，桩缺字段即 AttributeError）。
+    """
+    state = SimpleNamespace(
+        settings=SimpleNamespace(
+            ollama_base_url="http://localhost:9", kb_acl_filter_enabled=False, embed_protocol="ollama"
+        )
+    )
     return Request({"type": "http", "app": SimpleNamespace(state=state), "headers": [], "query_string": b""})
 
 

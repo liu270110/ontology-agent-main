@@ -20,7 +20,9 @@ import type { AdminUserPatch } from '@/features/admin/api'
  *  - GET /tasks/:id/logs + POST /tasks/:id/retry——§5.2 仅 cancel，日志与重试端点缺（IX-TSK-02/03）
  *  - POST /auth/totp/backup-codes——备份码重新生成端点缺（IX-SET-02「查看备份码」）
  *  - PUT /me/preferences 扩展 display_name/department——§5.9 无用户自更新端点（IX-SET-01 过渡）
- *  - POST /me/sessions/:id/revoke——设备下线端点未单列（§5.13 GET /me/sessions 描述含「与下线」） */
+ *  - POST /me/sessions/:id/revoke——设备下线端点未单列（§5.13 GET /me/sessions 描述含「与下线」）
+ *  - GET /admin/analytics/overview——数据分析聚合端点未登记（39 号对账 §2.14/G-D3 批 C：
+ *    FR-SYS-04/05/07 前端轻量版先行，仿真口径=画板 p-analytics 示例值，后端实装待办） */
 
 function ok<T>(data: T, status = 200) {
   return HttpResponse.json({ code: 0, message: 'ok', data }, { status })
@@ -507,7 +509,42 @@ let channelSeq = 3
 let taskSeq = 217
 let keySeq = 2
 
+// ============================================================
+// 数据分析 —— GET /admin/analytics/overview（p-analytics 轻量版预登记 2026-10-04，
+// 39 号对账 §2.14：api/01 未登记；数值=画板 p-analytics 示例口径，与既有 mock 种子语境
+// （电力 wedge、DeepSeek/Qwen 本地优先、CR-031 审批）对齐，后端实装待办）
+// ============================================================
+
+const ANALYTICS_OVERVIEW = {
+  window: { from: '09-01', to: '09-26' },
+  stats: {
+    sessions_today: 248,
+    sessions_today_delta_pct: 12,
+    tokens_30d: '6.2M',
+    budget_used_pct: 62,
+    cost_30d_yuan: '¥86.40',
+    local_channel_pct: 62,
+    approval_first_pass_rate: 86.5,
+    approval_first_pass_delta_pt: 2.1,
+  },
+  budget: { used: '6.2M', total: '10M', used_pct: 62, soft_pct: 80 },
+  attribution: [
+    { name: '原生 Agent', tokens: '2.9M', pct: 86, color: 'accent' },
+    { name: '抽取流水线', tokens: '2.1M', pct: 64, color: 'teal' },
+    { name: 'pi 插槽', tokens: '0.8M', pct: 26, color: 'purple' },
+    { name: 'MCP 外呼', tokens: '0.4M', pct: 12, color: 'orange' },
+  ] as { name: string; tokens: string; pct: number; color: 'accent' | 'teal' | 'purple' | 'orange' }[],
+  policy: {
+    auto_fallback_local: true,
+    soft_notify_admin: true,
+    pause_cloud_on_exhausted: false,
+  },
+}
+
 export const adminHandlers = [
+  // ---- 数据分析（p-analytics 轻量版，预登记见文件头注） ----
+  http.get('*/api/v1/admin/analytics/overview', () => ok(ANALYTICS_OVERVIEW)),
+
   // ---- 审批中心（§5.8 reviews 三行 + 批量预登记） ----
   http.get('*/api/v1/admin/reviews', ({ request }) => {
     const status = new URL(request.url).searchParams.get('status')

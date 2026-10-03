@@ -2,6 +2,7 @@ import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import {
   ArrowLeft,
   ArrowRight,
+  BarChart3,
   LayoutGrid,
   ScrollText,
   Settings,
@@ -42,6 +43,8 @@ const CONSOLE_NAV: Array<{ group: ConsoleGroup; items: ConsoleNavItem[] }> = [
     group: '观测',
     items: [
       { title: '审计日志', to: '/console/admin?tab=audit', icon: ScrollText, desc: '全链路审计 trace 与操作台账', roles: ['admin', 'super_admin'], permission: 'user:manage' },
+      // p-analytics 数据分析轻量版（39 号对账 G-D3/§2.14：观测组从 1 项变 2 项，深链同审计日志模式）
+      { title: '数据分析', to: '/console/admin?tab=analytics', icon: BarChart3, desc: '用量 · 成本 · 归因与预算水位（FR-SYS-04/05/07）', roles: ['admin', 'super_admin'], permission: 'user:manage' },
     ],
   },
 ]
@@ -68,8 +71,10 @@ export function ConsoleShell() {
   const { pathname, search } = useLocation()
   const nav = useVisibleConsoleNav()
 
-  // 顶栏当前页标题：命中导航项用其标题，否则查路由 meta（403 占位等兜底"管理控制台"）
+  // 顶栏当前页标题：带查询串的深链项（审计/数据分析 Tab）先按 pathname+search 精确命中，
+  // 否则退化按 pathname 匹配，再兜底路由 meta（403 占位等 →「管理控制台」）
   const current =
+    CONSOLE_NAV.flatMap(g => g.items).find(i => `${pathname}${search}` === i.to)?.title ??
     CONSOLE_NAV.flatMap(g => g.items).find(i => pathname === i.to.split('?')[0])?.title ??
     CONSOLE_ROUTES.find(r => r.path === pathname)?.title ??
     '管理控制台'

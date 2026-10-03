@@ -224,3 +224,31 @@ export async function getReadyz(): Promise<ReadyzOut> {
   if (!body?.checks) throw new ApiError(-1, `HTTP ${res.status}`, res.status)
   return body
 }
+
+// ---- 数据分析（GET /admin/analytics/overview ☆ p-analytics 轻量版预登记 2026-10-04（39 号对账
+//      §2.14/G-D3）：api/01 无 analytics 行（契约缺口已同步 R 清单），FR-SYS-04/05/07 前端先行，
+//      mock 仿真口径=画板 p-analytics 示例值，后端实装待办。趋势/漏斗/热力留二期引图表库。 ----
+export interface AnalyticsOverview {
+  /** 统计窗口（30 天滚动，示例 09-01 → 09-26） */
+  window: { from: string; to: string }
+  stats: {
+    sessions_today: number
+    sessions_today_delta_pct: number
+    tokens_30d: string
+    budget_used_pct: number
+    cost_30d_yuan: string
+    local_channel_pct: number
+    approval_first_pass_rate: number
+    approval_first_pass_delta_pt: number
+  }
+  budget: { used: string; total: string; used_pct: number; soft_pct: number }
+  /** Agent 用量归因（barlist）：pct=条宽（相对最大值），color=序列色令牌名（禁新 hex） */
+  attribution: { name: string; tokens: string; pct: number; color: 'accent' | 'teal' | 'purple' | 'orange' }[]
+  /** 预算降级策略三开关（FR-SYS-07：策略变更写审计；持久化端点实装前前端仅本地演示） */
+  policy: {
+    auto_fallback_local: boolean
+    soft_notify_admin: boolean
+    pause_cloud_on_exhausted: boolean
+  }
+}
+export const getAnalyticsOverview = () => api.get<AnalyticsOverview>('/admin/analytics/overview')

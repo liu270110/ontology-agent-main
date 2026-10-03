@@ -6,7 +6,6 @@ import { useAuthStore } from '@/stores/auth-store'
 import { ThemeToggle } from '@/components/theme-toggle'
 import { NotificationBell } from '@/components/notification-bell'
 import { ROLE_LABEL } from '@/lib/invite'
-import { CommandMenu } from '@/components/command-menu/command-menu'
 import { SidebarGroups } from './sidebar/SidebarGroups'
 import { SidebarResizer } from './SidebarResizer'
 import { UserMenu } from './UserMenu'
@@ -14,7 +13,8 @@ import { UserMenu } from './UserMenu'
 /** 应用壳（16 篇 §5.2 / 03 篇 AppLayout）：液态玻璃壳层——根容器挂 .app-stage 静态双光斑底
  *  （board.css .app 配方，玻璃折射的彩色来源），侧边栏 .glass-side（board.css .sb 配方）、
  *  顶栏 .material-bar（board.css .bbar 配方）。
- *  顶栏（⌘K / 主题三态 / 通知占位 / 用户菜单「退出登录」）+ CommandMenu。
+ *  顶栏（⌘K / 主题三态 / 通知占位 / 用户菜单「退出登录」）；CommandMenu 上移 App 全局挂载
+ *  （39 号对账批 C：404 裸页亦需 ⌘K，双挂载会双 ⌘K 监听互相抵消）。
  *  双区 IA（2026-09-28 裁决）：主侧边栏只留 7 常用项；侧边栏 Logo 点击回主页启动台。
  *  四区 IA（2026-10-01 裁决）：跨分区入口（平台能力/管理控制台/用户设置）收进侧边栏
  *  「独立页面」分组（SidebarGroups 消费 STANDALONE_NAV），sb-foot 只留设置齿轮。
@@ -124,8 +124,6 @@ export function AppShell() {
           <Outlet />
         </main>
       </div>
-
-      <CommandMenu />
     </div>
   )
 }

@@ -8,6 +8,8 @@ import { PlatformShell } from './PlatformShell'
 import { RequireAuth } from './RequireAuth'
 import { RouteGuard } from './RouteGuard'
 import { ErrorBoundary } from './ErrorBoundary'
+import { NotFoundPage } from './NotFoundPage'
+import { CommandMenu } from '@/components/command-menu/command-menu'
 import { ThemeProvider } from './providers/theme-provider'
 import { CONSOLE_ROUTES, MAIN_ROUTES, PLATFORM_ROUTES, type RouteMeta } from './routes'
 import { PlaceholderPage } from './PlaceholderPage'
@@ -180,9 +182,15 @@ export function App() {
                   }
                 />
               ))}
-              <Route path="*" element={<Navigate to="/" replace />} />
+              {/* 404 全局状态页（39 号对账 G-S1 / 画板 p-status）：通配分支不再静默重定向——
+                  独立 404 页展示用户输入路径（保留诊断价值）；包 RequireAuth 与全站口径一致
+                  （匿名先登录，回跳仍落本页） */}
+              <Route path="*" element={<RequireAuth><NotFoundPage /></RequireAuth>} />
             </Routes>
       </Suspense>
+          {/* ⌘K 命令面板上移全局挂载（随 404 裸页引入：NotFoundPage「搜索内容」动作依赖；
+              AppShell 内重复挂载已撤——双实例 ⌘K 监听会互相抵消。未登录时路由清单为空，仅空面板） */}
+          <CommandMenu />
           </BrowserRouter>
           {/* 全局 Toast（sonner；S3 起供各域操作反馈；z 层随 --z-toast 令牌）。
               v1.1 玻璃主题对齐（36 §B1 收尾）：classNames 映射 elements.css .toast

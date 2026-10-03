@@ -69,7 +69,7 @@ from services.kb.retrieval.graph import (
 )
 from services.platform.config import Settings
 from services.platform.deps import Principal
-from services.platform.errors import GatewayError
+from services.platform.errors import ErrorCode, GatewayError
 
 if sys.platform == "win32":
     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
@@ -565,6 +565,60 @@ async def test_CREATE_同内容幂等_墓碑后重传全新插入(doc_env, kb_pg
     live = [r for r in all_rows if r.valid_to is None]
     assert len(sealed) == 1 and sealed[0].id == first.id
     assert len(live) == 1 and live[0].id == again.id
+
+
+# ---------------------------------------------------------------- 入口两层防御（mime 白名单 + NUL 拒收）
+
+
+@pytest.mark.integration
+async def test_CREATE_二进制垃圾拒收_415_业务错误_正常文本不受影响(doc_env, kb_pg):
+    """docs/Agent/09 §2.1 工程问题 3（E2 实测裸 500 UntranslatableCharacter）：mime 白名单与
+    NUL 清洗前置——415 业务错误体（3004 UNSUPPORTED_MEDIA_TYPE）且零副作用，正常 markdown
+    （含带参 mime）不受影响。"""
+    env = doc_env
+    principal = _principal(env, scopes=["kb:write"])
+    async with kb_pg() as db:
+        # ① mime 白名单：application/pdf → 415 业务错误（非裸 500）
+        with pytest.raises(GatewayError) as exc:
+            await create_document(
+                DocumentCreateIn(
+                    collection_id=env["collection_id"],
+                    title="图纸.pdf",
+                    content="%PDF-1.7 二进制垃圾",
+                    mime_type="application/pdf",
+                ),
+                principal,
+                db,
+            )
+        assert exc.value.code == int(ErrorCode.UNSUPPORTED_MEDIA_TYPE) and exc.value.status_code == 415
+        # ② NUL 清洗：text/markdown 内容混入 \x00 → 415（JSONB 落库前拦截）
+        with pytest.raises(GatewayError) as exc:
+            await create_document(
+                DocumentCreateIn(collection_id=env["collection_id"], title="垃圾.md", content="正常文本\x00二进制尾巴"),
+                principal,
+                db,
+            )
+        assert exc.value.code == int(ErrorCode.UNSUPPORTED_MEDIA_TYPE) and exc.value.status_code == 415
+        # ③ 正常 markdown 文本不受影响（含 mime 参数段剥离：text/markdown; charset=utf-8）
+        ok = await create_document(
+            DocumentCreateIn(
+                collection_id=env["collection_id"],
+                title="正常联调.md",
+                content="# 正常内容\n段落文本。",
+                mime_type="text/markdown; charset=utf-8",
+            ),
+            principal,
+            db,
+        )
+        await db.commit()
+    assert ok.created is True
+    async with kb_pg() as db:  # 零副作用：两笔拒收均未落行（种子 1 行 + 正常上传 1 行）
+        n_rows = (
+            await db.execute(
+                select(func.count()).select_from(DocumentORM).where(DocumentORM.tenant_id == env["tenant_id"])
+            )
+        ).scalar_one()
+    assert n_rows == 2
 
 
 # ---------------------------------------------------------------- 图三查（GET /kb/graph/search|neighborhood|path）

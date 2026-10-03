@@ -10,7 +10,8 @@
     DELETE /kb/documents/{id}                 删除文档（B6 墓碑式软删：documents.valid_to 封口
                                               下线检索，chunks/kb_facts/审计物理保留；幂等
                                               恒 200，已删态与不存在对调用方等价不 404）
-    POST /kb/documents                        JSON 内容直传（MinIO 随 M3；checksum 幂等）
+    POST /kb/documents                        JSON 内容直传（MinIO 随 M3；checksum 幂等；
+                                              文本类 mime 白名单 + NUL 拒收 → 415 业务错误）
     POST /kb/documents/{id}/pipeline/start    后台流水线（202 受理；M2 lite 四步 / M2 full
                                               七步中段 extract/align/validate 已插回）
     POST /kb/documents/{id}/pipeline/retry    失败文档流水线重试（B6：202 受理 + 后台断点续跑，
@@ -250,9 +251,45 @@ async def create_collection(body: CollectionCreateIn, principal: KbWriteDep, ses
     )
 
 
-@router.post("/documents", summary="上传文档（M2 JSON 内容直传；checksum 幂等）")
+# 摄取入口两层防御（docs/Agent/09 §2.1 工程问题 3「二进制健壮性」）：M2 唯一通道是 JSON
+# content:str 直传，二进制（PDF/Office/图片）经 UTF-8 有损解码混入 NUL/不可译字符会在 PG
+# JSONB 落库时抛 UntranslatableCharacter（裸 500）；前置业务 415 拒收（错误码沿用契约已登记
+# 的 3004 UNSUPPORTED_MEDIA_TYPE「Content-Type 不支持」，HTTP 状态 415 Unsupported Media Type）。
+_TEXT_MIME_PREFIXES = ("text/",)  # text/markdown、text/x-markdown、text/plain、text/csv 等
+_TEXT_MIME_EXACT = frozenset({"application/json"})  # 结构化文本直传
+
+
+def _reject_binary_payload(mime_type: str | None, content: str) -> None:
+    """mime 白名单 + NUL 清洗前置（415 业务错误体，二进制垃圾禁入存储层；preprocess 之前执行）。
+
+    - mime 参数段剥离（「text/markdown; charset=utf-8」→ text/markdown）后小写比对；
+      mime 缺省视为 text/markdown（DTO 默认值同口径）；
+    - content 含 \\x00 直接拒收（疑似二进制；其余控制字符不动，保留既有 \\r\\n 规整链路）。
+    """
+    mime = (mime_type or "text/markdown").split(";", 1)[0].strip().lower()
+    if not (mime.startswith(_TEXT_MIME_PREFIXES) or mime in _TEXT_MIME_EXACT):
+        raise GatewayError(
+            ErrorCode.UNSUPPORTED_MEDIA_TYPE,
+            f"不支持的文档类型 {mime}：本通道仅接受文本类（text/* 与 application/json），"
+            "二进制文件摄取通道随 M3 MinIO 预签名上传落地",
+            status_code=415,
+        )
+    if "\x00" in content:
+        raise GatewayError(
+            ErrorCode.UNSUPPORTED_MEDIA_TYPE,
+            "文档内容含 NUL 控制字符（疑似二进制字节），请以文本内容重新上传",
+            status_code=415,
+        )
+
+
+@router.post("/documents", summary="上传文档（M2 JSON 内容直传；checksum 幂等；文本类 mime 白名单 + NUL 拒收）")
 async def create_document(body: DocumentCreateIn, principal: KbWriteDep, session: SessionDep) -> DocumentOut:
-    """§8.0 同源检测第①级：精确重复拒收并幂等返回既有文档（created=false）。"""
+    """§8.0 同源检测第①级：精确重复拒收并幂等返回既有文档（created=false）。
+
+    入口两层防御（415 业务错误，防二进制垃圾裸 500）：①mime 白名单（text/* 与
+    application/json）；②content 含 \\x00 拒收——均在 checksum/落库之前执行。
+    """
+    _reject_binary_payload(body.mime_type, body.content)
     collection = (
         await session.execute(
             select(KbCollection).where(

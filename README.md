@@ -27,7 +27,7 @@
 ```bash
 pip install -r requirements.txt   # 当前仅测试依赖，后端完整依赖随 M1 补充
 pytest -v
-python main.py                    # M0 后改为 uvicorn 启动 gateway
+python -m services.main           # 统一入口；或 uvicorn services.gateway.app:create_app --factory
 ```
 
 ## CI/CD（Gitee Go）
@@ -39,12 +39,11 @@ python main.py                    # M0 后改为 uvicorn 启动 gateway
 ```
 .
 ├── frontend/            # 前端（design-system 样式库；React 工程随 M5 搭建）
-├── services/             # L2~L7 后端模块化单体（gateway/business/domain/semantic/data/infra）
+├── services/             # L2~L7 后端模块化单体（gateway/business/domain/semantic/data/infra；统一入口 services/main.py）
 │   └── cli/             # 平台 CLI（onto 命令；后端含 CLI 一律在 services/ 内）
 ├── deploy/              # docker-compose（lite/full 双档）与初始化脚本
 ├── docs/                # 全部文档（architecture=后端权威；架构设计=前端视觉权威；详见 docs/README）
 ├── skills/              # 前端开发技能（SKILL.md，与平台 Skills 服务同构）
 ├── tools/ resrch-pj/    # 研究性工具与项目
-├── tests/               # 跨层集成测试
-└── main.py              # 入口（M0 换 uvicorn）
+└── tests/               # 跨层集成测试
 ```

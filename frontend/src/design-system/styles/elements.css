@@ -106,9 +106,13 @@
 .step.cur .s-name{color:var(--accent);font-weight:700}
 .step.done .s-name{color:var(--label)}
 
-/* ---- Toast ---- */
-/* ---- Toast（三档纪律：悬浮控件=Clear 档；Clear 上文字加光晕承托保证可读） ---- */
-.toast{display:flex;align-items:center;gap:10px;max-width:340px;border-radius:var(--r-panel);
+/* ---- Toast（三档纪律：悬浮控件=Clear 档；Clear 上文字加光晕承托保证可读） ----
+   v1.1 sonner 玻璃映射（36 §B1 收尾）：裸 .toast 类压不过 sonner 默认
+   [data-sonner-toast][data-styled]（0,2,0）与结构位规则（至 0,4,0）——以
+   ol[data-sonner-toaster] 前缀链提权（0,3,1~0,5,1），规则体与 .toast 单源不复制；
+   图标语义色绑令牌（success=--green / error=--red，33 §3），禁新 hex。
+   注意：不用 <Toaster id> 作用域——sonner 以 id 分发派 toast，加了收不到事件。 */
+.toast,ol[data-sonner-toaster] [data-sonner-toast].toast{display:flex;align-items:center;gap:10px;max-width:340px;border-radius:var(--r-panel);
   padding:12px 16px;font-size:13px;font-weight:500;color:var(--label);
   text-shadow:0 1px 2px var(--glass-halo);
   background:linear-gradient(135deg,var(--glass-tint),transparent 42%),var(--glass-clear);
@@ -116,10 +120,21 @@
   border:1px solid var(--glass-border);
   box-shadow:inset 0 1px 0 var(--glass-hi),var(--sh-float)}
 @supports not ((backdrop-filter:blur(1px)) or (-webkit-backdrop-filter:blur(1px))){
-  .toast{background:var(--surface);border-color:var(--separator)}
+  .toast,ol[data-sonner-toaster] [data-sonner-toast].toast{background:var(--surface);border-color:var(--separator)}
 }
-@media (prefers-reduced-transparency:reduce){.toast{background:var(--surface);border-color:var(--separator)}}
+@media (prefers-reduced-transparency:reduce){.toast,ol[data-sonner-toaster] [data-sonner-toast].toast{background:var(--surface);border-color:var(--separator)}}
 .toast svg{width:16px;height:16px;color:var(--green);flex:none}
+/* sonner 结构位（图标语义色 / 标题 / 描述 / 动作钮 / 关闭钮）——令牌单源 */
+ol[data-sonner-toaster] [data-sonner-toast].toast [data-icon]{color:var(--green)}
+ol[data-sonner-toaster] [data-sonner-toast][data-type='error'].toast [data-icon]{color:var(--red)}
+ol[data-sonner-toaster] [data-sonner-toast][data-type='warning'].toast [data-icon]{color:var(--orange)}
+ol[data-sonner-toaster] [data-sonner-toast][data-type='info'].toast [data-icon]{color:var(--accent)}
+ol[data-sonner-toaster] [data-sonner-toast].toast [data-title]{font-size:13px;font-weight:600;color:var(--label);text-shadow:0 1px 2px var(--glass-halo)}
+ol[data-sonner-toaster] [data-sonner-toast].toast [data-description]{font-size:12px;color:var(--label-2);opacity:1}
+ol[data-sonner-toaster] [data-sonner-toast].toast [data-button]{height:auto;border:1px solid var(--separator);border-radius:8px;
+  background:var(--surface-2);color:var(--label);padding:4px 10px;font-size:12px;cursor:pointer}
+ol[data-sonner-toaster] [data-sonner-toast].toast [data-button]:hover{background:var(--surface)}
+ol[data-sonner-toaster] [data-sonner-toast].toast [data-close-button]{background:var(--surface-2);border-color:var(--separator);color:var(--label-3);box-shadow:none}
 
 /* =============================================================
    v1.1 表单补充（24 篇 §3.7；画板 00H 同名同源）
@@ -162,6 +177,9 @@
   transform-origin:top;animation:sel-in var(--dur-2) var(--spring-soft)}
 /* MenuSurface 复用 .menu（patterns 层后置会盖掉背景，复合选择器提回玻璃配方） */
 .menu.sel-pop{background:linear-gradient(135deg,var(--glass-tint),transparent 42%),var(--glass-regular)}
+/* 容器托管键序（36 §C.1 v1.4）：DOM 焦点恒在菜单容器——抑制全局 :focus-visible 外环，
+   焦点指示=活动项高亮（.menu-i.on），容器本体视觉与未聚焦时零差异 */
+.menu.sel-pop:focus{outline:none;box-shadow:inset 0 1px 0 var(--glass-hi),var(--sh-float);border-color:var(--glass-border)}
 .sel-pop.up{transform-origin:bottom}
 @keyframes sel-in{from{opacity:0;transform:scale(.97)}}
 @supports not ((backdrop-filter:blur(1px)) or (-webkit-backdrop-filter:blur(1px))){

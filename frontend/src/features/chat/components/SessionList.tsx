@@ -19,7 +19,7 @@ import { relativeTime } from '@/lib/reltime'
 import { describeError, EXPORT_MD } from '@/lib/toast-templates'
 import { useSessionStore } from '@/stores/session-store'
 import {ErrorState, SkeletonRows, EmptyState} from '@/components/states'
-import { MenuSurface } from '@/components/popover'
+import {MenuItem, MenuSep, MenuSurface} from '@/components/popover'
 
 interface SessionItem {
   id: string
@@ -66,9 +66,18 @@ export function SessionList({ onPicked }: { onPicked?: (id: string) => void }) {
   // IX-CHT-01 菜单态：打开菜单的会话 / 删除二步确认 / 重命名行内输入
   const [menuId, setMenuId] = useState<string | null>(null)
   const [menuAnchor, setMenuAnchor] = useState<DOMRect | null>(null)
+  // APG：↑ 打开=末项起步（36 §C.1 键序表）
+  const [menuInit, setMenuInit] = useState<'first' | 'last'>('first')
   const [confirmId, setConfirmId] = useState<string | null>(null)
   const [renamingId, setRenamingId] = useState<string | null>(null)
   const [renameText, setRenameText] = useState('')
+
+  const openMenu = (id: string, el: HTMLElement, init: 'first' | 'last' = 'first') => {
+    setMenuAnchor(el.getBoundingClientRect())
+    setMenuInit(init)
+    setMenuId(menuId === id ? null : id)
+    setConfirmId(null)
+  }
 
   const invalidate = () => void qc.invalidateQueries({ queryKey: qk.session.list() })
   const patchSession = useMutation({
@@ -179,50 +188,59 @@ export function SessionList({ onPicked }: { onPicked?: (id: string) => void }) {
               <div className="px-0.5 pt-0.5 text-2xs text-label-3">重命名中 · ↵ 确认 · Esc 取消</div>
             </div>
           ) : (
-            <div key={s.id} className="relative">
+            // 36 §C.1-4：触发器改真 <button>——原 span role=button 嵌在行按钮内（嵌套交互控件
+            // 非法且读屏会吞内层）；移出为兄弟绝对定位覆盖原位（group 移至行壳，hover/focus 展示不变，
+            // 标题行 pr-[26px]+min-h-[22px] 保持行高与截断宽度，视觉零变化）
+            <div key={s.id} className="group relative">
               <button
                 type="button"
-                className={`sc-item group block w-full px-4 py-2.5 text-left hover:bg-surface-2 ${active === s.id ? 'bg-surface-2' : ''}`}
+                className={`sc-item block w-full px-4 py-2.5 text-left hover:bg-surface-2 ${active === s.id ? 'bg-surface-2' : ''}`}
                 onClick={() => {
                   setActive(s.id)
                   onPicked?.(s.id)
                 }}
               >
-                <div className="flex items-center gap-1">
+                <div className="flex min-h-[22px] items-center gap-1 pr-[26px]">
                   {s.pinned && <Pin size={11} className="flex-none text-orange" aria-label="已置顶" />}
                   <span className="min-w-0 flex-1 truncate text-[13px] font-medium">{s.title}</span>
-                  <span
-                    role="button"
-                    tabIndex={0}
-                    aria-label={`会话操作 ${s.title}`}
-                    data-testid={`session-menu-${s.id}`}
-                    className="icobtn flex h-[22px] w-[22px] flex-none items-center justify-center rounded-md text-label-3 opacity-0 hover:bg-surface hover:text-label group-hover:opacity-100 focus:opacity-100"
-                    onClick={e => {
-                      e.stopPropagation()
-                      setMenuAnchor((e.currentTarget as HTMLElement).getBoundingClientRect())
-                      setMenuId(menuId === s.id ? null : s.id)
-                      setConfirmId(null)
-                    }}
-                    onKeyDown={e => {
-                      if (e.key === 'Enter' || e.key === ' ') {
-                        e.stopPropagation()
-                        setMenuAnchor((e.currentTarget as HTMLElement).getBoundingClientRect())
-                        setMenuId(menuId === s.id ? null : s.id)
-                        setConfirmId(null)
-                      }
-                    }}
-                  >
-                    <MoreHorizontal size={13} aria-hidden />
-                  </span>
                 </div>
                 <div className="text-[11px] text-label-3">
                   {s.pinned ? '已置顶 · ' : ''}
                   {s.agent_id} · {relativeTime(s.updated_at)}
                 </div>
               </button>
+              <button
+                type="button"
+                aria-label={`会话操作 ${s.title}`}
+                aria-haspopup="menu"
+                aria-expanded={menuId === s.id}
+                data-testid={`session-menu-${s.id}`}
+                className="icobtn absolute right-4 top-2.5 flex h-[22px] w-[22px] flex-none items-center justify-center rounded-md text-label-3 opacity-0 hover:bg-surface hover:text-label group-hover:opacity-100 focus:opacity-100 group-focus-within:opacity-100"
+                onClick={e => {
+                  e.stopPropagation()
+                  openMenu(s.id, e.currentTarget)
+                }}
+                onKeyDown={e => {
+                  // APG menu-button（36 §C.1 键序表）：↓/Enter/Space 开=首项，↑ 开=末项；
+                  // preventDefault 抑制真按钮的默认激活点击，stopPropagation 隔断行按钮选中
+                  if (e.key === 'ArrowDown' || e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault()
+                    e.stopPropagation()
+                    openMenu(s.id, e.currentTarget, 'first')
+                  } else if (e.key === 'ArrowUp') {
+                    e.preventDefault()
+                    e.stopPropagation()
+                    openMenu(s.id, e.currentTarget, 'last')
+                  }
+                }}
+              >
+                <MoreHorizontal size={13} aria-hidden />
+              </button>
 
               {/* 会话项菜单（IX-CHT-01）：置顶/重命名/导出/删除（危险二次确认）。
-                  v1.3 经 MenuSurface portal——容器内 absolute 曾被玻璃层压住且侧栏裁剪 */}
+                  v1.3 经 MenuSurface portal——容器内 absolute 曾被玻璃层压住且侧栏裁剪。
+                  v1.4 键盘无障碍（36 §C.1）：MenuItem 容器托管键序 + 二步确认视图
+                  （Esc 第一击回列表 / Tab 局部循环 / 焦点安全落「取消」） */}
               <MenuSurface
                 open={menuId === s.id}
                 anchor={menuAnchor}
@@ -231,6 +249,17 @@ export function SessionList({ onPicked }: { onPicked?: (id: string) => void }) {
                   setConfirmId(null)
                 }}
                 label={`会话菜单 ${s.title}`}
+                initialActive={menuInit}
+                activeResetKey={confirmId === s.id ? 'confirm' : 'list'}
+                tabMode={confirmId === s.id ? 'cycle' : 'close'}
+                onEscape={() => {
+                  // 二步删除确认（36 §C.1-3）：Esc 第一击=回列表视图，第二击=关菜单
+                  if (confirmId === s.id) {
+                    setConfirmId(null)
+                    return true
+                  }
+                  return false
+                }}
               >
                 <div data-testid={`session-menu-pop-${s.id}`}>
                   {confirmId === s.id ? (
@@ -253,33 +282,37 @@ export function SessionList({ onPicked }: { onPicked?: (id: string) => void }) {
                           >
                             确认删除
                           </button>
-                          <button type="button" role="menuitem" className="btn btn-g btn-sm flex-1" onClick={() => setConfirmId(null)}>
+                          {/* 安全默认：视图切换焦点落「取消」（36 §C.1-3） */}
+                          <button type="button" role="menuitem" className="btn btn-g btn-sm flex-1" autoFocus onClick={() => setConfirmId(null)}>
                             取消
                           </button>
                         </div>
                       </div>
                     ) : (
                       <>
-                        <div role="menuitem" className="menu-i" onClick={() => { patchSession.mutate({ id: s.id, body: { pinned: !s.pinned } }); setMenuId(null) }}>
-                          {s.pinned ? <PinOff aria-hidden /> : <Pin aria-hidden />}
+                        <MenuItem
+                          icon={s.pinned ? <PinOff aria-hidden /> : <Pin aria-hidden />}
+                          onSelect={() => {
+                            patchSession.mutate({ id: s.id, body: { pinned: !s.pinned } })
+                            setMenuId(null)
+                          }}
+                        >
                           {s.pinned ? '取消置顶' : '置顶会话'}
-                        </div>
-                        <div
-                          role="menuitem"
-                          className="menu-i"
-                          onClick={() => {
+                        </MenuItem>
+                        <MenuItem
+                          icon={<Pencil aria-hidden />}
+                          onSelect={() => {
                             setRenamingId(s.id)
                             setRenameText(s.title)
                             setMenuId(null)
                           }}
                         >
-                          <Pencil aria-hidden />
                           重命名
-                        </div>
-                        <div
-                          role="menuitem"
-                          className="menu-i"
-                          onClick={() => {
+                        </MenuItem>
+                        <MenuItem
+                          icon={<Download aria-hidden />}
+                          kbd=".md"
+                          onSelect={() => {
                             setMenuId(null)
                             void toast.promise(exportMarkdown(s), {
                               loading: EXPORT_MD.loading(s.title),
@@ -288,15 +321,12 @@ export function SessionList({ onPicked }: { onPicked?: (id: string) => void }) {
                             })
                           }}
                         >
-                          <Download aria-hidden />
                           导出 Markdown
-                          <span className="menu-k">.md</span>
-                        </div>
-                        <div className="menu-sep" aria-hidden />
-                        <div role="menuitem" className="menu-i danger" onClick={() => setConfirmId(s.id)}>
-                          <Trash2 aria-hidden />
+                        </MenuItem>
+                        <MenuSep />
+                        <MenuItem danger icon={<Trash2 aria-hidden />} onSelect={() => setConfirmId(s.id)}>
                           删除会话…
-                        </div>
+                        </MenuItem>
                       </>
                     )}
                 </div>

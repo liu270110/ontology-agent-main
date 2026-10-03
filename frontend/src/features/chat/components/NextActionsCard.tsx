@@ -50,10 +50,10 @@ export function NextActionsCard({ actions = MOCK_NEXT_ACTIONS, className = '' }:
   /** 证据链折叠：当前展开的行动序号（mock 交互保留——折叠是 F4 验收点，禁用指数据源不指预览） */
   const [openIdx, setOpenIdx] = useState<number | null>(null)
   return (
-    // 禁用标注：aria-disabled + 虚线边框 + 「v1.5 待后端接入」徽标；行动行不做触发按钮（无真实 API 可接）
+    // 禁用标注：虚线边框 + 「v1.5 待后端接入」徽标；行动行不做触发按钮（无真实 API 可接）。
+    // P6 a11y：容器不挂 aria-disabled（内部含可点击证据按钮，循 MessageInput 先例落到非交互控件）
     <div
       data-testid="next-actions-card"
-      aria-disabled="true"
       className={`rounded-xl border border-dashed border-separator bg-surface-2 px-3 py-2.5 opacity-90 ${className}`}
     >
       <div className="flex items-center gap-1.5">
@@ -68,7 +68,7 @@ export function NextActionsCard({ actions = MOCK_NEXT_ACTIONS, className = '' }:
           const open = openIdx === i
           const badge = APPROVAL_BADGE[a.approval]
           return (
-            <li key={a.label} className="rounded-lg border border-separator bg-surface px-2.5 py-1.5">
+            <li key={`${a.label}-${i}`} className="rounded-lg border border-separator bg-surface px-2.5 py-1.5">
               <div className="flex flex-wrap items-center gap-1.5">
                 <span data-testid={`next-action-label-${i}`} className="min-w-0 flex-1 text-2xs text-label">{a.label}</span>
                 <span data-testid={`next-action-approval-${i}`} className={`badge ${badge.cls} flex-none px-[7px] py-px text-2xs`}>
@@ -90,8 +90,8 @@ export function NextActionsCard({ actions = MOCK_NEXT_ACTIONS, className = '' }:
               </div>
               {open && (
                 <div data-testid={`next-action-evidence-${i}`} className="mt-1.5 space-y-1 border-t border-separator pt-1.5">
-                  {a.evidence.map(ev => (
-                    <div key={ev.source} className="text-2xs leading-5">
+                  {a.evidence.map((ev, j) => (
+                    <div key={`${ev.source}-${j}`} className="text-2xs leading-5">
                       <span className="font-mono text-label-3">{ev.source}</span>
                       <span className="ml-1 text-label-2">{ev.quote}</span>
                     </div>

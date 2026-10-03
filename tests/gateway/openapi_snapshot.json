@@ -1208,6 +1208,71 @@
         "title": "CollectionCreateIn",
         "type": "object"
       },
+      "CollectionListData": {
+        "additionalProperties": false,
+        "description": "集合列表 data 面（信封解包后形态；与 DocumentListData 同构：{items,total,next_cursor}\n+ offset/limit，R53 补齐 GET /kb/collections，docs/Agent/09 §2.1 工程问题 4 信封漂移）。",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/CollectionOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "limit": {
+            "default": 50,
+            "title": "Limit",
+            "type": "integer"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          },
+          "offset": {
+            "default": 0,
+            "title": "Offset",
+            "type": "integer"
+          },
+          "total": {
+            "default": 0,
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "title": "CollectionListData",
+        "type": "object"
+      },
+      "CollectionListEnvelope": {
+        "additionalProperties": false,
+        "description": "集合列表成功信封（与 DocumentListEnvelope 同构：{code,message,data}，前端\napiFetchEnvelope 强信封解包口径）。",
+        "properties": {
+          "code": {
+            "default": 0,
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "$ref": "#/components/schemas/CollectionListData"
+          },
+          "message": {
+            "default": "ok",
+            "title": "Message",
+            "type": "string"
+          }
+        },
+        "required": [
+          "data"
+        ],
+        "title": "CollectionListEnvelope",
+        "type": "object"
+      },
       "CollectionOut": {
         "additionalProperties": false,
         "properties": {
@@ -1547,6 +1612,7 @@
               "Word",
               "Excel",
               "CSV",
+              "文本",
               "图片"
             ],
             "title": "Doc Type",
@@ -1771,6 +1837,7 @@
               "Word",
               "Excel",
               "CSV",
+              "文本",
               "图片"
             ],
             "title": "Doc Type",
@@ -7467,6 +7534,61 @@
       }
     },
     "/api/v1/kb/collections": {
+      "get": {
+        "description": "当前租户集合分页（created_at 降序；offset/limit 缺省 50 上限 200）。\n\n信封形态与 GET /kb/documents 同构（{code,message,data:{items,total,next_cursor,offset,\nlimit}}，前端 client apiFetchEnvelope 强信封解包）；空列表合法。租户 deny-by-default。",
+        "operationId": "list_collections_api_v1_kb_collections_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CollectionListEnvelope"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "知识库集合列表（R53 补齐：{code,message,data} 信封对齐 documents 列表）",
+        "tags": [
+          "knowledge-base"
+        ]
+      },
       "post": {
         "operationId": "create_collection_api_v1_kb_collections_post",
         "requestBody": {
@@ -7551,6 +7673,7 @@
                     "Word",
                     "Excel",
                     "CSV",
+                    "文本",
                     "图片"
                   ],
                   "type": "string"
@@ -7631,7 +7754,7 @@
         ]
       },
       "post": {
-        "description": "§8.0 同源检测第①级：精确重复拒收并幂等返回既有文档（created=false）。",
+        "description": "§8.0 同源检测第①级：精确重复拒收并幂等返回既有文档（created=false）。\n\n入口两层防御（415 业务错误，防二进制垃圾裸 500）：①mime 白名单（text/* 与\napplication/json）；②content 含 \\x00 拒收——均在 checksum/落库之前执行。",
         "operationId": "create_document_api_v1_kb_documents_post",
         "requestBody": {
           "content": {
@@ -7665,7 +7788,7 @@
             "description": "Validation Error"
           }
         },
-        "summary": "上传文档（M2 JSON 内容直传；checksum 幂等）",
+        "summary": "上传文档（M2 JSON 内容直传；checksum 幂等；文本类 mime 白名单 + NUL 拒收）",
         "tags": [
           "knowledge-base"
         ]

@@ -65,6 +65,9 @@ class Settings(BaseSettings):
     # 网关运行
     api_prefix: str = "/api/v1"
     sse_heartbeat_seconds: int = 15  # 建议值，压测后冻结（02 §5）
+    # 平台对外 base URL（32 篇 §一：链接 base=展示关注点归前端 location.origin 拼接；
+    # 本字段为邮件邀约场景 M4 预留，M1 零消费——禁各模块直读 env，取值唯一入口=此处）
+    platform_base_url: str | None = None
 
     # 任务执行 worker（非 SSE 受理路径 + 重试监督；Agent 服务设计 §2 补全表，2026-09-27 批）
     task_worker_enabled: bool = True  # False=回到「queued 挂起等人工/外部消费」旧行为

@@ -82,6 +82,17 @@ class ApiKey(Base, PkMixin, TenantMixin, TimestampMixin):
     )
 
 
+class Invite(Base, PkMixin, TenantMixin, TimestampMixin):  # 邀请链接（架构设计/32 §三）
+    __tablename__ = "invite_links"
+    # 安全红线：DB 只存 sha256(token) hex（64 字符），明文 token 仅在生成响应出现一次（32 篇 §一）
+    token_hash: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
+    role: Mapped[str] = mapped_column(String(32), nullable=False)  # Role.code（08 §2.2 英文码权威）
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))  # 撤销终态（不可逆）
+    created_by: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False)
+    used_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)  # M1 仅计数，不限人数
+
+
 class AuditLog(Base, PkMixin, TenantMixin):  # 只追加；无 update/delete（08 §3）
     __tablename__ = "audit_logs"
     actor_type: Mapped[str] = mapped_column(String(16), nullable=False)

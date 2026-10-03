@@ -8,7 +8,10 @@ Alembic 数据迁移；先例 f0f79f84dce4 / a5b7c9d1e3f5）。
 验证口径（**钉死修订号**，规避 a5b7c9d1e3f5 先例测试「downgrade -1 随 head 漂移」的
 失效陷阱——head 上移后 -1 不再指向目标迁移）：upgrade c9e3a7f1b5d2 后 admin 与
 super_admin 均含四值且零重复、既有 scopes 无丢失（超集校验）；upgrade SQL 复跑一次
-验幂等（集合不变）；downgrade b7d2e4f6a8c0 后四值零残留；再 upgrade 恢复。非目标角色
+验幂等（集合不变）；downgrade b7d2e4f6a8c0 后**按角色区分目标集**（ocr 整改
+2026-10-04：admin 四值零残留；super_admin 仅本迁移实际新增的三值零残留，m1 种子
+f0f79f84dce4 既有的 plugin:install 保留——先例 a5b7c9d1e3f5「downgrade 只移除本迁移
+upgrade 实际新增的」口径）；再 upgrade 恢复。非目标角色
 （member/ontologist/curator/guest 等）scopes 全程不动。
 
 跳过口径：本地 PG 不可达即整文件 skip；DB alembic_version 指向的修订不在当前工作区
@@ -40,6 +43,9 @@ _REVISION = "c9e3a7f1b5d2"
 _DOWN_REVISION = "b7d2e4f6a8c0"
 _TARGET_ROLES = ("admin", "super_admin")
 _TARGET_SCOPES = ("prompt:read", "admin:read", "admin:write", "plugin:install")
+# 本迁移对 super_admin 实际新增的三值（plugin:install 为 m1 种子 f0f79f84dce4 既有授权，
+# 不在其列——downgrade 不得回收，ocr 整改 2026-10-04 + 先例 a5b7c9d1e3f5 口径）
+_SUPER_ADMIN_ADDED_SCOPES = ("prompt:read", "admin:read", "admin:write")
 
 
 def _run_alembic(*args: str) -> subprocess.CompletedProcess[str]:
@@ -57,14 +63,15 @@ def _raise_or_skip(r: subprocess.CompletedProcess[str]) -> None:
     assert r.returncode == 0, r.stderr
 
 
-def _load_upgrade_sql() -> str:
+def _load_upgrade_sql() -> tuple[str, ...]:
     spec = importlib.util.spec_from_file_location("_seed_vocab_scopes_migration", _MIGRATION_PATH)
     assert spec is not None and spec.loader is not None, f"迁移脚本缺失：{_MIGRATION_PATH}"
     module = importlib.util.module_from_spec(spec)
     sys.modules.setdefault(spec.name, module)
     spec.loader.exec_module(module)
     assert module.revision == _REVISION
-    return module._UPGRADE_SQL  # noqa: SLF001  # 同仓测试直读迁移常量（幂等复跑口径）
+    # 同仓测试直读迁移常量（幂等复跑口径）；per-role 两条 UPDATE，逐条执行
+    return module._UPGRADE_SQL  # noqa: SLF001
 
 
 def _roles_scopes(engine) -> dict[str, list[str]]:
@@ -100,7 +107,8 @@ def test_admin_super_admin_vocab_scopes_roundtrip():
 
     # ③ 幂等：upgrade SQL 直跑一次（不经 alembic 版本号），scopes 集合不变
     with engine.begin() as conn:
-        conn.execute(text(_load_upgrade_sql()))
+        for stmt in _load_upgrade_sql():
+            conn.execute(text(stmt))
     after_rerun = _roles_scopes(engine)
     for role in _TARGET_ROLES:
         assert set(after_rerun[role]) == set(baseline[role]), f"{role} 重复 upgrade 产生 scopes 漂移"
@@ -110,12 +118,19 @@ def test_admin_super_admin_vocab_scopes_roundtrip():
     for role, anchor in (("admin", "review:approve"), ("super_admin", "plugin:publish")):
         assert anchor in after_rerun[role], f"upgrade 后 {role} 既有 scope {anchor} 丢失"
 
-    # ⑤ downgrade 钉死前驱修订：四值移除（零残留）
+    # ⑤ downgrade 钉死前驱修订，按角色区分目标集（ocr 整改 2026-10-04 + 先例
+    #    a5b7c9d1e3f5「downgrade 只移除本迁移 upgrade 实际新增的」）：admin 四值零残留；
+    #    super_admin 仅三值（本迁移实际新增集）零残留，m1 种子（f0f79f84dce4）既有的
+    #    plugin:install 保留——不得回收迁移前已存在的授权
     _raise_or_skip(_run_alembic("downgrade", _DOWN_REVISION))
     after_down = _roles_scopes(engine)
-    for role in _TARGET_ROLES:
-        for scope in _TARGET_SCOPES:
-            assert scope not in after_down[role], f"downgrade 后 {role} scopes 残留 {scope}"
+    for scope in _TARGET_SCOPES:
+        assert scope not in after_down["admin"], f"downgrade 后 admin scopes 残留 {scope}"
+    for scope in _SUPER_ADMIN_ADDED_SCOPES:
+        assert scope not in after_down["super_admin"], f"downgrade 后 super_admin scopes 残留 {scope}"
+    assert "plugin:install" in after_down["super_admin"], (
+        "downgrade 误回收 super_admin 既有 plugin:install（m1 种子 f0f79f84dce4 授权）"
+    )
     assert all(after_down[c] == baseline[c] for c in after_down if c not in _TARGET_ROLES), (
         "downgrade 误改非 target 角色 scopes"
     )

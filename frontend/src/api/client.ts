@@ -243,9 +243,20 @@ export function trySilentRefresh(): Promise<boolean> {
 export const api = {
   get: <T>(path: string) => apiFetch<T>(path),
   /** F0：列表请求三形态归一化（{items,..}/{data,meta}/裸数组 → 统一 {data,meta}）。
-   *  页面渐进迁移用；错误语义与 get 完全一致（4xx/5xx 照抛 ApiError，不吞）。 */
-  list: async <T>(path: string, init?: RequestInit): Promise<NormalizedList<T>> =>
-    normalizeList<T>(await apiFetch<unknown>(path, init)),
+   *  页面渐进迁移用；错误语义与 get 完全一致（4xx/5xx 照抛 ApiError，不吞）。
+   *  ocr 整改（fe2 发现1）：B1 信封 {code,message,data,meta?} 的 meta 与 data 同级，
+   *  原经 apiFetch 会先剥 .data——normalizeList 只见裸数组 → meta:{}，total/page 静默丢失；
+   *  改走 apiFetchEnvelope 取原始信封，inner=env.data??env 归一后，信封层同级 meta
+   *  在归一结果缺 total 时并回（内层 meta 优先，不覆盖已归一出的字段）。 */
+  list: async <T>(path: string, init?: RequestInit): Promise<NormalizedList<T>> => {
+    const env = await apiFetchEnvelope<{ data?: unknown; meta?: unknown }>(path, init)
+    const inner = (env as { data?: unknown }).data ?? env
+    const merged = normalizeList<T>(inner)
+    const siblingMeta = (env as { meta?: unknown }).meta
+    return siblingMeta && typeof siblingMeta === 'object' && merged.meta.total === undefined
+      ? { ...merged, meta: { ...(siblingMeta as ListMeta), ...merged.meta } }
+      : merged
+  },
   post: <T>(path: string, body?: unknown) =>
     apiFetch<T>(path, { method: 'POST', body: body === undefined ? undefined : JSON.stringify(body) }),
   /** 同 post，但返回完整信封（含与 data 同级的 meta——§6.2 kb/search 样例）。 */

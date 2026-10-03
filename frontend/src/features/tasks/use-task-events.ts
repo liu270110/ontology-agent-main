@@ -23,11 +23,11 @@ export function useTaskEvents(taskId: string | null): TaskEventStream {
   const [error, setError] = useState<TaskEventStream['error']>(null)
 
   useEffect(() => {
-    if (!taskId) {
-      setEvents([])
-      setError(null)
-      return
-    }
+    // ocr 整改（fe2 发现2）：重置提到 if (!taskId) 之前——taskId→taskId 切换（抽屉复用
+    // 同一 hook 实例）时 effect 重跑会先清空旧任务的 ApiError 与事件，不再泄漏到新任务时间线。
+    setEvents([])
+    setError(null)
+    if (!taskId) return
     let cancelled = false
     let reader: ReadableStreamDefaultReader<Uint8Array> | null = null
 
@@ -46,6 +46,9 @@ export function useTaskEvents(taskId: string | null): TaskEventStream {
         if (!res.ok) {
           // 错误信封优先取登记文案；非 JSON（裸 404 等）回落 HTTP 状态（F8①同口径：不编造业务码）
           const body = (await res.json().catch(() => null)) as { code?: number; message?: string } | null
+          // ocr 整改（fe2 发现3）：json 解析（可能含响应体延迟）后复查 cancelled——
+          // 卸载/切换后旧 effect 不写脏状态（对齐下方 catch 分支既有守卫）
+          if (cancelled) return
           setError(new ApiError(body?.code ?? -1, body?.message ?? `HTTP ${res.status}`, res.status))
           return
         }

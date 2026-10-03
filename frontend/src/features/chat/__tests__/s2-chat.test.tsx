@@ -112,7 +112,8 @@ describe('S2 对话域深化', () => {
       const b = screen.getByText('动力电池标准对比')
       expect(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     })
-    expect(screen.getByText(/已置顶 ·/)).toBeInTheDocument()
+    // C-3 贴稿：置顶=标题行 b-gray 徽标（原「已置顶 ·」副行前缀文字随画板口径退役）
+    expect(screen.getByText('置顶')).toBeInTheDocument()
 
     // 取消置顶：排序复原（同时复原 mock 模块态，保持用例独立）
     fireEvent.click(screen.getByTestId('session-menu-s-2479'))

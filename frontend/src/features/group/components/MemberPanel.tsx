@@ -35,6 +35,7 @@ export function MemberPanel({
   mentionTarget,
   memberCap,
   contextUsage,
+  onAddMember,
   onChanged,
 }: {
   sessionId: string
@@ -46,6 +47,8 @@ export function MemberPanel({
   memberCap?: number
   /** 共享上下文占用 0-1（会话详情 context_usage；缺省不渲染该行） */
   contextUsage?: number
+  /** G-2：头部整宽「+ 成员」→ 宿主开 MemberPickerDialog（与顶栏带字按钮同动作） */
+  onAddMember?: () => void
   onChanged: () => void
 }) {
   const [menuFor, setMenuFor] = useState<{ mid: string; anchor: DOMRect } | null>(null)
@@ -80,6 +83,12 @@ export function MemberPanel({
         成员
         <span className="badge b-gray ml-auto" data-testid="grp-member-count">{members.length}/{cap}</span>
       </h4>
+      {/* G-2 贴稿（画板 L2470）：头部下整宽 btn-s「+ 成员」，同开 MemberPickerDialog */}
+      {onAddMember && (
+        <button type="button" className="btn btn-s btn-sm mb-2 w-full justify-center" data-testid="grp-panel-add-member" onClick={onAddMember}>
+          + 成员
+        </button>
+      )}
       <GroupHeader testid="grp-member-group-agents">Agent 成员（{agentMembers.length}）</GroupHeader>
       {agentMembers.map(m => (
         <MemberRow key={m.id} m={m} setMenuFor={setMenuFor} setErrMsg={setErrMsg} />

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { CircleAlert, Link2, Loader2, Maximize2, Search, Settings2, ZoomIn, ZoomOut } from 'lucide-react'
+import { ChevronLeft, CircleAlert, Link2, Loader2, Maximize2, Search, Settings2, ZoomIn, ZoomOut } from 'lucide-react'
 import { GraphCanvas, type GraphCanvasApi, type GraphEdgeBiz, type GraphNodeBiz } from '@/components/graph/GraphCanvas'
 import { ApiError } from '@/api/client'
 import { ErrorState } from '@/components/states'
@@ -10,6 +10,7 @@ import {
   type GraphEntity, type GraphPath,
 } from '../api'
 import { EntityDrawer, NeighborhoodFilter, PathQueryDialog } from '../components/ExploreWidgets'
+import { RetrievalPanel } from '../components/RetrievalPanel'
 
 /** 图谱浏览 /kb/explore/:kbId（宿主画框 p-explore；26 篇 §7.2 IX-EX-01~04）：
  *  GraphCanvas browser profile 全屏 + 实体搜索选择器 + 双击展开（⚙ 邻域过滤）+
@@ -39,6 +40,8 @@ export function ExplorePage() {
   const [depth, setDepth] = useState<1 | 2>(2)
   const [highlightIds, setHighlightIds] = useState<string[]>([])
   const [focusTip, setFocusTip] = useState<string | null>(null)
+  /** 检索测试台右栏（E-1）：默认展开，可收起为窄轨 */
+  const [retrievalOpen, setRetrievalOpen] = useState(true)
   const canvasApi = useRef<GraphCanvasApi | null>(null)
   const onReady = useCallback((api: GraphCanvasApi) => {
     canvasApi.current = api
@@ -116,6 +119,13 @@ export function ExplorePage() {
     const e = entityById.get(id)
     if (e) setDrawerEntity(e)
   }, [entityById])
+
+  /** 检索测试台结果点击 → 聚焦画布（设为中心 + pulse 高亮 2.2s；E-1 闭环） */
+  const onFocusFromRetrieval = useCallback((e: GraphEntity) => {
+    setCenterId(e.id)
+    setHighlightIds([e.id])
+    window.setTimeout(() => setHighlightIds([]), 2200)
+  }, [])
 
   function applyFilter(rels: string[], d: 1 | 2) {
     setRelations(rels)
@@ -201,8 +211,9 @@ export function ExplorePage() {
         </div>
       )}
 
-      {/* 画布（browser profile：不可拖拽、双击展开、滚轮缩放） */}
-      <div className="relative min-h-0 flex-1">
+      {/* 画布行（browser profile：不可拖拽、双击展开、滚轮缩放）+ 右侧检索测试台（可收起） */}
+      <div className="flex min-h-0 flex-1">
+        <div className="relative min-h-0 flex-1">
         <GraphCanvas
           nodes={nodes}
           edges={edges}
@@ -272,6 +283,22 @@ export function ExplorePage() {
         <p className="pointer-events-none absolute bottom-2 left-3 text-[11px] text-label-3">
           单击打开实体抽屉 · 双击展开邻域 · ⚙ 过滤关系类型与深度
         </p>
+        </div>
+        {/* 右栏检索测试台（E-1）：Local 先行 / Global 置灰随 M4；收起为窄轨展开钮 */}
+        {retrievalOpen ? (
+          <RetrievalPanel onFocusEntity={onFocusFromRetrieval} onCollapse={() => setRetrievalOpen(false)} />
+        ) : (
+          <button
+            type="button"
+            data-testid="retrieval-expand"
+            aria-label="展开检索测试台"
+            title="展开检索测试台"
+            onClick={() => setRetrievalOpen(true)}
+            className="flex w-7 flex-none items-center justify-center border-l border-separator bg-surface text-label-3 hover:text-accent"
+          >
+            <ChevronLeft size={14} aria-hidden />
+          </button>
+        )}
       </div>
 
       {/* IX-EX-01 实体抽屉 */}

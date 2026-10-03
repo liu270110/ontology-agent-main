@@ -86,3 +86,12 @@ export const DASH_TASK_STATUS: Record<string, { label: string; badge: string }> 
 export const DASH_TASK_TYPE: Record<string, string> = {
   kb_extract: '抽取', kb_index: '索引', writeback: '对账', audit_export: '导出',
 }
+
+/** 运行中任务行的当前阶段文字（37 号对账 D-2：type 映射，行级化呈现流水线语义；
+ *  六步 stepper 粒度需任务 DTO 补 stage 字段，随 M4——当前只按类型给阶段名不硬造进度） */
+export const DASH_TASK_STAGE: Record<string, string> = {
+  kb_extract: '批量抽取',
+  kb_index: '向量索引',
+  writeback: '图谱回写',
+  audit_export: '审计导出',
+}

@@ -205,8 +205,9 @@ export function GroupChatPage() {
               </span>
             )}
             {session && (
-              <button type="button" data-testid="grp-add-member" aria-label="添加成员" title="添加成员（GRP-01）" className="icobtn flex h-8 w-8 items-center justify-center rounded-lg border border-separator text-label-2" onClick={() => setPickerOpen(true)}>
-                <Users size={14} />
+              // G-2 贴稿（画板 L2427）：顶栏带字按钮「+ 成员」（原 icon-only Users 降低发现成本）
+              <button type="button" data-testid="grp-add-member" title="添加成员（GRP-01）" className="btn btn-s btn-sm" onClick={() => setPickerOpen(true)}>
+                <Users size={12} aria-hidden /> + 成员
               </button>
             )}
             {/* 分享（F-10 资源 ACL 复用）未实现：诚实禁用而非死按钮。
@@ -288,6 +289,7 @@ export function GroupChatPage() {
           mentionTarget={mentionCount}
           memberCap={session.max_members}
           contextUsage={session.context_usage}
+          onAddMember={() => setPickerOpen(true)}
           onChanged={() => void refresh()}
         />
       )}

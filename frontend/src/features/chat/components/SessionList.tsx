@@ -13,6 +13,7 @@ import {SearchX, Check,
   Search,
   Trash2,
   X,} from 'lucide-react'
+
 import { api, ApiError } from '@/api/client'
 import { qk } from '@/lib/qk'
 import { relativeTime } from '@/lib/reltime'
@@ -203,13 +204,13 @@ export function SessionList({ onPicked }: { onPicked?: (id: string) => void }) {
                 }}
               >
                 <div className="flex min-h-[22px] items-center gap-1 pr-[26px]">
-                  {/* 装饰性重复：置顶状态已由下方「已置顶 · 」文本承载，图标 aria-hidden（读屏不重复播报） */}
-                  {s.pinned && <Pin size={11} className="flex-none text-orange" aria-hidden />}
                   <span className="min-w-0 flex-1 truncate text-[13px] font-medium">{s.title}</span>
+                  {/* C-3 贴稿（画板 L2534）：置顶=标题行徽标（替代 Pin 图标+副行前缀文字） */}
+                  {s.pinned && <span className="badge b-gray flex-none" style={{ fontSize: 9, padding: '0 6px' }}>置顶</span>}
                 </div>
                 <div className="text-[11px] text-label-3">
-                  {s.pinned ? '已置顶 · ' : ''}
-                  {s.agent_id} · {relativeTime(s.updated_at)}
+                  {/* C-3 副行：reltime 在前 + 元信息（agent 来源）；证据/记忆计数载荷随 M4 后补 */}
+                  {relativeTime(s.updated_at)} · {s.agent_id}
                 </div>
               </button>
               <button

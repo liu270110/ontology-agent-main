@@ -17,7 +17,8 @@ export function DeleteDocDialog({ doc, onClose, onDeleted }: { doc: KbDocument |
     queryFn: () => listCandidates(doc!.id),
     enabled: !!doc,
   })
-  const pendingCount = (candidatesQuery.data?.items ?? []).length
+  // fe3 信封收口：listCandidates 改 api.list 归一（{data,meta}），读 .data
+  const pendingCount = (candidatesQuery.data?.data ?? []).length
 
   if (!doc) return null
   const d = doc

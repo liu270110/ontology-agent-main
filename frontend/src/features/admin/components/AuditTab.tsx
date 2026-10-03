@@ -29,8 +29,9 @@ export function AuditTab() {
     queryKey: ['admin', 'audit', operator, q],
     queryFn: () => listAuditLogs({ operator, q }),
   })
+  // fe3 信封收口：listAuditLogs 改 api.list 归一（{data,meta}），行读 .data、总数读 meta.total
   const rows = useMemo(() => {
-    let items = data?.items ?? []
+    let items = data?.data ?? []
     if (action !== 'all') items = items.filter(r => r.action.startsWith(action))
     return items
   }, [data, action])
@@ -61,7 +62,7 @@ export function AuditTab() {
           <option value="30d">近 30 天</option>
         </Select>
         <input aria-label="搜索资源或 trace_id" className="input h-8 w-52 text-xs" placeholder="搜索资源 / trace_id" value={q} onChange={e => setQ(e.target.value)} />
-        <span className="text-[11px] text-label-3">共 {data?.total?.toLocaleString() ?? '—'} 条 · 点击 trace_id 展开</span>
+        <span className="text-[11px] text-label-3">共 {data?.meta.total?.toLocaleString() ?? '—'} 条 · 点击 trace_id 展开</span>
         <button type="button" className="btn btn-g btn-sm ml-auto" data-testid="adm-audit-export" onClick={() => setExportOpen(true)}>
           <Download size={13} aria-hidden /> 导出
         </button>

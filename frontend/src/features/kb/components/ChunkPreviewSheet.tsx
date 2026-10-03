@@ -15,7 +15,8 @@ export function ChunkPreviewSheet({ doc, onClose }: { doc: KbDocument | null; on
     queryFn: () => listChunks(doc!.id),
     enabled: !!doc,
   })
-  const chunks = chunksQuery.data?.items ?? []
+  // fe3 信封收口：listChunks 改 api.list 归一（{data,meta}），读 .data
+  const chunks = chunksQuery.data?.data ?? []
 
   useEffect(() => {
     setCurrent(0)

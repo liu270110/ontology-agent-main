@@ -40,7 +40,9 @@ export function PlatformPage() {
   const toolsCount =
     tools.data && skills.data ? `工具 ${tools.data.items.length} · 技能 ${skills.data.items.length}` : undefined
   const mcpCount = mcp.data ? `已接入 ${mcp.data.items.length}` : undefined
-  const agentsCount = agents.data ? `实例 ${agents.data.items.length}` : undefined
+  // fe3 信封收口：agents 查询（listAgentOverview）改 api.list 归一（{data,meta}）——be2 后
+  // 旧 .items.length 直接 'reading length' 崩溃；market/tools/skills/mcp 端点未改不动
+  const agentsCount = agents.data ? `实例 ${agents.data.data.length}` : undefined
 
   const capabilities: Capability[] = [
     {

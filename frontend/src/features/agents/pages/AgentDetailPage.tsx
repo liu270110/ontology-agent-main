@@ -238,11 +238,11 @@ export function AgentDetailPage() {
             <div className="flex items-center gap-2">
               <MessageSquare size={13} aria-hidden />
               <b className="text-xs">会话列表</b>
-              <span className="badge b-gray ml-auto">近 7 天 {sessions.data?.items.length ?? 0} 条</span>
+              <span className="badge b-gray ml-auto">近 7 天 {sessions.data?.data.length ?? 0} 条</span>
             </div>
             <div className="mt-1 text-[11px] text-label-3">列表口径 GET /sessions?agent={agentId}</div>
             <div className="mt-2 space-y-2">
-              {(sessions.data?.items ?? []).map(s => (
+              {(sessions.data?.data ?? []).map(s => (
                 <div key={s.id} className="rounded-xl border border-separator px-3 py-2">
                   <div className="text-xs font-semibold">{s.title}</div>
                   <div className="mt-0.5 text-[11px] text-label-3">
@@ -253,7 +253,7 @@ export function AgentDetailPage() {
                   </Link>
                 </div>
               ))}
-              {(sessions.data?.items ?? []).length === 0 && <EmptyState compact icon={MessageSquare} title="暂无会话" desc="与该 Agent 开启一段对话后在此列出。" />}
+              {(sessions.data?.data ?? []).length === 0 && <EmptyState compact icon={MessageSquare} title="暂无会话" desc="与该 Agent 开启一段对话后在此列出。" />}
             </div>
           </div>
 
@@ -262,11 +262,11 @@ export function AgentDetailPage() {
             <div className="flex items-center gap-2">
               <ListChecks size={13} aria-hidden />
               <b className="text-xs">任务列表</b>
-              <span className="badge b-gray ml-auto">{tasks.data?.items.length ?? 0} 条</span>
+              <span className="badge b-gray ml-auto">{tasks.data?.data.length ?? 0} 条</span>
             </div>
             <div className="mt-1 text-[11px] text-label-3">跳转 /tasks?agent={agentId}</div>
             <div className="mt-2 space-y-2">
-              {(tasks.data?.items ?? []).map(t => (
+              {(tasks.data?.data ?? []).map(t => (
                 <div key={t.id} className="rounded-xl border border-separator px-3 py-2 text-[11px]">
                   <div className="mono font-semibold">{t.id}</div>
                   <div className="mt-0.5 text-label-2">{t.title}</div>
@@ -282,7 +282,7 @@ export function AgentDetailPage() {
                   </div>
                 </div>
               ))}
-              {(tasks.data?.items ?? []).length === 0 && <EmptyState compact icon={ListChecks} title="暂无任务" desc="该 Agent 的抽取/检索任务将在此跟踪。" />}
+              {(tasks.data?.data ?? []).length === 0 && <EmptyState compact icon={ListChecks} title="暂无任务" desc="该 Agent 的抽取/检索任务将在此跟踪。" />}
             </div>
           </div>
 

@@ -41,7 +41,8 @@ export function ApprovalListPage() {
     queryKey: ['approvals', 'list', tab],
     queryFn: () => listReviews(TABS.find(t => t.key === tab)!.status),
   })
-  const items = useMemo(() => data?.items ?? [], [data])
+  // fe3 信封收口：listReviews 改 api.list 归一（{data,meta}），读 .data
+  const items = useMemo(() => data?.data ?? [], [data])
 
   // ?id= 深链：直开详情（联动 26 篇 §11 统一参数口径）
   const deepId = params.get('id')

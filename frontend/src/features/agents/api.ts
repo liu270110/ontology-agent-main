@@ -112,9 +112,10 @@ export function listRegistryTools() {
   return api.get<{ items: RegistryTool[] }>('/tools')
 }
 
-/** GET /agents —— 列表（§5.1） */
+/** GET /agents —— 列表（§5.1）。fe3 信封收口：be2 已改 {data,meta} 信封，
+ *  改走 api.list 三形态归一（fe2 F0；MSW 旧 {items} mock 兼容），消费方读 .data。 */
 export function listAgents() {
-  return api.get<{ items: PlatformAgent[] }>('/agents')
+  return api.list<PlatformAgent>('/agents')
 }
 
 /** GET /agents/{id} —— 详情（模型配置 / 绑定工具 / 适配器健康） */
@@ -169,12 +170,13 @@ export function listAdapterSchemas() {
   return api.get<{ items: AdapterSchemaDef[] }>('/agents/adapter-schemas')
 }
 
-/** GET /sessions?agent= —— 运行历史·会话区（26 篇 IX-AGT-02 引用；agent 过滤参数 R 建议登记） */
+/** GET /sessions?agent= —— 运行历史·会话区（26 篇 IX-AGT-02 引用；agent 过滤参数 R 建议登记）。
+ *  fe3 信封收口：be2 已改 {data,meta} 信封，改走 api.list 归一（消费方 .data）。 */
 export function listAgentSessions(agentId: string) {
-  return api.get<{ items: AgentSessionRow[] }>(`/sessions?agent=${encodeURIComponent(agentId)}`)
+  return api.list<AgentSessionRow>(`/sessions?agent=${encodeURIComponent(agentId)}`)
 }
 
-/** GET /tasks?agent= —— 运行历史·任务区（§5.2 ★） */
+/** GET /tasks?agent= —— 运行历史·任务区（§5.2 ★）。fe3 信封收口同上。 */
 export function listAgentTasks(agentId: string) {
-  return api.get<{ items: AgentTaskRow[] }>(`/tasks?agent=${encodeURIComponent(agentId)}`)
+  return api.list<AgentTaskRow>(`/tasks?agent=${encodeURIComponent(agentId)}`)
 }

@@ -32,8 +32,10 @@ export function TrajectoryPage() {
   useEffect(() => {
     if (!sessionId) return
     // 历史基线（用户输入/助手回复行）+ 会话标题（列表未含该会话时回退 id）
+    // fe3 信封收口：/sessions 列表已改 {data,meta} 信封（be2 B1 批）→ 标题读取改 api.list 归一；
+    // messages 端点仍 {items,next_before_id} 游标体（未改），保持 api.get
     void api.get<{ items: ChatMessage[] }>(`/sessions/${sessionId}/messages`).then(r => setHistory(r.items ?? [])).catch(() => {})
-    void api.get<{ items: { id: string; title: string }[] }>('/sessions').then(r => setTitle(r.items?.find(s => s.id === sessionId)?.title ?? '')).catch(() => {})
+    void api.list<{ id: string; title: string }>('/sessions').then(r => setTitle(r.data.find(s => s.id === sessionId)?.title ?? '')).catch(() => {})
   }, [sessionId])
 
   const items = useMemo(() => buildTimeline(history, frames), [history, frames])

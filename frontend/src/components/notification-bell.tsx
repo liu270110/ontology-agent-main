@@ -56,9 +56,11 @@ export function NotificationBell() {
     refetchInterval: 30_000,
   })
 
+  // fe3 信封收口：pendingQ=countPendingReviews 内部已改 api.list 归一（返回 {items,total} 复合形状不变）；
+  // tasksQ=listRecentTasks 改 api.list 归一（{data,meta}）→ 读 .data（be2 后 .items 恒 undefined 被吞空）
   const pendingItems = (pendingQ.data?.items ?? []) as Approval[]
   const pendingCount = pendingQ.data?.total ?? 0
-  const allTasks = tasksQ.data?.items ?? []
+  const allTasks = tasksQ.data?.data ?? []
   const failedTasks = allTasks.filter(t => t.status === 'failed')
   const failedCount = failedTasks.length
 

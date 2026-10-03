@@ -49,11 +49,14 @@ export interface TaskLog {
   line: string
 }
 
+/** 任务列表。fe3 信封收口（联调缺陷台账 2026-10-04）：GET /tasks 已改 B1 {data,meta} 信封
+ *  （be2，offset/limit 改 page/page_size），改走 api.list 三形态归一（fe2 F0，兼容 MSW 旧
+ *  {items} mock），消费方读 .data。 */
 export function listTasks(params?: { status?: string; type?: string }) {
   const qs = new URLSearchParams()
   if (params?.status && params.status !== 'all') qs.set('status', params.status)
   if (params?.type && params.type !== 'all') qs.set('type', params.type)
-  return api.get<{ items: Task[]; next_cursor: null }>(`/tasks?${qs.toString()}`)
+  return api.list<Task>(`/tasks?${qs.toString()}`)
 }
 export const getTask = (id: string) => api.get<Task>(`/tasks/${id}`)
 export const listTaskLogs = (id: string) => api.get<{ items: TaskLog[]; next_cursor: null }>(`/tasks/${id}/logs`)

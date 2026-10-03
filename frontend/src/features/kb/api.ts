@@ -110,9 +110,12 @@ export interface KbSearchMeta {
   trace_id: string
 }
 
-/** GET /kb/documents —— 文档列表（含流水线状态） */
+/** GET /kb/documents —— 文档列表（含流水线状态）。
+ *  fe3 信封收口（联调缺陷台账 2026-10-04）：be2 B1 批已改 {data,meta:{page,page_size,total}}
+ *  信封（api/01 §3.1），改走 api.list 三形态归一（fe2 F0，兼容 MSW 旧 {items} mock），
+ *  消费方读 .data。 */
 export function listDocuments() {
-  return api.get<{ items: KbDocument[]; next_cursor: string | null }>('/kb/documents')
+  return api.list<KbDocument>('/kb/documents')
 }
 
 // ---------------------------------------------------------------- 上传链路（S8 live 对账 2026-09-28）
@@ -275,9 +278,10 @@ export function retryPipeline(id: string, body: { scope: 'full' | 'chunk'; chunk
   return api.post<{ job_id: string; scope: string; chunk_id: string | null }>(`/kb/documents/${id}/pipeline/retry`, body)
 }
 
-/** GET /kb/documents/{id}/chunks —— 分片预览（IX-KB-02） */
+/** GET /kb/documents/{id}/chunks —— 分片预览（IX-KB-02）。
+ *  fe3 信封收口：be2 已改 {data,meta} 信封，改走 api.list 归一，消费方读 .data。 */
 export function listChunks(id: string) {
-  return api.get<{ items: KbChunk[]; next_cursor: string | null }>(`/kb/documents/${id}/chunks`)
+  return api.list<KbChunk>(`/kb/documents/${id}/chunks`)
 }
 
 /** POST /kb/search —— GraphRAG 检索（§6.2：meta 与 data 在信封同级，走 postEnvelope 取完整信封）。
@@ -292,12 +296,11 @@ export function search(body: {
   return api.postEnvelope<{ data: KbSearchResult; meta: KbSearchMeta }>('/kb/search', body)
 }
 
-/** GET /kb/documents/{id}/review/candidates —— 审核候选（跨文档队列由页面聚合，见 R16） */
+/** GET /kb/documents/{id}/review/candidates —— 审核候选（跨文档队列由页面聚合，见 R16）。
+ *  fe3 信封收口：be2 已改 {data,meta} 信封（ReviewCandidatePageOut），改走 api.list 归一。 */
 export function listCandidates(docId: string, type?: CandidateType | 'all') {
   const t = encodeURIComponent(type ?? 'all')
-  return api.get<{ items: KbCandidate[]; next_cursor: string | null }>(
-    `/kb/documents/${docId}/review/candidates?type=${t}`,
-  )
+  return api.list<KbCandidate>(`/kb/documents/${docId}/review/candidates?type=${t}`)
 }
 
 export type ReviewAction = 'accept' | 'reject' | 'edit_accept'

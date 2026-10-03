@@ -18,8 +18,9 @@ export function useDashboardQueries() {
   const docsQ = useQuery({ queryKey: ['dashboard', 'kb-doc-count'], queryFn: countKbDocuments })
 
   // 指标口径用全量返回（mock 忽略 limit 参数），展示口径收敛 top3
-  const allSessions = sessionsQ.data?.items ?? []
-  const allTasks = tasksQ.data?.items ?? []
+  // fe3 信封收口：listRecentSessions/listRecentTasks 改 api.list 归一（{data,meta}），读 .data
+  const allSessions = sessionsQ.data?.data ?? []
+  const allTasks = tasksQ.data?.data ?? []
   const sessions = allSessions.slice(0, 3)
   const tasks = allTasks.slice(0, 3)
   const pendingTotal = pendingQ.data?.total ?? 0

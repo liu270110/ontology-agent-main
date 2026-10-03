@@ -27,7 +27,8 @@ export function ModelsTab() {
   const [addOpen, setAddOpen] = useState(false)
   const [deleting, setDeleting] = useState<ModelChannel | null>(null)
   const { data, isLoading, isError, error, refetch } = useQuery({ queryKey: ['admin', 'models'], queryFn: listModels })
-  const channels = useMemo(() => data?.items ?? [], [data])
+  // fe3 信封收口：listModels 改 api.list 归一（{data,meta}），读 .data
+  const channels = useMemo(() => data?.data ?? [], [data])
 
   return (
     <div>

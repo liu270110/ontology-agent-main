@@ -60,7 +60,10 @@ export function SessionList({ onPicked }: { onPicked?: (id: string) => void }) {
   const qc = useQueryClient()
   const { data, isPending, isError, error, refetch } = useQuery({
     queryKey: qk.session.list(),
-    queryFn: () => api.get<{ items: SessionItem[]; next_cursor: null }>('/sessions'),
+    // fe3 信封收口（联调缺陷台账 2026-10-04）：GET /sessions 已改 B1 {data,meta} 信封，
+    // 裸 api.get<{items}> 的 .items 为 undefined → 列表静默空——改走 api.list 三形态归一
+    // （fe2 F0），下游 data.data 消费（MSW 旧 {items} mock 同样兼容）。
+    queryFn: () => api.list<SessionItem>('/sessions'),
   })
 
   // F-04 会话搜索（按标题过滤）
@@ -116,7 +119,7 @@ export function SessionList({ onPicked }: { onPicked?: (id: string) => void }) {
 
   // F5：live POST /sessions 新会话 title=null（首条消息后服务端才定题）——展示与过滤统一兜底
   const titleOf = (s: SessionItem) => s.title || '新会话'
-  const items = (data?.items ?? []).filter(s => !kw.trim() || titleOf(s).toLowerCase().includes(kw.trim().toLowerCase()))
+  const items = (data?.data ?? []).filter(s => !kw.trim() || titleOf(s).toLowerCase().includes(kw.trim().toLowerCase()))
 
   return (
     <div className="session-col flex w-60 flex-none flex-col border-r border-separator bg-surface">

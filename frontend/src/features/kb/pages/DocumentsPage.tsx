@@ -55,12 +55,13 @@ export function DocumentsPage() {
   const docsQuery = useQuery({
     queryKey: ['kb', 'documents'],
     queryFn: listDocuments,
+    // fe3 信封收口：listDocuments 改 api.list 归一（{data,meta}），query.state.data 读 .data
     refetchInterval: query => {
-      const items = (query.state.data as { items: KbDocument[] } | undefined)?.items ?? []
+      const items = (query.state.data as { data?: KbDocument[] } | undefined)?.data ?? []
       return items.some(d => d.status === 'pending' || d.status === 'extracting') ? 1500 : false
     },
   })
-  const docs = docsQuery.data?.items ?? []
+  const docs = docsQuery.data?.data ?? []
 
   const filtered = useMemo(
     () =>

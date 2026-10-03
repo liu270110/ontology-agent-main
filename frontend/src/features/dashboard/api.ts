@@ -1,12 +1,12 @@
 import { api } from '@/api/client'
 
 /** 工作台域 API（16 篇 §5.3 工作台信息结构；live 探测 2026-09-28，网关 127.0.0.1:8021）：
- *  - GET /sessions、/tasks、/ontologies —— live 网关回裸分页体 {items,offset,limit}
- *    （无 total/next_cursor；client 已做裸体兼容），mock 侧为信封 {items,next_cursor}
- *    ——两种形态读取 items 的口径一致；live SessionOut 只有 created_at（mock 契约有
- *    updated_at），live TaskOut 无 name/progress（mock 契约有）→ 一律按可选字段防御读取；
- *  - GET /admin/reviews?status=pending —— 信封 {items,total,…}，total=待审批计数；
- *  - GET /kb/documents —— live 挂起（探测 20s 超时，存储依赖未就绪）→ 知识文档卡保持样张。 */
+ *  - GET /sessions、/tasks、/ontologies —— be2 B1 批（2026-10-04）起 /sessions、/tasks 已改
+ *    {data,meta:{page,page_size,total}} 信封（api/01 §3.1），列表读取一律走 api.list 三形态
+ *    归一（fe2 F0，兼容 MSW 旧 {items} mock）；/ontologies 未改仍裸分页体（countOntologies
+ *    仅取长度，api.get 兼容读不变）；
+ *  - GET /admin/reviews?status=pending —— 同批改 {data,meta:{total}} 信封，见 countPendingReviews；
+ *  - GET /kb/documents —— be2 已改 {data,meta}；live 曾挂起（存储依赖未就绪）→ 知识文档卡保持样张。 */
 
 export interface DashSession {
   id: string
@@ -29,20 +29,23 @@ export interface DashTask {
   created_at?: string
 }
 
-/** 最近会话（工作台右栏入口列表，limit=5） */
+/** 最近会话（工作台右栏入口列表，limit=5）。fe3 信封收口：/sessions 已改 {data,meta}
+ *  信封（be2 B1 批），改走 api.list 三形态归一（fe2 F0），消费方读 .data。 */
 export function listRecentSessions(limit = 5) {
-  return api.get<{ items: DashSession[] }>(`/sessions?limit=${limit}`)
+  return api.list<DashSession>(`/sessions?limit=${limit}`)
 }
 
-/** 最近任务（任务中心入口列表，limit=5） */
+/** 最近任务（任务中心入口列表，limit=5）。fe3 信封收口同上（/tasks 已改 {data,meta}）。 */
 export function listRecentTasks(limit = 5) {
-  return api.get<{ items: DashTask[] }>(`/tasks?limit=${limit}`)
+  return api.list<DashTask>(`/tasks?limit=${limit}`)
 }
 
-/** 待审批计数（审批中心 open 队列；live 信封带 total，mock 无 total → 回退 items.length） */
+/** 待审批计数（审批中心 open 队列）。fe3 信封收口：/admin/reviews 已改 {data,meta:{total}}
+ *  信封（be2 B1 批，旧 {items,total} 信封废止）——改走 api.list，total 从 meta 取
+ *  （mock 无 total 回退 data.length），返回 {items,total} 复合形状不变（消费方零改动）。 */
 export async function countPendingReviews() {
-  const r = await api.get<{ items: unknown[]; total?: number }>('/admin/reviews?status=pending')
-  return { items: r.items, total: r.total ?? r.items.length }
+  const r = await api.list<unknown>('/admin/reviews?status=pending')
+  return { items: r.data, total: r.meta.total ?? r.data.length }
 }
 
 /** 本体项目计数：live 列表无 total，取首页（≤100）长度近似；TODO(R5x): 后端统计端点交付后切换 */
@@ -52,19 +55,21 @@ export async function countOntologies() {
 }
 
 /** 知识文档非空判定（新手引导第③步，S-AD 切片）：只拉 1 条判存在即可，不取全量；
- *  live /kb/documents 挂起（api.ts 头注）→ 引导卡第③步保持未完成态，不阻塞其余两步。 */
+ *  live /kb/documents 曾挂起（api.ts 头注）→ 引导卡第③步保持未完成态，不阻塞其余两步。
+ *  fe3 信封收口：/kb/documents 已改 {data,meta} 信封（be2 B1 批），改走 api.list。 */
 export async function countKbDocuments() {
-  const r = await api.get<{ items: unknown[] }>('/kb/documents?limit=1')
-  return r.items.length
+  const r = await api.list<unknown>('/kb/documents?limit=1')
+  return r.data.length
 }
 
-/** 今日会话计数：created_at 在今天的会话数（≤100 首页近似）；TODO(R5x): 后端统计端点交付后切换 */
+/** 今日会话计数：created_at 在今天的会话数（≤100 首页近似）；TODO(R5x): 后端统计端点交付后切换。
+ *  fe3 信封收口：/sessions 已改 {data,meta} 信封，改走 api.list。 */
 export async function countTodaySessions() {
-  const r = await api.get<{ items: DashSession[] }>('/sessions?limit=100')
+  const r = await api.list<DashSession>('/sessions?limit=100')
   const start = new Date()
   start.setHours(0, 0, 0, 0)
   const startMs = start.getTime()
-  return r.items.filter(s => {
+  return r.data.filter(s => {
     const t = s.created_at ? new Date(s.created_at).getTime() : NaN
     return Number.isFinite(t) && t >= startMs
   }).length

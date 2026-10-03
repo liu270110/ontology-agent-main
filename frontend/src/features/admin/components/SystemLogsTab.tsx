@@ -53,8 +53,10 @@ export function SystemLogsTab() {
     queryKey: ['admin', 'system-logs', level, service, range, q],
     queryFn: () => listSystemLogs({ level, service, range, q }),
   })
-  const rows = data?.items ?? []
-  const total = data?.total
+  // fe3 信封收口：listSystemLogs 改 api.list 归一（{data,meta}），行读 .data、分级计数 total
+  // 对象经 normalizeList 落 meta（ListMeta 索引签名兜住非标量载荷，此处按原形状窄化回读）
+  const rows = data?.data ?? []
+  const total = data?.meta.total as { error: number; warn: number; info: number; debug: number } | undefined
 
   return (
     <div>

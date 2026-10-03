@@ -71,9 +71,11 @@ export interface GroupMessageRow {
 
 // ---- 会话 ----
 
-/** GET /sessions?type=group —— 群会话列表（§5.2；type=X15 预登记） */
+/** GET /sessions?type=group —— 群会话列表（§5.2；type=X15 预登记）。
+ *  fe3 信封收口：GET /sessions 已改 {data,meta} 信封（be2 B1 批），改走 api.list 三形态
+ *  归一（fe2 F0，兼容 MSW 旧 {items} mock），消费方读 .data。 */
 export function listGroupSessions() {
-  return api.get<{ items: GroupSession[]; next_cursor: null }>('/sessions?type=group')
+  return api.list<GroupSession>('/sessions?type=group')
 }
 
 /** GET /sessions/{id} —— 详情（含成员 + routing；建议登记项，见 R 清单） */

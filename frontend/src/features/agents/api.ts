@@ -4,29 +4,39 @@ import { api } from '@/api/client'
  *  与 mocks/platform-handlers.ts 一一对应。启停/连接测试/适配器 Schema 等
  *  预登记口径见 mocks/platform-handlers.ts 头注与交付报告 R 清单。 */
 
-export type AgentStatus = 'running' | 'stopped' | 'error'
+/** 展示状态枚举：mock 适配器口径 running/stopped/error + live 后端口径 enabled/disabled
+ *  （agents.json 2026-10-04 实测 status='enabled'；fe1-F2 补映射，徽标/文案双口径收敛）。 */
+export type AgentStatus = 'running' | 'stopped' | 'error' | 'enabled' | 'disabled'
 
 export const AGENT_STATUS_LABEL: Record<AgentStatus, string> = {
   running: '运行中', stopped: '已停止', error: '异常',
+  enabled: '已启用', disabled: '已停用',
 }
 
 export interface PlatformAgent {
   id: string
   name: string
-  adapter: 'nanobot' | 'openclaw' | 'hermes' | 'custom'
-  adapter_version: string
   status: AgentStatus
-  version: string
-  description: string
-  endpoint_masked: string
-  token_masked: string
-  timeout_ms: number
-  tools: string[]
-  active_sessions: number
-  queued_tasks: number
-  health: { last_probe: string; rtt_ms: number; consecutive_failures: number }
-  owner: string
   created_at: string
+  /* ---- mock 富形状字段（mocks/platform-handlers.ts AGENTS）；live 后端暂不返回，一律可选 ---- */
+  adapter?: 'nanobot' | 'openclaw' | 'hermes' | 'custom'
+  adapter_version?: string
+  version?: string
+  description?: string
+  endpoint_masked?: string
+  token_masked?: string
+  timeout_ms?: number
+  tools?: string[]
+  active_sessions?: number
+  queued_tasks?: number
+  health?: { last_probe: string; rtt_ms: number; consecutive_failures: number }
+  owner?: string
+  /* ---- live 后端实测字段（tools/ui-audit/out/lianTiao-20261004/agents.json）----
+   * {id,name,agent_tool,status:'enabled',system_prompt,config,created_at}：无
+   * tools/health/adapter/active_sessions；页面层已做防御性可选链（fe1-F2，client 归一化归 fe2）。 */
+  agent_tool?: string
+  system_prompt?: string | null
+  config?: Record<string, unknown>
 }
 
 export interface AdapterSchemaDef {

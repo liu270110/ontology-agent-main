@@ -13,7 +13,16 @@ import type { EvidenceFocus } from './EvidenceSheet'
 
 // 2026-10-04 perf 批：面板（全仓唯一 framer-motion 使用点）异步挂载，家族 ~130KB 剥离
 // ChatPage 首包；证据消息才触发加载，fallback 空占位（折叠摘要 arrive 前无布局跳动）。
-const AgenticTracePanel = lazy(() => import('./AgenticTracePanel').then(m => ({ default: m.AgenticTracePanel })))
+// 兜底红线（ocr high）：全仓无渲染树 ErrorBoundary，chunk 拉取失败（离线/旧部署 404）
+// 若裸抛会炸到根整页白屏——工厂 catch 降级为空实现，与 fallback=null 同语义（面板尽力而为）。
+const AgenticTracePanel = lazy(async () => {
+  try {
+    const m = await import('./AgenticTracePanel')
+    return { default: m.AgenticTracePanel }
+  } catch {
+    return { default: () => null }
+  }
+})
 
 /** 消息流（画框03）：用户气泡实底蓝、助手气泡玻璃、工具卡、证据 chip（点击开抽屉 IX-CHT-03）、
  *  流式光标、助手消息悬停操作条（IX-CHT-07：复制/重新生成/赞踩——复制真实剪贴板，
@@ -396,6 +405,12 @@ export function ChatStream({
   useEffect(() => {
     if (baselineError) setHydrating(false)
   }, [baselineError])
+
+  // perf 批（ocr low）：证据首到即 fire-and-forget 预热面板 chunk——检索应答的证据到达是
+  // 可预期的，预热吸收网络延迟，折叠摘要不晚一拍；失败静默（渲染侧工厂已有空实现兜底）。
+  useEffect(() => {
+    if (evidence || messages.some(m => m.evidence)) void import('./AgenticTracePanel').catch(() => {})
+  }, [evidence, messages])
 
   useEffect(() => {
     // jsdom 无 scrollIntoView（可选调用兜底），浏览器端平滑滚到流底

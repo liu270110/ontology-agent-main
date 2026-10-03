@@ -29,13 +29,19 @@ const LIVE_AGENT = {
   created_at: '2026-09-28T23:28:57.950608Z',
 }
 
+/** GET /agents/:id 实测形状（2026-10-04 curl 8364）：多出 adapter 对象形态 */
+const LIVE_AGENT_DETAIL = {
+  ...LIVE_AGENT,
+  adapter: { id: '01a0e24b-d032-7093-af24-a84821f9b039', agent_tool: 'builtin', version: 'platform', health_endpoint: null },
+}
+
 function mockLiveAgents() {
   // live 口径：200 裸分页体（无信封，client 双形态兼容包 {data} 放行）
   server.use(
     http.get('*/api/v1/agents', () =>
       HttpResponse.json({ items: [LIVE_AGENT], offset: 0, limit: 20 }),
     ),
-    http.get('*/api/v1/agents/:id', () => HttpResponse.json(LIVE_AGENT)),
+    http.get('*/api/v1/agents/:id', () => HttpResponse.json(LIVE_AGENT_DETAIL)),
   )
 }
 
@@ -60,7 +66,7 @@ describe('fe1-F2 agents 域 · live 实测形状防御', () => {
     expect(card).toHaveTextContent('sse-dual-4c31f883')
   }, 30_000)
 
-  it('② 详情：无 health 字段健康行=—，tools 面板空态不崩', async () => {
+  it('② 详情：无 health 字段健康行=—，adapter 对象形态收敛文本，tools 面板空态不崩', async () => {
     mockLiveAgents()
     await loginAndGo(`/agents/${LIVE_AGENT.id}?tab=info`)
 
@@ -68,6 +74,8 @@ describe('fe1-F2 agents 域 · live 实测形状防御', () => {
     expect(screen.queryByText('页面出现异常')).not.toBeInTheDocument()
     // 健康：RTT 缺省 → 「—」，连续失败 0
     expect(screen.getByTestId('agt-panel-info')).toHaveTextContent('最近探活 RTT —ms · 连续失败 0')
+    // adapter 对象 {agent_tool,version} → 「builtin · platform」（对象直渲染会抛 React child 异常）
+    expect(screen.getByTestId('agt-panel-info')).toHaveTextContent('builtin · platform')
 
     // 切工具配置：boundNames 缺省空数组 → 空态文案，不抛 TypeError
     fireEvent.click(screen.getByTestId('agt-tab-tools'))

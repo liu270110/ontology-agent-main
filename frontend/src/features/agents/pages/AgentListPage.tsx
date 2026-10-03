@@ -5,7 +5,7 @@ import { ArrowRight, Bot, CircleStop, Play, Plus } from 'lucide-react'
 import { ApiError } from '@/api/client'
 import { useAuthStore } from '@/stores/auth-store'
 import { ErrorState, SkeletonCards } from '@/components/states'
-import { listAgents, AGENT_STATUS_LABEL, type AgentStatus, type PlatformAgent } from '../api'
+import { listAgents, AGENT_STATUS_LABEL, adapterText, adapterVersionText, type AgentStatus, type PlatformAgent } from '../api'
 import { RegisterWizard } from '../components/RegisterWizard'
 import { StartStopModal } from '../components/StartStopModal'
 
@@ -64,7 +64,7 @@ export function AgentListPage() {
             <div className="flex items-center gap-2">
               <Bot size={15} aria-hidden />
               <b className="truncate text-sm">{a.name}</b>
-              <span className="mono ml-auto text-[11px] text-label-3">{a.adapter} {a.adapter_version}</span>
+              <span className="mono ml-auto text-[11px] text-label-3">{adapterText(a)} {adapterVersionText(a)}</span>
             </div>
             <div className="mt-1.5 flex items-center gap-2">
               <AgentStatusBadge status={a.status} />

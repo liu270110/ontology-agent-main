@@ -13,13 +13,20 @@ export const AGENT_STATUS_LABEL: Record<AgentStatus, string> = {
   enabled: '已启用', disabled: '已停用',
 }
 
+/** 适配器字段双形态：mock=字符串枚举；live 详情（2026-10-04 实测）=对象
+ *  {id,agent_tool,version,health_endpoint}。展示一律走 adapterText/adapterVersionText
+ *  收敛为可渲染文本（fe1-F2：对象直渲染曾抛「Objects are not valid as a React child」）。 */
+export type AdapterRef =
+  | 'nanobot' | 'openclaw' | 'hermes' | 'custom'
+  | { id: string; agent_tool?: string | null; version?: string | null; health_endpoint?: string | null }
+
 export interface PlatformAgent {
   id: string
   name: string
   status: AgentStatus
   created_at: string
   /* ---- mock 富形状字段（mocks/platform-handlers.ts AGENTS）；live 后端暂不返回，一律可选 ---- */
-  adapter?: 'nanobot' | 'openclaw' | 'hermes' | 'custom'
+  adapter?: AdapterRef
   adapter_version?: string
   version?: string
   description?: string
@@ -31,12 +38,26 @@ export interface PlatformAgent {
   queued_tasks?: number
   health?: { last_probe: string; rtt_ms: number; consecutive_failures: number }
   owner?: string
-  /* ---- live 后端实测字段（tools/ui-audit/out/lianTiao-20261004/agents.json）----
-   * {id,name,agent_tool,status:'enabled',system_prompt,config,created_at}：无
-   * tools/health/adapter/active_sessions；页面层已做防御性可选链（fe1-F2，client 归一化归 fe2）。 */
+  /* ---- live 后端实测字段（tools/ui-audit/out/lianTiao-20261004/agents.json + GET /agents/:id）----
+   * {id,name,agent_tool,status:'enabled',system_prompt,config,created_at,adapter?:对象}：无
+   * tools/health/active_sessions；页面层已做防御性可选链（fe1-F2，client 归一化归 fe2）。 */
   agent_tool?: string
   system_prompt?: string | null
   config?: Record<string, unknown>
+}
+
+/** 适配器名（字符串枚举原样；对象形态取 agent_tool，缺省 —） */
+export function adapterText(agent: Pick<PlatformAgent, 'adapter'>): string {
+  const a = agent.adapter
+  if (typeof a === 'string') return a
+  return a?.agent_tool ?? '—'
+}
+
+/** 适配器版本（adapter_version 优先；live 对象形态回退 adapter.version，缺省 —） */
+export function adapterVersionText(agent: Pick<PlatformAgent, 'adapter' | 'adapter_version'>): string {
+  if (agent.adapter_version) return agent.adapter_version
+  const a = agent.adapter
+  return (typeof a === 'object' ? a?.version : undefined) ?? '—'
 }
 
 export interface AdapterSchemaDef {

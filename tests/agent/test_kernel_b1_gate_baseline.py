@@ -181,7 +181,7 @@ async def test_包gate超时_按拒绝合成_基线放行结论被包gate否决(
         make_tool_dispatcher(
             FakeTool(),
             register_planning_strategy=(FakePlanner(make_candidate((make_step(),))),),
-            register_pre_gate=(FakePackGate(sleep_s=1.5),),  # 超过 _GATE_TIMEOUT_S=1s
+            register_pre_gate=(FakePackGate(sleep_s=1.5),),  # 超过 kernel_gate_timeout_s=1s（Settings 默认）
         )
     )
     outcome = await kernel.run(make_task(), make_ctx(), budget=Budget(max_steps=5, duration_s=30))

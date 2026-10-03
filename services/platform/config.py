@@ -85,6 +85,15 @@ class Settings(BaseSettings):
     context_budget_tokens: int = Field(default=4_000, gt=0)
     context_compaction_threshold: float = Field(default=0.8, ge=0.0, le=1.0)
 
+    # 内核四维超时（B-③ 批，docs/Agent/10 §8.2）：原 kernel/loop.py 与 execution.py 的
+    # 模块级常量（_TOOL_TIMEOUT_S/_PLANNING_TIMEOUT_S/_GATE_TIMEOUT_S/_SINK_TIMEOUT_S，
+    # 30/10/1/5）收编于此——内核不藏数值策略，D2/F-4 同款纪律；默认值=原常量逐位一致。
+    # 显式构造参数优先（测试与组合根直传通道），未传运行期读这里。
+    kernel_tool_timeout_s: float = Field(default=30.0, gt=0)
+    kernel_planning_timeout_s: float = Field(default=10.0, gt=0)
+    kernel_gate_timeout_s: float = Field(default=1.0, gt=0)
+    kernel_sink_timeout_s: float = Field(default=5.0, gt=0)
+
     # 记忆域（06 篇 §4/§5.2/§5.5；计划 1 仅 L1 与检索参数）
     memory_l1_ttl_seconds: int = 24 * 3600  # L1 会话记忆块 TTL（会话活跃期）
     memory_search_top_k: int = 8  # 检索注入条数上限

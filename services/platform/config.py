@@ -73,6 +73,10 @@ class Settings(BaseSettings):
     # 新会话拒绑、存量 Run 跑完；成功清零自愈）
     agent_degrade_threshold: int = 3
 
+    # B-① Run 内并行工具调度（docs/Agent/10 §3，T6 唯一事实源）：并行调度段内最大并发度；
+    # =1 时所有段退化为单步=串行（零行为变化）。内核构造参数显式注入优先，缺省读此值（D2 纪律）。
+    kernel_tool_parallelism: int = Field(default=4, ge=1, le=16)
+
     # H-2 上下文工程（2026-09-29 批，docs/Agent/07 边界契约 D-7/F-2/F-4 三层归属：
     # 策略=能力层/阈值=配置层/断点=内核）。context_budget_tokens=组装器绝对预算
     # （A1，原 kernel/grounding.py 的 GROUNDING_BUDGET_TOKENS 常量收编于此——内核不藏

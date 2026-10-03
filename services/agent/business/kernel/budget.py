@@ -78,6 +78,13 @@ class BudgetTracker:
         return self._budget.max_tokens - self._tokens_used
 
     @property
+    def remaining_steps(self) -> int | None:
+        """剩余步数预算（None=不限）：多步段段前截断口（B-①，对齐 remaining_tokens 先例）。"""
+        if self._budget.max_steps is None:
+            return None
+        return max(0, self._budget.max_steps - self._steps_done)
+
+    @property
     def steps_done(self) -> int:
         return self._steps_done
 

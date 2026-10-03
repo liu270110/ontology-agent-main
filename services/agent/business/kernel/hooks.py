@@ -126,9 +126,7 @@ class HookRegistry:
                 if inspect.isawaitable(decision):
                     decision = await decision
             except Exception as exc:  # observer 纪律③：异常不逃逸、不劫持执行面
-                logger.warning(
-                    "pre_tool_call hook %s 异常，降级 Allow（安全权威在门禁基线 B1）: %s", _name_of(fn), exc
-                )
+                logger.warning("pre_tool_call hook %s 异常，降级 Allow（安全权威在门禁基线 B1）: %s", _name_of(fn), exc)
                 continue
             if isinstance(decision, Block):
                 return decision

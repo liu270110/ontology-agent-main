@@ -40,6 +40,7 @@ from typing import TYPE_CHECKING, Any
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.middleware.cors import CORSMiddleware
 
 from services.agent.api.agents import router as agents_router
@@ -70,6 +71,7 @@ from services.memory.api.memory import router as memory_router
 from services.ontology.api.ontology import router as ontology_router
 from services.platform.db.uow import AsyncUnitOfWork
 from services.platform.deps import dispose_gateways, get_engine
+from services.platform.errors import error_response
 from services.plugin.api.plugins import router as plugin_router
 from services.review.api.admin import router as review_admin_router
 from services.writeback.api.ledger import router as writeback_ledger_router
@@ -341,6 +343,33 @@ def _validation_error_body(request: Request, exc: RequestValidationError) -> JSO
     return JSONResponse(body, status_code=422)
 
 
+# 未捕获 HTTPException 的状态码 → 错误码就近映射（B-⑥ 联调修复，台账见 platform/errors.py 登记注释）：
+# 既有族就近（400/401/403/422/429/503）；路由不存在/方法不允许用新增 1004/1005。
+_HTTP_STATUS_CODE_MAP: dict[int, tuple[ErrorCode, str]] = {
+    400: (ErrorCode.BODY_MALFORMED, "请求体不合法"),
+    401: (ErrorCode.TOKEN_INVALID, "认证失败"),
+    403: (ErrorCode.ROLE_FORBIDDEN, "禁止访问"),
+    404: (ErrorCode.ROUTE_NOT_FOUND, "路由不存在"),
+    405: (ErrorCode.METHOD_NOT_ALLOWED, "HTTP 方法不允许"),
+    422: (ErrorCode.PARAM_INVALID, "参数校验失败"),
+    429: (ErrorCode.RATE_LIMITED, "请求超过限流配额"),
+    503: (ErrorCode.STORAGE_UNAVAILABLE, "依赖服务不可用"),
+}
+
+
+def _http_exception_body(request: Request, exc: StarletteHTTPException) -> JSONResponse:
+    """未捕获 HTTPException（FastAPI 默认 404/405 与路由内裸抛）→ 统一四字段错误体。
+
+    B-⑥ 联调修复：FastAPI 默认 handler 回 ``{"detail": ...}`` 单字段体，不合 api/01 §4
+    错误体四字段契约。code 按 platform/errors.py 既有族就近映射，无登记码的罕见状态兜底
+    5999（02 §7 无 4xx 通用码，原文不丢——exc.detail 整体入 detail 字段）；trace_id 复用
+    ② RequestID 写入的请求上下文（exception handler 于 ExceptionMiddleware 内层执行，在
+    ② 之内，同 _validation_error_body 先例）；exc.headers 透传（保住 405 的 Allow 头）。
+    """
+    code, message = _HTTP_STATUS_CODE_MAP.get(exc.status_code, (ErrorCode.INTERNAL_ERROR, "请求处理失败"))
+    return error_response(request, code, message, status_code=exc.status_code, detail=exc.detail, headers=exc.headers)
+
+
 def create_app(settings: Settings | None = None) -> FastAPI:
     """应用工厂。settings 由入口层注入；缺省路径走局部导入（import-linter 白名单）。"""
     if settings is None:
@@ -390,6 +419,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     # DTO 校验异常 → 统一错误体 3001（02 §6；默认 422 体不合错误码契约，改写）
     app.add_exception_handler(RequestValidationError, _validation_error_body)
+    # 未捕获 HTTPException（默认 404/405 与路由内裸抛）→ 统一四字段错误体（api/01 §4；B-⑥ 联调修复）
+    app.add_exception_handler(StarletteHTTPException, _http_exception_body)
 
     @app.get("/api/v1/healthz", tags=["probe"])
     async def healthz() -> dict[str, str]:

@@ -151,7 +151,13 @@ export function GroupChatPage() {
         <div className="min-h-0 flex-1 overflow-y-auto">
           {/* S8 状态切片：群会话列表首载骨架 / 失败错误态（重试=refetch） */}
           {listQ.isPending && <SkeletonRows rows={4} rowHeight={48} className="px-3 pt-2" />}
-          {listQ.isError && (
+          {listQ.isError && filteredSessions.length > 0 && (
+            <div className="mx-3 mt-2 flex items-center gap-2 rounded-lg border border-orange/40 bg-orange/10 px-2.5 py-1.5 text-[11px] text-orange">
+              刷新失败（{(listQ.error as ApiError)?.code === -1 ? '响应解析异常' : '网络波动'}）· 正展示缓存
+              <button type="button" className="ml-auto underline underline-offset-2" onClick={() => void listQ.refetch()}>重试</button>
+            </div>
+          )}
+          {listQ.isError && filteredSessions.length === 0 && (
             <ErrorState
               className="mx-3 mt-2"
               message={listQ.error instanceof Error ? listQ.error.message : undefined}
@@ -193,7 +199,7 @@ export function GroupChatPage() {
         <header className="flex h-12 flex-none items-center gap-3 border-b border-separator bg-surface px-5">
           <Zap size={15} style={{ color: 'var(--accent)' }} aria-hidden />
           <b className="text-sm">{session?.title ?? '群聊'}</b>
-          <span className="badge b-gray">{members.length} 人</span>
+          {sessionId && <span className="badge b-gray">{members.length} 人</span>}
           {sessionId && !missing && <RoutingModePicker sessionId={sessionId} routing={routing} onChange={setRouting} />}
           <div className="ml-auto flex items-center gap-2">
             {/* 连接徽标只在选中会话后有意义（未选会话时流未建立，恒显 connecting 是假状态）；

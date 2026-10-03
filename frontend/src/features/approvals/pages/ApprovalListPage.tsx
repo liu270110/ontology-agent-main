@@ -141,8 +141,17 @@ export function ApprovalListPage() {
         )}
         {!isLoading && !isError && items.length === 0 && (
           <div className="empty">
-            <div className="t">没有待办审批</div>
-            <div className="d">新的变更发布、抽取终审、插件安装、MCP 接入、记忆升级与权限申请会出现在这里。</div>
+            {tab === 'done' ? (
+              <>
+                <div className="t">没有已办审批</div>
+                <div className="d">已通过 / 已驳回的审批工单会归档在这里。</div>
+              </>
+            ) : (
+              <>
+                <div className="t">没有待办审批</div>
+                <div className="d">新的变更发布、抽取终审、插件安装、MCP 接入、记忆升级与权限申请会出现在这里。</div>
+              </>
+            )}
           </div>
         )}
       </div>

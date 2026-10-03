@@ -66,7 +66,7 @@ describe('S6 治理域', () => {
     fireEvent.change(within(dialog).getByLabelText(/决议说明/), { target: { value: '术语委员会已会签，同意发布' } })
     fireEvent.click(within(dialog).getByTestId('apr-approve'))
     await waitFor(() => expect(decisions).toHaveLength(1))
-    expect(decisions[0]).toMatchObject({ action: 'approve', reason: '术语委员会已会签，同意发布' })
+    expect(decisions[0]).toMatchObject({ action: 'approve', note: '术语委员会已会签，同意发布' }) // fe1-F1：R50 后端 DecisionIn={action,note}（extra=forbid），意见字段名=note
     expect(await screen.findByText(/已通过，按类型写回对应域/)).toBeInTheDocument()
   }, 30_000)
 

@@ -79,6 +79,7 @@ from services.kb.api.schemas.kb import (
     DocumentPipelineProgress,
     DocumentStatusQuery,
     FactTypeFilter,
+    KbAgenticTraceOut,
     KbAnswerOut,
     KbAnswerSentenceOut,
     KbChunkOut,
@@ -111,6 +112,7 @@ from services.kb.api.schemas.kb import (
     doc_type_of,
     ui_status_of,
 )
+from services.kb.business.agentic import run_agentic_search
 from services.kb.business.kb_pipeline import (
     M2_FULL_STEPS,
     PipelineError,
@@ -131,7 +133,14 @@ from services.kb.retrieval.graph import (
     graph_search,
     graph_shortest_path,
 )
-from services.kb.retrieval.retrieve import ExtractiveAnswer, GraphExpansion, GraphPath, SearchHit, hybrid_search
+from services.kb.retrieval.retrieve import (
+    ExtractiveAnswer,
+    GraphExpansion,
+    GraphPath,
+    SearchHit,
+    hybrid_search,
+    resolve_mode,
+)
 from services.ontology.business.hierarchy_service import get_class_hierarchy
 
 # 跨模块显式服务调用（standards/01 §2.1 规则 3：business 为许可面，调用处注释模块文档）：
@@ -703,6 +712,10 @@ async def _class_hierarchy(
 async def search(body: KbSearchIn, principal: KbReadDep, request: Request, session: SessionDep) -> KbSearchOut:
     """OntRAG §5 契约 REST 子集全量：citations 全字段 / evidence.graph_paths / answers+confidence / usage。
 
+    agentic=true 走 A0 服务端代跑管线（AgenticRAG优化方案 §3/§8.1，v1 纯规则档零 LLM）：
+    判别（寒暄 skip → hits/citations 空数组 + decision 徽标）→ 三路召回 → 规则评级 →
+    术语归一改写纠错（≤max_rounds 轮，改写依据进 trace）→ 仍失败 degraded="agentic_exhausted"；
+    全程 trace 进响应 agentic 块（false 时恒 None=存量消费方零影响）。
     降级：嵌入路不可用 → BM25-only（degraded=true, reason=vector_unavailable）；
     mode=global/drift 无社区摘要索引 → local 降级（degraded=true, reason=mode_downgraded:*，二期）；
     图路无已发布本体读模型 → 层次闭包退化为类自身，同类扩展照常（非降级）。
@@ -760,35 +773,68 @@ async def search(body: KbSearchIn, principal: KbReadDep, request: Request, sessi
             acl=acl,
         )
 
-    result = await hybrid_search(
-        body.query,
-        bm25=bm25_fn,
-        vector=vector_fn,
-        graph=graph_fn if body.with_evidence else None,
-        top_k=body.top_k,
-        mode=body.mode,
-        entity_type_filter=body.entity_type_filter,
-    )
+    if body.agentic:
+        # A0 服务端代跑（AgenticRAG优化方案 §3/§8.1）：编排委托 business/agentic——decide 判别
+        # （寒暄 skip 时下方回调永不触发=零召回）→ 每轮走同一套三路召回闭包 → 规则评级 →
+        # 术语归一改写纠错（≤body.max_rounds 轮）→ 仍失败 degraded="agentic_exhausted"。
+        async def agentic_once(round_query: str) -> list[SearchHit]:
+            inner = await hybrid_search(
+                round_query,
+                bm25=bm25_fn,
+                vector=vector_fn,
+                graph=graph_fn if body.with_evidence else None,
+                top_k=body.top_k,
+                mode=body.mode,
+                entity_type_filter=body.entity_type_filter,
+            )
+            return inner.hits
+
+        hits, trace = await run_agentic_search(body.query, agentic_once, max_rounds=body.max_rounds)
+        mode_used, mode_reason = resolve_mode(body.mode)  # lite 路由口径与 hybrid_search 内部一致
+        degraded = mode_reason is not None
+        degraded_reasons = [mode_reason] if mode_reason is not None else []
+        channels = sorted({channel for hit in hits for channel in hit.channels})
+        evidence = KbEvidenceOut(graph_paths=[])  # v1 边界：agentic 管线不回图路证据（trace 为解释面）
+        answers: list[KbAnswerOut] = []  # v1 边界：抽取式摘要随完整档接入，不因纠错轮拼装误导
+        result_query = body.query
+        result_mode = body.mode
+    else:
+        result = await hybrid_search(
+            body.query,
+            bm25=bm25_fn,
+            vector=vector_fn,
+            graph=graph_fn if body.with_evidence else None,
+            top_k=body.top_k,
+            mode=body.mode,
+            entity_type_filter=body.entity_type_filter,
+        )
+        hits = result.hits
+        mode_used = result.mode_used
+        degraded = result.degraded
+        degraded_reasons = list(result.degraded_reasons)
+        channels = list(result.channels)
+        evidence = KbEvidenceOut(graph_paths=[_path_to_out(path) for path in result.graph_paths])
+        answers = [_answer_to_out(result.answer)] if result.answer is not None else []
+        result_query = result.query
+        result_mode = result.mode
     # source_context 软路由（多源接入 §5.2 v1，service 层共用助手）：None=原序零开销零 SQL；
-    # 非空=按文档 meta.source_system 加权重排（不剔除）。answers 摘要仍按融合相关度取——
-    # 分组返回 schema 随 v1.5 语境术语表落地。
-    final_hits = await rerank_hits_by_source_context(session, result.hits, source_context=body.source_context)
+    # 非空=按文档 meta.source_system 加权重排（不剔除）。
+    final_hits = await rerank_hits_by_source_context(session, hits, source_context=body.source_context)
     latency_ms = int((time.perf_counter() - started) * 1000)
     return KbSearchOut(
-        query=result.query,
-        mode=result.mode,
-        mode_used=result.mode_used,
-        degraded=result.degraded,
-        degraded_reasons=result.degraded_reasons,
-        channels=result.channels,
+        query=result_query,
+        mode=result_mode,
+        mode_used=mode_used,
+        degraded=degraded,
+        degraded_reasons=degraded_reasons,
+        channels=channels,
         latency_ms=latency_ms,
         hits=[_hit_to_out(hit) for hit in final_hits],
         citations=[_hit_to_citation(hit) for hit in final_hits],
-        evidence=KbEvidenceOut(graph_paths=[_path_to_out(path) for path in result.graph_paths])
-        if body.with_evidence
-        else KbEvidenceOut(graph_paths=[]),
-        answers=[_answer_to_out(result.answer)] if result.answer is not None else [],
+        evidence=evidence,
+        answers=answers,
         usage=KbUsageOut(latency_ms=latency_ms),
+        agentic=KbAgenticTraceOut.model_validate(trace.model_dump()) if body.agentic else None,
     )
 
 

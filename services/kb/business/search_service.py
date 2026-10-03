@@ -28,6 +28,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from services.kb.business.agentic import AgenticTrace, run_agentic_search
 from services.kb.business.usage_service import UsageStore
 from services.kb.retrieval.embed import AclPushdown, OllamaEmbedder, bm25_search, vector_search
 from services.kb.retrieval.graph import ClassHierarchy, build_class_hierarchy, expand_graph
@@ -76,6 +77,8 @@ class KnowledgeSearchResult(BaseModel):
     citations: list[KnowledgeCitation] = Field(default_factory=list)
     graph_paths: list[dict[str, Any]] = Field(default_factory=list)  # lite=类 IRI 链（§5 evidence）
     latency_ms: int = 0
+    # agentic 管线 trace（AgenticRAG优化方案 §8.1 冻结契约；agentic=False 恒 None=存量消费方零影响）
+    agentic: AgenticTrace | None = None
 
 
 class KnowledgeSearchService:
@@ -117,6 +120,8 @@ class KnowledgeSearchService:
         with_evidence: bool = True,
         acl_tags: Sequence[str] | None = None,
         source_context: str | None = None,
+        agentic: bool = False,
+        max_rounds: int = 2,
     ) -> KnowledgeSearchResult:
         """检索（OntRAG §5 子集）：返回引用与 lite 图路；空库/零命中为空结果非失败。
 
@@ -124,8 +129,29 @@ class KnowledgeSearchService:
         ``source_context``=源系统标识软路由（多源接入设计 §5.2：同词异义按源系统加权；
         None=维持相关度序零开销——匹配文档 meta.source_system 的命中加分排前，不匹配者降序
         不剔除，软路由不硬过滤；硬过滤与分组返回随 v1.5 语境术语表落地）。
+        ``agentic``=A0 服务端代跑 agentic 管线开关（AgenticRAG优化方案 §3/§8.1；v1 纯规则档）。
+        **False=现状路径逐行不变（零行为变化红线，结果 agentic 恒 None）**；True 时
+        decide 判别（寒暄 skip 零召回）→ 每轮独立短会话三路召回 → 规则评级 → 术语归一改写
+        纠错（≤``max_rounds`` 轮）→ 仍失败 degraded="agentic_exhausted"；全程 trace 进
+        结果 agentic 块。agentic 管线内嵌路降级不再置 result.degraded（语义保留给基础设施
+        降级链），循环解释以 trace 为唯一事实源（v1 边界：graph_paths 恒空、channels 取
+        最终命中并集）。
         """
         started = time.perf_counter()
+        if agentic:  # A0 管线支路：不触碰下方现状路径（零行为变化红线）
+            return await self._search_agentic(
+                tenant_id=tenant_id,
+                query=query,
+                kb_id=kb_id,
+                top_k=top_k,
+                mode=mode,
+                entity_type_filter=entity_type_filter,
+                with_evidence=with_evidence,
+                acl_tags=acl_tags,
+                source_context=source_context,
+                max_rounds=max_rounds,
+                started=started,
+            )
         async with self._session_factory() as db:
             hierarchy = await self._class_hierarchy(db, tenant_id)
             acl = await AclPushdown.prepare(db, enabled=self._acl_filter_enabled, allowed_tags=acl_tags)
@@ -182,6 +208,86 @@ class KnowledgeSearchService:
             citations=citations,
             graph_paths=[_path_to_dict(path) for path in result.graph_paths],
             latency_ms=latency_ms,
+        )
+
+    async def _search_agentic(
+        self,
+        *,
+        tenant_id: uuid.UUID,
+        query: str,
+        kb_id: uuid.UUID | None,
+        top_k: int,
+        mode: str,
+        entity_type_filter: Sequence[str] | None,
+        with_evidence: bool,
+        acl_tags: Sequence[str] | None,
+        source_context: str | None,
+        max_rounds: int,
+        started: float,
+    ) -> KnowledgeSearchResult:
+        """A0 服务端代跑支路（AgenticRAG优化方案 §3）：编排委托 business/agentic，本方法只装配。
+
+        - 每轮检索回调自开短只读会话即用即弃（03 §6.1 检索在事务外；轮数 ≤ max_rounds ≤ 2）；
+        - 寒暄判别 skip 时 search_fn 永不触发 → 零召回零会话（§5 场景 1）；
+        - source_context 软路由对最终命中照常生效（None=零开销）；
+        - 证据图路 v1 不带回（graph_paths 恒空）——循环解释以 trace 为事实源。
+        """
+
+        async def once(round_query: str) -> list[SearchHit]:
+            async with self._session_factory() as db:
+                hierarchy = await self._class_hierarchy(db, tenant_id)
+                acl = await AclPushdown.prepare(db, enabled=self._acl_filter_enabled, allowed_tags=acl_tags)
+
+                async def bm25_fn(q: str, k: int) -> list[SearchHit]:
+                    rows = await bm25_search(db, tenant_id=tenant_id, query=q, top_k=k, collection_id=kb_id, acl=acl)
+                    return [_dict_to_hit(r) for r in rows]
+
+                async def vector_fn(q: str, k: int) -> list[SearchHit]:
+                    embeddings = await self._embedder.embed([q])
+                    rows = await vector_search(
+                        db, tenant_id=tenant_id, query_embedding=embeddings[0], top_k=k, collection_id=kb_id, acl=acl
+                    )
+                    return [_dict_to_hit(r) for r in rows]
+
+                async def graph_fn(seeds: Sequence[SearchHit]) -> Any:
+                    return await expand_graph(
+                        db,
+                        tenant_id=tenant_id,
+                        collection_id=kb_id,
+                        seeds=seeds,
+                        hierarchy=hierarchy,
+                        entity_type_filter=entity_type_filter,
+                        acl=acl,
+                    )
+
+                result = await hybrid_search(
+                    round_query,
+                    bm25=bm25_fn,
+                    vector=vector_fn,
+                    graph=graph_fn if with_evidence else None,
+                    top_k=top_k,
+                    mode=mode,
+                    entity_type_filter=entity_type_filter,
+                )
+                return result.hits
+
+        hits, trace = await run_agentic_search(query, once, max_rounds=max_rounds)
+        if source_context and hits:  # 软路由（§5.2）：仅对最终命中重排；空/None 零 SQL
+            async with self._session_factory() as db:
+                hits = await rerank_hits_by_source_context(db, hits, source_context=source_context)
+        citations = [_hit_to_citation(hit) for hit in hits]
+        self._schedule_usage_record(
+            tenant_id=tenant_id, kb_collection_id=kb_id, chunk_ids=[c.chunk_id for c in citations]
+        )
+        return KnowledgeSearchResult(
+            query=query,
+            degraded=False,  # 基础设施降级语义不与 agentic 纠错混用（见 search docstring v1 边界）
+            degraded_reasons=[],
+            channels=sorted({channel for hit in hits for channel in hit.channels}),
+            citations=citations,
+            graph_paths=[],
+            latency_ms=int((time.perf_counter() - started) * 1000),
+            agentic=trace,
         )
 
     def _schedule_usage_record(

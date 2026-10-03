@@ -14,23 +14,23 @@ triggers:
         - master
 stages:
   - name: stage-quality
-    displayName: 'S1 静态质量（lint+类型）'
+    displayName: 'S1 静态质量（ruff；mypy strict 待模块轴落位重建）'
     steps:
       - step: build@python
         name: lint_typecheck
-        displayName: 'ruff + mypy'
+        displayName: 'ruff lint'
         pythonVersion: 3.11
         commands:
-          - python -m pip install --upgrade pip ruff mypy
-          - ruff check services/ cli/ tests/
-          # 仅 domain 参与硬门禁（本地 strict 全绿）；semantic/ 尚无 .py，待代码落地加入
-          - mypy services/domain/ --strict
+          - python -m pip install --upgrade pip ruff
+          - ruff check services/ tests/
+          # mypy --strict 硬门禁待重建：原 services/domain/ 聚合目录随模块轴落位
+          # （services/<模块>/domain）不再存在，新门禁对象属门禁设计决策，不在路径清账范围
   - name: stage-unit
     displayName: 'S2 单元测试'
     steps:
       - step: build@python
         name: unit_tests
-        displayName: 'pytest（domain 覆盖率 ≥90% 随 services/domain/tests 落地转硬门禁）'
+        displayName: 'pytest（单测硬门禁；覆盖率门禁随模块轴落位待建）'
         pythonVersion: 3.11
         commands:
           - python -m pip install -r requirements.txt pytest

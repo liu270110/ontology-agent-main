@@ -45,11 +45,6 @@ from services.platform.errors import ErrorCode
 
 logger = logging.getLogger(__name__)
 
-_TOOL_TIMEOUT_S = 30.0
-_PLANNING_TIMEOUT_S = 10.0
-_GATE_TIMEOUT_S = 1.0
-_SINK_TIMEOUT_S = 5.0
-
 # 模型回退规划的结构化产物 Schema（推理分级宪法：输出必须过确定性校验才可用）
 _PLAN_JSON_SCHEMA: dict[str, Any] = {
     "type": "object",
@@ -84,7 +79,7 @@ class AgentKernel:
         dispatcher: ExtensionDispatcher,
         *,
         clock: Callable[[], float] = time.monotonic,
-        tool_timeout_s: float = _TOOL_TIMEOUT_S,
+        tool_timeout_s: float | None = None,
         spill_store: SpillStore | None = None,
         tool_parallelism: int | None = None,
     ) -> None:
@@ -92,7 +87,6 @@ class AgentKernel:
         self._baseline = BaselineGate()
         self._evaluator = CriterionEvaluator()
         self._clock = clock
-        self._tool_timeout_s = tool_timeout_s
         # B-① 并行段并发度：显式注入优先，缺省读 Settings（T6 唯一事实源；=1 退化为串行）
         self._tool_parallelism = (
             tool_parallelism if tool_parallelism is not None else get_settings().kernel_tool_parallelism
@@ -100,6 +94,9 @@ class AgentKernel:
         self._last_ledger: KernelLedger | None = None
         # 阶段执行器（内核私有；依赖注入同一分发器，禁直连能力实现）
         self._context_stage = ContextAssemblyStage(dispatcher, self._emit)
+        # B-③ 批（docs/Agent/10 §8.2）：tool_timeout_s 直传执行阶段——显式注入优先
+        # （测试与组合根直传通道，D2/F-4 同款纪律），缺省 None 由 ExecutionStage
+        # 运行期读 Settings（配置层唯一事实源）。
         self._execution_stage = ExecutionStage(
             dispatcher, self._emit, tool_timeout_s=tool_timeout_s, spill_store=spill_store
         )
@@ -114,6 +111,17 @@ class AgentKernel:
     def last_ledger(self) -> KernelLedger | None:
         """最近一次运行的账本（C2 v1 内存形态；M4 切 PG 台账，取消/审计验收取数口）。"""
         return self._last_ledger
+
+    # ── 配置层解析（B-③ 批，docs/Agent/10 §8.2：规划/门禁/事件汇+排水无显式构造参数，
+    # 运行期统一读 Settings；数值默认=原模块级常量 10/1/5 逐位一致）───────────────
+    def _resolve_planning_timeout_s(self) -> float:
+        return get_settings().kernel_planning_timeout_s
+
+    def _resolve_gate_timeout_s(self) -> float:
+        return get_settings().kernel_gate_timeout_s
+
+    def _resolve_sink_timeout_s(self) -> float:
+        return get_settings().kernel_sink_timeout_s
 
     # ── 主入口 ───────────────────────────────────────────────────────────
     async def run(
@@ -217,14 +225,16 @@ class AgentKernel:
                     "residuals": list(rc.ledger.residuals),
                 },
             )
-            await rc.ledger.drain_sink()  # C1 投影排水（取消亦不丢锚点）
+            await rc.ledger.drain_sink(timeout_s=self._resolve_sink_timeout_s())  # C1 投影排水（取消亦不丢锚点）
             raise  # 取消语义向上传播；终态与零残留已经账本可追溯
 
     # ── ③ 规划（策略优先、模型回退；三层校验）────────────────────────────
     async def _stage_planning(self, rc: RunContext, context: tuple[ContextBlock, ...]) -> PlanCandidate:
         strategy = self._dispatcher.planning_strategy
         if strategy is not None:
-            candidate = await asyncio.wait_for(strategy.plan(rc.task, rc.ctx), timeout=_PLANNING_TIMEOUT_S)
+            candidate = await asyncio.wait_for(
+                strategy.plan(rc.task, rc.ctx), timeout=self._resolve_planning_timeout_s()
+            )
         else:
             model = self._dispatcher.model
             if model is None:
@@ -236,7 +246,7 @@ class AgentKernel:
                     json_schema=_PLAN_JSON_SCHEMA,
                     trace_id=rc.ctx.trace_id,
                 ),
-                timeout=_PLANNING_TIMEOUT_S,
+                timeout=self._resolve_planning_timeout_s(),
             )
             candidate = self._candidate_from_model(raw)
         self._validate_candidate(candidate)  # 三层校验（结构/绑定/分级）
@@ -341,7 +351,9 @@ class AgentKernel:
         pack_reports: list[GateReport] = []
         for gate in self._dispatcher.pre_gates:  # 包 gate：投影上毫秒级、确定性（§4 表）
             try:
-                pack_reports.append(await asyncio.wait_for(gate.check(decision, ctx), timeout=_GATE_TIMEOUT_S))
+                pack_reports.append(
+                    await asyncio.wait_for(gate.check(decision, ctx), timeout=self._resolve_gate_timeout_s())
+                )
             except TimeoutError:  # 降级矩阵：包 gate 超时按拒绝合成（基线不受影响）
                 pack_reports.append(self._pack_timeout_report(gate.meta.name, decision))
         report = BaselineGate.compose(baseline, pack_reports)  # 篡改基线（自称基线）在此被拒
@@ -397,7 +409,7 @@ class AgentKernel:
         if result is not None:
             for gate in self._dispatcher.post_gates:  # gates.post：只报违例，不改状态（T2）
                 try:
-                    report = await asyncio.wait_for(gate.validate(result, ctx), timeout=_GATE_TIMEOUT_S)
+                    report = await asyncio.wait_for(gate.validate(result, ctx), timeout=self._resolve_gate_timeout_s())
                     if not report.ok:
                         findings.append(report.validator or "post_gate")
                 except TimeoutError:
@@ -450,10 +462,10 @@ class AgentKernel:
             reason = "全部步 validated 且判据满足（或无判据）"
         for sink in self._dispatcher.event_sinks:  # 事件汇（Outbox/审计 sink 为内核必选，不经此）
             try:
-                await asyncio.wait_for(sink.handle(list(ledger.events), ctx), timeout=_SINK_TIMEOUT_S)
+                await asyncio.wait_for(sink.handle(list(ledger.events), ctx), timeout=self._resolve_sink_timeout_s())
             except Exception as exc:  # 通知失败不阻断落账（结构化转义留痕）
                 logger.warning("事件汇失败（不阻断落账）: %s", exc)
-        await ledger.drain_sink()  # C1 投影排水：先落库后终态（可追溯口径）
+        await ledger.drain_sink(timeout_s=self._resolve_sink_timeout_s())  # C1 投影排水：先落库后终态（可追溯口径）
         self._emit(
             ledger,
             ctx,
@@ -466,7 +478,9 @@ class AgentKernel:
                 "stage": str(LoopStage.SETTLEMENT),
             },
         )
-        await ledger.drain_sink()  # C1 投影排水：settled 锚点亦投影，先落库后终态（可追溯口径）
+        await ledger.drain_sink(
+            timeout_s=self._resolve_sink_timeout_s()
+        )  # C1 投影排水：settled 锚点亦投影，先落库后终态（可追溯口径）
         return RunOutcome(
             run_id=task.run_id,
             status=str(status),
@@ -488,7 +502,9 @@ class AgentKernel:
     ) -> RunOutcome:
         if run_checklist:  # §2.4：资源释放先行（在途调用中止/租约强制释放/工作区标记）
             await rc.coordinator.execute(reason=reason)
-        await rc.ledger.drain_sink()  # C1 投影排水：终态可追溯（超时残留已在账本留痕）
+        await rc.ledger.drain_sink(
+            timeout_s=self._resolve_sink_timeout_s()
+        )  # C1 投影排水：终态可追溯（超时残留已在账本留痕）
         for state in rc.states.values():
             if not state.is_terminal:
                 state.cancel(reason=reason)

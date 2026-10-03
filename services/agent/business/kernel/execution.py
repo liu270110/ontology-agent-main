@@ -30,11 +30,11 @@ from services.agent.domain.model.kernel_actions import (
 from services.agent.domain.model.kernel_context import TenantContext, TrustLevel
 from services.agent.domain.model.kernel_planning import PlanStep
 from services.agent.domain.model.step_state import LoopStage, StepStatus
+from services.platform.config import get_settings
 from services.platform.errors import ErrorCode
 
 logger = logging.getLogger(__name__)
 
-_TOOL_TIMEOUT_S = 30.0
 _APPROVAL_REQUIRED_MODES = frozenset({ExecutionMode.EXTERNAL_WRITE, ExecutionMode.CODE})
 _TOOL_ERROR_MAX_CHARS = 2048  # 工具错误正文硬截断（hermes 勘察细节 2，02 §11.2-2：「错误即反馈」回流防灌爆）
 
@@ -51,13 +51,20 @@ class ExecutionStage:
         dispatcher: ExtensionDispatcher,
         emit: Emit,
         *,
-        tool_timeout_s: float = _TOOL_TIMEOUT_S,
+        tool_timeout_s: float | None = None,
         spill_store: SpillStore | None = None,
     ) -> None:
         self._dispatcher = dispatcher
         self._emit = emit
+        # B-③ 批（docs/Agent/10 §8.2）：缺省 None=运行期从配置层解析（Settings 唯一事实源）；
+        # 显式注入优先（测试与组合根直传通道，D2/F-4 同款纪律）。
         self._tool_timeout_s = tool_timeout_s
         self._spill_store = spill_store  # C1 spill（02 §11.2-11）：超大结果→有界预览+locator
+
+    def _resolve_tool_timeout_s(self) -> float:
+        if self._tool_timeout_s is not None:
+            return self._tool_timeout_s
+        return get_settings().kernel_tool_timeout_s
 
     async def run(self, rc: RunContext, step: PlanStep) -> None:
         state, ctx, ledger = rc.states[step.seq], rc.ctx, rc.ledger
@@ -154,13 +161,14 @@ class ExecutionStage:
                 },
             )
         else:
+            tool_timeout_s = self._resolve_tool_timeout_s()  # B-③：显式注入优先，未传读 Settings（§8.2）
             invoke_task = asyncio.create_task(
-                tool.invoke(call, ctx, approval=approval, timeout_ms=int(self._tool_timeout_s * 1000))
+                tool.invoke(call, ctx, approval=approval, timeout_ms=int(tool_timeout_s * 1000))
             )
             coordinator.track_tool_task(call.call_id, invoke_task)
             invoke_task.add_done_callback(lambda _t, call_id=call.call_id: coordinator.untrack_tool_task(call_id))
             try:
-                result = await asyncio.wait_for(asyncio.shield(invoke_task), timeout=self._tool_timeout_s)
+                result = await asyncio.wait_for(asyncio.shield(invoke_task), timeout=tool_timeout_s)
             except TimeoutError:  # 单调用超时 → 结构化失败（禁异常逃逸循环；任务留协调器可取消）
                 result = ToolResult(
                     ok=False,

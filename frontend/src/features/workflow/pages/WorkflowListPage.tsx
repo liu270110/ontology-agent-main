@@ -13,6 +13,9 @@ export function WorkflowListPage() {
   const navigate = useNavigate()
   const [newOpen, setNewOpen] = useState(false)
   const listQ = useQuery({ queryKey: ['wf', 'list'], queryFn: () => listWorkflows() })
+  // F8④（B:A-18）：items 提取空数组保底——重试后 data undefined / 形变（B1 双轨缺 items 键）
+  // 时不再 `.items.length` 崩溃或空白，统一落保底空态
+  const items = Array.isArray(listQ.data?.items) ? listQ.data.items : []
 
   return (
     <div className="min-h-0 flex-1 overflow-y-auto p-6" data-testid="wf-list-page">
@@ -28,7 +31,7 @@ export function WorkflowListPage() {
       </div>
 
       <div className="grid grid-cols-3 gap-4">
-        {(listQ.data?.items ?? []).map(w => (
+        {items.map(w => (
           <button
             key={w.id}
             type="button"
@@ -70,8 +73,10 @@ export function WorkflowListPage() {
         ))}
       </div>
 
-      {/* S8 状态切片：加载骨架卡（数量≈mock 工作流 3）/ 错误态（重试=refetch）；空态仅在成功后出现 */}
-      {listQ.isLoading && (
+      {/* S8 状态切片：加载骨架卡（数量≈mock 工作流 3）/ 错误态（重试=refetch）；空态仅在成功后出现。
+          F8④：骨架门控用 isPending（v5 isLoading=isPending&&isFetching——重试失败后不再有
+          骨架/错误/空态三不管的中间态）；保底空态兜 data undefined/形变 */}
+      {listQ.isPending && (
         <div className="mt-4">
           <SkeletonCards count={3} />
         </div>
@@ -86,7 +91,7 @@ export function WorkflowListPage() {
         </div>
       )}
 
-      {!listQ.isLoading && !listQ.isError && (listQ.data?.items.length ?? 0) === 0 && (
+      {!listQ.isPending && !listQ.isError && items.length === 0 && (
         <div className="empty mt-16">
           <Play aria-hidden />
           <div className="t">还没有工作流</div>

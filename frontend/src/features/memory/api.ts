@@ -58,6 +58,18 @@ export interface L1Session {
   blocks: { key: string; value: string; masked?: boolean }[]
 }
 
+/** L1 工作记忆快照（契约形态 GET /memory/l1/{session_id}，api/01 §5.5；live 实测
+ *  2026-10-04：{layer, session_id, blocks:dict, window:[{role,content,...}], state, degraded}）。
+ *  blocks=会话内记忆块字典（服务端已脱敏后的值）；window=滑动窗口近期消息。 */
+export interface L1Snapshot {
+  layer?: string
+  session_id: string
+  blocks: Record<string, unknown> | null
+  window: { role: string; content: string; message_id?: string; created_at?: string }[] | null
+  state?: unknown
+  degraded?: boolean
+}
+
 export interface MemoryPromotion {
   id: string
   fact_id: string
@@ -87,9 +99,15 @@ export function invalidateFact(id: string, reason: string) {
   return api.post<{ id: string; status: string }>(`/memory/facts/${id}/invalidate`, { reason })
 }
 
-/** GET /memory/l1 —— L1 工作记忆（R 预登记列表端点；契约单条=GET /memory/l1/{session_id}） */
+/** GET /memory/l1 —— L1 列表（R 预登记端点，live 未实装仅 mock 有；仅供分层容量卡计数，
+ *  视图层已改契约单条见 getL1BySession——F8⑤/B:A-11） */
 export function listL1() {
   return api.get<{ items: L1Session[] }>('/memory/l1')
+}
+
+/** GET /memory/l1/{session_id} —— L1 工作记忆（契约单条形态 §5.5；会话关闭归档后 404） */
+export function getL1BySession(sessionId: string) {
+  return api.get<L1Snapshot>(`/memory/l1/${sessionId}`)
 }
 
 /** GET /memory/promotions —— L2→L3 升级审核队列（R 预登记，见 R 清单） */

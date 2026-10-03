@@ -1,4 +1,4 @@
-import { api } from '@/api/client'
+import { api, ApiError } from '@/api/client'
 
 /** 当前用户偏好（/me/preferences，api/01 §5.13 me 预登记；DTO 与 mocks/admin-handlers.ts
  *  PREFS 一一对应）。跨域消费（工作台新手引导卡 onboarding-card + 设置各 Tab）→
@@ -31,5 +31,30 @@ export interface Preferences {
   memory_clear_via_invalidate?: boolean
 }
 
-export const getPreferences = () => api.get<Preferences>('/me/preferences')
+/** 本地默认偏好（F8⑥ B:A-9 前端半：/me/preferences 404——后端 me 域未挂载（live 实测
+ *  2026-10-04 裸 404 {detail}）→ 降级本地默认值继续渲染，设置页不再永挂「加载中…」。
+ *  display_name/email 留空由消费方以 auth-store 用户信息兜底；PUT 在降级态下仍可发起
+ *  （后端上线后自然转正），保存失败照常 toast 不静默。 */
+export const PREFERENCES_DEFAULTS: Preferences = {
+  display_name: '',
+  email: '',
+  department: '',
+  language: 'zh-CN',
+  timezone: 'Asia/Shanghai',
+  totp_enabled: false,
+  notifications: {},
+}
+
+export const getPreferences = async (): Promise<Preferences> => {
+  try {
+    return await api.get<Preferences>('/me/preferences')
+  } catch (e) {
+    // 仅对「端点不存在/未实现」降级（404/501/503——B7 后端裁决口径的占位路由形态）；
+    // 鉴权失败（401/1003）等照抛，避免掩盖会话过期
+    if (e instanceof ApiError && (e.httpStatus === 404 || e.httpStatus === 501 || e.httpStatus === 503)) {
+      return { ...PREFERENCES_DEFAULTS }
+    }
+    throw e
+  }
+}
 export const putPreferences = (body: Partial<Preferences>) => api.put<Preferences>('/me/preferences', body)

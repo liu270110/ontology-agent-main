@@ -28,7 +28,9 @@ export function RecycleBinSheet({ open, onClose, onChanged }: { open: boolean; o
   const [purgeTarget, setPurgeTarget] = useState<RecycleItem | null>(null)
   const [busy, setBusy] = useState(false)
   const query = useQuery({ queryKey: ['kb', 'recycle-bin'], queryFn: listRecycleBin, enabled: open })
-  const items = query.data?.items ?? []
+  // F8③（B:A-17 前端半）：列表失败 → 错误态/空态分支（与 isPending 互斥，见下）；items 提取
+  // 数组化防形变（B1 双轨期 {data:[],meta} / {items} / 裸数组三形态，避免 undefined.items 崩溃）
+  const items = Array.isArray(query.data?.items) ? query.data.items : []
 
   async function onRestore(item: RecycleItem) {
     if (busy) return

@@ -1,6 +1,7 @@
 import '@testing-library/jest-dom/vitest'
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { http, HttpResponse } from 'msw'
 import { App } from '@/app/App'
 import { server } from '@/mocks/node'
 import { useAuthStore } from '@/stores/auth-store'
@@ -108,20 +109,42 @@ describe('B3-P 记忆 · 搜索/导出转实', () => {
     expect(anchors.some(a => /^memory-export-L3-\d{8}\.json$/.test(a.download))).toBe(true)
   }, 30_000)
 
-  it('④ L1 层内过滤：会话标题 / 块 key·value 命中口径', async () => {
+  it('④ L1 层内过滤（F8⑤ 契约形态）：会话 id / 块 key·value / 窗口内容命中口径', async () => {
     await openL3WithDrawer()
+
+    // 契约夹具：会话 s-9001（blocks 含脱敏联系块 + 窗口消息）
+    server.use(
+      http.get('*/api/v1/sessions', () =>
+        HttpResponse.json({
+          code: 0, message: 'ok',
+          data: { items: [{ id: 's-9001', title: '馈线 F12 过载研判', updated_at: null }], next_cursor: null },
+        }),
+      ),
+      http.get('*/api/v1/memory/l1/s-9001', () =>
+        HttpResponse.json({
+          code: 0, message: 'ok',
+          data: {
+            layer: 'l1', session_id: 's-9001', state: null, degraded: false,
+            blocks: { contact: '张** · 138*****5678', state: 'stage=impact_analysis' },
+            window: [{ role: 'assistant', content: 'F12 负荷转移路径已生成。' }],
+          },
+        }),
+      ),
+    )
 
     // L3 打开搜索栏后切层：搜索栏保留，过滤口径跟随当前层
     fireEvent.click(screen.getByTestId('mem-search-open'))
     await screen.findByTestId('mem-search-input')
     fireEvent.click(screen.getByTestId('layer-tab-L1'))
-    expect(await screen.findByTestId('l1-card-s-2417', {}, { timeout: 10_000 })).toBeInTheDocument()
-    expect(screen.getByTestId('l1-card-s-2398')).toBeInTheDocument()
+    expect(await screen.findByTestId('l1-snapshot-s-9001', {}, { timeout: 10_000 })).toBeInTheDocument()
 
-    // '138' 仅命中 s-2398 的脱敏联系块（138*****5678），其余两张卡被过滤
+    // '138' 命中脱敏联系块 → 快照保留；计数 1/1（单快照口径）
     fireEvent.change(screen.getByTestId('mem-search-input'), { target: { value: '138' } })
-    expect(screen.getByTestId('l1-card-s-2398')).toBeInTheDocument()
-    expect(screen.queryByTestId('l1-card-s-2417')).not.toBeInTheDocument()
-    expect(screen.getByTestId('mem-search-count')).toHaveTextContent('1/3')
+    expect(screen.getByTestId('l1-snapshot-s-9001')).toBeInTheDocument()
+    expect(screen.getByTestId('mem-search-count')).toHaveTextContent('1/1')
+
+    // 无关词 → 无匹配空态（快照隐藏）
+    fireEvent.change(screen.getByTestId('mem-search-input'), { target: { value: '绝对不存在的词' } })
+    expect(await screen.findByText('无匹配内容')).toBeInTheDocument()
   }, 30_000)
 })

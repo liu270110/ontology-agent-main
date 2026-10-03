@@ -2,7 +2,8 @@ import { useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { Bot, CircleStop, MessageSquare, Pencil, Play, Send, ListChecks } from 'lucide-react'
-import {EmptyState} from '@/components/states'
+import {EmptyState, ErrorState} from '@/components/states'
+import { ApiError } from '@/api/client'
 import { useAuthStore } from '@/stores/auth-store'
 import {
   getAgent,
@@ -47,7 +48,13 @@ export function AgentDetailPage() {
   const [debugInput, setDebugInput] = useState('')
   const [debugLog, setDebugLog] = useState<{ role: 'user' | 'agent'; text: string; trace?: string }[]>([])
 
-  const { data: agent } = useQuery({ queryKey: ['agents', agentId], queryFn: () => getAgent(agentId) })
+  // F8②（B:A-16）：详情查询 422（live 对非 UUID id 回信封 3001）/404 → 错误态（重试=refetch），
+  // 不再因 !agent 永挂「加载中…」
+  const { data: agent, isError: agentError, error: agentErr, refetch: refetchAgent } = useQuery({
+    queryKey: ['agents', agentId],
+    queryFn: () => getAgent(agentId),
+    retry: false,
+  })
   const sessions = useQuery({
     queryKey: ['agents', agentId, 'sessions'],
     queryFn: () => listAgentSessions(agentId),
@@ -79,6 +86,21 @@ export function AgentDetailPage() {
     setDebugLog(l => [...l, { role: 'user', text: content }])
     const res = await debugChat(agentId, content)
     setDebugLog(l => [...l, { role: 'agent', text: res.reply, trace: res.trace_id }])
+  }
+
+  if (agentError) {
+    return (
+      <div className="mx-auto max-w-[1080px]">
+        <div className="mt-10">
+          <ErrorState
+            title="Agent 详情加载失败"
+            message={agentErr instanceof Error ? agentErr.message : undefined}
+            code={agentErr instanceof ApiError ? agentErr.code : undefined}
+            onRetry={() => void refetchAgent()}
+          />
+        </div>
+      </div>
+    )
   }
 
   if (!agent) {

@@ -77,7 +77,7 @@
 
 /* ---- 数字变化提示（统计卡刷新时的 tick） ---- */
 @keyframes oa-tick{0%{transform:translateY(0)}35%{transform:translateY(-3px);color:var(--accent)}100%{transform:translateY(0)}}
-.tick{animation:oa-tick .4s var(--ease)}
+.tick{animation:oa-tick var(--dur-3) var(--ease)} /* .4s→--dur-3 精确等值（头部规则 2：禁裸写 ms） */
 
 /* ---- 主题切换交叉淡化（html 加 .theme-fading 时全局过渡一帧） ---- */
 .theme-fading *{transition:background-color var(--dur-2) var(--ease),color var(--dur-2) var(--ease),border-color var(--dur-2) var(--ease)!important}
@@ -95,6 +95,10 @@
    v1.7 动效实验室（24 篇 §3.9/§4.15；画板 00J 同名同源）
    缓动令牌：--spring-soft（linear() 物理弹簧）与 --expo-out
    （Linear 标志曲线）定义在 tokens.css；本层只含 keyframes/类。
+   时长纪律说明（2026-10-03 审计 M2）：微交互过渡一律 --dur-1..4；
+   本节与上方氛围层的 .3s/.32s/.35s/.6s/2.2s 与 5.5s/14s 等为
+   效果专用时长（编舞配对/内容速度/环境循环），无对应令牌档，
+   刻意保留裸值并在此登记豁免——归键属 v2 动效字阶裁决。
    ============================================================= */
 @keyframes oa-grow{from{scale:0 1}to{scale:1 1}}
 @keyframes oa-reveal{from{opacity:0;translate:0 36px}to{opacity:1;translate:0}}
@@ -119,7 +123,7 @@
 .ripple-btn .rp{position:absolute;border-radius:50%;background:var(--glass-hi);opacity:.45;
   transform:scale(0);animation:oa-rip .6s var(--ease) forwards;pointer-events:none}
 .tilt{transform:perspective(900px) rotateX(var(--rx,0deg)) rotateY(var(--ry,0deg));
-  transition:transform .15s ease-out;will-change:transform}
+  transition:transform var(--dur-1) var(--ease);will-change:transform} /* .15s ease-out→--dur-1+--ease（150ms 精确等值） */
 .magnetic{transition:transform .35s cubic-bezier(.3,1.5,.5,1)}
 @keyframes oa-pop{from{opacity:0;transform:translateY(8px) scale(.92)}to{opacity:1;transform:none}}
 .pop-in{animation:oa-pop .3s var(--spring-soft) both}
@@ -143,4 +147,9 @@
   .chk-draw.on{animation:none}
   .pop-in,.tilt,.magnetic{animation:none!important;transition:none!important;transform:none!important}
   .toaststack .tst{transition:none}
+  /* scroll-timeline 驱动的动画不吃上面全局 .01ms 开关（时长对 timeline 无意义），
+     必须显式关停：reveal 入场改为直出；scroll-progress 为装饰性冗余
+     （滚动条已传达位置，deslop「砍掉装饰信息仍完整」）直接隐藏 */
+  .reveal{animation:none!important}
+  .scroll-progress{display:none!important}
 }

@@ -105,14 +105,14 @@ export function StartStopModal({
           <div className="rounded-xl px-3 py-2.5 text-[11px] leading-5" style={{ background: 'var(--orange-soft)' }}>
             <b className="text-orange">影响说明</b>
             <div>
-              {agent.active_sessions} 个进行中会话将被终止：会话已生成部分保留，可随时从历史继续；
+              {agent.active_sessions ?? 0} 个进行中会话将被终止：会话已生成部分保留，可随时从历史继续；
               不再接收新消息与会话请求。
             </div>
           </div>
           <div className="rounded-xl px-3 py-2.5 text-[11px] leading-5" style={{ background: 'var(--red-soft)' }}>
             <b className="text-red">任务连锁</b>
             <div>
-              排队中任务 {agent.queued_tasks} 个（TASK 队列）将标记失败，可在任务中心重试（IX-TSK-03）。
+              排队中任务 {agent.queued_tasks ?? 0} 个（TASK 队列）将标记失败，可在任务中心重试（IX-TSK-03）。
             </div>
           </div>
           <div className="flex items-center gap-2 rounded-xl border border-separator px-3 py-2 text-[11px] text-label-2">
@@ -140,7 +140,7 @@ export function StartStopModal({
             )}
             {checkStep > 1 && (
               <div className="flex items-center gap-1.5">
-                <Wrench size={11} className="text-green" aria-hidden /> 工具可用 · 已绑定 {agent.tools.length} 个工具全部可达
+                <Wrench size={11} className="text-green" aria-hidden /> 工具可用 · 已绑定 {agent.tools?.length ?? 0} 个工具全部可达
               </div>
             )}
             {checkStep > 2 && (

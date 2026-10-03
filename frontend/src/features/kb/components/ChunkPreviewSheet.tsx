@@ -44,7 +44,8 @@ export function ChunkPreviewSheet({ doc, onClose }: { doc: KbDocument | null; on
                 }`}
               >
                 <span className={`mono text-[11px] ${i === current ? 'text-accent' : 'text-label-3'}`}>#{String(c.index + 1).padStart(3, '0')}</span>
-                <span className="mt-0.5 block truncate text-xs font-medium">{c.text.slice(0, 16)}…</span>
+                {/* live 分片 text 缺省防护（fe1-F3）：空文本渲染空摘要不崩 */}
+                <span className="mt-0.5 block truncate text-xs font-medium">{(c.text ?? '').slice(0, 16)}…</span>
                 <span className="mt-0.5 block text-[11px] text-label-3">{c.tokens} tokens</span>
               </button>
             ))}

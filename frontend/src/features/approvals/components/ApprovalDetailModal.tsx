@@ -156,7 +156,9 @@ export function ApprovalDetailModal({
   const qc = useQueryClient()
   const [note, setNote] = useState('')
   const [noteErr, setNoteErr] = useState('')
-  const decided = approval && approval.status !== 'pending'
+  // decided 按归一化后三态枚举白名单判定（api.ts normalizeReview 保证 status ∈ pending/approved/rejected；
+  // 后端 pending_review 等六态已在信任边界收敛，未知值保守视为未决）
+  const decided = !!approval && (approval.status === 'approved' || approval.status === 'rejected')
 
   const mutation = useMutation({
     mutationFn: (action: 'approve' | 'reject') => {
@@ -207,7 +209,8 @@ export function ApprovalDetailModal({
         <div>
           <div className="field-label">审批链</div>
           <ol className="tl">
-            {approval.chain.map((s, i) => (
+            {/* 后端 AdminReviewOut 无 chain 字段（fe1-F1 实测）：缺省渲染空时间线不崩 */}
+            {(approval.chain ?? []).map((s, i) => (
               <li key={i} className={`tl-item ${s.state === 'rejected' ? '' : ''}`}>
                 <span className="tl-dot" style={{ background: CHAIN_DOT[s.state] }} />
                 <div className="tl-c" style={s.state === 'current' ? { outline: '1.5px solid var(--accent)' } : undefined}>

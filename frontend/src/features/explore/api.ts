@@ -34,9 +34,16 @@ export interface GraphPath {
   edges: { rel: string }[]
 }
 
-/** GET /kb/graph/search —— 实体搜索（q= 关键词/IRI 片段；IX-EX 搜索选择器 / 实体抽屉） */
-export function graphSearch(q: string, topK = 8) {
-  return api.get<{ items: GraphEntity[] }>(`/kb/graph/search?q=${encodeURIComponent(q)}&top_k=${topK}`)
+/** GET /kb/graph/search —— 实体搜索（q= 关键词/IRI 片段；IX-EX 搜索选择器 / 实体抽屉）。
+ *  fe1 ocr 发现1（live 实测 2026-10-04）：端点双形态——契约信封 {items:[…]}，live 裸回
+ *  {nodes,rels}（无 items）。在契约边界归一（镜像 api/client.ts 双形态兼容先例）：
+ *  返回恒含 items（= res.items ?? res.nodes ?? []），页面与全部消费方继续只读 items，
+ *  后端信封收口另登记（不在本批）。 */
+export async function graphSearch(q: string, topK = 8) {
+  const res = await api.get<{ items?: GraphEntity[]; nodes?: GraphEntity[] }>(
+    `/kb/graph/search?q=${encodeURIComponent(q)}&top_k=${topK}`,
+  )
+  return { items: res.items ?? res.nodes ?? [] }
 }
 
 /** GET /kb/graph/neighborhood —— 邻域展开（entity_id/depth/limit，可按关系类型过滤；IX-EX-03） */

@@ -35,7 +35,8 @@ export function CandidateDetail({
         <div className="card-h !mb-2">
           <h3>原文出处</h3>
           <span className="badge b-gray mono ml-auto">
-            {current.doc_name} · {current.chunk_id.split('-').pop()}
+            {/* live 候选 chunk_id 可空（后端 CandidateOut chunk_id=None，fe1-F3）：缺省 — 不崩 */}
+            {current.doc_name} · {current.chunk_id?.split('-').pop() || '—'}
           </span>
         </div>
         <p className="rounded-xl bg-surface-2 p-3.5 text-[13px] leading-7">

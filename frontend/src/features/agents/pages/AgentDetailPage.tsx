@@ -11,9 +11,11 @@ import {
   listAgentSessions,
   listAgentTasks,
   AGENT_STATUS_LABEL,
+  adapterText,
+  adapterVersionText,
   type ConnectionTestResult,
 } from '../api'
-import { AgentStatusBadge } from './AgentListPage'
+import { AgentStatusBadge, isAgentActive } from './AgentListPage'
 import { ToolPickerModal } from '../components/ToolPickerModal'
 import { StartStopModal } from '../components/StartStopModal'
 
@@ -87,7 +89,8 @@ export function AgentDetailPage() {
     )
   }
 
-  const boundNames = agent.tools
+  // live 后端详情无 tools 字段（agents.json 实测，fe1-F2）：缺省空数组，工具面板/ToolPicker 不崩
+  const boundNames: string[] = agent.tools ?? []
 
   return (
     <div className="mx-auto max-w-[1080px]" data-testid="agent-detail">
@@ -101,7 +104,7 @@ export function AgentDetailPage() {
             <button type="button" className="btn btn-g btn-sm">
               <Pencil size={12} aria-hidden /> 编辑
             </button>
-            {agent.status === 'running' ? (
+            {isAgentActive(agent.status) ? (
               <button type="button" className="btn btn-d btn-sm" data-testid="agt-detail-stop" onClick={() => setToggle('stop')}>
                 <CircleStop size={12} aria-hidden /> 停止
               </button>
@@ -137,10 +140,10 @@ export function AgentDetailPage() {
           <div className="grid grid-cols-1 gap-x-6 gap-y-2 text-xs md:grid-cols-2">
             <div className="flex justify-between gap-3"><span className="text-label-3">实例 ID</span><span className="mono">{agent.id}</span></div>
             <div className="flex justify-between gap-3"><span className="text-label-3">状态 / 版本</span><span>{AGENT_STATUS_LABEL[agent.status]} · {agent.version}</span></div>
-            <div className="flex justify-between gap-3"><span className="text-label-3">适配器</span><span>{agent.adapter} · {agent.adapter_version}</span></div>
+            <div className="flex justify-between gap-3"><span className="text-label-3">适配器</span><span>{/* live adapter=对象（fe1-F2 实测）：收敛文本渲染 */}{adapterText(agent)} · {adapterVersionText(agent)}</span></div>
             <div className="flex justify-between gap-3"><span className="text-label-3">负责人</span><span>{agent.owner}</span></div>
             <div className="flex justify-between gap-3"><span className="text-label-3">描述</span><span className="max-w-[320px] text-right">{agent.description}</span></div>
-            <div className="flex justify-between gap-3"><span className="text-label-3">健康</span><span>最近探活 RTT {agent.health.rtt_ms || '—'}ms · 连续失败 {agent.health.consecutive_failures}</span></div>
+            <div className="flex justify-between gap-3"><span className="text-label-3">健康</span><span>{/* live 后端无 health（fe1-F2）：缺省 — 不崩 */}最近探活 RTT {agent.health?.rtt_ms || '—'}ms · 连续失败 {agent.health?.consecutive_failures ?? 0}</span></div>
           </div>
         </div>
       )}
@@ -174,8 +177,8 @@ export function AgentDetailPage() {
       {tab === 'adapter' && (
         <div className="card mt-4 !p-5" data-testid="agt-panel-adapter">
           <div className="grid grid-cols-1 gap-x-6 gap-y-2 text-xs md:grid-cols-2">
-            <div className="flex justify-between gap-3"><span className="text-label-3">适配器</span><span>{agent.adapter} · RPC 模式 · {agent.adapter_version}</span></div>
-            <div className="flex justify-between gap-3"><span className="text-label-3">endpoint（脱敏）</span><span className="mono">{agent.endpoint_masked}</span></div>
+            <div className="flex justify-between gap-3"><span className="text-label-3">适配器</span><span>{adapterText(agent)} · RPC 模式 · {adapterVersionText(agent)}</span></div>
+            <div className="flex justify-between gap-3"><span className="text-label-3">endpoint（脱敏）</span><span className="mono">{agent.endpoint_masked ?? '—'}</span></div>
             <div className="flex justify-between gap-3">
               <span className="text-label-3">token（脱敏）</span>
               <span className="flex items-center gap-1.5">
@@ -183,7 +186,7 @@ export function AgentDetailPage() {
                 <span className="badge b-gray">脱敏</span>
               </span>
             </div>
-            <div className="flex justify-between gap-3"><span className="text-label-3">调用超时</span><span>{agent.timeout_ms} ms</span></div>
+            <div className="flex justify-between gap-3"><span className="text-label-3">调用超时</span><span>{agent.timeout_ms ?? '—'} ms</span></div>
           </div>
           <div className="mt-3 flex items-center gap-2">
             <button type="button" className="btn btn-s btn-sm" data-testid="agt-adapter-probe" onClick={() => void runProbe()}>
@@ -310,7 +313,7 @@ export function AgentDetailPage() {
       <ToolPickerModal
         open={pickerOpen}
         agentId={agentId}
-        initialTools={agent.tools}
+        initialTools={boundNames}
         onClose={() => setPickerOpen(false)}
       />
       <StartStopModal agent={agent} action={toggle} onClose={() => setToggle(null)} />

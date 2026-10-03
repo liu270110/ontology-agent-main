@@ -47,7 +47,10 @@ export interface Approval {
   applicant: string
   department: string
   submitted_at: string
-  status: 'pending' | 'approved' | 'rejected'
+  /** 后端 review_tickets 口径（fe1-F1 对齐 2026-10-04）：待审=pending_review（非 pending），
+   *  终态=approved/rejected；draft/published/cancelled 不入 mock。前端经
+   *  features/approvals/api.ts normalizeReview 收敛为三态展示。 */
+  status: 'pending_review' | 'approved' | 'rejected'
   high_risk: boolean
   /** 类型化摘要载荷（渲染按 type 分派；契约缺口：payload schema 待 §5.8 reviews 详情行补） */
   payload: {
@@ -75,7 +78,7 @@ export interface Approval {
 
 const REVIEWS: Approval[] = [
   {
-    id: 'CR-031', type: 'changeset_publish', high_risk: true, status: 'pending',
+    id: 'CR-031', type: 'changeset_publish', high_risk: true, status: 'pending_review',
     title: '本体变更发布 CR-031 · 停电范围术语唯一性整改',
     summary: '配网停电分析本体 v1.4.2 → v1.5.0：+12/−3/~4，停电范围与术语委员会 TC-07 对齐',
     applicant: '王工', department: '知识工程师', submitted_at: '2026-09-25T16:40:00Z',
@@ -98,7 +101,7 @@ const REVIEWS: Approval[] = [
     ],
   },
   {
-    id: 'JOB-218-FIN', type: 'extraction_final', high_risk: false, status: 'pending',
+    id: 'JOB-218-FIN', type: 'extraction_final', high_risk: false, status: 'pending_review',
     title: '抽取终审 JOB #218 · 设备手册.docx 候选 ×12',
     summary: '批量抽取完成，12 条三元组候选待人工归档（负样本池反哺已开启）',
     applicant: '王工', department: '知识工程师', submitted_at: '2026-09-26T14:18:00Z',
@@ -117,7 +120,7 @@ const REVIEWS: Approval[] = [
     ],
   },
   {
-    id: 'PLG-07', type: 'plugin_install', high_risk: false, status: 'pending',
+    id: 'PLG-07', type: 'plugin_install', high_risk: false, status: 'pending_review',
     title: '插件安装 PLG-07 · 工单系统连接器 v1.3.0',
     summary: '申请安装「工单系统连接器」，申请 scope：workorder.read/write + attachment.download',
     applicant: '陈晨', department: '服务集成组', submitted_at: '2026-09-26T10:02:00Z',
@@ -131,7 +134,7 @@ const REVIEWS: Approval[] = [
     ],
   },
   {
-    id: 'MCP-12', type: 'mcp_access', high_risk: true, status: 'pending',
+    id: 'MCP-12', type: 'mcp_access', high_risk: true, status: 'pending_review',
     title: 'MCP 接入 MCP-12 · crm-prod 生产实例',
     summary: '接入 crm-prod（3 工具，2 高危），annotations 不作授权依据，走 review_workflow 终审',
     applicant: '陈晨', department: '服务集成组', submitted_at: '2026-09-26T09:30:00Z',
@@ -149,7 +152,7 @@ const REVIEWS: Approval[] = [
     ],
   },
   {
-    id: 'MEM-204', type: 'memory_promotion', high_risk: false, status: 'pending',
+    id: 'MEM-204', type: 'memory_promotion', high_risk: false, status: 'pending_review',
     title: '记忆升级 MEM-204 · 馈线 F12 过载阈值 L2 → L3',
     summary: '复用 26 次、证据 7 处的 L2 候选申请沉淀为 L3 长期记忆，与 1 条现有记忆冲突',
     applicant: '系统（自动发起）', department: '记忆管线', submitted_at: '2026-09-26T08:15:00Z',
@@ -164,7 +167,7 @@ const REVIEWS: Approval[] = [
     ],
   },
   {
-    id: 'ACC-09', type: 'permission_request', high_risk: false, status: 'pending',
+    id: 'ACC-09', type: 'permission_request', high_risk: false, status: 'pending_review',
     title: '权限申请 ACC-09 · 陈晨申请 kb:write',
     summary: '403 申请权限闭环：目标资源「配网停电分析知识库」，通过后自动授权并审计',
     applicant: '陈晨', department: '服务集成组', submitted_at: '2026-09-26T11:47:00Z',
@@ -545,11 +548,11 @@ export const adminHandlers = [
   // ---- 数据分析（p-analytics 轻量版，预登记见文件头注） ----
   http.get('*/api/v1/admin/analytics/overview', () => ok(ANALYTICS_OVERVIEW)),
 
-  // ---- 审批中心（§5.8 reviews 三行 + 批量预登记） ----
+  // ---- 审批中心（§5.8 reviews 三行 + 批量预登记；status 口径=后端 review_tickets，fe1-F1） ----
   http.get('*/api/v1/admin/reviews', ({ request }) => {
     const status = new URL(request.url).searchParams.get('status')
     const items = status === 'pending' || status === 'done'
-      ? REVIEWS.filter(r => (status === 'pending' ? r.status === 'pending' : r.status !== 'pending'))
+      ? REVIEWS.filter(r => (status === 'pending' ? r.status === 'pending_review' : r.status !== 'pending_review'))
       : REVIEWS
     return ok({ items, next_cursor: null })
   }),
@@ -560,20 +563,24 @@ export const adminHandlers = [
   }),
 
   http.post('*/api/v1/admin/reviews/:id/decision', async ({ request, params }) => {
-    const body = (await request.json()) as { action?: 'approve' | 'reject'; reason?: string }
+    // R50 后端 DecisionIn={action,note}（extra=forbid）；兼容旧 reason 键（mock 宽容、live 严格）
+    const body = (await request.json()) as { action?: 'approve' | 'reject'; note?: string; reason?: string }
+    const note = body.note ?? body.reason
     const r = REVIEWS.find(x => x.id === String(params.id))
     if (!r) return err(4041, '审批工单不存在', 404)
-    if (body.action === 'reject' && !body.reason?.trim()) return err(3001, '驳回必须附意见（审批链留痕）', 422)
+    if (body.action === 'reject' && !note?.trim()) return err(3001, '驳回必须附意见（审批链留痕）', 422)
     r.status = body.action === 'approve' ? 'approved' : 'rejected'
     r.chain = r.chain.map(s => (s.state === 'current'
-      ? { ...s, state: (body.action === 'approve' ? 'done' : 'rejected') as 'done' | 'rejected', at: '刚刚', actor: '刘以在（管理员）', note: body.reason || s.note }
+      ? { ...s, state: (body.action === 'approve' ? 'done' : 'rejected') as 'done' | 'rejected', at: '刚刚', actor: '刘以在（管理员）', note: note || s.note }
       : s))
-    return ok({ id: r.id, status: r.status })
+    // DecisionOut 对齐（services/review/api/schemas/admin.py）：ticket_id/status/governance_tier/签名集
+    return ok({ ticket_id: r.id, status: r.status, governance_tier: 'team', signatures_required: 1, signatures_collected: 1, complete: true })
   }),
 
   // 预登记：批量端点（IX-APR-02；高危类服务端同拒，前端已先行禁用）
   http.post('*/api/v1/admin/reviews/batch', async ({ request }) => {
-    const body = (await request.json()) as { ids?: string[]; action?: 'approve' | 'reject'; reason?: string }
+    const body = (await request.json()) as { ids?: string[]; action?: 'approve' | 'reject'; note?: string; reason?: string }
+    const note = body.note ?? body.reason
     const ids = body.ids ?? []
     const items = REVIEWS.filter(r => ids.includes(r.id))
     if (items.length === 0) return err(3001, '未选中任何工单', 422)
@@ -582,7 +589,7 @@ export const adminHandlers = [
     for (const r of items) {
       r.status = body.action === 'approve' ? 'approved' : 'rejected'
       r.chain = r.chain.map(s => (s.state === 'current'
-        ? { ...s, state: 'done' as const, at: '刚刚', actor: '刘以在（管理员）', note: body.reason || s.note }
+        ? { ...s, state: 'done' as const, at: '刚刚', actor: '刘以在（管理员）', note: note || s.note }
         : s))
     }
     return ok({ updated: items.length, ids: items.map(i => i.id) })
@@ -990,7 +997,7 @@ export const adminHandlers = [
     // 审批联动副作用：第六类 permission_request 待办工单（/console/approvals 待办可见）
     const ticketId = `ACC-${accessTicketSeq++}`
     REVIEWS.unshift({
-      id: ticketId, type: 'permission_request', high_risk: false, status: 'pending',
+      id: ticketId, type: 'permission_request', high_risk: false, status: 'pending_review',
       title: `权限申请 ${ticketId} · ${name}申请 ${route}`,
       summary: `403 申请权限闭环：目标资源「${route}」，通过后自动授权并审计`,
       applicant: name, department: '—', submitted_at: req.created_at,

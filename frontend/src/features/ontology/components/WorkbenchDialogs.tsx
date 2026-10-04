@@ -14,6 +14,20 @@ const CURATORS = ['刘以在（curator）', '陈评（curator）']
 
 // ---- IX-ON-01 新建类/属性/规则 ----
 
+/** 创建载荷（「新建真上图」接线）：表单已采集字段的整包透出——类 → addPendingClass
+ *  合成画布节点；对象属性 → addPendingEdge（连线即对象属性）；规则暂无画布投影。 */
+export interface NewElementPayload {
+  type: 'class' | 'property' | 'rule'
+  name: string
+  label: string
+  iri: string
+  parentId: string
+  abstract: boolean
+  propType: 'data' | 'object'
+  domain: string
+  range: string
+}
+
 export function NewElementDialog({
   open,
   elementType,
@@ -27,7 +41,7 @@ export function NewElementDialog({
   namespace: string
   classes: OntoClassNode[]
   onClose: () => void
-  onCreate: (label: string) => void
+  onCreate: (payload: NewElementPayload) => void
 }) {
   const [name, setName] = useState('')
   const [label, setLabel] = useState('')
@@ -75,7 +89,17 @@ export function NewElementDialog({
     }
     setErrors(errs)
     if (Object.keys(errs).length > 0) return
-    onCreate(label || name || ruleName)
+    onCreate({
+      type: elementType,
+      name: name.trim(),
+      label: label.trim(),
+      iri: iri.trim(),
+      parentId,
+      abstract,
+      propType,
+      domain,
+      range,
+    })
     setName(''); setLabel(''); setIri(''); setRuleName('')
   }
 

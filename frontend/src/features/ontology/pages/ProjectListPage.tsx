@@ -1,19 +1,22 @@
 import { useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
+import { motion } from 'framer-motion'
 import { ArrowRight, FileUp, Plus } from 'lucide-react'
 import { toast } from 'sonner'
 import { useAuthStore } from '@/stores/auth-store'
 import { ApiError } from '@/api/client'
 import { ErrorState, SkeletonCards } from '@/components/states'
 import { Tooltip } from '@/components/tooltip'
-import { listProjects, type OntoProject } from '../api'
+import { listProjects, TIER_LABEL, type OntoProject, type OntoTier } from '../api'
 import { TierBadge, relativeTime } from '../components/shared'
 import { NewProjectWizard } from '../components/NewProjectWizard'
 import { ImportTurtleDialog } from '../components/ImportTurtleDialog'
 
 /** /ontology 本体项目列表（宿主画框 p-onto-list；26 篇 §6.1）：
- *  项目卡网格（名称/三档方案徽标/命名空间 mono/版本/进入）+ IX-OL-01 新建向导
+ *  项目卡网格（名称/三档方案徽标/命名空间 mono/版本/进入）+ 三档方案 seg 筛选
+ *  （38 号对账 L 组：light/standard/heavy，字段=OntoProject.tier）+ 尾部虚线新建卡
+ *  （点击唤起 IX-OL-01 向导）+ 卡片 stagger 入场（前 8 项 index×40ms 递增延迟）
  *  + IX-OL-02 导入 Turtle。roles=ontologist/admin/curator（routes meta）。 */
 
 /** 三档方案一句话解释（TierBadge 悬停提示；代码三档 heavy/standard/light，
@@ -24,14 +27,26 @@ const TIER_TOOLTIP: Record<OntoProject['tier'], string> = {
   light: '轻量：术语层（术语与实例为主，仅基础校验）',
 }
 
+/** seg 筛选档位顺序（三档 fixed 闭环集，恒渲染不按计数隐藏——与 changeset 状态 seg 不同：
+ *  方案档位是建模契约不是事实状态） */
+const TIER_FILTER_ORDER: OntoTier[] = ['light', 'standard', 'heavy']
+
+/** stagger 上限：仅前 8 张卡吃 index×40ms 递增延迟，其后 0 延迟立即入场 */
+const STAGGER_CAP = 8
+
 export function ProjectListPage() {
   const navigate = useNavigate()
   const canWrite = useAuthStore(s => s.can('ontology:write'))
   const [wizardOpen, setWizardOpen] = useState(false)
   const [importProject, setImportProject] = useState<OntoProject | null>(null)
+  const [tierFilter, setTierFilter] = useState<'all' | OntoTier>('all')
 
   const { data, isLoading, isError, error, refetch } = useQuery({ queryKey: ['ontology', 'projects'], queryFn: listProjects })
-  const projects = useMemo(() => data?.items ?? [], [data])
+  const allProjects = useMemo(() => data?.items ?? [], [data])
+  const projects = useMemo(
+    () => (tierFilter === 'all' ? allProjects : allProjects.filter(p => p.tier === tierFilter)),
+    [allProjects, tierFilter],
+  )
 
   return (
     <div className="mx-auto max-w-[1080px]">
@@ -45,10 +60,44 @@ export function ProjectListPage() {
         )}
       </div>
 
-      {/* 项目卡网格 */}
+      {/* 三档方案 seg 筛选（38 号对账 L 组；testid 对齐 VersionsPage cs-filter-* 口径） */}
+      <div className="mt-3 flex items-center gap-3" role="group" aria-label="按方案档位筛选项目">
+        <div className="seg">
+          <button
+            type="button"
+            className={`seg-btn ${tierFilter === 'all' ? 'on' : ''}`}
+            aria-pressed={tierFilter === 'all'}
+            data-testid="tier-filter-all"
+            onClick={() => setTierFilter('all')}
+          >
+            全部 {allProjects.length}
+          </button>
+          {TIER_FILTER_ORDER.map(t => (
+            <button
+              key={t}
+              type="button"
+              className={`seg-btn ${tierFilter === t ? 'on' : ''}`}
+              aria-pressed={tierFilter === t}
+              data-testid={`tier-filter-${t}`}
+              onClick={() => setTierFilter(t)}
+            >
+              {TIER_LABEL[t]} {allProjects.filter(p => p.tier === t).length}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* 项目卡网格（stagger 入场：前 8 张 index×40ms 递增延迟，data-stagger 记录延迟档位） */}
       <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
-        {projects.map(p => (
-          <div key={p.id} className="card flex flex-col !p-4" data-testid={`project-card-${p.id}`}>
+        {projects.map((p, index) => (
+          <motion.div
+            key={p.id}
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.28, ease: 'easeOut', delay: index < STAGGER_CAP ? index * 0.04 : 0 }}
+            data-stagger={index < STAGGER_CAP ? index : undefined}
+          >
+            <div className="card flex h-full flex-col !p-4" data-testid={`project-card-${p.id}`}>
             <div className="flex items-center gap-2">
               <b className="truncate text-sm">{p.name}</b>
               {/* S8 Tooltip：三档方案徽标悬停解释 */}
@@ -80,9 +129,26 @@ export function ProjectListPage() {
                 </button>
               </span>
             </div>
-          </div>
+            </div>
+          </motion.div>
         ))}
       </div>
+
+      {/* 尾部虚线新建卡（38 号对账 L 组）：网格末位常驻入口，点击唤起 IX-OL-01 向导；
+          写权限门控与头部「新建项目」按钮同口径 */}
+      {canWrite && !isError && (
+        <button
+          type="button"
+          data-testid="project-card-new"
+          onClick={() => setWizardOpen(true)}
+          className="card mt-3 flex min-h-[120px] w-full flex-col items-center justify-center gap-1.5 !p-4 text-label-3 transition-colors hover:border-accent hover:text-accent"
+          style={{ borderStyle: 'dashed' }}
+        >
+          <Plus size={18} aria-hidden />
+          <b className="text-sm">新建本体项目</b>
+          <span className="text-[11px]">三档方案向导：轻量 / 标准 / 重型</span>
+        </button>
+      )}
 
       {/* S8 状态切片：首载骨架卡 / 失败错误态（重试=refetch） */}
       {isLoading && <SkeletonCards count={3} className="mt-4" />}
@@ -94,7 +160,13 @@ export function ProjectListPage() {
           onRetry={() => void refetch()}
         />
       )}
-      {!isLoading && !isError && projects.length === 0 && (
+      {!isLoading && !isError && projects.length === 0 && allProjects.length > 0 && (
+        <div className="empty mt-6">
+          <div className="t">该方案档位暂无项目</div>
+          <div className="d">切回「全部」查看其余项目。</div>
+        </div>
+      )}
+      {!isLoading && !isError && allProjects.length === 0 && (
         <div className="empty mt-6">
           <div className="t">还没有本体项目</div>
           <div className="d">从「新建项目」开始，或先到知识库完成一次抽取。</div>

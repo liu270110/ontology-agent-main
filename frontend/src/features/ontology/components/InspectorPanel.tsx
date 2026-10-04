@@ -1,15 +1,18 @@
 import { useEffect, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { z } from 'zod'
-import { ExternalLink, History, Link2, RotateCcw, Save } from 'lucide-react'
+import { Link2, RotateCcw, Save } from 'lucide-react'
 import { listClasses, type OntoClassNode } from '../api'
 import { useWorkbenchStore } from '../stores/workbench-store'
 import { Select } from '@/components/select'
 
 /** 右侧检查器（26 篇 §6.2 IX-ON-04；画板 ix-on-04，右栏 320px）：
  *  GB/T 48000.3 类 8 项元数据（Name/Label/Definition/SubclassOf/DisjointWith/抽象开关/
- *  同义标签/状态）+ IRI 只读 + 出处链接 + 修订历史迷你时间线；RHF 注册 + zod 校验错误
- *  就地显示；脏态「应用修改」（写入变更单草稿，不直写 TBox——宪法 3）+「还原」。 */
+ *  同义标签/状态）+ IRI 只读；RHF 注册 + zod 校验错误就地显示；脏态「应用修改」
+ *  （写入变更单草稿，不直写 TBox——宪法 3）+「还原」。
+ *  迷你导航 seg：元数据为本视图；属性/公理为跳转入口——经 store leftTab 切左树对应
+ *  Tab（IX-ON-03 联动；公理 Tab 即 IX-ON-08 公理编辑器）。出处/修订历史区依赖
+ *  来源文档与修订记录数据，OntoClassNode 暂无该字段——数据不可得整区不渲染（不造假）。 */
 
 const NAME_REGEX = /^[A-Z][A-Za-z0-9]*$/
 
@@ -28,6 +31,7 @@ export function InspectorPanel({ projectId, cls }: { projectId: string; cls: Ont
   const dirty = useWorkbenchStore(s => s.dirtyCount)
   const bumpDirty = useWorkbenchStore(s => s.bumpDirty)
   const resetDirty = useWorkbenchStore(s => s.resetDirty)
+  const setLeftTab = useWorkbenchStore(s => s.setLeftTab)
   const [applied, setApplied] = useState(false)
   const [fieldErr, setFieldErr] = useState<Partial<Record<keyof MetaForm, string>>>({})
 
@@ -118,11 +122,25 @@ export function InspectorPanel({ projectId, cls }: { projectId: string; cls: Ont
         )}
       </div>
 
-      {/* 迷你导航：元数据/属性/公理（元数据为主视图，其余为跳转占位） */}
+      {/* 迷你导航：元数据/属性/公理（元数据为主视图；属性/公理 = store leftTab 切左树 Tab） */}
       <div className="seg mx-4 mt-3 flex-none">
         <button type="button" className="seg-btn on flex-1">元数据</button>
-        <button type="button" className="seg-btn flex-1">属性</button>
-        <button type="button" className="seg-btn flex-1">公理</button>
+        <button
+          type="button"
+          className="seg-btn flex-1"
+          data-testid="insp-seg-properties"
+          onClick={() => setLeftTab('properties')}
+        >
+          属性
+        </button>
+        <button
+          type="button"
+          className="seg-btn flex-1"
+          data-testid="insp-seg-axioms"
+          onClick={() => setLeftTab('axioms')}
+        >
+          公理
+        </button>
       </div>
 
       <div className="flex-1 px-4 py-3">
@@ -198,35 +216,8 @@ export function InspectorPanel({ projectId, cls }: { projectId: string; cls: Ont
           <span className="badge b-green">在用</span>
         </div>
 
-        {/* 出处 + 修订历史迷你时间线 */}
-        <div className="field">
-          <span className="field-label">出处</span>
-          <a className="flex items-center gap-1 text-[11px] text-accent hover:underline" href="#source-doc" onClick={e => e.preventDefault()}>
-            <ExternalLink size={11} aria-hidden /> 设备手册.pdf · §6.1
-          </a>
-        </div>
-        <div className="field mb-0">
-          <span className="field-label">
-            <History size={11} className="mr-1 inline" aria-hidden />
-            修订历史
-          </span>
-          <ol className="tl mt-1">
-            <li className="tl-item">
-              <span className="tl-dot" aria-hidden />
-              <div>
-                <div className="text-[11px]">同义标签 +「馈电线」</div>
-                <div className="tl-meta">王工 · v2.1 · 09-05</div>
-              </div>
-            </li>
-            <li className="tl-item">
-              <span className="tl-dot" aria-hidden />
-              <div>
-                <div className="text-[11px]">定义修订：补充负荷分区限定</div>
-                <div className="tl-meta">王工 · v2.0 · 08-12</div>
-              </div>
-            </li>
-          </ol>
-        </div>
+        {/* 出处 + 修订历史（IX-ON-04）：来源文档/修订记录数据不可得（OntoClassNode 无
+         *  该字段），整区不渲染——不造假占位，待 api 契约补充后按数据驱动恢复 */}
       </div>
 
       {/* 脏态操作条：应用修改（→变更单草稿）/ 还原 */}

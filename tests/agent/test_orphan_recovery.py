@@ -11,6 +11,7 @@ from __future__ import annotations
 import asyncio
 import uuid
 from datetime import UTC, datetime, timedelta
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -40,6 +41,7 @@ class FakeTaskRepo:
     def __init__(self) -> None:
         self.tasks: dict[uuid.UUID, Task] = {}
         self.events: dict[uuid.UUID, list[Any]] = {}
+        self.subrun_updates: list[tuple[uuid.UUID, str]] = []  # (run_id, status)：R6 子 Run 行回写记录
 
     async def get(self, task_id: uuid.UUID) -> Task | None:
         return self.tasks.get(task_id)
@@ -53,6 +55,11 @@ class FakeTaskRepo:
 
     async def list_events(self, task_id: uuid.UUID, **_: Any) -> list[Any]:
         return list(self.events.get(task_id, []))
+
+    async def update_subrun_status(self, run_id: uuid.UUID, status: Any) -> bool:
+        """R1 独立写入口桩（40 篇 §8 R6：撕裂子 Run 行回写由 worker 依据合成行驱动）。"""
+        self.subrun_updates.append((run_id, str(getattr(status, "value", status))))
+        return True
 
 
 class FakeTx:
@@ -292,3 +299,36 @@ async def test_阈值边界_恰好达阈值即回收(stale: float, expected: int
 
 def uow_events(worker: TaskRunWorker) -> dict[uuid.UUID, list[Any]]:
     return worker._uow.task_repo.events  # type: ignore[attr-defined]
+
+
+# ── 撕裂子 Run 行回写（40 篇 §3.2/§8 R6，2026-10-04 批）───────────────────
+
+
+async def test_孤儿回收_撕裂子Run行回写cancelled_合成终态行落task_events():
+    """崩溃时子 Run 在途：孤儿 sweep 认根 Run，撕裂子 Run 由合成行驱动回写终态（不永久 running）。"""
+    worker, uow, poller, task, _clock = seeded_env()
+    sub_run_id = uuid.uuid4()
+    uow.task_repo.events[task.id] = [
+        SimpleNamespace(
+            task_id=task.id,
+            seq=1,
+            event_type="SUBRUN_STARTED",
+            data={"sub_run_id": str(sub_run_id), "parent_run_id": str(task.active_run_id), "depth": 1},
+        )
+    ]
+    # Act
+    assert await worker.sweep_once() == 1
+    # Assert：子 Run 行经 R1 独立写入口定向回写 cancelled；合成 SUBRUN_FINISHED 落 task_events
+    assert uow.task_repo.subrun_updates == [(sub_run_id, "cancelled")]
+    finished = [e for e in uow.task_repo.events[task.id] if e.event_type == "SUBRUN_FINISHED"]
+    assert len(finished) == 1
+    assert finished[0].data["sub_run_id"] == str(sub_run_id) and finished[0].data["status"] == "cancelled"
+
+
+async def test_孤儿回收_无子Run撕裂_零回写():
+    worker, uow, _poller, task, _clock = seeded_env()
+    uow.task_repo.events[task.id] = [
+        SimpleNamespace(task_id=task.id, seq=1, event_type="kernel.planned", data={"steps": [1]})
+    ]
+    assert await worker.sweep_once() == 1
+    assert uow.task_repo.subrun_updates == []

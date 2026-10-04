@@ -3,16 +3,22 @@
 - 强制租户过滤：tenant_id 构造期绑定（`uow.for_tenant()`，04 §4），全部查询/写入携带；
 - typed SQLAlchemy 2.0（standards/01 §4），无裸 SQL 字符串；
 - `get` 未命中返回 None；只追加实体（Message、TaskEvent）走专用 append；
+- 子 Run 行（runs.parent_run_id 非空，40 篇 R1）走独立写入口 create_subrun /
+  update_subrun_status——聚合 save/_load_runs 只见根 Run（防并行子 Run 互相丢更新）；
 - next_seq / 事件 seq 均由存储重建或分配（唯一约束 uk_messages_session_id_seq /
   uk_task_events_task_id_seq 兜底），不新增列（迁移只增不改）。
 """
 
 from __future__ import annotations
 
+import asyncio
+import logging
 import uuid
 from datetime import UTC, datetime
+from typing import Any
 
 from sqlalchemy import delete, func, select, update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from services.agent.data.orm import Message as MessageORM
@@ -35,6 +41,13 @@ from services.agent.domain.model.task import Run, RunStatus, Task, TaskEvent, Ta
 # 活跃 Run 状态集：与 PG 部分唯一索引 uk_runs_one_active WHERE 子句同口径（database/01 §3.2）
 _ACTIVE_RUN_STATES = ("queued", "running", "waiting_tool")
 _TERMINAL_RUN_STATES = ("completed", "failed", "timeout", "cancelled")
+
+# 40 篇 R11：replay_root 追加的重试参数（回放根不可吞——冲突后重读 max(seq) 重插，
+# 耗尽仍失败上抛交调用方；有锁串行化下冲突属防御性兜底，退避取小值不拖事务）
+_APPEND_RETRIES = 3
+_APPEND_RETRY_DELAY_S = 0.05
+
+logger = logging.getLogger(__name__)
 
 
 def _now() -> datetime:
@@ -88,6 +101,10 @@ def _run_to_domain(row: RunORM) -> Run:
         task_id=row.task_id,
         seq_start=row.seq_start,
         status=RunStatus(row.status),
+        parent_run_id=row.parent_run_id,
+        label=row.label,
+        goal=row.goal,
+        depth=row.depth,
         usage=row.usage or {},
         error=row.error,
         started_at=row.started_at,
@@ -362,11 +379,57 @@ class PgTaskRepository:
         row.payload = task.payload
         row.result = task.result
         row.error = task.error
+        # 40 篇 R1：聚合 save 只写根 Run——子 Run 行走独立写入口（create_subrun/
+        # update_subrun_status），防并行子 Run 互相丢更新（防御性跳过手工注入的子 Run）。
         for run in task.runs:
+            if run.parent_run_id is not None:
+                continue
             await self._save_run(run)
         await self._db.flush()
 
-    async def append_event(self, task_id: uuid.UUID, event: TaskEvent) -> int:
+    async def append_event(self, task_id: uuid.UUID, event: TaskEvent, *, replay_root: bool = False) -> int:
+        """只追加事件，返回仓储分配的递增 seq（04 §2：先落库后推送）。
+
+        40 篇 R11 写序串行化：先对任务行 SELECT FOR UPDATE（per-task 锁，与
+        ``tx.tasks.get`` 同锁口径、锁序恒为任务行）再 ``max(seq)+1``——并行子 Run 并发
+        追加不再撞 uk_task_events_task_id_seq。``replay_root=True``（执行结构事件，回放
+        根，40 篇 §3.1）：追加经 SAVEPOINT 重试（_APPEND_RETRIES 次），耗尽仍失败**上抛**
+        ——回放根不可吞；默认 False 保持既有调用方行为不变（一次尝试，失败随事务上抛）。
+        """
+        await self._lock_task_row(task_id)
+        attempts = _APPEND_RETRIES if replay_root else 1
+        for attempt in range(1, attempts + 1):
+            try:
+                if replay_root:
+                    # SAVEPOINT：冲突只回滚插入点，本事务其余写入（payload 锚等）不受牵连
+                    async with self._db.begin_nested():
+                        seq, created_at = await self._insert_event(task_id, event)
+                else:
+                    seq, created_at = await self._insert_event(task_id, event)
+                break
+            except IntegrityError:
+                if attempt == attempts:
+                    raise
+                logger.warning(
+                    "task_events 追加冲突（task=%s event=%s 第 %d/%d 次重试）",
+                    task_id,
+                    event.event_type,
+                    attempt,
+                    attempts - 1,
+                )
+                await asyncio.sleep(_APPEND_RETRY_DELAY_S)
+        event.seq = seq
+        event.created_at = created_at
+        return seq
+
+    async def _lock_task_row(self, task_id: uuid.UUID) -> None:
+        """任务行 FOR UPDATE（40 篇 R11 per-task 串行化锁点）：行缺失则无锁（与旧径同形）。"""
+        await self._db.execute(
+            select(TaskORM.id).where(TaskORM.id == task_id, TaskORM.tenant_id == self._tenant_id).with_for_update()
+        )
+
+    async def _insert_event(self, task_id: uuid.UUID, event: TaskEvent) -> tuple[int, datetime]:
+        """max(seq)+1 分配 + 插入（调用方须已持任务行锁或自担并发）；返回 (seq, created_at)。"""
         current = (
             await self._db.execute(
                 select(func.max(TaskEventORM.seq)).where(
@@ -386,10 +449,112 @@ class PgTaskRepository:
                 created_at=now,
             )
         )
-        event.seq = seq
-        event.created_at = now
         await self._db.flush()
-        return seq
+        return seq, now
+
+    async def create_subrun(self, run: Run) -> None:
+        """子 Run 独立写入口（40 篇 R1）：轻量 INSERT，不经聚合 save——
+
+        并行子 Run 各走各的写路径互不丢更新；根 Run 断言（start_run 的 PENDING+活跃
+        互斥）不适用于子 Run。parent_run_id 为空即调用方误用（根 Run 须走聚合 save），
+        结构化拒绝防根 Run 绕过断言静默落库。
+        """
+        if run.parent_run_id is None:
+            raise ValueError("create_subrun 仅接收子 Run（parent_run_id 必填）；根 Run 走聚合 start_run/save")
+        if run.tenant_id != self._tenant_id:  # 防御：禁止跨租户写（save 同口径）
+            raise ValueError("租户不匹配：拒绝写入他租户子 Run 行")
+        self._db.add(
+            RunORM(
+                id=run.id,
+                tenant_id=self._tenant_id,
+                task_id=run.task_id,
+                seq_start=run.seq_start,
+                status=run.status.value,
+                parent_run_id=run.parent_run_id,
+                label=run.label,
+                goal=run.goal,
+                depth=run.depth,
+                usage=run.usage,
+                error=run.error,
+                started_at=run.started_at,
+                ended_at=run.ended_at,
+            )
+        )
+        await self._db.flush()
+
+    async def update_subrun_status(
+        self,
+        run_id: uuid.UUID,
+        status: RunStatus,
+        *,
+        usage: dict[str, Any] | None = None,
+        error: dict[str, Any] | None = None,
+    ) -> bool:
+        """子 Run 定向状态更新（40 篇 R1）：只 UPDATE 目标行——
+
+        并行子 Run 行级隔离（同表不同行），互不覆写；终态自动兜底回填 ended_at
+        （与聚合 _save_run 同口径）。根 Run 结构化拒绝（与 create_subrun 同口径——根
+        行状态只走聚合 save，绕行会失配 task.active_run_id/task.status 并越过
+        PENDING/活跃互斥断言）。返回 False=行不存在/跨租户/根 Run（防御，403/404 归调用方）。
+        """
+        row = await self._db.get(RunORM, run_id)
+        if row is None or row.tenant_id != self._tenant_id:
+            return False
+        if row.parent_run_id is None:  # 根 Run 须走聚合 save（R1 聚合隔离在写边界收口）
+            return False
+        row.status = status.value
+        if usage is not None:
+            row.usage = usage
+        if error is not None:
+            row.error = error
+        if status.value in _TERMINAL_RUN_STATES and row.ended_at is None:
+            row.ended_at = _now()  # 终态时间由仓储兜底回填（持久化细节，非业务规则）
+        await self._db.flush()
+        return True
+
+    async def list_subruns(self, run_id: uuid.UUID) -> list[Run] | None:
+        """run 的全部后代子 Run 快照（40 篇 R3，2026-10-04）：GET /runs/{run_id}/subruns 取数口。
+
+        - 锚 run 行按租户取（跨租户/不存在 → None，404 判定归路由层，update_subrun_status 同口径）；
+        - 后代=同 task 全部子 Run 行（parent_run_id 非空）中 ancestor 链可达 run_id 者——
+          逐行沿 parent_run_id 上溯（子 Run 数量小，O(n×depth)）；他根（重试重建的新根）
+          链不可达即排除，不混入其他执行尝试；
+        - 返回扁平列表（树由前端按 parent_run_id 派生，40 篇 §2.4 共识 2），按 depth、
+          started_at 排序（id 兜底同键确定性）；空列表=无子 Run（合法快照）。
+        """
+        anchor = await self._db.get(RunORM, run_id)
+        if anchor is None or anchor.tenant_id != self._tenant_id:
+            return None
+        stmt = (
+            select(RunORM)
+            .where(
+                RunORM.task_id == anchor.task_id,
+                RunORM.tenant_id == self._tenant_id,
+                RunORM.parent_run_id.is_not(None),  # 子 Run 行（R1：根 Run 不入子树）
+            )
+            .order_by(RunORM.depth, RunORM.started_at, RunORM.id)
+        )
+        rows = (await self._db.execute(stmt)).scalars().all()
+        sub_by_id = {row.id: row for row in rows}
+        descendants = [
+            row
+            for row in rows
+            if self._reachable(row.parent_run_id, run_id, sub_by_id)  # 保序过滤（SQL 排序不动）
+        ]
+        return [_run_to_domain(r) for r in descendants]
+
+    @staticmethod
+    def _reachable(
+        start: uuid.UUID, target: uuid.UUID, sub_by_id: dict[uuid.UUID, RunORM]
+    ) -> bool:
+        """ancestor 链上溯判定：start 经 parent_run_id 逐级可达 target（target 命中即真）。"""
+        cursor: uuid.UUID | None = start
+        while cursor is not None:
+            if cursor == target:
+                return True
+            parent = sub_by_id.get(cursor)  # 父不在子行集合=父为根 Run 且非目标 → 链断
+            cursor = parent.parent_run_id if parent is not None else None
+        return False
 
     async def list_events(
         self, task_id: uuid.UUID, *, after_seq: int | None = None, limit: int = 100
@@ -418,6 +583,9 @@ class PgTaskRepository:
                 RunORM.task_id == task_id,
                 RunORM.tenant_id == self._tenant_id,
                 RunORM.status.in_(_ACTIVE_RUN_STATES),
+                # 40 篇 R1：活跃 Run 预检只认根 Run（与 uk_runs_one_active 收窄后 WHERE 同口径）——
+                # 否则并行子 Run 的活跃行会误触 4102 预检
+                RunORM.parent_run_id.is_(None),
             )
             .order_by(RunORM.created_at.desc())
             .limit(1)
@@ -504,7 +672,13 @@ class PgTaskRepository:
     async def _load_runs(self, task_id: uuid.UUID) -> list[Run]:
         stmt = (
             select(RunORM)
-            .where(RunORM.task_id == task_id, RunORM.tenant_id == self._tenant_id)
+            .where(
+                RunORM.task_id == task_id,
+                RunORM.tenant_id == self._tenant_id,
+                # 40 篇 R1 聚合加载隔离：只载根 Run——子 Run 行独立落库（create_subrun），
+                # 不入聚合（防 save 全量覆写路径覆写并行子 Run 互相丢更新）
+                RunORM.parent_run_id.is_(None),
+            )
             .order_by(RunORM.created_at, RunORM.id)
         )
         rows = (await self._db.execute(stmt)).scalars().all()

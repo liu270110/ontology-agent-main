@@ -414,3 +414,66 @@ async def test_组合根sink投影行补trace_id_崩溃恢复合成行回声链�
     synthetic = plan_interrupted_closures(stored, run_id=run_id)
     assert len(synthetic) == 4  # 两个在途步 ×（interrupted + step_failed）
     assert all(item.data["trace_id"] == _TRACE for item in synthetic)  # 回声投影行 trace（seq 有序首个）
+
+
+# ── 撕裂子 Run（40 篇 §3.2/§8 R6，2026-10-04 批）──────────────────────────
+
+
+def _subrun_started(seq: int, sub_run_id: str, **extra: Any) -> TaskEvent:
+    """SUBRUN_STARTED 回放协议行（wire_data 落库形态：sub_run_id/parent_run_id/depth）。"""
+    return row(
+        seq,
+        "SUBRUN_STARTED",
+        {"sub_run_id": sub_run_id, "parent_run_id": str(_RUN), "depth": 1, **extra},
+    )
+
+
+def test_撕裂子Run_STARTED无FINISHED_合成cancelled终态行():
+    sid = str(uuid.uuid4())
+    synthetic = plan_interrupted_closures([_subrun_started(1, sid)], reason="orphan_recovered")
+    assert len(synthetic) == 1
+    closed = synthetic[0]
+    assert closed.event_type == "SUBRUN_FINISHED"  # 回放协议行形态（前端重连回放可归并）
+    assert closed.task_id == _TASK
+    assert closed.data["sub_run_id"] == sid
+    assert closed.data["status"] == "cancelled"  # 崩溃恢复合成终态恒 cancelled（40 篇 §3.2）
+    assert closed.data["interrupted"] is True and closed.data["reason"] == "orphan_recovered"
+
+
+def test_子Run已收口_零合成_且幂等二跑零新增():
+    sid = str(uuid.uuid4())
+    events = [_subrun_started(1, sid), row(2, "SUBRUN_FINISHED", {"sub_run_id": sid, "status": "completed"})]
+    assert plan_interrupted_closures(events) == []  # STARTED↔FINISHED 已配对：零合成
+    synthetic = plan_interrupted_closures([_subrun_started(1, sid)])
+    repaired = [*events, *synthetic]  # 模拟合成行落库后的投影
+    assert [e for e in plan_interrupted_closures(repaired) if e.event_type == "SUBRUN_FINISHED"] == []  # 幂等
+
+
+def test_子Run多成员_仅撕裂成员合成_收口成员不动():
+    torn, closed = str(uuid.uuid4()), str(uuid.uuid4())
+    events = [
+        _subrun_started(1, torn),
+        _subrun_started(2, closed),
+        row(3, "SUBRUN_FINISHED", {"sub_run_id": closed, "status": "failed"}),
+    ]
+    synthetic = plan_interrupted_closures(events)
+    assert [e.data["sub_run_id"] for e in synthetic] == [torn]  # 只补撕裂成员
+
+
+def test_子Run行无sub_run_id_不可归因不修():
+    events = [row(1, "SUBRUN_STARTED", {"depth": 1})]
+    assert plan_interrupted_closures(events) == []
+
+
+def test_步撕裂与子Run撕裂同批合成_互不干扰():
+    sid = str(uuid.uuid4())
+    events = [
+        row(1, "TOOL_CALL_START", {"tool_call_id": "c1"}),
+        row(2, "kernel.gated", {"step_seq": 1, "verdict": "allow", "stage": "gate"}, run_id=str(_RUN)),
+        _subrun_started(3, sid),
+    ]
+    synthetic = plan_interrupted_closures(events, run_id=_RUN)
+    types = [e.event_type for e in synthetic]
+    assert types.count("TOOL_CALL_RESULT") == 1
+    assert types.count("kernel.interrupted") == 1 and types.count("kernel.step_failed") == 1
+    assert types.count("SUBRUN_FINISHED") == 1  # 三类撕裂同批闭合（各自配对规则独立）

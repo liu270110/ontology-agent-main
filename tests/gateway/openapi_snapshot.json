@@ -6987,6 +6987,130 @@
         "title": "SparqlQueryOut",
         "type": "object"
       },
+      "SubRunListOut": {
+        "additionalProperties": false,
+        "description": "子 Run 快照列表（非分页快照语义，40 篇 §4.4：重连后先查快照再吃增量）。",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/SubRunOut"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "SubRunListOut",
+        "type": "object"
+      },
+      "SubRunOut": {
+        "additionalProperties": false,
+        "description": "子 Run 快照行（40 篇 §4.4 R3：状态/耗时/usage/血统；重连兜底快照行）。",
+        "properties": {
+          "artifact": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Artifact"
+          },
+          "depth": {
+            "default": 0,
+            "title": "Depth",
+            "type": "integer"
+          },
+          "duration_ms": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duration Ms"
+          },
+          "ended_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ended At"
+          },
+          "goal": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Goal"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label"
+          },
+          "parent_run_id": {
+            "format": "uuid",
+            "title": "Parent Run Id",
+            "type": "string"
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started At"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "usage": {
+            "additionalProperties": true,
+            "title": "Usage",
+            "type": "object"
+          }
+        },
+        "required": [
+          "id",
+          "parent_run_id",
+          "status"
+        ],
+        "title": "SubRunOut",
+        "type": "object"
+      },
       "SubmitIn": {
         "description": "提交上架审核（指定版本；api/01 §5.6 POST /plugins/{id}/submit）。",
         "properties": {
@@ -13728,6 +13852,50 @@
         "summary": "聚合就绪探活（PG/Redis/MinIO；任一硬依赖失败 503+明细）",
         "tags": [
           "probe"
+        ]
+      }
+    },
+    "/api/v1/runs/{run_id}/subruns": {
+      "get": {
+        "description": "重连兜底快照（40 篇 §4.4）：run 的全部后代子 Run（扁平，按 depth、started_at 排序）。\n\nrun 不存在/跨租户 → 404（登记行注：TenantMixin 口径）；无子 Run → 空 items。",
+        "operationId": "list_subruns_api_v1_runs__run_id__subruns_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SubRunListOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "子 Run 列表快照（状态/耗时/usage/血统；40 篇 R3）",
+        "tags": [
+          "runs"
         ]
       }
     },

@@ -104,6 +104,12 @@ class Run(BaseModel):
     task_id: uuid.UUID
     seq_start: int = 0  # 本 Run 的 task_events.seq 起始（跨 Run 连续递增，04 §2）
     status: RunStatus = RunStatus.QUEUED
+    # 40 篇 R1（2026-10-04）：子 Run 血统四字段——NULL=根 Run；子 Run=内核 spawn_sub 派生，
+    # 沿用同一七态状态机；depth 0=根，上限护栏=R10（统一配置层，后续批次）。
+    parent_run_id: uuid.UUID | None = None
+    label: str | None = None  # 子代理显示名（根 Run 为 None）
+    goal: str | None = None  # 子任务目标（根 Run 为 None）
+    depth: int = 0
     usage: dict[str, Any] = Field(default_factory=dict)  # tokens/cost 汇总（LiteLLM 回传，M3+）
     error: dict[str, Any] | None = None  # {code,message,retryable}
     started_at: datetime | None = None
@@ -205,6 +211,8 @@ class Task(BaseModel):
         """受理 → 执行：pending→running 由首个 Run 承载（04 §3 task 状态机）。返回新建 Run（queued）。
 
         attempt_count=已受理 Run 数（含首次，§2 补全表「≤3 含首次」的计数口径）。
+        断言语义只约束**根 Run**（40 篇 R1）：PENDING 前置与活跃互斥断言均针对根 Run——
+        子 Run（parent_run_id 非空）不走本方法，另经仓储独立写入口落库（session_repo）。
         """
         if self.status is not TaskStatus.PENDING:
             raise TaskError(f"非法状态迁移 {self.status} → running（04 篇 §3 状态机）")
@@ -256,7 +264,12 @@ class Task(BaseModel):
     def _active_run(self) -> Run | None:
         if self.active_run_id is None:
             return None
-        return next((r for r in self.runs if r.id == self.active_run_id), None)
+        # 40 篇 R1：活跃断言只约束根 Run——子 Run 不经聚合落库（仓储侧 WHERE parent_run_id
+        # IS NULL 隔离）；此处防御性再过滤，防调用方手工注入子 Run 误触 4102 断言。
+        return next(
+            (r for r in self.runs if r.id == self.active_run_id and r.parent_run_id is None),
+            None,
+        )
 
     def succeed(self) -> None:
         """成功终态（running→succeeded，04 §3：Run completed 承载）。"""

@@ -8,11 +8,11 @@ add/list_messages/list 等为创建与回放用例定制的方法（04 §4「查
 
 from __future__ import annotations
 
-from typing import Protocol, runtime_checkable
+from typing import Any, Protocol, runtime_checkable
 from uuid import UUID
 
 from services.agent.domain.model.session import Message, Session
-from services.agent.domain.model.task import Run, Task, TaskEvent
+from services.agent.domain.model.task import Run, RunStatus, Task, TaskEvent
 
 
 @runtime_checkable
@@ -78,8 +78,44 @@ class TaskRepository(Protocol):
 
     async def save(self, task: Task) -> None: ...
 
-    async def append_event(self, task_id: UUID, event: TaskEvent) -> int:
-        """只追加事件，返回仓储分配的递增 seq（04 §2：先落库后推送）。"""
+    async def append_event(self, task_id: UUID, event: TaskEvent, *, replay_root: bool = False) -> int:
+        """只追加事件，返回仓储分配的递增 seq（04 §2：先落库后推送）。
+
+        40 篇 R11（2026-10-04）：实现须 per-task 串行化（同任务并发追加不撞
+        uk_task_events_task_id_seq、seq 零丢失）。``replay_root=True`` 标记执行结构事件
+        （回放根，40 篇 §3.1）：追加失败须重试且重试耗尽后上抛——回放根不可吞；
+        默认 False 保持既有调用方行为不变。
+        """
+        ...
+
+    async def create_subrun(self, run: Run) -> None:
+        """子 Run 独立写入口（40 篇 R1）：轻量 INSERT，不经聚合 save 全量覆写——
+
+        并行子 Run 各走各的写路径，互不丢更新；根 Run 仍走 save（聚合加载已按
+        ``parent_run_id IS NULL`` 隔离子 Run 行）。仅接收 parent_run_id 非空的 Run。
+        """
+        ...
+
+    async def update_subrun_status(
+        self,
+        run_id: UUID,
+        status: RunStatus,
+        *,
+        usage: dict[str, Any] | None = None,
+        error: dict[str, Any] | None = None,
+    ) -> bool:
+        """子 Run 定向状态更新（40 篇 R1）：只 UPDATE 目标行（终态自动回填 ended_at）。
+
+        返回 False=行不存在或跨租户。不经聚合 save，防并行子 Run 互相丢更新。
+        """
+        ...
+
+    async def list_subruns(self, run_id: UUID) -> list[Run] | None:
+        """run 的全部后代子 Run 快照（40 篇 R3：GET /runs/{run_id}/subruns 取数口）。
+
+        返回扁平列表（树由前端按 parent_run_id 派生，40 篇 §2.4 共识 2），按 depth、
+        started_at 排序；None=run 不存在或跨租户（404 判定归路由层）；空列表=无子 Run。
+        """
         ...
 
     async def find_active_run(self, task_id: UUID) -> Run | None: ...

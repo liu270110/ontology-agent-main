@@ -47,6 +47,7 @@ from services.agent.api.agents import router as agents_router
 from services.agent.api.approvals import router as approvals_router  # H-0b 运行中审批（api/01 §5.15 ★，2026-09-29）
 from services.agent.api.control import router as run_control_router  # M4.5-A：运行中输入面（inbox+estop）
 from services.agent.api.prompts import router as prompts_router  # H-1 提示词模板库（api/01 §5.10，2026-09-29）
+from services.agent.api.runs import router as runs_router  # 子 Run 快照（api/01 §5.2 ★，40 篇 R3，2026-10-04）
 from services.agent.api.sessions import get_or_build_chat_orchestrator
 from services.agent.api.sessions import router as sessions_router
 from services.agent.api.tasks import router as tasks_router
@@ -481,6 +482,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(sessions_router, prefix=settings.api_prefix)
     app.include_router(run_control_router, prefix=settings.api_prefix)  # M4.5-A：inbox 提交 + admin estop（§1.4）
     app.include_router(tasks_router, prefix=settings.api_prefix)
+    app.include_router(runs_router, prefix=settings.api_prefix)  # 40 篇 R3：子 Run 快照（顶层 /runs 命名空间）
     app.include_router(approvals_router, prefix=settings.api_prefix)  # H-0b：运行中审批（api/01 §5.15 ★）
     app.include_router(prompts_router, prefix=settings.api_prefix)  # H-1：提示词模板库（api/01 §5.10）
     app.include_router(kb_router, prefix=settings.api_prefix)  # M2：知识库基线（上传/流水线/混合检索）

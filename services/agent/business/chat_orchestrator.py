@@ -34,8 +34,10 @@ from services.agent.business.chat_events import (
     ChatOutcome,
     ChatPolicy,
 )
+from services.agent.business.exec_events import ExecEventTranslator
 from services.agent.business.kernel.budget import Budget
 from services.agent.business.kernel.dispatcher import ExtensionDispatcher
+from services.agent.business.kernel.hooks import HookName
 from services.agent.business.kernel.inbox import KernelInbox
 from services.agent.business.kernel.loop import AgentKernel
 from services.agent.domain.model.kernel_context import KernelEvent, TaskRef, TenantContext
@@ -159,7 +161,8 @@ class ChatOrchestrator:
     async def _stream_chat_impl(self, command: ChatCommand) -> AsyncIterator[ChatEvent]:
         """执行一次对话，产出主干波事件流（消费方取消 → 内核取消清单收敛后重抛）。"""
         started = time.monotonic()
-        # ① RUN_STARTED（02 §5：{run_id, session_id, task_id, agent_id}）
+        # ① RUN_STARTED（02 §5：{run_id, session_id, task_id, agent_id}；40 篇 §4.2 增补
+        # task_type=task.type 透传，前端据此挂运行卡或普通消息流，缺省 chat 向后兼容）
         yield ChatEvent(
             name=ChatEventName.RUN_STARTED,
             data={
@@ -167,6 +170,7 @@ class ChatOrchestrator:
                 "session_id": str(command.session_id),
                 "task_id": str(command.task_id),
                 "agent_id": str(command.agent_id) if command.agent_id else None,
+                "task_type": command.task_type,
             },
             run_id=command.run_id,
         )
@@ -308,6 +312,18 @@ class ChatOrchestrator:
         dispatcher.register_tool(adapter.turn_tool(turn, box, on_event))
         for binding in self._extra_tool_bindings:  # 能力层 P0（docs/Agent/06）：fs/web 等工具经 B1 门禁链注册
             dispatcher.register_tool(binding)
+        # 40 篇 R2 转译 observer（H-0a on_kernel_event）：内核子 run/计划类锚点 → 执行结构
+        # ChatEvent（SUBRUN_*/PLAN_UPDATED），经 on_event 入队走既有 SSE/落库路径；非转译型
+        # 锚点 fast-path 跳过（发射点=spawn/close、规划 R4 逐批落地，见 exec_events.py 契约）。
+        dispatcher.register_hook(
+            HookName.ON_KERNEL_EVENT,
+            ExecEventTranslator(
+                task_id=command.task_id,
+                session_id=command.session_id,
+                trace_id=command.trace_id,
+                on_event=on_event,
+            ),
+        )
         kernel = AgentKernel(dispatcher)
         ledger_sink = (
             self._ledger_sink_factory(command.task_id, command.run_id)

@@ -39,8 +39,9 @@ def test_帧编码按_02_5_帧格式输出_id_event_data_与空行() -> None:
 
 
 def test_主干波事件名与生产侧单一事实源一致() -> None:
-    """主干波=11 事件（02 §5 M3 主干行）：编码侧校验集与 ChatEventName 同源同值。"""
-    assert len(ChatEventName) == 13  # 11 主干波 + ROUTING_DECISION（27 篇 X15）+ INBOX_SPLICED（M4.5-A §1.4）
+    """主干波=11 事件（02 §5 M3 主干行）+ 执行结构波：编码侧校验集与 ChatEventName 同源同值。"""
+    # 11 主干波 + 群聊 ROUTING_DECISION（27 篇 X15）+ INBOX_SPLICED（M4.5-A §1.4）+ 执行结构波 6（40 篇 R2）
+    assert len(ChatEventName) == 19
 
     assert MAINSTREAM_EVENT_NAMES == {name.value for name in ChatEventName}
     assert "GATE_VERDICT" not in MAINSTREAM_EVENT_NAMES  # 扩展波不入主干（协议向前兼容）
@@ -248,7 +249,9 @@ async def test_编排器事件流经_hub_发布后订阅者收到完整主干波
     await asyncio.wait_for(producer, timeout=2.0)
     watcher.close()
 
-    assert len(frames) == 10  # 主干波 10 帧（RUN_ERROR 为互斥终态不在 happy path）
+    # 40 篇 §8 R4（2026-10-04）：主干波 10 帧 + 计划快照 3 帧（规划/步开跑/步终态）=13
+    assert len(frames) == 13
+    assert sum(b"event: PLAN_UPDATED" in frame for frame in frames) == 3
     ids = [int(frame.split(b"\n", 1)[0].split(b": ")[1]) for frame in frames]
-    assert ids == list(range(1, 11))  # id 单调递增且不重不漏（02 §5）
+    assert ids == list(range(1, 14))  # id 单调递增且不重不漏（02 §5）
     assert any(b"RETRIEVAL_EVIDENCE" in frame and b"citations" in frame for frame in frames)

@@ -18,6 +18,14 @@ TOOL_CALL_RESULT 收口（task_worker._drain_orchestrator 落库的 SSE 投影�
   kernel.approval_pending（waiting_approval）；终态 = kernel.step_validated /
   kernel.step_failed / kernel.approval_denied。kernel.* 行由 sink 注入 data.run_id
   （sessions.build_kernel_ledger_sink_factory）→ 步规则按 Run 隔离，他 Run 行不修；
+- 子 Run 生命周期行（40 篇 §3.2/§8 R6，2026-10-04 批）：SUBRUN_STARTED / SUBRUN_FINISHED
+  （task_events 回放协议行，event_type=事件名；data.sub_run_id 为 UUID 全局唯一）——
+  **有 STARTED 无 FINISHED 即撕裂**（进程死时子 Run 在途，孤儿 sweep 只认根
+  active_run_id，子 Run 行会永久 running）→ 合成 SUBRUN_FINISHED(status=cancelled)
+  终态行；配对按 sub_run_id 任务级扫描（同 TOOL_CALL_* 先例：旧 Run 残留撕裂一并闭合，
+  无害且幂等）。**崩溃恢复的合成终态只落 task_events，不经 SSE 补发**（40 篇 §4.3-5，
+  重连走回放）；子 Run 行状态回写（update_subrun_status → cancelled）由调用方依据
+  合成行 data.sub_run_id 执行（本模块纯函数零 IO，落库归 task_worker._recover_orphan）；
 - Run 级收敛行 kernel.settled / kernel.cancelled / kernel.interrupted = 优雅路径已
   收敛全部在途步（02 §2.4），不再合成（本批不动优雅路径，防重复合成）。
 
@@ -45,6 +53,10 @@ from services.platform.errors import ErrorCode
 
 _TOOL_CALL_OPEN = "TOOL_CALL_START"
 _TOOL_CALL_CLOSE = "TOOL_CALL_RESULT"
+
+# 子 Run 生命周期行（40 篇 §4.1 回放协议行：event_type=事件名；R6 撕裂识别+合成终态）
+_SUBRUN_STARTED_EVENT = "SUBRUN_STARTED"
+_SUBRUN_FINISHED_EVENT = "SUBRUN_FINISHED"
 
 _GATE_EVENT = "kernel.gated"
 _APPROVAL_PENDING_EVENT = "kernel.approval_pending"
@@ -88,6 +100,7 @@ def plan_interrupted_closures(
 
     closes: list[TaskEvent] = _plan_tool_call_closes(ordered, task_id, reason, consistency)
     closes.extend(_plan_step_closures(ordered, task_id, run_id, reason, consistency))
+    closes.extend(_plan_subrun_closures(ordered, task_id, reason, consistency))
     return closes
 
 
@@ -216,4 +229,51 @@ def _plan_step_closures(
             },
         )
         closes.extend([interrupted, step_failed])
+    return closes
+
+
+def _plan_subrun_closures(
+    ordered: Sequence[TaskEvent],
+    task_id: uuid.UUID,
+    reason: str,
+    consistency: dict[str, object],
+) -> list[TaskEvent]:
+    """撕裂子 Run（SUBRUN_STARTED 无 FINISHED 收口）→ 合成 SUBRUN_FINISHED(cancelled) 终态行。
+
+    40 篇 §3.2 孤儿子 Run 回收 + §4.3-5：合成终态只落 task_events（SSE 不补发，重连走
+    回放）；status 恒 cancelled（崩溃时刻子 Run 存续态不可证，按取消收敛口径合成，
+    与步撕裂的 kernel.interrupted 同理）。配对按 data.sub_run_id 任务级扫描（同
+    TOOL_CALL_* 先例：sub_run_id 为 UUID 全局唯一，旧 Run 残留撕裂一并闭合，无害且
+    幂等）；无 sub_run_id 的 STARTED 行不可归因，不修。
+    """
+    finished_ids: set[str] = set()
+    for row in ordered:
+        if row.event_type != _SUBRUN_FINISHED_EVENT:
+            continue
+        sid = (row.data or {}).get("sub_run_id")
+        if isinstance(sid, str):
+            finished_ids.add(sid)
+    closes: list[TaskEvent] = []
+    seen: set[str] = set()
+    for row in ordered:
+        if row.event_type != _SUBRUN_STARTED_EVENT:
+            continue
+        data = row.data or {}
+        sub_run_id = data.get("sub_run_id")
+        if not isinstance(sub_run_id, str) or sub_run_id in finished_ids or sub_run_id in seen:
+            continue  # 无 sub_run_id 不可配对（不修不可归因行）；已收口/重复 STARTED 幂等跳过
+        seen.add(sub_run_id)
+        closes.append(
+            TaskEvent(
+                task_id=task_id,
+                event_type=_SUBRUN_FINISHED_EVENT,
+                data={
+                    "sub_run_id": sub_run_id,
+                    "status": "cancelled",  # 40 篇 §3.2：崩溃恢复合成终态恒 cancelled
+                    "interrupted": True,
+                    "reason": reason,
+                    **consistency,
+                },
+            )
+        )
     return closes

@@ -127,6 +127,12 @@ class Run(Base, PkMixin, TenantMixin, TimestampMixin):  # 一次执行尝试（0
     task_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("tasks.id"), nullable=False, index=True)
     seq_start: Mapped[int] = mapped_column(Integer, nullable=False)  # task_events.seq 起始（跨 Run 连续）
     status: Mapped[str] = mapped_column(String(16), default="queued", nullable=False)
+    # 40 篇 R1 子 Run 血统（2026-10-04）：自引用 FK，NULL=根 Run；子 Run=内核 spawn_sub 派生，
+    # 与根 Run 同表承载（database/01 §3.2 DDL 权威），聚合加载隔离与独立写入口见 session_repo。
+    parent_run_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("runs.id"))
+    label: Mapped[str | None] = mapped_column(String(128))  # 子代理显示名（根 Run 为 NULL）
+    goal: Mapped[str | None] = mapped_column(Text)  # 子任务目标（根 Run 为 NULL）
+    depth: Mapped[int] = mapped_column(SmallInteger, default=0, nullable=False)  # 派发深度（0=根；上限护栏=R10）
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     ended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     usage: Mapped[dict] = mapped_column(JSONB, default=dict, nullable=False)
@@ -140,7 +146,9 @@ class Run(Base, PkMixin, TenantMixin, TimestampMixin):  # 一次执行尝试（0
             "tenant_id",
             "task_id",
             unique=True,
-            postgresql_where=text("status IN ('queued','running','waiting_tool')"),
+            # 40 篇 R1 收窄：每任务至多一个活跃**根** Run——并行子 Run 不受此约束
+            # （活跃数受 kernel_tool_parallelism 限额），否则并行派发即撞唯一索引。
+            postgresql_where=text("status IN ('queued','running','waiting_tool') AND parent_run_id IS NULL"),
         ),
         Index("ix_runs_task_created", "task_id", "created_at"),  # 2026-09-26 缺口核查修复（Run 历史）
     )

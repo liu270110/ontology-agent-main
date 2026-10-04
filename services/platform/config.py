@@ -124,6 +124,11 @@ class Settings(BaseSettings):
     # 超限 4203 INBOX_CAPACITY 结构化拒绝）；estop_ttl_seconds=紧急停止键 TTL（§1.2 定稿 24h）。
     kernel_inbox_max_per_run: int = Field(default=8, ge=1, le=32)
     estop_ttl_seconds: int = Field(default=86_400, gt=0)
+    # 子代理派发深度上限（40 篇 §8 R10，2026-10-04 批）：kernel spawn_sub 通道护栏的
+    # 唯一权威取值——超限在 STARTED 之前结构化拒绝（不产生事件）。默认 2 与能力层
+    # guards.MAX_DERIVATION_DEPTH_DEFAULT 对齐（能力层 ContextVar 护栏=第一线，本值=
+    # kernel 通道的第二线；语义同源：根 Run 深度 0，允许派生当且仅当 子深度 ≤ 上限）。
+    kernel_subagent_max_depth: int = Field(default=2, ge=0)
 
     # 记忆域（06 篇 §4/§5.2/§5.5；计划 1 仅 L1 与检索参数）
     memory_l1_ttl_seconds: int = 24 * 3600  # L1 会话记忆块 TTL（会话活跃期）

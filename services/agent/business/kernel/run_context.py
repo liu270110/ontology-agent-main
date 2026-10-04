@@ -9,6 +9,7 @@ from uuid import UUID
 from services.agent.business.kernel.budget import Budget, BudgetTracker
 from services.agent.business.kernel.cancellation import CancellationCoordinator
 from services.agent.business.kernel.ledger import KernelLedger, LedgerSink
+from services.agent.business.kernel.plan import PlanProjection
 from services.agent.domain.model.kernel_actions import ApprovalTicket, StepResult
 from services.agent.domain.model.kernel_context import ContextBlock, TaskRef, TenantContext
 from services.agent.domain.model.step_state import StepState
@@ -46,3 +47,6 @@ class RunContext:
         # 段边界 drain 的 steer/inject 文本包装为 ContextBlock（source="user_steer"，B3 标界
         # agent_attested，tier=3 易变尾）追加于此，供后续组装消费方就近读取。
         self.context_blocks: tuple[ContextBlock, ...] = ()
+        # 40 篇 R4（2026-10-04）：计划投影（规划阶段产出后填充；规划前 None=零发射）。
+        # items=内核执行步整表，步推进时由 loop/tool_dispatch 经 begin/finish 推进并发快照。
+        self.plan: PlanProjection | None = None

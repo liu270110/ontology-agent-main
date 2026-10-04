@@ -9,10 +9,12 @@ send_message 适用豁免①（消息落库 + 任务受理同一事务，03 §6.
 
 from __future__ import annotations
 
+import asyncio
 import inspect
 import logging
 import uuid
 from collections.abc import AsyncIterator, Awaitable, Callable
+from datetime import datetime
 from typing import Annotated, Any, Protocol
 
 from fastapi import APIRouter, Depends, Query, Request, status
@@ -41,13 +43,14 @@ from services.agent.api.schemas.session import (
     message_from_domain,
     to_domain,
 )
-from services.agent.business.chat_events import ChatCommand, ChatOutcome
+from services.agent.business.chat_events import ChatCommand, ChatEvent, ChatOutcome, wire_data
 from services.agent.business.chat_group import stream_group_turn
 from services.agent.business.chat_orchestrator import build_chat_orchestrator
+from services.agent.business.exec_events import EXEC_PERSISTED_EVENTS
 from services.agent.domain.model.agent import AgentError
 from services.agent.domain.model.kernel_context import KernelEvent
 from services.agent.domain.model.session import MemberRole, Message, RoutingMode, SessionError
-from services.agent.domain.model.task import Task, TaskError, TaskEvent, TaskStatus
+from services.agent.domain.model.task import Run, RunStatus, Task, TaskError, TaskEvent, TaskStatus
 from services.memory.business.runtime import build_l1_store  # memory 公开装配面（memory.data 模块私有，P2-2 收口）
 from services.platform.db.uow import AsyncUnitOfWork
 from services.platform.deps import get_redis, get_session_factory
@@ -55,6 +58,8 @@ from services.platform.errors import GatewayError
 from services.platform.schemas import PageMeta
 
 router = APIRouter(prefix="/sessions", tags=["sessions"])
+
+logger = logging.getLogger(__name__)  # 子 Run 行投影落空等组合根告警（审计不阻断主流程）
 
 _SSE_MEDIA_TYPE = "text/event-stream"
 _SSE_HEADERS = {"Cache-Control": "no-cache", "X-Accel-Buffering": "no"}  # 02 §5 响应头固定项
@@ -101,6 +106,29 @@ def _build_spill_store(settings: Any) -> Any:
     return LocalDirSpillStore(spill_dir)
 
 
+# 40 篇 §3.2（2026-10-04 批）：SUBRUN_FINISHED.status 五值 → runs 七态行映射。
+# rejected_artifact=执行成功但产物被拒（宪法 2）——runs 七态无此值，行落 completed
+# （执行面终态）+ 拒绝原因随 error 列留痕；协议权威是事件 status 本身，行状态只回答
+# 「子 Run 执行得怎样」。
+_SUBRUN_ROW_STATUS: dict[str, RunStatus] = {
+    "completed": RunStatus.COMPLETED,
+    "failed": RunStatus.FAILED,
+    "cancelled": RunStatus.CANCELLED,
+    "timeout": RunStatus.TIMEOUT,
+    "rejected_artifact": RunStatus.COMPLETED,
+}
+
+
+def _parse_iso(value: Any) -> datetime | None:
+    """事件 started_at（ISO8601 字符串）→ datetime；非法/缺失返回 None（宁缺不造）。"""
+    if not isinstance(value, str) or not value:
+        return None
+    try:
+        return datetime.fromisoformat(value)
+    except ValueError:
+        return None
+
+
 def build_kernel_ledger_sink_factory(
     uow: AsyncUnitOfWork,
 ) -> Callable[[uuid.UUID, uuid.UUID], Callable[[KernelEvent], Awaitable[None]]]:
@@ -112,13 +140,76 @@ def build_kernel_ledger_sink_factory(
     投影 data 一致性注入（只补缺不覆盖）：run_id（对账四元组）+ trace_id（ocr 整改
     B-②：KernelEvent 顶层必填 trace_id 落进行 data，崩溃恢复合成行经 resume_repair
     回声投影行 trace，C2 链在崩溃恢复行上不断链；SSE 投影行不受影响）。
+
+    子 Run 行投影（40 篇 §3.1/§8 R1+R2，2026-10-04 批）：``kernel.subrun_started`` /
+    ``kernel.subrun_finished`` 锚点额外驱动 runs 表子 Run 行（parent_run_id/label/goal/
+    depth 落列，状态随生命周期迁移）——写入口=R1 独立通道（create_subrun /
+    update_subrun_status），不经聚合 save（并行子 Run 各走各的写路径）。同 Run 的
+    STARTED/FINISHED 投影是账本上两个独立排水任务，经闭包内 ``asyncio.Lock`` 串行化，
+    防 FINISHED 先于 STARTED 提交而落空（写序纪律=R11 同源）。事件五值 status →
+    runs 七态行映射见 ``_SUBRUN_ROW_STATUS``。
     """
 
     def factory(task_id: uuid.UUID, run_id: uuid.UUID) -> Callable[[KernelEvent], Awaitable[None]]:
+        subrun_write_lock = asyncio.Lock()  # 同 Run 子 Run 行写序（见 docstring）
+
+        async def persist_subrun_started(event: KernelEvent, data: dict[str, Any]) -> None:
+            """STARTED → create_subrun 落行（status=running，血统/元数据随事件落列）。"""
+            try:
+                sub_run_id = uuid.UUID(str(data["sub_run_id"]))
+                parent_run_id = uuid.UUID(str(data["parent_run_id"]))
+            except (KeyError, ValueError, TypeError):
+                logger.warning("SUBRUN_STARTED 缺可归因标识，子 Run 行不落库（run=%s）: %s", run_id, data)
+                return
+            started_at = _parse_iso(data.get("started_at"))
+            async with subrun_write_lock:
+                async with uow.for_tenant(event.tenant_id) as tx:
+                    await tx.tasks.create_subrun(
+                        Run(
+                            id=sub_run_id,
+                            tenant_id=event.tenant_id,
+                            task_id=task_id,  # 子 Run 隶属父 Task（03 §4.1）
+                            status=RunStatus.RUNNING,
+                            parent_run_id=parent_run_id,
+                            label=data.get("label"),
+                            goal=data.get("goal"),
+                            depth=int(data.get("depth") or 0),
+                            started_at=started_at,
+                        )
+                    )
+
+        async def persist_subrun_finished(event: KernelEvent, data: dict[str, Any]) -> None:
+            """FINISHED → update_subrun_status 定向推进（终态兜底回填 ended_at 由仓储负责）。"""
+            try:
+                sub_run_id = uuid.UUID(str(data["sub_run_id"]))
+            except (KeyError, ValueError, TypeError):
+                logger.warning("SUBRUN_FINISHED 缺 sub_run_id，子 Run 行不更新（run=%s）: %s", run_id, data)
+                return
+            row_status = _SUBRUN_ROW_STATUS.get(str(data.get("status", "")))
+            if row_status is None:  # 转译器已拦五值；防御非法态不落行
+                logger.warning("SUBRUN_FINISHED 非法 status，子 Run 行不更新（run=%s）: %s", run_id, data)
+                return
+            usage = data.get("usage") if isinstance(data.get("usage"), dict) else None
+            error = data.get("error") if isinstance(data.get("error"), dict) else None
+            async with subrun_write_lock:
+                async with uow.for_tenant(event.tenant_id) as tx:
+                    updated = await tx.tasks.update_subrun_status(sub_run_id, row_status, usage=usage, error=error)
+            if not updated:
+                logger.warning(
+                    "子 Run 行状态更新落空（行缺失/跨租户，run=%s sub_run=%s status=%s）",
+                    run_id,
+                    sub_run_id,
+                    row_status.value,
+                )
+
         async def sink(event: KernelEvent) -> None:
             data = dict(event.data)
             data.setdefault("run_id", str(run_id))
             data.setdefault("trace_id", event.trace_id)  # C2：只补缺不覆盖，resume_repair 回声源
+            if event.event_type == "kernel.subrun_started":  # 子 Run 行投影（与审计行并存不互替）
+                await persist_subrun_started(event, data)
+            elif event.event_type == "kernel.subrun_finished":
+                await persist_subrun_finished(event, data)
             async with uow.for_tenant(event.tenant_id) as tx:
                 # H-0b 接线：approval_pending 锚点事件 → task.payload（审批呈现端点的核验锚，
                 # approval_service PENDING_KEY 同款键；人工批准后 worker resume 通道携票消费该锚）
@@ -181,6 +272,36 @@ def build_llm_event_emitter_factory(
         return emit
 
     return factory
+def build_exec_event_dual_write(
+    uow: AsyncUnitOfWork, tenant_id: uuid.UUID
+) -> Callable[[uuid.UUID, ChatEvent], Awaitable[None]]:
+    """40 篇 R2 双写钩子工厂（组合根，2026-10-04）：SSE 内联主路径执行结构事件 → task_events。
+
+    现网用户聊天主路径事件只 hub.publish 不落 task_events（落库仅 task_worker 路径）——
+    本钩子为执行结构波（40 篇 §4.1）补回放根（40 篇 §4.5：否则「断线重连回放可重建」
+    验收不成立）。纪律：
+    - SUBRUN_UPDATED 设计为纯实时心跳**不落库**（EXEC_PERSISTED_EVENTS 之外，40 篇 §4.1
+      控回放窗口挤占），钩子内守卫直接跳过（含 SUBRUN_UPDATED 之外的任何非回放根事件）；
+    - 落库走 R11 串行化+SAVEPOINT 重试（append_event replay_root=True，回放根不可吞——
+      重试耗尽上抛中断本连接流，运行侧经取消清单收敛，防半截回放）；
+    - data=wire_data(event)（trace_id 只补缺，wire payload 与回放行同源一致）；
+    - kernel.* 账本投影（build_kernel_ledger_sink_factory）与本钩子并存不互替：前者=
+      内核审计流（event_type=kernel.*，全部锚点），后者=回放协议流（event_type=事件名，
+      仅执行结构事件，40 篇 §3.1）。
+    本函数是编排器事件流（业务层）与 UoW 之间的注入边界——同 build_kernel_ledger_sink_factory。
+    """
+
+    async def dual_write(task_id: uuid.UUID, event: ChatEvent) -> None:
+        if event.name not in EXEC_PERSISTED_EVENTS:
+            return  # 非回放根事件（主干波/SUBRUN_UPDATED 心跳）不落库
+        async with uow.for_tenant(tenant_id) as tx:
+            await tx.tasks.append_event(
+                task_id,
+                TaskEvent(task_id=task_id, event_type=event.name.value, data=wire_data(event)),
+                replay_root=True,
+            )
+
+    return dual_write
 
 
 def get_or_build_chat_orchestrator(state: Any) -> Any:
@@ -538,6 +659,7 @@ async def send_message(
         message=body.content,
         trace_id=getattr(request.state, "trace_id", "") or f"req-{run.id}",
         adapter=body.adapter,
+        task_type=task.type,  # 40 篇 §4.2：RUN_STARTED.task_type 透传（chat 路径恒 chat）
     )
     return _chat_stream_response(
         request,
@@ -588,6 +710,7 @@ def _chat_stream_response(
     orchestrator = _get_chat_orchestrator(request)
     uow = request.app.state.uow
     settings = request.app.state.settings
+    dual_write = build_exec_event_dual_write(uow, command.tenant_id)  # 40 篇 R2 执行结构回放根钩子
 
     async def count_assistant() -> int:
         async with uow.for_tenant(command.tenant_id) as tx:
@@ -606,9 +729,13 @@ def _chat_stream_response(
         else:
             source = orchestrator.stream_chat(command)
         async for event in source:
+            data = wire_data(event)  # trace_id 只补缺：wire payload 与回放行 data 同源（40 篇 §4.2）
+            # 先落库后推送（04 §2）：执行结构事件经 R11 串行化+重试落 task_events（回放根），
+            # 非回放根事件钩子内 no-op；重试耗尽上抛 → 本流中断 → 运行侧取消清单收敛。
+            await dual_write(command.task_id, event)
             # hub 形态二态：进程内 publish=同步二元组，Redis Stream publish=协程（双副本形态）——
             # 双副本压测（批次 B-①）暴露的形态差异 bug，统一在此收敛
-            published = hub.publish(session_id, event.name.value, event.data)
+            published = hub.publish(session_id, event.name.value, data)
             if inspect.isawaitable(published):
                 published = await published
             _, frame = published

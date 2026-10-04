@@ -21,6 +21,7 @@ from services.agent.business.adapters.builtin import BuiltinAdapter
 from services.agent.business.chat_context import ChatContextAssembler
 from services.agent.business.chat_events import ChatCommand, ChatEvent, ChatEventName, ChatOutcome
 from services.agent.business.chat_orchestrator import ChatOrchestrator
+from services.agent.business.exec_events import EXEC_STRUCTURE_EVENTS
 from services.kb.business.search_service import KnowledgeCitation, KnowledgeSearchResult
 from services.memory.domain.model.l1 import L1Snapshot, MemoryBlock, WindowMessage
 from services.platform.errors import ErrorCode
@@ -179,21 +180,32 @@ async def test_一次对话产出主干波_11_事件族完整序列() -> None:
     names = [e.name for e in events]
     assert names[0] is ChatEventName.RUN_STARTED
     assert names[1] is ChatEventName.RETRIEVAL_EVIDENCE
-    assert names[2:5] == [
+    # 40 篇 §8 R4（2026-10-04）：PLAN_UPDATED 随内核步推进插流（规划 rev1 / 步开跑 rev2 /
+    # 步终态 rev3）——主干波序列以「剔除计划快照后」断言，协议向后兼容语义=未知/新增事件忽略
+    plan_updates = [e for e in events if e.name is ChatEventName.PLAN_UPDATED]
+    assert [e.data["revision"] for e in plan_updates] == [1, 2, 3]
+    assert [i["status"] for i in plan_updates[0].data["items"]] == ["pending"]
+    assert [i["status"] for i in plan_updates[-1].data["items"]] == ["completed"]
+    trunk = [e.name for e in events if e.name is not ChatEventName.PLAN_UPDATED]
+    assert trunk[0] is ChatEventName.RUN_STARTED
+    assert trunk[1] is ChatEventName.RETRIEVAL_EVIDENCE
+    assert trunk[2:5] == [
         ChatEventName.TOOL_CALL_START,
         ChatEventName.TOOL_CALL_ARGS,
         ChatEventName.TOOL_CALL_END,
     ]
-    assert names[5] is ChatEventName.TEXT_MESSAGE_START
-    assert names[-1] is ChatEventName.RUN_FINISHED
+    assert trunk[5] is ChatEventName.TEXT_MESSAGE_START
+    assert trunk[-1] is ChatEventName.RUN_FINISHED
     # 主干波事件族（RUN_ERROR 为互斥终态，由失败路径用例覆盖；ROUTING_DECISION 为
     # 群聊路由系统事件，仅 group 会话路径产出——单 agent 对话不含，27 篇 X15；
-    # INBOX_SPLICED 为运行中输入面回执，仅 inbox API 提交路径产出——M4.5-A §1.4）
-    assert set(names) == set(ChatEventName) - {
-        ChatEventName.RUN_ERROR,
-        ChatEventName.ROUTING_DECISION,
-        ChatEventName.INBOX_SPLICED,
-    }
+    # INBOX_SPLICED 为运行中输入面回执，仅 inbox API 提交路径产出——M4.5-A §1.4）。
+    # 执行结构波六事件（40 篇 §4.1 R2）：无子代理对话仅含 PLAN_UPDATED（R4 规划发射点）；
+    # SUBRUN_*/WORKFLOW_NODE_* 仅随子 run/节点执行器产出。
+    assert set(names) == (
+        set(ChatEventName)
+        - {ChatEventName.RUN_ERROR, ChatEventName.ROUTING_DECISION, ChatEventName.INBOX_SPLICED}
+        - EXEC_STRUCTURE_EVENTS
+    ) | {ChatEventName.PLAN_UPDATED}
     assert (
         "".join(e.data["delta"] for e in events if e.name is ChatEventName.TEXT_MESSAGE_CONTENT) == answer
     )  # 流式增量拼接=全文（流式透传）

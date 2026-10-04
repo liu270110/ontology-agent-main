@@ -79,6 +79,7 @@ from services.plugin.api.plugins import router as plugin_router
 from services.review.api.admin import router as review_admin_router
 from services.tools.api.tools import router as tools_market_router  # S1 工具集市（docs/Agent/14 §3）
 from services.rsi.api.capabilities import router as orsi_router  # M4.6-S3：ORSI 注册表三端点（docs/Agent/14 §3）
+from services.skills.api.skills import router as skills_router  # S2 技能集市四端点（docs/Agent/14 §3）
 from services.writeback.api.ledger import router as writeback_ledger_router
 from services.writeback.business.relay import LoggingEventPublisher, OutboxRelay
 from services.writeback.data.repo_impl.writeback_repo import PgOutboxPoller
@@ -491,6 +492,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(ontology_router, prefix=settings.api_prefix)  # M2：本体域（CRUD+changeset 五动词+validate）
     app.include_router(memory_router, prefix=settings.api_prefix)  # 计划 3.3：记忆域（L1/L2 六端点）
     app.include_router(plugin_router, prefix=settings.api_prefix)  # M5-1：插件市场（api/01 §5.6 八端点）
+    app.include_router(skills_router, prefix=settings.api_prefix)  # S2 技能集市四端点（docs/Agent/14 §3）
     app.include_router(review_admin_router, prefix=settings.api_prefix)  # M5 条件四：审核工单审批决策（api/01 §5.8 ★）
     app.include_router(tools_market_router, prefix=settings.api_prefix)  # S1 工具集市四端点（docs/Agent/14 §3）
     app.include_router(orsi_router, prefix=settings.api_prefix)  # M4.6-S3：ORSI 注册表三端点（docs/Agent/14 §3）

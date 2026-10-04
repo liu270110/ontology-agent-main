@@ -58,6 +58,16 @@ def _tick_admitted(
             _sched._maybe_run_worktree_maintenance()
         except Exception as _wt_exc:
             _sched.logger.debug("Worktree maintenance dispatch failed: %s", _wt_exc)
+        # kb nightly 保鲜例程（问题清单 A2 / OntRAG §8.4 例程可运行化）：每日 02:00
+        # （示例值，Settings.kb_nightly_schedule_hour）hold-down 触发一次 run_nightly；
+        # 决策与生产装配收口在 services/kb/business/nightly_schedule.py，此处只留注册
+        # 挂点（worktree GC 同款纪律：后台线程化、异常不外溢、不阻塞 tick）。
+        try:
+            from services.kb.business.nightly_schedule import maybe_run_kb_nightly
+
+            maybe_run_kb_nightly()
+        except Exception as _kb_nightly_exc:
+            _sched.logger.debug("kb nightly dispatch failed: %s", _kb_nightly_exc)
 
         due_jobs = _sched.get_due_jobs()
         _sched._sweep_stale_inflight_for_tick(due_jobs)

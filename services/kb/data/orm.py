@@ -34,7 +34,8 @@ class KbCollection(Base, PkMixin, TenantMixin, TimestampMixin):
     __tablename__ = "kb_collections"
     name: Mapped[str] = mapped_column(String(128), nullable=False)
     description: Mapped[str | None] = mapped_column(Text)
-    ontology_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("ontologies.id"))  # 本体引导（后建 FK 见迁移）
+    # 本体引导（后建 FK 见迁移）
+    ontology_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("ontologies.id"))
     embedding_model: Mapped[str] = mapped_column(String(64), nullable=False)
     chunk_defaults: Mapped[dict] = mapped_column(JSONB, default=dict, nullable=False)
     status: Mapped[str] = mapped_column(String(16), default="active", nullable=False)
@@ -46,7 +47,9 @@ class KbCollection(Base, PkMixin, TenantMixin, TimestampMixin):
 
 class Document(Base, PkMixin, TenantMixin, TimestampMixin):
     __tablename__ = "documents"
-    kb_collection_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("kb_collections.id"), nullable=False)
+    kb_collection_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("kb_collections.id"), nullable=False
+    )
     title: Mapped[str] = mapped_column(String(512), nullable=False)
     source_type: Mapped[str] = mapped_column(String(16), default="upload", nullable=False)
     mime_type: Mapped[str | None] = mapped_column(String(128))
@@ -89,7 +92,7 @@ class DocumentChunk(Base, PkMixin, TenantMixin):  # 只追加；向量在 pgvect
     """
 
     __tablename__ = "document_chunks"
-    document_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("documents.id"), nullable=False)
+    document_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("documents.id"), nullable=False)
     seq: Mapped[int] = mapped_column(Integer, nullable=False)
     content: Mapped[str] = mapped_column(Text, nullable=False)
     token_count: Mapped[int | None] = mapped_column(Integer)
@@ -113,7 +116,7 @@ class KbPipelineStep(Base, PkMixin, TenantMixin):
     """断点续跑 checkpoint（03 §4）；step 七枚举（管线审计修复）。"""
 
     __tablename__ = "kb_pipeline_step"
-    document_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("documents.id"), nullable=False)
+    document_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("documents.id"), nullable=False)
     step: Mapped[str] = mapped_column(String(32), nullable=False)
     status: Mapped[str] = mapped_column(String(16), default="pending", nullable=False)
     checkpoint_uri: Mapped[str | None] = mapped_column(String(512))  # MinIO key
@@ -145,11 +148,11 @@ class EvaluationRun(Base, PkMixin, TenantMixin):
     benchmark_type: Mapped[str] = mapped_column(String(32), nullable=False)
     benchmark_version: Mapped[str] = mapped_column(String(32), nullable=False)  # 评估集版本
     trigger_ref: Mapped[dict | None] = mapped_column(JSONB)  # PR/commit/参数快照
-    baseline_run_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("evaluation_runs.id"))
+    baseline_run_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("evaluation_runs.id"))
     metrics: Mapped[dict] = mapped_column(JSONB, default=dict, nullable=False)  # 主指标+分层
     delta: Mapped[dict | None] = mapped_column(JSONB)  # 对基线（-2% 阻断，08 §7.2）
     passed: Mapped[bool] = mapped_column(BOOLEAN, default=True, nullable=False)
-    started_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"))
+    started_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     __table_args__ = (
         CheckConstraint(
@@ -161,7 +164,7 @@ class EvaluationRun(Base, PkMixin, TenantMixin):
 
 class EvaluationResult(Base, PkMixin, TenantMixin):  # 只追加
     __tablename__ = "evaluation_results"
-    run_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("evaluation_runs.id"), nullable=False)
+    run_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("evaluation_runs.id"), nullable=False)
     case_id: Mapped[str] = mapped_column(String(64), nullable=False)
     metrics: Mapped[dict] = mapped_column(JSONB, default=dict, nullable=False)
     verdict: Mapped[str] = mapped_column(String(16), nullable=False)
@@ -177,9 +180,9 @@ class KbFact(Base, PkMixin):  # 七步终点权威表（OntRAG §2）；status=c
     """抽取事实：subject/predicate/object 三元组 + 证据信封；命名沿用真库现状（含双前缀）。"""
 
     __tablename__ = "kb_facts"
-    tenant_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("tenants.id"), nullable=False)
-    document_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("documents.id"), nullable=False)
-    chunk_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("document_chunks.id"))
+    tenant_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("tenants.id"), nullable=False)
+    document_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("documents.id"), nullable=False)
+    chunk_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("document_chunks.id"))
     fact_type: Mapped[str] = mapped_column(String(16), nullable=False)  # entity|relation|attribute|event
     subject: Mapped[str] = mapped_column(Text, nullable=False)
     predicate: Mapped[str | None] = mapped_column(Text)

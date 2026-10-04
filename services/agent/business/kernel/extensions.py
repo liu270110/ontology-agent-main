@@ -45,9 +45,11 @@ from services.agent.domain.model.kernel_planning import (
     MemoryCandidate,
     PlanCandidate,
     PlanMode,
+    ProjectionReport,
     ReasoningRequest,
     ReasoningResult,
     RecallItem,
+    SuccessCriterion,
 )
 
 
@@ -253,3 +255,28 @@ class AgentSlot(Protocol):
 # label/index/total（40 篇 §8 R2，2026-10-04 批）：SUBRUN_STARTED 发射面元数据（子代理
 # 显示名 / 本批并行批次序号 / 批次总量）——仅进事件载荷与回执审计，不参与裁决，缺省 None
 # 向后兼容（既有实现可忽略；BuiltinAgentSlot/ChatAdapter 已同步签名）。
+
+
+# ⑩ criterion.projections —— 判据投影（E-4 K1-c 最小求值面，docs/Agent/13 §2；通道 L2/L3；
+#    内核禁直连 pySHACL，实现位=business 组合根适配器，import 白名单 CI 锁边）
+@runtime_checkable
+class CriterionProjection(Protocol):
+    """判据投影端口：回执缺失时对判据焦点节点做**确定性**投影求值（B2 补充分支，M3 口径不变）。
+
+    契约（违反即拒注册/产物拒收）：
+
+    - 确定性引擎（SHACL 封装族）：禁 LLM、禁随机（推理分级宪法 2：高频确定性逻辑不走模型）；
+    - ``criterion.focus_iri`` 即焦点节点；``criterion.projection`` 携带形状集寻址声明；
+    - 求值不可得（形状/图缺失等）必须返回 ``evaluated=False`` 的结构化结论，禁裸异常逃逸；
+    - 只读求值：禁改账本、禁产回执（回执登记口仅内核/写回路径，B3）。
+    """
+
+    meta: ExtensionMeta
+
+    async def evaluate(
+        self,
+        criterion: SuccessCriterion,
+        ctx: TenantContext,
+        *,
+        timeout_ms: int = 1_000,
+    ) -> ProjectionReport: ...  # pragma: no cover — Protocol 方法无实现

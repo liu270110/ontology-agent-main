@@ -1,20 +1,22 @@
 import { useMemo } from 'react'
-import { selectSubRunGroups, useSessionStore } from '@/stores/session-store'
+import { useSessionStore } from '@/stores/session-store'
+import { buildWfRunViews, groupSubrunsByBatch } from '../lib/exec-selectors'
 import { ExecutionTaskCard } from './ExecutionTaskCard'
 import { PlanCard } from './PlanCard'
 import { WorkflowRunCard } from './WorkflowRunCard'
 
 /** 消息流内联执行卡组（40 篇 §5.2 形态①）：PlanCard + ExecutionTaskCard（按父 run 分组，
  *  一批次一张）+ WorkflowRunCard。挂载位复用 ToolCallCard（助手消息下，ChatStream 注入）；
- *  数据=store 三 slices（plan/subruns/workflowRuns）——空态纪律：全部无数据时整组不渲染
- *  （不占位不报错）。与右栏执行页签/画布三投影同源。 */
+ *  数据=store 三 slices（s.plan/s.subruns/s.workflowRuns，W1a 形状）经 exec-selectors 派生——
+ *  空态纪律：全部无数据时整组不渲染（不占位不报错）。与右栏执行页签/画布三投影同源。 */
 export function ExecInlineCards({ onOpenExecution }: { onOpenExecution?: () => void }) {
   const plan = useSessionStore(s => s.plan)
-  const groups = useSessionStore(selectSubRunGroups)
+  const subruns = useSessionStore(s => s.subruns)
   const workflowRuns = useSessionStore(s => s.workflowRuns)
   const runs = useSessionStore(s => s.runs)
 
-  const wfRuns = useMemo(() => [...workflowRuns.values()], [workflowRuns])
+  const groups = useMemo(() => groupSubrunsByBatch(subruns ?? {}), [subruns])
+  const wfRuns = useMemo(() => buildWfRunViews(workflowRuns ?? {}), [workflowRuns])
 
   // 空态纪律（40 篇 §5.2 空态）：无任何执行结构数据不渲染
   if (!plan && groups.length === 0 && wfRuns.length === 0) return null
@@ -34,7 +36,8 @@ export function ExecInlineCards({ onOpenExecution }: { onOpenExecution?: () => v
       {wfRuns.map(r => (
         <WorkflowRunCard
           key={r.runId}
-          run={r}
+          runId={r.runId}
+          nodes={r.nodes}
           runStatus={runs[r.runId]?.status}
           onOpenExecution={onOpenExecution}
         />

@@ -1,6 +1,7 @@
 import type { EvidenceChunk } from '@/stores/session-store'
 
-/** SSE 事件清单（api/02 §3 事件总表）。M3 主干波 11 事件 + M4+ 已知扩展；
+/** SSE 事件清单（协议出处：docs/api/02 §3 事件总表 + docs/架构设计/42 对话执行可视化）。
+ *  M3 主干波 11 事件 + M4+ 已知扩展 + 执行可视化五组登记（api/02 §3 2026-10-05 五组登记）；
  *  未知事件一律忽略（向前兼容裁决）。 */
 
 export const KNOWN_EVENTS = [
@@ -16,21 +17,26 @@ export const KNOWN_EVENTS = [
   'run.usage',
   // Agent 产物卡（S2 设计稿对齐切片追加：画框03 .artifact，载荷挂 message_id + artifact）
   'artifact.created',
-  // 执行结构波 6 事件（40 篇 §4.1/§4.2，api/02 扩展波）：PLAN_UPDATED 计划整表快照 +
-  // SUBRUN_* 子代理 run 生命周期 + WORKFLOW_NODE_* 工作流节点（X16 后才有发射，前端先收
-  // 从不报错——未知事件忽略纪律不破坏，40 篇 §4.3.6）
+  // 执行结构波（api/02 §3 ☆；契约权威=40 篇 §4：PLAN_UPDATED / SUBRUN_*×3 / WORKFLOW_NODE_*×2）
   'PLAN_UPDATED', 'SUBRUN_STARTED', 'SUBRUN_UPDATED', 'SUBRUN_FINISHED',
   'WORKFLOW_NODE_STARTED', 'WORKFLOW_NODE_FINISHED',
+  // 思考波（api/02 §3 ◆ 2026-10-05 登记：THINKING_* 三事件，ReasoningBlock 数据源，24 篇 §3.6）
+  'THINKING_START', 'THINKING_CONTENT', 'THINKING_END',
+  // 审批波（api/02 §3 ◆：kernel.approval_pending 转译上 wire，H-0b；对话内审批卡 42 篇 §3）
+  'APPROVAL_REQUIRED', 'APPROVAL_RESOLVED',
+  // 输入面波（api/02 §3 ★ M4.5-A 已实现已发射补登记：运行中输入插队受理回执）
+  'INBOX_SPLICED',
+  // 群聊波（api/02 §3 ★ 27 篇 X15 已实现已发射补登记：群聊编排器路由决议，group 域另有消费）
+  'ROUTING_DECISION',
+  // 控制面波（api/02 §3 ◆：estop 激活/解除 hub 广播，全局横幅）
+  'CONTROL_STATE',
 ] as const
 
 export type SseEventName = (typeof KNOWN_EVENTS)[number] | (string & {})
 
 export interface SseEvent {
   name: SseEventName
-  /** seq = SSE `id:` 行——**会话级**单调 seq（api/02 §2）。双 seq 参照系辨析（40 篇 §4.3.1，
-   *  批次 B 修正旧注）：SSE 帧序（会话级，实时流对账/续传用）与 `task_events.seq`（任务级，
-   *  持久回放通道序）是**两个独立单调空间**，数值不可互比，排序不变量各自空间内成立；
-   *  旧注「即 task_events.seq」为误注（40 篇 §9 回填清单）。 */
+  /** seq = SSE `id:` 行（api/02 §2：会话内单调递增，即 task_events.seq） */
   seq: number
   data: Record<string, unknown>
 }
@@ -112,107 +118,4 @@ export type RunUsageEventName = 'run.usage'
 
 export function isRunUsageEvent(name: SseEventName): name is RunUsageEventName {
   return name === 'run.usage'
-}
-
-// ---- 执行结构波 6 事件（40 篇 §4.2 payload schema；字段名对齐 Hermes SubagentEventPayload，
-//      以 2026-10 后端实装部署契约为准）——计划快照 / 子 run 生命周期 / 工作流节点 ----
-
-/** 计划条目（PLAN_UPDATED.items，整表快照语义：last-wins，revision 旧包丢弃） */
-export interface PlanItem {
-  id: string
-  content: string
-  status: 'pending' | 'in_progress' | 'completed'
-}
-
-/** PLAN_UPDATED：计划整表快照（revision 单调递增；落 task_events，回放可重建） */
-export interface PlanUpdatedEventData {
-  plan_id: string
-  revision: number
-  items: PlanItem[]
-  trace_id?: string
-}
-
-/** SUBRUN_STARTED：子 run 创建（= runs 行 parent_run_id 链，R1 落库） */
-export interface SubrunStartedEventData {
-  sub_run_id: string
-  parent_run_id: string
-  task_id: string
-  session_id: string
-  label: string
-  goal: string
-  depth: number
-  index: number
-  total: number
-  context_budget: number
-  /** 40 篇 §4.2 草案含 started_at；实装契约未列——可选兼容 */
-  started_at?: string
-  trace_id?: string
-}
-
-/** SUBRUN_UPDATED：子 run 心跳（不落 task_events 纯实时；服务端/前端双端 300ms 节流） */
-export interface SubrunUpdatedEventData {
-  sub_run_id: string
-  phase?: 'tool' | 'text' | 'thinking'
-  tool_name?: string
-  tool_count: number
-  preview?: string
-  tokens?: { input: number; output: number }
-  trace_id?: string
-}
-
-/** 子 run 终态枚举（rejected_artifact=Artifact 确定性校验被拒，宪法 2，不得误报 completed） */
-export const SUBRUN_FINISH_STATUSES = ['completed', 'failed', 'rejected_artifact', 'cancelled', 'timeout'] as const
-export type SubrunFinishStatus = (typeof SUBRUN_FINISH_STATUSES)[number]
-
-export function isSubrunFinishStatus(v: unknown): v is SubrunFinishStatus {
-  return typeof v === 'string' && (SUBRUN_FINISH_STATUSES as readonly string[]).includes(v)
-}
-
-/** SUBRUN_FINISHED：子 run 终态（终态后同 id UPDATED/STARTED=协议违例，前端丢弃+计数） */
-export interface SubrunFinishedEventData {
-  sub_run_id: string
-  status: SubrunFinishStatus
-  duration_ms: number
-  summary?: string
-  usage?: { input_tokens: number; output_tokens: number }
-  error?: { code?: string; message?: string }
-  trace_id?: string
-}
-
-/** 工作流节点八类（27 篇既有）与节点终态（waiting_approval 复用既有审批队列） */
-export type WorkflowNodeType =
-  | 'agent' | 'tool' | 'retrieval' | 'condition'
-  | 'parallel' | 'approval' | 'template' | 'start_end'
-
-export const WORKFLOW_NODE_FINISH_STATUSES = ['succeeded', 'failed', 'skipped', 'waiting_approval', 'cancelled'] as const
-export type WorkflowNodeFinishStatus = (typeof WORKFLOW_NODE_FINISH_STATUSES)[number]
-
-export function isWorkflowNodeFinishStatus(v: unknown): v is WorkflowNodeFinishStatus {
-  return typeof v === 'string' && (WORKFLOW_NODE_FINISH_STATUSES as readonly string[]).includes(v)
-}
-
-/** WORKFLOW_NODE_STARTED：工作流节点开始（X16 对接；后端发扁平事件带 parallel_id 组树，
- *  树由前端派生——后端不发树，40 篇 §2.4 总纲 2） */
-export interface WorkflowNodeStartedEventData {
-  workflow_run_id: string
-  node_id: string
-  node_type?: WorkflowNodeType
-  title?: string
-  attempt: number
-  parallel_id?: string | null
-  parent_parallel_id?: string | null
-  started_at?: string
-  trace_id?: string
-}
-
-/** WORKFLOW_NODE_FINISHED：节点终态（n/m 计数推进，运行卡/画布着色同源） */
-export interface WorkflowNodeFinishedEventData {
-  workflow_run_id: string
-  node_id: string
-  attempt?: number
-  status: WorkflowNodeFinishStatus
-  duration_ms?: number
-  error?: { code?: string; message?: string }
-  usage?: { input_tokens: number; output_tokens: number }
-  trace_id?: string
 }

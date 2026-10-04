@@ -1,20 +1,8 @@
 import { create } from 'zustand'
 import type { AgenticBlock } from '@/api/contracts'
-import type {
-  PlanItem,
-  RunUsageEventData,
-  SubrunFinishedEventData,
-  SubrunFinishStatus,
-  SubrunStartedEventData,
-  SubrunUpdatedEventData,
-  SseEvent,
-  WorkflowNodeFinishStatus,
-  WorkflowNodeType,
-} from '@/sse/events'
-import { isSubrunFinishStatus, isWorkflowNodeFinishStatus } from '@/sse/events'
+import type { RunUsageEventData, SseEvent } from '@/sse/events'
 
-/** 会话域全局态（16 篇 §2.2 session-store）+ 事件归约（§3.3）+ seq 对账（§3.2）
- *  + 执行结构波三 slices（40 篇 §5.1：plan/subruns/workflowRuns，三投影同源）。
+/** 会话域全局态（16 篇 §2.2 session-store）+ 事件归约（§3.3）+ seq 对账（§3.2）。
  *  敏感且体积大，不持久化。 */
 
 export interface ChatMessage {
@@ -42,13 +30,16 @@ export interface ToolCall {
   state: 'args' | 'running' | 'ok' | 'err'
   summary?: string
   costMs?: number
+  /** TOOL_CALL_RESULT 可选 tool_name（IX-CHT-05：断线重连 START 缺帧时恢复名称；卡片显示优先用它） */
+  toolName?: string
+  /** TOOL_CALL_RESULT 可选 args_digest（重连 args 增量缺失时的参数摘要，展开态展示） */
+  argsDigest?: string
+  /** TOOL_CALL_RESULT 可选 trace_id（宪法 5 全程可追溯；无帧不存 → 卡片不渲染该行，禁止造假值） */
+  traceId?: string
 }
 
 export interface RunInfo {
   status: 'running' | 'succeeded' | 'failed'
-  /** RUN_STARTED 兼容增补（40 篇 §4.2）：chat|workflow_run|…；缺省视为 chat（向后兼容），
-   *  前端据此决定挂运行卡还是普通消息流 */
-  taskType?: string
   usage?: Record<string, unknown>
   error?: { code: number; message: string }
 }
@@ -93,110 +84,207 @@ export interface DraftInsert {
   seq: number
 }
 
-/** R3 重连兜底快照行（GET /runs/{run_id}/subruns → {items:[…]}，40 篇 §4.4；信封=裸对象
- *  items 键，api.list/normalizeList 兼容）：快照只有状态摘要，无 index/total/task_id 等实时
- *  载荷字段——补建条目时以空值填充，实时 SUBRUN_* 帧随后原地合补全。 */
-export interface SubrunSnapshotRow {
-  id: string
-  parent_run_id: string
-  label?: string
-  goal?: string
-  depth?: number
-  /** runs 七态既有（queued/running/waiting_tool/…）或子 run 终态五枚举；未知值按非终态处理 */
-  status?: string
-  started_at?: string
-  ended_at?: string
-  duration_ms?: number
-  usage?: unknown
+// ---- 对话执行可视化 slices（协议出处：docs/api/02 §3 事件总表 + docs/架构设计/42；
+//      42 篇对话执行可视化批次。全部为可选新字段，向后兼容，不触碰既有字段）----
+
+/** PLAN_UPDATED（执行结构波，40 篇 §4）：内核规划步结构化输出，整表替换 + revision 乱序防抖 */
+export interface PlanItem {
+  id?: string
+  content: string
+  status: string
 }
 
-/** 快照 usage 载荷防御性收窄（wire 不可信）：{input_tokens,output_tokens} 数字字段才收 */
-function parseSnapshotUsage(u: unknown): { input_tokens: number; output_tokens: number } | undefined {
-  if (u == null || typeof u !== 'object') return undefined
-  const o = u as Record<string, unknown>
-  return { input_tokens: Number(o.input_tokens ?? 0), output_tokens: Number(o.output_tokens ?? 0) }
-}
-
-// ---- 执行结构波三 slices（40 篇 §5.1）：一事件一 reducer，按 id 原地合并（ACP
-//      tool_call_update 语义）；树形（subrun 树/并行分支组）由 selector 派生，后端不发树 ----
-
-/** 计划投影（PLAN_UPDATED 整表快照 last-wins；revision 旧包丢弃） */
-export interface PlanSnapshot {
-  planId: string
+export interface PlanSlice {
+  plan_id: string
   revision: number
   items: PlanItem[]
 }
 
-/** 子 run 投影：STARTED 载荷 + UPDATED 节流预览 + FINISHED 终态，均按 sub_run_id 原地合 */
-export interface SubRunState {
-  started: SubrunStartedEventData
-  /** 最近一次心跳合并态（300ms 至多一帧落 state，40 篇 §4.6 前端节流） */
-  updated?: SubrunUpdatedEventData
-  /** 终态（其后同 id UPDATED/STARTED=协议违例，丢弃+计数，§4.3.3） */
-  finished?: SubrunFinishedEventData
-}
+export type SubrunStatus = 'in_progress' | 'completed' | 'failed' | 'rejected_artifact' | 'cancelled' | 'timeout'
 
-/** 工作流节点投影（键=node_id 原地合；重试=attempt 推进回 running） */
-export interface WfNodeState {
-  node_id: string
-  node_type?: WorkflowNodeType
-  title?: string
-  attempt: number
-  parallel_id?: string | null
-  parent_parallel_id?: string | null
-  status: 'running' | WorkflowNodeFinishStatus
+/** SUBRUN_STARTED/UPDATED/FINISHED（执行结构波，40 篇 §4）：子代理协作任务卡行（sub_run_id 主键） */
+export interface SubrunInfo {
+  sub_run_id: string
+  parent_run_id?: string
+  label?: string
+  goal?: string
+  depth?: number
+  index?: number
+  total?: number
+  status: SubrunStatus
+  phase?: string
+  tool_name?: string
+  tool_count?: number
+  preview?: string
+  tokens?: number
   duration_ms?: number
-  error?: { code?: string; message?: string }
-  usage?: { input_tokens: number; output_tokens: number }
+  summary?: string
+  error?: string
 }
 
-/** 工作流运行投影（键=根 run_id；n/m 计数供运行卡头「{done}/{total}」） */
-export interface WfRunState {
-  runId: string
-  nodes: Map<string, WfNodeState>
-  /** done=已到终态节点数（waiting_approval 仍待审批不计入），total=已见节点数 */
-  done: number
-  total: number
+export type WorkflowNodeStatus = 'running' | 'succeeded' | 'failed' | 'skipped' | 'waiting_approval' | 'cancelled'
+
+export interface WorkflowNodeState {
+  node_id: string
+  node_type?: string
+  title?: string
+  attempt?: number
+  status: WorkflowNodeStatus
+  duration_ms?: number
+  error?: string
 }
 
-/** 节点计数 n/m（40 篇 §5.2 运行卡头） */
-function wfCounts(nodes: Map<string, WfNodeState>): { done: number; total: number } {
-  let done = 0
-  for (const n of nodes.values()) if (n.status !== 'running' && n.status !== 'waiting_approval') done += 1
-  return { done, total: nodes.size }
+/** WORKFLOW_NODE_STARTED/FINISHED（执行结构波 X16，40 篇 §4）：workflow_run_id → 节点表 */
+export interface WorkflowRunSlice {
+  nodes: Record<string, WorkflowNodeState>
 }
 
-/** SUBRUN_UPDATED 前端节流窗口（40 篇 §4.6：lobe-chat 教训，双端执行） */
-const UPDATED_THROTTLE_MS = 300
-/** 被节流挂起的最新载荷与 per-subrun 定时器放模块级（非 state）：挂起动作不触发渲染 */
-const pendingUpdated = new Map<string, SubrunUpdatedEventData>()
-const updatedTimers = new Map<string, ReturnType<typeof setTimeout>>()
-const lastUpdatedAt = new Map<string, number>()
-
-function applySubrunUpdated(sid: string, payload: SubrunUpdatedEventData) {
-  lastUpdatedAt.set(sid, Date.now())
-  useSessionStore.setState(s => {
-    const prev = s.subruns.get(sid)
-    if (!prev || prev.finished) return {} // 终态竞态（flush 晚到 FINISHED 已落）：丢弃，不变量 3
-    const next = new Map(s.subruns)
-    next.set(sid, { ...prev, updated: { ...prev.updated, ...payload } })
-    return { subruns: next }
-  })
+/** THINKING_START/CONTENT/END（思考波）：message_id → 思考折叠块（ReasoningBlock，24 篇 §3.6，默认收起） */
+export interface ThinkingBlock {
+  text: string
+  effort?: string
+  done: boolean
 }
 
-function flushUpdated(sid: string) {
-  updatedTimers.delete(sid)
-  const payload = pendingUpdated.get(sid)
-  pendingUpdated.delete(sid)
-  if (payload) applySubrunUpdated(sid, payload)
+export type ApprovalCardStatus = 'waiting' | 'approved' | 'rejected' | 'escalated' | 'timeout'
+
+/** APPROVAL_REQUIRED/RESOLVED（审批波，08 篇事件 14 + 42 篇 §3）：run_id → 对话内审批卡 */
+export interface ApprovalPend {
+  run_id: string
+  task_id: string
+  step_seq?: number
+  action_iri?: string
+  param_hash?: string
+  execution_mode?: string
+  summary?: string
+  /** 客户端受理时刻（帧无时间字段），等待耗时展示用 */
+  waiting_since?: string
+  cardStatus: ApprovalCardStatus
+  /** RUN_FINISHED/RUN_ERROR 或 APPROVAL_RESOLVED 后置 true：终态卡保留、不再轮询 */
+  settled?: boolean
+  /** APPROVAL_RESOLVED 载荷存档（api/01 H-0b 审批票） */
+  ticket_id?: string
 }
 
-/** 会话切换/MESSAGES_SNAPSHOT 重置时同步清理节流挂起态（防跨会话 flush 串写） */
-function resetExecThrottle() {
-  for (const t of updatedTimers.values()) clearTimeout(t)
-  updatedTimers.clear()
-  pendingUpdated.clear()
-  lastUpdatedAt.clear()
+/** INBOX_SPLICED（输入面波，api/02 §3 ★ M4.5-A）：插队受理回执行，会话级环形缓冲最近 20 条 */
+export interface InboxSpliceItem {
+  run_id: string
+  /** 载荷内插队序号（api/02 §3），与 SSE 帧 seq 无关 */
+  seq: number
+  kind: 'followup' | 'steer' | 'inject'
+  source: string
+  text: string
+}
+
+/** ROUTING_DECISION（群聊波，27 篇 X15）：协调者路由决议（单聊域存最近一帧；群聊域 group-store 另有消费） */
+export interface RoutingDecision {
+  mode: string
+  selected: string[]
+  names?: string[]
+  selected_by?: string
+  reason?: string
+}
+
+/** CONTROL_STATE（控制面波）：estop 激活/解除广播 → 全局横幅态（运行中 Run 以 RUN_ERROR code=4104 呈现） */
+export interface ControlStateInfo {
+  kind: string
+  reason?: string
+  by?: string
+  at?: string
+}
+
+/** 可选字段清洗（api/02 §7：SSE 帧载荷不可信）：仅收原生 string/number，其余归 undefined */
+function optStr(v: unknown): string | undefined {
+  return typeof v === 'string' ? v : undefined
+}
+
+function optNum(v: unknown): number | undefined {
+  return typeof v === 'number' && Number.isFinite(v) ? v : undefined
+}
+
+/** SUBRUN_FINISHED 合法终态（api/02 §3 枚举） */
+const TERMINAL_SUBRUN_STATUS: ReadonlySet<string> = new Set(['completed', 'failed', 'rejected_artifact', 'cancelled', 'timeout'])
+
+/** run 终态（RUN_FINISHED/RUN_ERROR）收敛审批卡：settled=true 保留终态卡、不再轮询；
+ *  无卡/已结算原样返回（引用稳定，ocr 2026-10-05：两处终态 handler 收敛为单点）。 */
+function settleApproval(pends: Record<string, ApprovalPend> | undefined, rid: string) {
+  const card = pends?.[rid]
+  return card && !card.settled ? { ...pends!, [rid]: { ...card, settled: true } } : pends
+}
+
+/** WORKFLOW_NODE_FINISHED 合法终态（api/02 §3 枚举） */
+const TERMINAL_NODE_STATUS: ReadonlySet<string> = new Set(['succeeded', 'failed', 'skipped', 'waiting_approval', 'cancelled'])
+
+/** INBOX_SPLICED 合法 kind（api/02 §3 枚举） */
+const INBOX_KINDS: ReadonlySet<string> = new Set(['followup', 'steer', 'inject'])
+
+type PatchOp = 'add' | 'replace' | 'remove'
+
+/** RFC 6902 单 op 求值（不可变：沿途浅克隆，不原地改）；目标缺失/越界一律原样返回（忽略不炸）。
+ *  数组容器：数字索引定位，remove=splice 删除，add=splice 插入（'-'=尾部追加）。 */
+function patchAt(target: unknown, tokens: string[], op: PatchOp, value: unknown): unknown {
+  const [tok, ...rest] = tokens
+  if (tok === undefined) return target
+  if (Array.isArray(target)) {
+    const idx = tok === '-' ? target.length : Number(tok)
+    const valid = Number.isInteger(idx) && idx >= 0 && idx <= target.length
+    if (rest.length === 0) {
+      if (op === 'add') {
+        if (!valid) return target
+        const arr = target.slice()
+        arr.splice(idx, 0, value)
+        return arr
+      }
+      if (!valid || idx === target.length) return target
+      const arr = target.slice()
+      if (op === 'remove') arr.splice(idx, 1)
+      else arr[idx] = value
+      return arr
+    }
+    if (!valid || idx === target.length) return target
+    const arr = target.slice()
+    arr[idx] = patchAt(arr[idx], rest, op, value)
+    return arr
+  }
+  const obj = target !== null && typeof target === 'object' ? (target as Record<string, unknown>) : undefined
+  if (!obj) {
+    // 中间节点缺失：仅 add 沿途建对象；replace/remove 视为无目标，忽略
+    if (op !== 'add') return target
+    return { [tok]: rest.length === 0 ? value : patchAt(undefined, rest, op, value) }
+  }
+  const has = Object.prototype.hasOwnProperty.call(obj, tok)
+  if (rest.length === 0) {
+    if (op === 'remove') {
+      if (!has) return obj
+      const clone = { ...obj }
+      delete clone[tok]
+      return clone
+    }
+    if (op === 'replace' && !has) return obj
+    return { ...obj, [tok]: value }
+  }
+  const child = patchAt(obj[tok], rest, op, value)
+  return child === obj[tok] ? obj : { ...obj, [tok]: child }
+}
+
+/** RFC 6902 JSON Patch 最小实现（api/02 §3 STATE_DELTA）：仅 add/remove/replace 三 op，
+ *  move/copy/test 及未知 op 忽略不炸；路径 ~0/~1 转义按 RFC 解码；根路径 add/replace 仅收对象整表。 */
+function jsonPatchApply(doc: Record<string, unknown>, patch: unknown): Record<string, unknown> {
+  if (!Array.isArray(patch)) return doc
+  let out = doc
+  for (const raw of patch) {
+    if (raw === null || typeof raw !== 'object') continue
+    const { op, path, value } = raw as { op?: unknown; path?: unknown; value?: unknown }
+    if (typeof path !== 'string') continue
+    if (op !== 'add' && op !== 'replace' && op !== 'remove') continue
+    const tokens = path === '' ? [] : path.split('/').slice(1).map(t => t.replace(/~1/g, '/').replace(/~0/g, '~'))
+    if (tokens.length === 0) {
+      if (op !== 'remove' && value !== null && typeof value === 'object' && !Array.isArray(value)) out = value as Record<string, unknown>
+      continue
+    }
+    out = patchAt(out, tokens, op, value) as Record<string, unknown>
+  }
+  return out
 }
 
 let draftSeq = 0
@@ -213,6 +301,10 @@ interface SessionState {
   running: boolean
   /** 当前运行 id（停止生成 IX-CHT-06：POST /sessions/{id}/cancel 需携带） */
   activeRunId: string | null
+  /** W-02（41 号验收）：202 受理后的乐观运行态——POST 成功即置 true，任一运行生命周期帧
+   *  （RUN_STARTED/TEXT_MESSAGE_START/RUN_FINISHED/RUN_ERROR）到达或停止/切会话即清。
+   *  live 后端首帧未达窗口内，消息流以「正在思考…」占位、停止钮可用（首帧到达后替换）。 */
+  pendingReply: boolean
 
   /** 会话级 workspace 事件环形缓冲（最近 20 条，31 篇 workspace.file.*） */
   workspaceEvents: WorkspaceEventItem[]
@@ -226,21 +318,32 @@ interface SessionState {
   usageGroups: RunUsageEventData['groups'] | null
   /** 上下文压缩回写（POST /sessions/{id}/compact 成功后 ContextMeter 以此覆盖 token 用量显示） */
   usageTokens: number | null
-
-  /** —— 执行结构波三 slices（40 篇 §5.1）：消息流内联卡/右栏执行面板/画布三投影同源 —— */
-  /** 计划投影（PLAN_UPDATED 整表替换、revision 旧包丢弃） */
-  plan: PlanSnapshot | null
-  /** 子 run 投影（SUBRUN_STARTED 建 / UPDATED 300ms 节流原地合 / FINISHED 终态原地合） */
-  subruns: Map<string, SubRunState>
-  /** 工作流运行投影（WORKFLOW_NODE_* 原地合；X16 后才有发射，先收从不报错） */
-  workflowRuns: Map<string, WfRunState>
-  /** 执行结构事件协议违例计数（§4.3.7：console.warn+计数，不中断流；随重置纪律清零） */
-  execViolations: number
-
   /** 资源行「@引用」动作入口：入队 @文件名（不直接触碰输入框） */
   pushDraftInsert: (text: string) => void
   /** 压缩成功回写 summary_tokens（api/01 §5.2 compact 预登记口径） */
   compactUsage: (tokens: number) => void
+
+  // ---- 对话执行可视化（docs/api/02 §3 + docs/架构设计/42；全部可选字段，向后兼容）----
+  /** PLAN_UPDATED 归约：计划卡整表（revision 乱序防抖） */
+  plan?: PlanSlice | null
+  /** SUBRUN_* 归约：sub_run_id → 子代理任务卡行 */
+  subruns?: Record<string, SubrunInfo>
+  /** WORKFLOW_NODE_* 归约：workflow_run_id → 节点表（组不存在自动建） */
+  workflowRuns?: Record<string, WorkflowRunSlice>
+  /** THINKING_* 归约：message_id → 思考折叠块 */
+  thinking?: Record<string, ThinkingBlock>
+  /** APPROVAL_* 归约：run_id → 审批卡（run 结束置 settled 保留终态卡） */
+  approvalPends?: Record<string, ApprovalPend>
+  /** INBOX_SPLICED 归约：插队受理回执（环形 20 条） */
+  inboxSplices?: InboxSpliceItem[]
+  /** STATE_SNAPSHOT 归约：共享状态全量整表；STATE_DELTA 按最小 JSON Patch 应用其上 */
+  snapshot?: Record<string, unknown>
+  /** ROUTING_DECISION 归约：最近一帧路由决议 */
+  lastRouting?: RoutingDecision
+  /** CONTROL_STATE 归约：estop 全局横幅态 */
+  controlState?: ControlStateInfo | null
+  /** RUN_STARTED task_type（api/02 §3：chat|workflow_run|…，缺省 chat 向后兼容） */
+  activeTaskType?: string
 
   setActiveSession: (id: string | null) => void
   /** 历史基线（订阅前 GET /sessions/{id}/messages，§3.2），对齐 lastSeq */
@@ -253,22 +356,11 @@ interface SessionState {
   setConnection: (c: SessionState['connection']) => void
   /** 停止生成（IX-CHT-06）：流终止、保留已生成部分，末条助手消息追加「已手动停止」标记 */
   stopRun: () => void
-  /** R3 重连兜底（40 篇 §4.4）：GET /runs/{run_id}/subruns 快照行归并进 subruns slice——
-   *  按 sub_run_id 原地合：既有终态条目不动（终态优先）；快照终态仅补缺（不覆盖实时
-   *  FINISHED 明细）；快照非终态行只补建缺失条目（不覆盖本地 updated 心跳态）。 */
-  ingestSubrunsSnapshot: (rows: SubrunSnapshotRow[]) => void
   /** 归约一帧：返回 'applied' | 'dup' | 'gap'（gap 由调用方触发补发/快照，§3.2） */
   apply: (evt: SseEvent) => 'applied' | 'dup' | 'gap'
 }
 
-export const useSessionStore = create<SessionState>((set, get) => {
-  /** §4.3.7 协议违例处置（40 篇）：console.warn + 计数，不中断流（可用性优先于一致性） */
-  function bumpViolation(reason: string) {
-    console.warn('[sse] 执行结构事件协议违例（丢弃+计数）：', reason)
-    set(s => ({ execViolations: s.execViolations + 1 }))
-  }
-
-  return {
+export const useSessionStore = create<SessionState>((set, get) => ({
   activeSessionId: null,
   messages: [],
   toolCalls: {},
@@ -278,6 +370,7 @@ export const useSessionStore = create<SessionState>((set, get) => {
   evidence: null,
   running: false,
   activeRunId: null,
+  pendingReply: false,
   workspaceEvents: [],
   workspaceVersion: 0,
   terminalLines: [],
@@ -285,18 +378,23 @@ export const useSessionStore = create<SessionState>((set, get) => {
   usageGroups: null,
   usageTokens: null,
   plan: null,
-  subruns: new Map(),
-  workflowRuns: new Map(),
-  execViolations: 0,
+  subruns: {},
+  workflowRuns: {},
+  thinking: {},
+  approvalPends: {},
+  inboxSplices: [],
+  snapshot: undefined,
+  lastRouting: undefined,
+  controlState: null,
+  activeTaskType: undefined,
 
-  setActiveSession: id => {
-    resetExecThrottle()
+  setActiveSession: id =>
     set({
-      activeSessionId: id, messages: [], toolCalls: {}, runs: {}, lastSeq: 0, evidence: null, running: false, activeRunId: null,
+      activeSessionId: id, messages: [], toolCalls: {}, runs: {}, lastSeq: 0, evidence: null, running: false, activeRunId: null, pendingReply: false,
       workspaceEvents: [], workspaceVersion: 0, terminalLines: [], draftInserts: [], usageGroups: null, usageTokens: null,
-      plan: null, subruns: new Map(), workflowRuns: new Map(), execViolations: 0,
-    })
-  },
+      plan: null, subruns: {}, workflowRuns: {}, thinking: {}, approvalPends: {}, inboxSplices: [],
+      snapshot: undefined, lastRouting: undefined, controlState: null, activeTaskType: undefined,
+    }),
 
   compactUsage: tokens => set({ usageTokens: tokens }),
 
@@ -342,56 +440,11 @@ export const useSessionStore = create<SessionState>((set, get) => {
     set(s => ({
       running: false,
       activeRunId: null,
+      pendingReply: false,
       messages: s.messages.map((m, i) =>
         m.role === 'assistant' && i === s.messages.length - 1 ? { ...m, finishReason: 'stopped' } : m,
       ),
     }))
-  },
-
-  ingestSubrunsSnapshot(rows) {
-    const list = Array.isArray(rows) ? rows : []
-    if (list.length === 0) return
-    set(s => {
-      const next = new Map(s.subruns)
-      for (const row of list) {
-        const id = String(row?.id ?? '')
-        if (!id) continue
-        const cur = next.get(id)
-        if (cur?.finished) continue // 终态优先：快照不覆盖既有终态明细（§4.3.3 终态不变量）
-        // 快照 status 非终态枚举（runs 七态 active 族/未知值）一律按非终态处理（宁缺勿错）
-        const terminal = isSubrunFinishStatus(row.status)
-        const finished: SubrunFinishedEventData | undefined = terminal
-          ? {
-              sub_run_id: id,
-              status: row.status as SubrunFinishStatus,
-              duration_ms: Number(row.duration_ms ?? 0),
-              usage: parseSnapshotUsage(row.usage),
-            }
-          : undefined
-        if (cur) {
-          // 既有条目：仅快照带终态且本地未终态时回填；非终态快照不覆盖本地 updated 心跳态
-          if (!finished) continue
-          next.set(id, { ...cur, finished })
-        } else {
-          // 缺失条目补建（快照无 index/total/task_id 等实时字段，空值填充待实时帧补全）
-          const started: SubrunStartedEventData = {
-            sub_run_id: id,
-            parent_run_id: String(row.parent_run_id ?? ''),
-            task_id: '',
-            session_id: '',
-            label: String(row.label ?? ''),
-            goal: String(row.goal ?? ''),
-            depth: Number(row.depth ?? 0),
-            index: 0,
-            total: 0,
-            context_budget: 0,
-            started_at: typeof row.started_at === 'string' ? row.started_at : undefined,
-          }
-          next.set(id, finished ? { started, finished } : { started })
-        }
-      }
-      return next === s.subruns ? {} : { subruns: next }
-    })
   },
 
   apply(evt) {
@@ -411,10 +464,10 @@ export const useSessionStore = create<SessionState>((set, get) => {
       ok?: boolean
       summary?: string
       cost_ms?: number
+      args_digest?: string
+      trace_id?: string
       code?: number
       message?: string
-      /** SUBRUN_FINISHED / WORKFLOW_NODE_FINISHED 嵌套错误（40 篇 §4.2：code 为字符串码） */
-      error?: { code?: number | string; message?: string }
       usage?: Record<string, unknown>
       chunks?: Evidence['chunks']
       graph_paths?: Evidence['graph_paths']
@@ -429,11 +482,11 @@ export const useSessionStore = create<SessionState>((set, get) => {
       text?: string
       groups?: RunUsageEventData['groups']
       artifact?: ChatMessage['artifact']
-      // —— 执行结构波 6 事件 + RUN_STARTED 兼容增补（40 篇 §4.2；wire 不可信，用点防御性收窄）——
+      // ---- 对话执行可视化批次（api/02 §3；载荷不可信，归约处逐字段再清洗）----
       task_type?: string
       plan_id?: string
       revision?: number
-      items?: PlanItem[]
+      items?: unknown[]
       sub_run_id?: string
       parent_run_id?: string
       label?: string
@@ -441,37 +494,56 @@ export const useSessionStore = create<SessionState>((set, get) => {
       depth?: number
       index?: number
       total?: number
-      context_budget?: number
-      started_at?: string
+      status?: string
       phase?: string
       tool_count?: number
       preview?: string
-      tokens?: { input: number; output: number }
-      status?: string
+      tokens?: number
       duration_ms?: number
+      error?: string
       workflow_run_id?: string
       node_id?: string
       node_type?: string
       title?: string
       attempt?: number
-      parallel_id?: string
-      parent_parallel_id?: string
+      reasoning_effort?: string
+      decision?: string
+      ticket_id?: string
+      kind?: string
+      source?: string
+      seq?: number
+      snapshot?: unknown
+      patch?: unknown
+      mode?: string
+      selected?: unknown[]
+      names?: unknown[]
+      selected_by?: string
+      reason?: string
+      by?: string
+      at?: string
+      step_seq?: number
+      action_iri?: string
+      param_hash?: string
+      execution_mode?: string
     }
 
     switch (evt.name) {
       case 'RUN_STARTED': {
         const rid = String(d.run_id ?? '')
-        // 40 篇 §4.2 兼容增补：task_type 缺省视为 chat（向后兼容）
-        const taskType = typeof d.task_type === 'string' && d.task_type !== '' ? d.task_type : undefined
-        set(s => ({ running: true, activeRunId: rid, runs: { ...s.runs, [rid]: { status: 'running', taskType } }, evidence: null }))
+        // 42 篇批次 1 task_type 归约 + W-02 乐观占位让位（真运行帧已到）
+        set(s => ({
+          running: true, activeRunId: rid, runs: { ...s.runs, [rid]: { status: 'running' } }, evidence: null,
+          activeTaskType: optStr(d.task_type) ?? 'chat',
+          pendingReply: false,
+        }))
         break
       }
       case 'TEXT_MESSAGE_START':
         // F7 防双行：历史补齐已并入同 id 完成态消息时，重放的 START 不再追加（保「恰 1 次」）
         set(s =>
           s.messages.some(m => m.id === String(d.message_id ?? ''))
-            ? {}
-            : { messages: [...s.messages, { id: String(d.message_id ?? ''), role: 'assistant', content: '' }] },
+            ? { pendingReply: false }
+            : { messages: [...s.messages, { id: String(d.message_id ?? ''), role: 'assistant', content: '' }], pendingReply: false },
         )
         break
       case 'TEXT_MESSAGE_CONTENT':
@@ -521,6 +593,11 @@ export const useSessionStore = create<SessionState>((set, get) => {
               state: d.ok ? 'ok' : 'err',
               summary: d.summary,
               costMs: d.cost_ms,
+              // IX-CHT-05 新可选字段（载荷不可信，仅收非空原生 string；缺帧保留既有值不回退 undefined）：
+              // 重连恢复名称 / 参数摘要 / trace_id（卡片「无值不显示该行」的诚实口径）
+              toolName: typeof d.tool_name === 'string' && d.tool_name ? d.tool_name : s.toolCalls[tid]?.toolName,
+              argsDigest: typeof d.args_digest === 'string' && d.args_digest ? d.args_digest : s.toolCalls[tid]?.argsDigest,
+              traceId: typeof d.trace_id === 'string' && d.trace_id ? d.trace_id : s.toolCalls[tid]?.traceId,
             },
           },
         }))
@@ -537,7 +614,11 @@ export const useSessionStore = create<SessionState>((set, get) => {
         set(s => {
           const runs = { ...s.runs, [rid]: { ...s.runs[rid], status: 'succeeded' as const, usage: d.usage } }
           const stillRunning = Object.values(runs).some(r => r.status === 'running')
-          return { runs, running: stillRunning, activeRunId: stillRunning ? s.activeRunId : null }
+          return {
+            runs, running: stillRunning, activeRunId: stillRunning ? s.activeRunId : null,
+            approvalPends: settleApproval(s.approvalPends, rid),
+            pendingReply: false,
+          }
         })
         break
       }
@@ -546,18 +627,16 @@ export const useSessionStore = create<SessionState>((set, get) => {
         set(s => {
           const runs = { ...s.runs, [rid]: { ...s.runs[rid], status: 'failed' as const, error: { code: Number(d.code), message: String(d.message ?? '') } } }
           const stillRunning = Object.values(runs).some(r => r.status === 'running')
-          return { runs, running: stillRunning, activeRunId: stillRunning ? s.activeRunId : null }
+          return {
+            runs, running: stillRunning, activeRunId: stillRunning ? s.activeRunId : null,
+            approvalPends: settleApproval(s.approvalPends, rid),
+            pendingReply: false,
+          }
         })
         break
       }
       case 'MESSAGES_SNAPSHOT':
-        // 快照=丢帧后的重同步（api/02 §4）：三 slices 可能已缺帧，一并重置防串/防脏——
-        // 重连回放与 R3 快照端点（GET /runs/{id}/subruns）随后重建；节流挂起态同步清理
-        resetExecThrottle()
-        set({
-          messages: d.messages ?? [],
-          plan: null, subruns: new Map(), workflowRuns: new Map(), execViolations: 0,
-        })
+        set({ messages: d.messages ?? [] })
         break
       case 'workspace.file.created':
       case 'workspace.file.modified':
@@ -590,267 +669,282 @@ export const useSessionStore = create<SessionState>((set, get) => {
         if (d.groups) set({ usageGroups: d.groups })
         break
       }
-      // —— 执行结构波（40 篇 §4/§5.1）：归并纪律=按 id 原地合并；违例 warn+计数不中断流 ——
+      // ---- 以下为对话执行可视化批次归约（docs/api/02 §3 事件总表 + docs/架构设计/42）----
+
+      // 执行结构波（40 篇 §4）
       case 'PLAN_UPDATED': {
-        // 整表快照 last-wins（对标 DSH todo/write）：revision 旧包/等包（重放）丢弃（§4.3.4）
-        const rev = Number(d.revision ?? 0)
-        const curPlan = get().plan
-        if (curPlan && rev <= curPlan.revision) break
-        const raw = Array.isArray(d.items) ? d.items : []
-        const items: PlanItem[] = raw.map((it, i) => {
-          const o = (it ?? {}) as Partial<PlanItem>
-          return {
-            id: String(o.id ?? `p${i + 1}`),
-            content: String(o.content ?? ''),
-            status: o.status === 'in_progress' || o.status === 'completed' ? o.status : 'pending',
-          }
+        // 内核规划步结构化输出：整表替换；revision 小于当前丢弃（乱序防抖）。
+        // plan_id 变化=新一轮规划（revision 跨 run 可重排），不参与乱序比较，直接替换。
+        const planId = String(d.plan_id ?? '')
+        const revision = Number(d.revision)
+        if (!planId || !Number.isFinite(revision)) break
+        const cur = get().plan
+        if (cur && cur.plan_id === planId && revision < cur.revision) break
+        const items = Array.isArray(d.items) ? d.items : []
+        set({
+          plan: {
+            plan_id: planId,
+            revision,
+            items: items
+              .filter((it): it is Record<string, unknown> => it !== null && typeof it === 'object')
+              .map(it => ({
+                id: optStr(it.id),
+                content: String(it.content ?? ''),
+                status: String(it.status ?? ''),
+              })),
+          },
         })
-        set({ plan: { planId: String(d.plan_id ?? ''), revision: rev, items } })
         break
       }
       case 'SUBRUN_STARTED': {
+        // 内核 spawn_sub 派发子代理：协作任务卡建行（in_progress）
         const sid = String(d.sub_run_id ?? '')
-        const prev = get().subruns.get(sid)
-        if (prev?.finished) {
-          // 终态后重入 STARTED=违例（§4.3.3 镜像），不重建（快照端点兜底）
-          bumpViolation(`SUBRUN_STARTED 终态后重入：${sid}`)
-          break
-        }
-        const started: SubrunStartedEventData = {
+        if (!sid) break
+        const row: SubrunInfo = {
           sub_run_id: sid,
-          parent_run_id: String(d.parent_run_id ?? ''),
-          task_id: String(d.task_id ?? ''),
-          session_id: String(d.session_id ?? ''),
-          label: String(d.label ?? ''),
-          goal: String(d.goal ?? ''),
-          depth: Number(d.depth ?? 0),
-          index: Number(d.index ?? 0),
-          total: Number(d.total ?? 0),
-          context_budget: Number(d.context_budget ?? 0),
-          started_at: typeof d.started_at === 'string' ? d.started_at : undefined,
+          parent_run_id: optStr(d.parent_run_id),
+          label: optStr(d.label),
+          goal: optStr(d.goal),
+          depth: optNum(d.depth),
+          index: optNum(d.index),
+          total: optNum(d.total),
+          status: 'in_progress',
         }
-        set(s => {
-          const next = new Map(s.subruns)
-          // 同 id 重复 STARTED（重放/重连）：按 id 原地合，保留已观测 updated 态
-          next.set(sid, prev ? { ...prev, started: { ...prev.started, ...started } } : { started })
-          return { subruns: next }
-        })
+        set(s => ({ subruns: { ...s.subruns, [sid]: row } }))
         break
       }
       case 'SUBRUN_UPDATED': {
+        // 子代理心跳（服务端 300ms 合并，40 篇 R5）：行内字段刷新；行不存在忽略（等 STARTED 建行）
         const sid = String(d.sub_run_id ?? '')
-        const cur = get().subruns.get(sid)
-        if (!cur || cur.finished) {
-          // 无 STARTED 或终态后的 UPDATED=违例（§4.3.2/3）：丢弃+计数
-          bumpViolation(`SUBRUN_UPDATED 无 STARTED 或已终态：${sid}`)
-          break
-        }
-        const payload: SubrunUpdatedEventData = {
-          sub_run_id: sid,
-          phase: d.phase === 'tool' || d.phase === 'text' || d.phase === 'thinking' ? d.phase : undefined,
-          tool_name: d.tool_name,
-          tool_count: Number(d.tool_count ?? cur.updated?.tool_count ?? 0),
-          preview: d.preview,
-          tokens: d.tokens,
-        }
-        const now = Date.now()
-        const last = lastUpdatedAt.get(sid) ?? 0
-        if (now - last >= UPDATED_THROTTLE_MS) {
-          applySubrunUpdated(sid, payload) // 窗口外：立即合并
-        } else {
-          // 窗口内：只挂起最新一帧（合并语义），300ms 至多一帧落 state 触发渲染
-          pendingUpdated.set(sid, payload)
-          if (!updatedTimers.has(sid)) {
-            updatedTimers.set(sid, setTimeout(() => flushUpdated(sid), UPDATED_THROTTLE_MS - (now - last)))
+        if (!sid) break
+        set(s => {
+          const cur = s.subruns?.[sid]
+          if (!cur) return {}
+          return {
+            subruns: {
+              ...s.subruns!,
+              [sid]: {
+                ...cur,
+                phase: optStr(d.phase) ?? cur.phase,
+                tool_name: optStr(d.tool_name) ?? cur.tool_name,
+                tool_count: optNum(d.tool_count) ?? cur.tool_count,
+                preview: optStr(d.preview) ?? cur.preview,
+                tokens: optNum(d.tokens) ?? cur.tokens,
+              },
+            },
           }
-        }
+        })
         break
       }
       case 'SUBRUN_FINISHED': {
+        // 子代理终态（级联取消/超时/崩溃恢复合成含）：行转终态 + duration_ms/summary/error；
+        // 畸形 status（非 api/02 §3 枚举）按缺省 completed 收敛
         const sid = String(d.sub_run_id ?? '')
-        const cur = get().subruns.get(sid)
-        if (!cur || cur.finished) {
-          // 无 STARTED / 重复 FINISHED=违例（§4.3.3）：丢弃+计数（快照端点兜底）
-          bumpViolation(cur ? `SUBRUN_FINISHED 重复终态：${sid}` : `SUBRUN_FINISHED 无 STARTED：${sid}`)
-          break
-        }
-        if (!isSubrunFinishStatus(d.status)) bumpViolation(`SUBRUN_FINISHED 未知 status：${String(d.status)}`)
-        const finished: SubrunFinishedEventData = {
-          sub_run_id: sid,
-          // 非枚举值按 failed 降级（红色失败态，不误报成功；rejected_artifact 等枚举原样保留）
-          status: isSubrunFinishStatus(d.status) ? d.status : 'failed',
-          duration_ms: Number(d.duration_ms ?? 0),
-          summary: typeof d.summary === 'string' ? d.summary : undefined,
-          usage: d.usage as SubrunFinishedEventData['usage'],
-          error: d.error as SubrunFinishedEventData['error'],
-        }
-        // 终态优先：清未决 UPDATED 节流（终态 summary 取代预览，防 flush 晚到覆写）
-        const timer = updatedTimers.get(sid)
-        if (timer) {
-          clearTimeout(timer)
-          updatedTimers.delete(sid)
-        }
-        pendingUpdated.delete(sid)
+        if (!sid) break
         set(s => {
-          const next = new Map(s.subruns)
-          next.set(sid, { ...cur, finished })
-          return { subruns: next }
+          const cur = s.subruns?.[sid]
+          if (!cur) return {}
+          const st = optStr(d.status)
+          return {
+            subruns: {
+              ...s.subruns!,
+              [sid]: {
+                ...cur,
+                status: st && TERMINAL_SUBRUN_STATUS.has(st) ? (st as SubrunStatus) : 'completed',
+                duration_ms: optNum(d.duration_ms) ?? cur.duration_ms,
+                summary: optStr(d.summary) ?? cur.summary,
+                error: optStr(d.error) ?? cur.error,
+              },
+            },
+          }
         })
         break
       }
       case 'WORKFLOW_NODE_STARTED': {
-        // X16 对接（后端发扁平事件带 parallel_id，组树由 selector 派生）；先收从不报错
-        const rid = String(d.workflow_run_id ?? '')
+        // 工作流节点开始（task.type=workflow_run，X16）：节点置 running；组不存在自动建组
+        const wid = String(d.workflow_run_id ?? '')
         const nid = String(d.node_id ?? '')
+        if (!wid || !nid) break
         set(s => {
-          const prevRun = s.workflowRuns.get(rid)
-          const nodes = new Map(prevRun?.nodes ?? [])
-          const prev = nodes.get(nid)
-          nodes.set(nid, {
-            node_id: nid,
-            node_type: d.node_type === 'agent' || d.node_type === 'tool' || d.node_type === 'retrieval' || d.node_type === 'condition'
-              || d.node_type === 'parallel' || d.node_type === 'approval' || d.node_type === 'template' || d.node_type === 'start_end'
-              ? d.node_type
-              : prev?.node_type,
-            title: typeof d.title === 'string' ? d.title : prev?.title,
-            // 重试=同 node_id 原地合，attempt 推进回 running（zed ACP 原地 PATCH 语义）
-            attempt: Number(d.attempt ?? prev?.attempt ?? 1),
-            parallel_id: typeof d.parallel_id === 'string' ? d.parallel_id : prev?.parallel_id ?? null,
-            parent_parallel_id: typeof d.parent_parallel_id === 'string' ? d.parent_parallel_id : prev?.parent_parallel_id ?? null,
-            status: 'running',
-          })
-          const runs = new Map(s.workflowRuns)
-          runs.set(rid, { runId: rid, nodes, ...wfCounts(nodes) })
-          return { workflowRuns: runs }
+          const group = s.workflowRuns?.[wid] ?? { nodes: {} }
+          return {
+            workflowRuns: {
+              ...s.workflowRuns,
+              [wid]: {
+                nodes: {
+                  ...group.nodes,
+                  [nid]: {
+                    node_id: nid,
+                    node_type: optStr(d.node_type),
+                    title: optStr(d.title),
+                    attempt: optNum(d.attempt),
+                    status: 'running',
+                  },
+                },
+              },
+            },
+          }
         })
         break
       }
       case 'WORKFLOW_NODE_FINISHED': {
-        const rid = String(d.workflow_run_id ?? '')
+        // 工作流节点终态：节点转终态着色；组/节点缺失防御性补建（START 缺帧时终态不丢）
+        const wid = String(d.workflow_run_id ?? '')
         const nid = String(d.node_id ?? '')
-        const cur = get().workflowRuns.get(rid)?.nodes.get(nid)
-        if (!cur) {
-          // 无 STARTED=违例（§4.3.2）：丢弃+计数，不凭空建卡（快照端点兜底）
-          bumpViolation(`WORKFLOW_NODE_FINISHED 无 STARTED：${rid}/${nid}`)
-          break
-        }
-        if (!isWorkflowNodeFinishStatus(d.status)) bumpViolation(`WORKFLOW_NODE_FINISHED 未知 status：${String(d.status)}`)
+        if (!wid || !nid) break
         set(s => {
-          const prevRun = s.workflowRuns.get(rid)
-          if (!prevRun) return {}
-          const nodes = new Map(prevRun.nodes)
-          nodes.set(nid, {
-            ...cur,
-            status: isWorkflowNodeFinishStatus(d.status) ? d.status : 'failed',
-            attempt: Number(d.attempt ?? cur.attempt),
-            duration_ms: Number(d.duration_ms ?? cur.duration_ms ?? 0),
-            error: d.error as WfNodeState['error'],
-            usage: d.usage as WfNodeState['usage'],
-          })
-          const runs = new Map(s.workflowRuns)
-          runs.set(rid, { runId: rid, nodes, ...wfCounts(nodes) })
-          return { workflowRuns: runs }
+          const group = s.workflowRuns?.[wid] ?? { nodes: {} }
+          const node: WorkflowNodeState = group.nodes[nid] ?? { node_id: nid, status: 'running' }
+          const st = optStr(d.status)
+          return {
+            workflowRuns: {
+              ...s.workflowRuns,
+              [wid]: {
+                nodes: {
+                  ...group.nodes,
+                  [nid]: {
+                    ...node,
+                    attempt: optNum(d.attempt) ?? node.attempt,
+                    status: st && TERMINAL_NODE_STATUS.has(st) ? (st as WorkflowNodeStatus) : node.status,
+                    duration_ms: optNum(d.duration_ms) ?? node.duration_ms,
+                    error: optStr(d.error) ?? node.error,
+                  },
+                },
+              },
+            },
+          }
         })
         break
       }
+
+      // 思考波（api/02 §3 ◆：vLLM/DeepSeek reasoning token 透传，ReasoningBlock 默认收起）
+      case 'THINKING_START': {
+        // 折叠块占位：初始化（可带 reasoning_effort）；重复 START 按「初始化」语义重置
+        set(s => {
+          const mid = String(d.message_id ?? '')
+          if (!mid) return {}
+          return {
+            thinking: { ...s.thinking, [mid]: { text: '', effort: optStr(d.reasoning_effort), done: false } },
+          }
+        })
+        break
+      }
+      case 'THINKING_CONTENT': {
+        // 折叠块内追加（与 TEXT_MESSAGE_CONTENT 同构增量拼接，不进正文）；START 缺帧防御：占位后追加
+        set(s => {
+          const mid = String(d.message_id ?? '')
+          if (!mid || optStr(d.delta) === undefined) return {}
+          const block = s.thinking?.[mid] ?? { text: '', done: false }
+          return { thinking: { ...s.thinking!, [mid]: { ...block, text: block.text + (d.delta ?? '') } } }
+        })
+        break
+      }
+      case 'THINKING_END': {
+        // 折叠块定稿（此后 TEXT_MESSAGE_* 才开始）；块不存在（此前无 START/CONTENT）忽略
+        set(s => {
+          const mid = String(d.message_id ?? '')
+          const block = mid ? s.thinking?.[mid] : undefined
+          return block ? { thinking: { ...s.thinking!, [mid]: { ...block, done: true } } } : {}
+        })
+        break
+      }
+
+      // 审批波（08 篇事件 14 + 42 篇 §3：批准→POST /tasks/{tid}/runs/{rid}/approvals，H-0b）
+      case 'APPROVAL_REQUIRED': {
+        // 内核步落 waiting_tool 态上 wire：对话内审批卡建卡（waiting）
+        const rid = String(d.run_id ?? '')
+        const tid = String(d.task_id ?? '')
+        if (!rid || !tid) break
+        const card: ApprovalPend = {
+          run_id: rid,
+          task_id: tid,
+          step_seq: optNum(d.step_seq),
+          action_iri: optStr(d.action_iri),
+          param_hash: optStr(d.param_hash),
+          execution_mode: optStr(d.execution_mode),
+          summary: optStr(d.summary),
+          waiting_since: new Date().toISOString(), // 帧无时间字段，取客户端受理时刻
+          cardStatus: 'waiting',
+          settled: false,
+        }
+        set(s => ({ approvalPends: { ...s.approvalPends, [rid]: card } }))
+        break
+      }
+      case 'APPROVAL_RESOLVED': {
+        // 审批裁决落定：卡转终态（approved/rejected）+ ticket_id 存档；
+        // 卡缺失（未收到 REQUIRED）或 decision 非法（escalated/timeout 由本地动作置位，非 wire 枚举）忽略
+        const rid = String(d.run_id ?? '')
+        const decision = optStr(d.decision)
+        if (!rid || (decision !== 'approved' && decision !== 'rejected')) break
+        set(s => {
+          const card = s.approvalPends?.[rid]
+          if (!card) return {}
+          return {
+            approvalPends: {
+              ...s.approvalPends!,
+              [rid]: { ...card, cardStatus: decision, settled: true, ticket_id: optStr(d.ticket_id) ?? card.ticket_id },
+            },
+          }
+        })
+        break
+      }
+
+      // 输入面波（api/02 §3 ★ M4.5-A）：插队受理回执（「已插入 · 追问/转向/注入」徽标），环形 20 条
+      case 'INBOX_SPLICED': {
+        const kind = optStr(d.kind)
+        if (!kind || !INBOX_KINDS.has(kind)) break
+        const item: InboxSpliceItem = {
+          run_id: String(d.run_id ?? ''),
+          seq: optNum(d.seq) ?? 0, // 载荷内插队序号（api/02 §3），与帧 seq（evt.seq）无关
+          kind: kind as InboxSpliceItem['kind'],
+          source: String(d.source ?? ''),
+          text: String(d.text ?? ''),
+        }
+        set(s => ({ inboxSplices: [...(s.inboxSplices ?? []), item].slice(-20) }))
+        break
+      }
+
+      // 群聊波（27 篇 X15）：协调者路由决议（单聊域存最近一帧；含 trace_id 复制由消息行承担）
+      case 'ROUTING_DECISION':
+        set({
+          lastRouting: {
+            mode: String(d.mode ?? ''),
+            selected: Array.isArray(d.selected) ? d.selected.map(x => String(x)) : [],
+            names: Array.isArray(d.names) ? d.names.map(x => String(x)) : undefined,
+            selected_by: optStr(d.selected_by),
+            reason: optStr(d.reason),
+          },
+        })
+        break
+
+      // 控制面波：estop 激活/解除广播 → 全局横幅态（运行中 Run 以 RUN_ERROR code=4104 呈现）
+      case 'CONTROL_STATE':
+        set({
+          controlState: {
+            kind: String(d.kind ?? ''),
+            reason: optStr(d.reason),
+            by: optStr(d.by),
+            at: optStr(d.at),
+          },
+        })
+        break
+
+      // M4+ 补归约（原「认识不归约」→ 落 state）：共享状态快照/增量（api/02 §3）
+      case 'STATE_SNAPSHOT':
+        // 共享状态全量整表（重连/开始下发）；非对象载荷忽略不炸
+        if (d.snapshot !== null && typeof d.snapshot === 'object' && !Array.isArray(d.snapshot)) {
+          set({ snapshot: d.snapshot as Record<string, unknown> })
+        }
+        break
+      case 'STATE_DELTA':
+        // 共享状态增量：RFC 6902 JSON Patch 最小实现（add/remove/replace，其余 op 忽略不炸）；
+        // 快照未建立时以空对象为底（仅 add/replace 类 op 可生长）
+        set(s => ({ snapshot: jsonPatchApply(s.snapshot ?? {}, d.patch) }))
+        break
       default:
         break // 未知事件忽略（api/02 向前兼容裁决）
     }
     set({ lastSeq: evt.seq })
     return 'applied'
   },
-  }
-})
-
-// ---- 派生 selectors（40 篇 §5.1：树形由前端派生，后端不发树；UI 组件只订阅 selector，
-//      与消息流内联卡/右栏面板/画布三投影同源）----
-
-export type SubRunDerivedStatus = 'running' | 'pending' | SubrunFinishedEventData['status']
-
-/** 子 run 派生态：有终态 → 终态；有心跳（updated）→ running；仅 STARTED → pending。
- *  注：v1 服务端若缓发 UPDATED（40 篇 Q3），未完成行全部落 pending 组——呈现层可按
- *  「pending=进行中（已 STARTED）」渲染，排序规则不变。 */
-export function subRunStatus(sr: SubRunState): SubRunDerivedStatus {
-  if (sr.finished) return sr.finished.status
-  return sr.updated ? 'running' : 'pending'
-}
-
-const SUBRUN_RANK: Record<SubRunDerivedStatus, number> = {
-  running: 0, pending: 1,
-  completed: 2, failed: 2, rejected_artifact: 2, cancelled: 2, timeout: 2,
-}
-
-/** 列表版置顶排序（40 篇 §5.2 codex PlanUpdateCell 规则）：in_progress 置顶 → pending → 终态；
- *  同组保持插入序（Map 迭代序=STARTED 到达序；ES2019+ sort 稳定）。selector 与分组卡共用。 */
-export function sortSubRunsByStatus(list: SubRunState[]): SubRunState[] {
-  return [...list].sort((a, b) => SUBRUN_RANK[subRunStatus(a)] - SUBRUN_RANK[subRunStatus(b)])
-}
-
-/** 扁平排序（40 篇 §5.2 codex PlanUpdateCell 规则）：in_progress 置顶 → pending → 终态；
- *  同组保持插入序（Map 迭代序=STARTED 到达序；ES2019+ sort 稳定）。 */
-export function selectSortedSubRuns(s: SessionState): SubRunState[] {
-  return sortSubRunsByStatus([...s.subruns.values()])
-}
-
-/** 父 run 分组卡（40 篇 §5.2 消息流内联卡）：同一 parent_run_id 的子 run 归一组（一次派发
- *  批次=一张 ExecutionTaskCard），组内按置顶排序，done=已终态数；组序=首个 STARTED 到达序。 */
-export interface SubRunGroup {
-  parentRunId: string
-  items: SubRunState[]
-  done: number
-}
-
-export function selectSubRunGroups(s: SessionState): SubRunGroup[] {
-  const byParent = new Map<string, SubRunState[]>()
-  for (const sr of s.subruns.values()) {
-    // parent_run_id 缺帧（快照补建的撕裂行）自成一组，不误挂他组
-    const pid = sr.started.parent_run_id || sr.started.sub_run_id
-    const arr = byParent.get(pid)
-    if (arr) arr.push(sr)
-    else byParent.set(pid, [sr])
-  }
-  return [...byParent.entries()].map(([parentRunId, items]) => ({
-    parentRunId,
-    items: sortSubRunsByStatus(items),
-    done: items.filter(x => x.finished).length,
-  }))
-}
-
-/** 缩进树行：depth 供 UI 缩进（按 parent_run_id 派生，后端不发树） */
-export interface SubRunTreeRow {
-  id: string
-  depth: number
-  status: SubRunDerivedStatus
-  state: SubRunState
-}
-
-/** 派生缩进树（40 篇 §5.3 右栏 Run 树）：roots=parent_run_id 不在子 run 集内的条目；
- *  根层按排序规则（in_progress 置顶），同父子代按 started.index 升序（批次内序号，缺省保持
- *  插入序）；孤儿子 run（父缺帧）视为 root——快照端点兜底后自动归位。 */
-export function selectSubRunTree(s: SessionState): SubRunTreeRow[] {
-  const rows: SubRunTreeRow[] = []
-  const byParent = new Map<string, SubRunState[]>()
-  const roots: SubRunState[] = []
-  for (const sr of s.subruns.values()) {
-    const pid = sr.started.parent_run_id
-    if (pid && s.subruns.has(pid)) {
-      const arr = byParent.get(pid)
-      if (arr) arr.push(sr)
-      else byParent.set(pid, [sr])
-    } else {
-      roots.push(sr)
-    }
-  }
-  const visit = (list: SubRunState[], depth: number, byIndex: boolean) => {
-    const ordered = byIndex
-      ? [...list].sort((a, b) => a.started.index - b.started.index)
-      : [...list].sort((a, b) => SUBRUN_RANK[subRunStatus(a)] - SUBRUN_RANK[subRunStatus(b)])
-    for (const sr of ordered) {
-      rows.push({ id: sr.started.sub_run_id, depth, status: subRunStatus(sr), state: sr })
-      const kids = byParent.get(sr.started.sub_run_id)
-      if (kids) visit(kids, depth + 1, true)
-    }
-  }
-  visit(roots, 0, false)
-  return rows
-}
+}))

@@ -1,36 +1,26 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { ChevronDown, ChevronUp, Zap } from 'lucide-react'
-import type { RunInfo, SubRunGroup, SubRunState } from '@/stores/session-store'
-import { subRunStatus } from '@/stores/session-store'
+import type { RunInfo, SubrunInfo } from '@/stores/session-store'
+import type { SubRunGroup } from '../lib/exec-selectors'
 import {
   SUBRUN_STATUS_UI,
   fmtDuration,
   fmtTokens,
   groupElapsedMs,
+  subRunDerivedStatus,
   subrunElapsedMs,
   subrunTokens,
 } from '../lib/exec-display'
 
 /** 协作任务卡（40 篇 §5.2 ExecutionTaskCard，N1 核心；对标 codex CollabAgentToolCall）：
- *  头部=状态点+标题+{done}/{total}+耗时；行=一个 SubRun（--src-subagent 紫点+label+状态
- *  徽标+SUBRUN_UPDATED.preview 最新动作+耗时+token 小字）；in_progress 置顶（store selector
- *  已排）；>3 行折叠已完成行；行点击展开摘要/错误；rejected_artifact 走警示态（非成功态，
- *  宪法 2）；失败行红色。根 run 终态（RUN_FINISHED/RUN_ERROR）后整卡折叠为一行摘要+
- *  「查看执行」深链右栏。 */
+ *  头部=状态点+标题+{done}/{total}+耗时；行=一个 SubrunInfo（--src-subagent 紫点+label+状态
+ *  徽标+SUBRUN_UPDATED.preview 最新动作+耗时+token 小字）；执行中置顶（exec-selectors 已排）；
+ *  >3 行折叠已完成行；行点击展开摘要/错误；rejected_artifact 走警示态（非成功态，宪法 2）；
+ *  失败行红色。根 run 终态（RUN_FINISHED/RUN_ERROR）后整卡折叠为一行摘要+「查看执行」深链右栏。
+ *  数据形状=W1a 扁平 SubrunInfo（snake_case，无 started_at/context_budget——无据不渲染）。 */
 
 /** >3 行折叠阈值（sketch：运行中默认展开前 3 行） */
 const MAX_VISIBLE_ROWS = 3
-
-/** 跑表：运行中每秒推进（头部/行耗时活值）；终态停摆冻结当前值 */
-function useNow(active: boolean): number {
-  const [now, setNow] = useState(() => Date.now())
-  useEffect(() => {
-    if (!active) return
-    const t = window.setInterval(() => setNow(Date.now()), 1000)
-    return () => window.clearInterval(t)
-  }, [active])
-  return now
-}
 
 export function ExecutionTaskCard({
   group,
@@ -73,17 +63,16 @@ function ExecutionTaskCardInner({
   const [expanded, setExpanded] = useState(false)
   const [openRowId, setOpenRowId] = useState<string | null>(null)
   const running = !runStatus || runStatus === 'running'
-  const now = useNow(running)
   const done = group.done
   const total = group.items.length
-  const title = titleHint?.trim() || group.items[0]?.started.goal?.trim() || '多 Agent 协作'
-  const elapsedText = fmtDuration(groupElapsedMs(group.items, now))
-  const hasFailure = group.items.some(x => x.finished && (x.finished.status === 'failed' || x.finished.status === 'timeout'))
+  const title = titleHint?.trim() || group.items[0]?.goal?.trim() || '多 Agent 协作'
+  const elapsedText = fmtDuration(groupElapsedMs(group.items))
+  const hasFailure = group.items.some(x => x.status === 'failed' || x.status === 'timeout')
   // 头部状态点：根 run 失败红 / 完成绿；运行中橙脉冲（ToolCallCard 四态语言）
   const headDot = !running ? (runStatus === 'failed' ? 'bg-red-500' : 'bg-green-500') : 'bg-orange-400 animate-pulse'
   const headState = !running ? (runStatus === 'failed' ? '失败' : '已完成') : '运行中'
 
-  // 折叠策略（§5.2）：>3 行收起已完成行——置顶排序后 slice(0,3) 自然保留进行中行
+  // 折叠策略（§5.2）：>3 行收起已完成行——置顶排序后 slice(0,3) 自然保留执行中行
   const visible = expanded || total <= MAX_VISIBLE_ROWS ? group.items : group.items.slice(0, MAX_VISIBLE_ROWS)
   const hiddenCount = total - visible.length
 
@@ -120,11 +109,10 @@ function ExecutionTaskCardInner({
           <div className="mt-1.5 border-t border-separator pt-1.5">
             {group.items.map(sr => (
               <SubRunRow
-                key={sr.started.sub_run_id}
+                key={sr.sub_run_id}
                 sr={sr}
-                now={now}
-                open={openRowId === sr.started.sub_run_id}
-                onToggle={() => setOpenRowId(id => (id === sr.started.sub_run_id ? null : sr.started.sub_run_id))}
+                open={openRowId === sr.sub_run_id}
+                onToggle={() => setOpenRowId(id => (id === sr.sub_run_id ? null : sr.sub_run_id))}
               />
             ))}
           </div>
@@ -146,11 +134,10 @@ function ExecutionTaskCardInner({
       <div className="mt-1.5 flex flex-col">
         {visible.map(sr => (
           <SubRunRow
-            key={sr.started.sub_run_id}
+            key={sr.sub_run_id}
             sr={sr}
-            now={now}
-            open={openRowId === sr.started.sub_run_id}
-            onToggle={() => setOpenRowId(id => (id === sr.started.sub_run_id ? null : sr.started.sub_run_id))}
+            open={openRowId === sr.sub_run_id}
+            onToggle={() => setOpenRowId(id => (id === sr.sub_run_id ? null : sr.sub_run_id))}
           />
         ))}
       </div>
@@ -178,35 +165,33 @@ function ExecutionTaskCardInner({
   )
 }
 
-/** 子 run 行：--src-subagent 紫点（running 附脉冲）+label+状态徽标+最新动作预览+耗时+token
+/** 子 run 行：--src-subagent 紫点（执行中附脉冲）+label+状态徽标+最新动作预览+耗时+token
  *  小字；行点击展开摘要/错误明细（失败行红色 / rejected_artifact 警示橙）。 */
 function SubRunRow({
   sr,
-  now,
   open,
   onToggle,
 }: {
-  sr: SubRunState
-  now: number
+  sr: SubrunInfo
   open: boolean
   onToggle: () => void
 }) {
-  const derived = subRunStatus(sr)
+  const derived = subRunDerivedStatus(sr)
   const status = SUBRUN_STATUS_UI[derived]
-  const preview = sr.updated?.preview ?? (sr.updated?.tool_name ? `${sr.updated.tool_name} · ${sr.updated.tool_count} 次调用` : null)
-  const elapsed = fmtDuration(subrunElapsedMs(sr, now))
+  const preview = sr.preview ?? (sr.tool_name ? `${sr.tool_name} · ${sr.tool_count ?? 0} 次调用` : null)
+  const elapsed = fmtDuration(subrunElapsedMs(sr))
   const tokens = fmtTokens(subrunTokens(sr))
   return (
     <div data-testid="subrun-row" className="border-b border-separator/60 last:border-b-0">
       <button type="button" onClick={onToggle} className="flex w-full items-center gap-2 py-1 text-left">
-        {/* 来源色点固定 --src-subagent 紫（24 篇 §4.12）；进行中附脉冲表活值，状态语义由徽标承载 */}
+        {/* 来源色点固定 --src-subagent 紫（24 篇 §4.12）；执行中附脉冲表活值，状态语义由徽标承载 */}
         <span
           className={`h-1.5 w-1.5 flex-none rounded-full ${derived === 'running' ? 'animate-pulse' : ''}`}
           style={{ background: 'var(--src-subagent)' }}
           aria-hidden
         />
         <span className={`min-w-0 flex-none truncate font-medium ${status.row ?? ''}`}>
-          {sr.started.label || sr.started.sub_run_id.slice(0, 8)}
+          {sr.label || sr.sub_run_id.slice(0, 8)}
         </span>
         <span className={`badge flex-none px-[6px] py-0 text-2xs ${status.badge}`}>{status.text}</span>
         {preview && <span className="min-w-0 flex-1 truncate text-label-3" title={preview}>{preview}</span>}
@@ -218,37 +203,33 @@ function SubRunRow({
   )
 }
 
-/** 行展开明细：目标/预算 + 产物摘要 + 错误；rejected_artifact 警示行（宪法 2 候选非成品） */
-function SubRunDetail({ sr }: { sr: SubRunState }) {
-  const f = sr.finished
-  const u = sr.updated
+/** 行展开明细：目标 + 心跳阶段/工具 + 产物摘要 + 错误；rejected_artifact 警示行（宪法 2 候选非成品） */
+function SubRunDetail({ sr }: { sr: SubrunInfo }) {
   return (
     <div data-testid="subrun-detail" className="mb-1.5 rounded-md bg-surface px-2 py-1.5 text-[11px] leading-5 text-label-2">
-      {sr.started.goal && <div className="truncate" title={sr.started.goal}>目标：{sr.started.goal}</div>}
-      {sr.started.context_budget > 0 && <div>上下文预算：{fmtTokens(sr.started.context_budget)} tok</div>}
-      {u?.phase && (
+      {sr.goal && <div className="truncate" title={sr.goal}>目标：{sr.goal}</div>}
+      {sr.phase && (
         <div>
-          阶段：{u.phase === 'tool' ? '工具调用' : u.phase === 'text' ? '文本生成' : '思考'}
-          {u.tool_name ? ` · ${u.tool_name}` : ''} · 共 {u.tool_count} 次调用
+          阶段：{sr.phase === 'tool' ? '工具调用' : sr.phase === 'text' ? '文本生成' : '思考'}
+          {sr.tool_name ? ` · ${sr.tool_name}` : ''}
+          {sr.tool_count != null ? ` · 共 ${sr.tool_count} 次调用` : ''}
         </div>
       )}
-      {f?.summary && <div className="min-w-0 break-words" title={f.summary}>产物摘要：{f.summary}</div>}
-      {f?.status === 'rejected_artifact' && (
+      {sr.summary && <div className="min-w-0 break-words" title={sr.summary}>产物摘要：{sr.summary}</div>}
+      {sr.status === 'rejected_artifact' && (
         <div className="text-orange" data-testid="subrun-rejected">
           产物校验被拒：Artifact 确定性校验未通过，产物未生效（候选非成品，宪法 2）
         </div>
       )}
-      {f?.error && (
+      {sr.error && (
         <div className="break-words text-red" data-testid="subrun-error">
-          失败：{f.error.code ? `${f.error.code} ` : ''}{f.error.message ?? ''}
+          失败：{sr.error}
         </div>
       )}
-      {f?.usage && (
-        <div className="font-mono text-2xs text-label-3">
-          tokens ↑{f.usage.input_tokens ?? 0} / ↓{f.usage.output_tokens ?? 0}
-        </div>
+      {sr.tokens != null && (
+        <div className="font-mono text-2xs text-label-3">tokens {fmtTokens(sr.tokens) ?? sr.tokens}</div>
       )}
-      {!f && <div className="text-label-3">运行中…（明细随 SUBRUN_UPDATED 心跳刷新）</div>}
+      {sr.status === 'in_progress' && <div className="text-label-3">运行中…（明细随 SUBRUN_UPDATED 心跳刷新）</div>}
     </div>
   )
 }

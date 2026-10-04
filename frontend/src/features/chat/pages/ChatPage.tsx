@@ -53,9 +53,12 @@ export function ChatPage() {
    *  「执行」页签仅在有执行结构数据时出现（空态纪律：无数据不渲染页签不占位）。 */
   const [rightTab, setRightTab] = useState<'context' | 'execution' | 'workspace'>('context')
   /** 执行页签出现门禁（store 三 slices 有任一实质数据：plan 非空表/subruns/workflowRuns；
-   *  空表 plan 与空 Map 一致视为无数据——空态纪律：页签不渲染不占位） */
+   *  W1a 后两者为扁平 Record——空表与空 Record 一致视为无数据——空态纪律：页签不渲染不占位） */
   const hasExecData = useSessionStore(
-    s => (s.plan != null && s.plan.items.length > 0) || s.subruns.size > 0 || s.workflowRuns.size > 0,
+    s =>
+      (s.plan != null && s.plan.items.length > 0) ||
+      Object.keys(s.subruns ?? {}).length > 0 ||
+      Object.keys(s.workflowRuns ?? {}).length > 0,
   )
   /** 执行卡「查看执行」深链：切执行页签 + 展开右栏（40 篇 §5.2） */
   function openExecutionTab() {

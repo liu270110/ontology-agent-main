@@ -1,12 +1,12 @@
 import { Check, ListChecks, RefreshCw } from 'lucide-react'
-import type { PlanSnapshot } from '@/stores/session-store'
-import type { PlanItem } from '@/sse/events'
+import type { PlanItem, PlanSlice } from '@/stores/session-store'
 
 /** 计划卡（40 篇 §5.2 PlanCard / 24 篇 §4.12 PLAN_UPDATED 行）：紧凑行「计划 · {completed}/{total}」
  *  + 复选清单——pending 空框 / in_progress 旋转点 / completed 划线勾；随 PLAN_UPDATED 整表快照
  *  原地刷新（revision 旧包丢弃已在 store 归约层执行）。完成前只读（§6 入口 2「存为工作流草稿」
- *  归后续批次）。plan=null 时不渲染（空态纪律：不占位不报错）。 */
-export function PlanCard({ plan }: { plan: PlanSnapshot | null }) {
+ *  归后续批次）。plan=null 时不渲染（空态纪律：不占位不报错）。
+ *  数据形状=W1a PlanSlice（plan_id/revision/items，item.status 为 wire string）。 */
+export function PlanCard({ plan }: { plan: PlanSlice | null }) {
   if (!plan || plan.items.length === 0) return null
   const completed = plan.items.filter(i => i.status === 'completed').length
   return (
@@ -18,8 +18,8 @@ export function PlanCard({ plan }: { plan: PlanSnapshot | null }) {
         <span className="ml-auto font-mono text-2xs text-label-3">rev {plan.revision}</span>
       </div>
       <ul className="mt-1.5 flex flex-col gap-1" data-testid="plan-items">
-        {plan.items.map(it => (
-          <li key={it.id} className="flex items-start gap-1.5 leading-5">
+        {plan.items.map((it, i) => (
+          <li key={it.id ?? `item-${i}`} className="flex items-start gap-1.5 leading-5">
             <PlanItemMark status={it.status} />
             <span className={it.status === 'completed' ? 'min-w-0 text-label-3 line-through' : 'min-w-0'}>{it.content}</span>
           </li>

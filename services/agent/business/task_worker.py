@@ -33,7 +33,7 @@ import asyncio
 import logging
 import random
 import uuid
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
 from typing import Any, Protocol
 
@@ -108,6 +108,7 @@ class TaskRunWorker:
         orphan_running_timeout_s: float | None = None,
         rng: Callable[[], float] = random.random,
         estop_store: Any | None = None,  # M4.5-A：EStopStore（None=不做 estop 前检，直跑形态）
+        event_publisher: Callable[[uuid.UUID, str, dict[str, Any]], Awaitable[None]] | None = None,
     ) -> None:
         if policy is None:
             from services.agent.domain.model.task import RunRetryPolicy
@@ -133,6 +134,10 @@ class TaskRunWorker:
         self._orphan_running_timeout_s = float(orphan_running_timeout_s)
         self._rng = rng
         self._estop_store = estop_store  # M4.5-A：submit 前 estop 前检（§1.2 生效点①）
+        # 2026-10-05 修复：异步 202 路径实时推送——worker 消费的事件同步转发会话 SSE hub
+        # （此前 worker 只落 task_events 不推送，订阅者收不到任何帧；内联 SSE 路径不受影响）。
+        # 组合根注入（gateway/app.py 以 app.state.sse_hub.publish 包装）；None=旧行为不推。
+        self._event_publisher = event_publisher
         self._backoff_s = 0.0  # 重试退避节流（排空后 sleep，防止新 Run 早于退避到期被执行）
 
     async def run(self, stop: asyncio.Event) -> None:
@@ -558,6 +563,19 @@ class TaskRunWorker:
         anchors.sort(key=lambda a: a["step_seq"])
         return anchors[:_CONTINUATION_MAX_STEPS]
 
+    async def _publish_sse(self, session_id: uuid.UUID, name: str, data: dict[str, Any]) -> None:
+        """会话 SSE 实时推送（2026-10-05 修复，本 worker 异步路径唯一实时通道）。
+
+        推送失败只告警不阻断执行（先落库后推送，04 §2；断线订阅者由 task_events 回放
+        与 Last-Event-ID 续传兜底）。publisher 缺省 None=组合根未接线（旧行为不推）。
+        """
+        if self._event_publisher is None:
+            return
+        try:
+            await self._event_publisher(session_id, name, data)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("task worker SSE 推送失败（session=%s type=%s）: %s", session_id, name, exc)
+
     async def _drain_orchestrator(self, command: ChatCommand) -> dict[str, Any] | None:
         """消费事件流：非终态事件逐条落 task_events（先落库后推送，04 §2；时间线端点取数口）。
 
@@ -565,6 +583,8 @@ class TaskRunWorker:
         SUBRUN_UPDATED 心跳纯实时不落库（40 篇 §4.1，控回放窗口挤占；SSE 双写钩子同口径）；
         执行结构事件按回放根重试追加（R11 replay_root=True，失败仍按本路径既有口径转义留痕）。
         落库失败结构化转义留痕不阻断执行（审计不阻塞主流程，02 §3 ⑥ 纪律）。
+        全部事件（含终态与心跳）经 _publish_sse 同步转发会话 hub——202 受理形态下订阅者
+        唯一实时通道（2026-10-05 修复：此前只落库不推送，订阅者零帧）。
         """
         orchestrator = self._orchestrator_provider()
         if orchestrator is None:
@@ -572,21 +592,27 @@ class TaskRunWorker:
             return None
         final_error: dict[str, Any] | None = None
         async for event in orchestrator.stream_chat(command):
+            payload = wire_data(event)
             if event.name is ChatEventName.RUN_ERROR:
                 final_error = dict(event.data)
             if event.name in (ChatEventName.RUN_FINISHED, ChatEventName.RUN_ERROR):
+                # 终态：落账归结果汇（防 DB 双写），SSE 仍推（订阅者实时收终态）
+                await self._publish_sse(command.session_id, event.name.value, payload)
                 continue
             if event.name in EXEC_REALTIME_ONLY_EVENTS:
-                continue  # 40 篇 §4.1：SUBRUN_UPDATED 纯实时不落库
+                # 40 篇 §4.1：SUBRUN_UPDATED 纯实时不落库，仅推送
+                await self._publish_sse(command.session_id, event.name.value, payload)
+                continue
             try:
                 async with self._uow.for_tenant(command.tenant_id) as tx:
                     await tx.tasks.append_event(
                         command.task_id,
-                        TaskEvent(task_id=command.task_id, event_type=event.name.value, data=wire_data(event)),
+                        TaskEvent(task_id=command.task_id, event_type=event.name.value, data=payload),
                         replay_root=event.name in EXEC_PERSISTED_EVENTS,  # 执行结构=回放根（R11 重试）
                     )
             except Exception as exc:  # 事件留痕失败不阻断执行（转义留痕，standards/01 §2.6）
                 logger.warning("task worker 事件落库失败（run=%s type=%s）: %s", command.run_id, event.name, exc)
+            await self._publish_sse(command.session_id, event.name.value, payload)  # 先落库后推送（04 §2）
         return final_error
 
     # ── 重试监督 ──────────────────────────────────────────────────────────

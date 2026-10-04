@@ -160,6 +160,12 @@ class Settings(BaseSettings):
     kb_nightly_max_items_per_run: int = Field(default=5000, gt=0)
     kb_nightly_token_budget: int = Field(default=1_000_000, ge=0)
     kb_nightly_lock_ttl_seconds: int = Field(default=900, gt=0)  # Redis 锁 lock:kb_nightly TTL（心跳续期周期=TTL/3）
+    # nightly 调度挂点（问题清单 A2；OntRAG §8.4 例程可运行化）：cron tick 每轮经
+    # services/kb/business/nightly_schedule.py 判定达点即后台触发一次 run_nightly。
+    # schedule_hour=2（每日 02:00，进程本地时区）为**示例值**，待运营按低峰窗口裁决调整；
+    # enabled=false 整体摘除挂点（tick 侧短路零开销）。
+    kb_nightly_schedule_enabled: bool = True
+    kb_nightly_schedule_hour: int = Field(default=2, ge=0, le=23)
 
     # 在线忠实度抽检（docs/architecture/10 §2 缺口②，落点 08 §7.4）：对话完成路径按采样率
     # 抽中后记录 faithfulness 检查任务占位（LLM-as-judge 判定本体随评估批次接入）。

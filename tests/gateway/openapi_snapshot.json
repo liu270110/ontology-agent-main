@@ -6776,6 +6776,13 @@
       },
       "ValidationError": {
         "properties": {
+          "ctx": {
+            "title": "Context",
+            "type": "object"
+          },
+          "input": {
+            "title": "Input"
+          },
           "loc": {
             "items": {
               "anyOf": [
@@ -7078,7 +7085,7 @@
       },
       "services__review__api__schemas__admin__BatchDecisionIn": {
         "additionalProperties": false,
-        "description": "批量审批请求（api/01 §5.8 W1 实装行 POST /admin/reviews/batch；契约源=approvals/api.ts\nbatchReviews body {ids, action, reason}——字段名 reason 为前端预登记名，本轮追认）。\n\n「驳回必附理由」与单条 DecisionIn 同规（08 §4 REJ 回边，DTO 前置校验→422）；\nids 空列表 422（Field min_length=1，前端批量按钮不可能发出，防御面）。",
+        "description": "批量审批请求（api/01 §5.8 W1 实装行 POST /admin/reviews/batch；契约卡二（W2 冻结\n2026-10-04）+ frontend approvals/api.ts batchReviews body {ids, action, note}——意见字段名\n定稿=note（与单条 DecisionIn 同词汇，W2 已废止旧 reason 键，本轮追认同名词汇）。\n\n「驳回必附理由」与单条 DecisionIn 同规（08 §4 REJ 回边，DTO 前置校验→422）；\nids 空列表 422（Field min_length=1，前端批量按钮不可能发出，防御面）。",
         "properties": {
           "action": {
             "enum": [
@@ -7098,10 +7105,10 @@
             "title": "Ids",
             "type": "array"
           },
-          "reason": {
+          "note": {
             "default": "",
             "maxLength": 2000,
-            "title": "Reason",
+            "title": "Note",
             "type": "string"
           }
         },
@@ -7223,7 +7230,7 @@
     },
     "/api/v1/admin/reviews/batch": {
       "post": {
-        "description": "ids 逐单独立决策（复用 decision 端点同一 ReviewApprovalService.decide——三档审批链/\n禁自批/非待审单约束全部生效），失败不中断整批、不回滚已成功单：\n\n- 单不存在（LookupError）/ 非待审或越档（DomainError 4702/4703）→ failed[{id, reason}]；\n- target_type ∈ 高危面（ontology_candidate）→ 不进决策，直接 failed（IX-APR-02 服务端同拒）；\n- 空 ids 422（DTO min_length=1）；批量驳回必附 reason 422（与单条 decision 同规）。\n\n装配未初始化（503）与 scope 门禁沿用 decision 端点同款依赖。",
+        "description": "api/01 §5.8 契约卡二（W2 冻结 2026-10-04）W1 追认实装：ids 逐单独立决策（复用\ndecision 端点同一 ReviewApprovalService.decide——三档审批链/禁自批/非待审单约束全部\n生效），失败不中断整批、不回滚已成功单：\n\n- 单不存在（LookupError）/ 非待审或越档（DomainError 4702/4703）→ failed[{id, reason}]；\n- target_type ∈ 高危面（ontology_candidate）→ 不进决策，直接 failed（IX-APR-02 服务端\n  同拒；实装口径=逐单落 failed 而非整批 409，成功单不受高危单牵连）；\n- 空 ids 422（DTO min_length=1）；批量驳回必附 note 422（与单条 decision 同规）。\n\n响应 {succeeded, failed} 为 W1 冻结口径，updated/ids 为契约卡/前端 batchReviews 类型\n{updated, ids} 的兼容镜像（恒=succeeded）；信封沿用本路由 B1 裸形态（同列表/decision，\n前端 apiFetch 双形态兼容）。装配未初始化（503）与 scope 门禁沿用 decision 同款依赖。",
         "operationId": "batch_review_api_v1_admin_reviews_batch_post",
         "requestBody": {
           "content": {

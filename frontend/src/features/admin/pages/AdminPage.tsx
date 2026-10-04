@@ -1,5 +1,5 @@
 import { useSearchParams } from 'react-router-dom'
-import { Activity, BarChart3, type LucideIcon } from 'lucide-react'
+import { Activity, ArrowLeftRight, BarChart3, type LucideIcon } from 'lucide-react'
 import { useAuthStore } from '@/stores/auth-store'
 import { UsersTab } from '../components/UsersTab'
 import { GroupsTab } from '../components/GroupsTab'
@@ -9,9 +9,10 @@ import { AuditTab } from '../components/AuditTab'
 import { AnalyticsTab } from '../components/AnalyticsTab'
 import { TenantsTab } from '../components/TenantsTab'
 import { SystemLogsTab } from '../components/SystemLogsTab'
+import { WritebackLedgerTab } from '../components/WritebackLedgerTab'
 
 /** /admin 系统管理（宿主 p-admin + p-auditlog + p-analytics；26 篇 §10.2）：Tab 深链
- *  ?tab=users|groups|roles|models|audit|analytics|logs（租户 Tab 仅 super_admin 可见）。
+ *  ?tab=users|groups|roles|models|audit|writeback|analytics|logs（租户 Tab 仅 super_admin 可见）。
  *  roles=admin/super_admin（routes meta）。 */
 
 type TabDef = { key: string; label: string; icon?: LucideIcon }
@@ -21,6 +22,7 @@ const TABS: TabDef[] = [
   { key: 'roles', label: '角色' },
   { key: 'models', label: '模型渠道' },
   { key: 'audit', label: '审计日志' },
+  { key: 'writeback', label: '回写台账', icon: ArrowLeftRight }, // §5.8 writeback 三端点 live 消费面（W2 切片 2026-10-04）
   { key: 'analytics', label: '数据分析', icon: BarChart3 }, // p-analytics 轻量版（39 号对账 §2.14）
   { key: 'logs', label: '系统日志', icon: Activity }, // S9 系统日志切片（设计稿 20b p-syslogs）
 ]
@@ -65,6 +67,7 @@ export function AdminPage() {
         {tab === 'roles' && <RolesTab />}
         {tab === 'models' && <ModelsTab />}
         {tab === 'audit' && <AuditTab />}
+        {tab === 'writeback' && <WritebackLedgerTab />}
         {tab === 'analytics' && <AnalyticsTab />}
         {tab === 'logs' && <SystemLogsTab />}
         {tab === 'tenants' && <TenantsTab />}

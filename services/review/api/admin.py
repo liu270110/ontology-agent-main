@@ -34,8 +34,12 @@ from services.platform.kernel import DomainError
 from services.platform.schemas import PageMeta
 from services.review.api.schemas.admin import (
     STATUS_QUERY_MAP,
+    AdminReviewDetailOut,
     AdminReviewListOut,
     AdminReviewOut,
+    BatchDecisionFailure,
+    BatchDecisionIn,
+    BatchDecisionOut,
     DecisionIn,
     DecisionOut,
     StatusQuery,
@@ -48,6 +52,17 @@ ReviewReadDep = Annotated[Principal, Depends(require_scope("review:read"))]
 ReviewApproveDep = Annotated[Principal, Depends(require_scope("review:approve"))]
 
 _QUEUE_DEFAULT_STATUS = "pending_review"  # 「open 工单」缺省口径=待审（可决策，08 §4）
+
+# W1 批量审批高危拒批面（2026-10-04）：前端 HIGH_RISK_TYPES（changeset_publish/mcp_access）
+# 在后端 target_type 词汇表中的对应面=ontology_candidate（changeset 发布）；IX-APR-02「高危类
+# 不可批量」服务端同拒（frontend approvals/api.ts HIGH_RISK_TYPES 注释契约），逐单落 failed。
+_BATCH_HIGH_RISK_TARGET_TYPES = frozenset({"ontology_candidate"})
+
+_DETAIL_STMT = text(
+    "SELECT id, target_type, target_id, status, submitter_id, reviewer_id, decision_note,"
+    " sla_deadline, created_at, payload FROM review_tickets"
+    " WHERE tenant_id = :tenant_id AND id = :ticket_id"
+)
 
 
 # ---------------------------------------------------------------- 装配与异常映射
@@ -166,3 +181,112 @@ async def decide_review(
         signatures_collected=result.decision.signatures_collected,
         complete=result.decision.complete,
     )
+
+
+# ---------------------------------------------------------------- W1 缺口补齐批（2026-10-04）
+
+
+def _chain_from_payload(payload: dict[str, Any], status: str) -> list[dict[str, Any]]:
+    """payload.approvals 审批留痕 → 前端 ApprovalChainStep 视图（approvals/api.ts 富形状）。
+
+    每条留痕一step（approve=done / reject=rejected）；未终态单追加 current 终审步
+    （前端「当前节点」高亮位）。前端 normalizeReview 对 chain 缺省容忍（[]→空时间线），
+    本派生纯增量不破契约。
+    """
+    steps: list[dict[str, Any]] = []
+    for item in payload.get("approvals") or []:
+        action = str(item.get("action") or "")
+        steps.append(
+            {
+                "label": "审批通过" if action == "approve" else "驳回",
+                "actor": str(item.get("approver_id") or "—"),
+                "at": str(item.get("decided_at") or ""),
+                "state": "rejected" if action == "reject" else "done",
+                "note": str(item.get("note") or "") or None,
+            }
+        )
+    if status in ("draft", "pending_review"):
+        steps.append({"label": "终审", "actor": "—", "at": "", "state": "current"})
+    return steps
+
+
+@router.get("/{ticket_id}", summary="审核工单详情（payload/审批链全量字段；api/01 §5.8 W1 实装行）")
+async def get_review_detail(
+    ticket_id: uuid.UUID,
+    principal: ReviewReadDep,
+    db: SessionDep,
+) -> AdminReviewDetailOut:
+    """详情=列表同一查询面加 id 过滤 + payload/chain 全量（契约源=前端 getReview +
+    ApprovalDetailModal；404 同 decision 口径）。零 ORM import 纪律同列表（text() 直查）。"""
+    row = (
+        await db.execute(_DETAIL_STMT, {"tenant_id": str(principal.tenant_id), "ticket_id": str(ticket_id)})
+    ).mappings().first()
+    if row is None:
+        raise GatewayError(404, "审核单不存在", status_code=404)
+    payload = dict(row["payload"] or {})
+    return AdminReviewDetailOut(
+        id=row["id"],
+        target_type=row["target_type"],
+        target_id=row["target_id"],
+        status=row["status"],
+        submitter_id=row["submitter_id"],
+        reviewer_id=row["reviewer_id"],
+        decision_note=row["decision_note"],
+        sla_deadline=row["sla_deadline"],
+        created_at=row["created_at"],
+        payload=payload,
+        chain=_chain_from_payload(payload, row["status"]),
+    )
+
+
+@router.post("/batch", summary="批量审批（逐单走单条 decision 业务；高危类服务端同拒 IX-APR-02）")
+async def batch_review(
+    body: BatchDecisionIn,
+    principal: ReviewApproveDep,
+    request: Request,
+    db: SessionDep,
+) -> BatchDecisionOut:
+    """api/01 §5.8 契约卡二（W2 冻结 2026-10-04）W1 追认实装：ids 逐单独立决策（复用
+    decision 端点同一 ReviewApprovalService.decide——三档审批链/禁自批/非待审单约束全部
+    生效），失败不中断整批、不回滚已成功单：
+
+    - 单不存在（LookupError）/ 非待审或越档（DomainError 4702/4703）→ failed[{id, reason}]；
+    - target_type ∈ 高危面（ontology_candidate）→ 不进决策，直接 failed（IX-APR-02 服务端
+      同拒；实装口径=逐单落 failed 而非整批 409，成功单不受高危单牵连）；
+    - 空 ids 422（DTO min_length=1）；批量驳回必附 note 422（与单条 decision 同规）。
+
+    响应 {succeeded, failed} 为 W1 冻结口径，updated/ids 为契约卡/前端 batchReviews 类型
+    {updated, ids} 的兼容镜像（恒=succeeded）；信封沿用本路由 B1 裸形态（同列表/decision，
+    前端 apiFetch 双形态兼容）。装配未初始化（503）与 scope 门禁沿用 decision 同款依赖。"""
+    approvals = _approvals(request)
+    type_rows = (
+        await db.execute(
+            text("SELECT id, target_type FROM review_tickets WHERE tenant_id = :tenant_id AND id IN :ids").bindparams(
+                bindparam("ids", expanding=True)
+            ),
+            {"tenant_id": str(principal.tenant_id), "ids": [str(i) for i in body.ids]},
+        )
+    ).mappings().all()
+    target_types = {row["id"]: row["target_type"] for row in type_rows}
+
+    succeeded: list[uuid.UUID] = []
+    failed: list[BatchDecisionFailure] = []
+    for ticket_id in body.ids:
+        if target_types.get(ticket_id) in _BATCH_HIGH_RISK_TARGET_TYPES:
+            failed.append(BatchDecisionFailure(id=ticket_id, reason="高危类型不可批量（IX-APR-02 服务端同拒）"))
+            continue
+        try:
+            await approvals.decide(
+                tenant_id=principal.tenant_id,
+                ticket_id=ticket_id,
+                action=body.action,
+                approver_id=principal.user_id,
+                note=body.note,
+            )
+        except LookupError as exc:
+            failed.append(BatchDecisionFailure(id=ticket_id, reason=str(exc)))
+        except DomainError as exc:
+            failed.append(BatchDecisionFailure(id=ticket_id, reason=str(exc)))
+        else:
+            succeeded.append(ticket_id)
+    return BatchDecisionOut(succeeded=succeeded, failed=failed, updated=len(succeeded), ids=succeeded)

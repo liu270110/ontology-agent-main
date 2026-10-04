@@ -6,7 +6,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Literal
+from typing import Any, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -98,3 +98,64 @@ class AdminReviewListOut(BaseModel):
 
     data: list[AdminReviewOut] = Field(default_factory=list)
     meta: PageMeta
+
+
+# ---------------------------------------------------------------- W1 缺口补齐批（2026-10-04）
+
+class AdminReviewDetailOut(AdminReviewOut):
+    """审核工单详情（api/01 §5.8 W1 实装行 GET /admin/reviews/{ticket_id}；契约源=
+    frontend/src/features/approvals/api.ts getReview → normalizeReview）。
+
+    详情=列表查询面加 id 过滤 + 全量富字段：payload（review_tickets.payload JSONB 原样透传，
+    含 gate_result/approvals 审批留痕）+ chain（由 payload.approvals 派生的前端
+    ApprovalChainStep 视图，见路由层 _chain_from_payload；终态单无 current 步）。
+    前端 normalizeReview 对 title/summary/applicant 等富字段可选兜底（缺省回退
+    target_type/target_id 等），后端不伪造、缺省不返回。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    payload: dict[str, Any] = Field(default_factory=dict)
+    chain: list[dict[str, Any]] = Field(default_factory=list)
+
+
+class BatchDecisionIn(BaseModel):
+    """批量审批请求（api/01 §5.8 W1 实装行 POST /admin/reviews/batch；契约卡二（W2 冻结
+    2026-10-04）+ frontend approvals/api.ts batchReviews body {ids, action, note}——意见字段名
+    定稿=note（与单条 DecisionIn 同词汇，W2 已废止旧 reason 键，本轮追认同名词汇）。
+
+    「驳回必附理由」与单条 DecisionIn 同规（08 §4 REJ 回边，DTO 前置校验→422）；
+    ids 空列表 422（Field min_length=1，前端批量按钮不可能发出，防御面）。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    ids: list[UUID] = Field(min_length=1, max_length=100)
+    action: Literal["approve", "reject"]
+    note: str = Field(default="", max_length=2000)
+
+    @model_validator(mode="after")
+    def _reject_requires_note(self) -> BatchDecisionIn:
+        if self.action == "reject" and not self.note.strip():
+            raise ValueError("驳回必附理由（08 §4 REJ 回边，与单条 decision 同规）")
+        return self
+
+
+class BatchDecisionFailure(BaseModel):
+    """批量审批逐单失败项（id + 原因文案；不中断整批——逐单独立决策、失败不回滚已成功单）。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    id: UUID
+    reason: str
+
+
+class BatchDecisionOut(BaseModel):
+    """批量审批结果（{succeeded, failed} 为本端点冻结口径；updated/ids 为前端
+    api.ts batchReviews 返回类型 {updated:number, ids:string[]} 的兼容镜像面，
+    值恒等于 succeeded——消费方两形状皆可用）。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    succeeded: list[UUID] = Field(default_factory=list)
+    failed: list[BatchDecisionFailure] = Field(default_factory=list)
+    updated: int = 0
+    ids: list[UUID] = Field(default_factory=list)

@@ -1,5 +1,5 @@
 import { http, HttpResponse } from 'msw'
-import type { AdminUserPatch } from '@/features/admin/api'
+import type { AdminUserPatch, WritebackLedgerRow } from '@/features/admin/api'
 
 /** S6 治理域 mock（30 篇 §2 S6；契约=api/01 §5.8 admin 与 writeback 台账 + §6.5 回写台账
  *  + §5.2 tasks 组 + §5.9 auth（totp 三端点）+ §5.13 me）。独立文件注册，经 handlers.ts 展开。
@@ -7,8 +7,10 @@ import type { AdminUserPatch } from '@/features/admin/api'
  *  erp.freezeAccount(C-20481)、WB-0311 台账，与画板 ix-08-admin / ix-02-converse 口径一致）。
  *
  *  预登记口径（26 篇 §14 铁律 2，禁止默写为已登记，交付报告 R 清单同步）：
- *  - POST /admin/reviews/batch——IX-APR-02 批量审批端点未登记（§5.8 仅单条 decision）
- *  - GET  /admin/reviews/:id——审批详情端点未登记（本 mock 详情随列表项返回过渡）
+ *  - POST /admin/reviews/batch——W2 已契约冻结（2026-10-04，api/01 §5.8 ☆ 追记：契约源=前端
+ *    mock，后端 W1 按 card 追认实装）；mock 字段名已对齐后端真实 DTO（AdminReviewOut 基座
+ *    + DecisionIn 同词汇 note），不再列 R 清单
+ *  - GET  /admin/reviews/:id——同上 W2 冻结（api/01 §5.8 ☆：AdminReviewOut 基座 + 详情富扩展）
  *  - POST /admin/users 批量邀请（emails[]）——契约仅单用户创建；IX-ADM-01 chip 化批量需批量端点或循环调用
  *  - GET/PUT /admin/roles/matrix——角色权限矩阵读写未登记（IX-ADM-04）
  *  - POST/DELETE /admin/models(/:id)——§5.8 仅 GET 列表 / PUT 更新，接入与删除端点缺（IX-ADM-05/06）
@@ -40,17 +42,25 @@ export type ApprovalType =
   | 'mcp_access' | 'memory_promotion' | 'permission_request'
 
 export interface Approval {
+  /** ---- AdminReviewOut 基座（services/review/api/schemas/admin.py 实名对齐，W2 2026-10-04
+   *  契约冻结：列表/详情两端的必返字段名，消 M2.5 以来字段漂移） ---- */
   id: string
+  target_type: string
+  target_id: string
+  submitter_id: string | null
+  reviewer_id: string | null
+  decision_note: string | null
+  sla_deadline: string | null
+  created_at: string
+  /** ---- 工单状态机（review_tickets 六态权威；mock 只种待审/两终态，状态机
+   *  pending_review→approved/rejected，draft/published/cancelled 不入 mock） ---- */
+  status: 'pending_review' | 'approved' | 'rejected'
+  /** ---- 详情端点富扩展（§5.8 ☆ 契约卡：仅 GET /admin/reviews/{id} 返回，列表不携带） ---- */
   type: ApprovalType
   title: string
   summary: string
   applicant: string
   department: string
-  submitted_at: string
-  /** 后端 review_tickets 口径（fe1-F1 对齐 2026-10-04）：待审=pending_review（非 pending），
-   *  终态=approved/rejected；draft/published/cancelled 不入 mock。前端经
-   *  features/approvals/api.ts normalizeReview 收敛为三态展示。 */
-  status: 'pending_review' | 'approved' | 'rejected'
   high_risk: boolean
   /** 类型化摘要载荷（渲染按 type 分派；契约缺口：payload schema 待 §5.8 reviews 详情行补） */
   payload: {
@@ -79,9 +89,12 @@ export interface Approval {
 const REVIEWS: Approval[] = [
   {
     id: 'CR-031', type: 'changeset_publish', high_risk: true, status: 'pending_review',
+    target_type: 'ontology_candidate', target_id: '01J9AR3Z7M4T8W2XQF6YB1KDCR',
+    submitter_id: 'u-02', reviewer_id: null, decision_note: null, sla_deadline: '2026-09-28T16:40:00Z',
+    created_at: '2026-09-25T16:40:00Z',
     title: '本体变更发布 CR-031 · 停电范围术语唯一性整改',
     summary: '配网停电分析本体 v1.4.2 → v1.5.0：+12/−3/~4，停电范围与术语委员会 TC-07 对齐',
-    applicant: '王工', department: '知识工程师', submitted_at: '2026-09-25T16:40:00Z',
+    applicant: '王工', department: '知识工程师',
     payload: {
       project: '配网停电分析本体', base: 'v1.4.2', target: 'v1.5.0',
       stats: { add: 12, del: 3, mod: 4 }, shacl: '0 违例', owlrl: '推理通过',
@@ -102,9 +115,12 @@ const REVIEWS: Approval[] = [
   },
   {
     id: 'JOB-218-FIN', type: 'extraction_final', high_risk: false, status: 'pending_review',
+    target_type: 'knowledge_instance', target_id: '01J9AVC3P6N9D2RGY8KT5HXRJB',
+    submitter_id: 'u-02', reviewer_id: null, decision_note: null, sla_deadline: null,
+    created_at: '2026-09-26T14:18:00Z',
     title: '抽取终审 JOB #218 · 设备手册.docx 候选 ×12',
     summary: '批量抽取完成，12 条三元组候选待人工归档（负样本池反哺已开启）',
-    applicant: '王工', department: '知识工程师', submitted_at: '2026-09-26T14:18:00Z',
+    applicant: '王工', department: '知识工程师',
     payload: {
       source: '设备手册.docx', job: '#218', candidate_count: 12,
       review_ref: '/kb/review?job=218',
@@ -121,9 +137,12 @@ const REVIEWS: Approval[] = [
   },
   {
     id: 'PLG-07', type: 'plugin_install', high_risk: false, status: 'pending_review',
+    target_type: 'plugin_listing', target_id: '01J9AWQ8V2H5R7NCZ3M6T4YKPL',
+    submitter_id: 'u-04', reviewer_id: null, decision_note: null, sla_deadline: '2026-09-29T10:02:00Z',
+    created_at: '2026-09-26T10:02:00Z',
     title: '插件安装 PLG-07 · 工单系统连接器 v1.3.0',
     summary: '申请安装「工单系统连接器」，申请 scope：workorder.read/write + attachment.download',
-    applicant: '陈晨', department: '服务集成组', submitted_at: '2026-09-26T10:02:00Z',
+    applicant: '陈晨', department: '服务集成组',
     payload: {
       plugin: '工单系统连接器', version: 'v1.3.0', publisher: 'platform-extensions 官方',
       scopes: ['workorder.read', 'workorder.write', 'attachment.download'],
@@ -135,9 +154,12 @@ const REVIEWS: Approval[] = [
   },
   {
     id: 'MCP-12', type: 'mcp_access', high_risk: true, status: 'pending_review',
+    target_type: 'plugin_listing', target_id: '01J9AXD4F8S2K9WBN5Q7V3HGMC',
+    submitter_id: 'u-04', reviewer_id: null, decision_note: null, sla_deadline: '2026-09-29T09:30:00Z',
+    created_at: '2026-09-26T09:30:00Z',
     title: 'MCP 接入 MCP-12 · crm-prod 生产实例',
     summary: '接入 crm-prod（3 工具，2 高危），annotations 不作授权依据，走 review_workflow 终审',
-    applicant: '陈晨', department: '服务集成组', submitted_at: '2026-09-26T09:30:00Z',
+    applicant: '陈晨', department: '服务集成组',
     payload: {
       server: 'crm-prod', endpoint: 'https://crm.internal.example:8443/mcp',
       tools: [
@@ -153,9 +175,12 @@ const REVIEWS: Approval[] = [
   },
   {
     id: 'MEM-204', type: 'memory_promotion', high_risk: false, status: 'pending_review',
+    target_type: 'memory_l2_upgrade', target_id: 'mem:30871',
+    submitter_id: null, reviewer_id: null, decision_note: null, sla_deadline: null,
+    created_at: '2026-09-26T08:15:00Z',
     title: '记忆升级 MEM-204 · 馈线 F12 过载阈值 L2 → L3',
     summary: '复用 26 次、证据 7 处的 L2 候选申请沉淀为 L3 长期记忆，与 1 条现有记忆冲突',
-    applicant: '系统（自动发起）', department: '记忆管线', submitted_at: '2026-09-26T08:15:00Z',
+    applicant: '系统（自动发起）', department: '记忆管线',
     payload: {
       content: '馈线 F12 过载阈值为额定容量 85%，越限持续 10min 触发预警',
       layer_from: 'L2 会话沉淀', layer_to: 'L3 长期记忆', reuse: 26, evidence: 7,
@@ -168,9 +193,14 @@ const REVIEWS: Approval[] = [
   },
   {
     id: 'ACC-09', type: 'permission_request', high_risk: false, status: 'pending_review',
+    // target_type 取后端六枚举内最近似值（权限申请类后端枚举暂缺，B3-R 联动工单 R 清单已注）；
+    // UI 渲染走富扩展 type 字段，target_type 仅作 AdminReviewOut 基座形状演示
+    target_type: 'knowledge_instance', target_id: 'kb-outage',
+    submitter_id: 'u-04', reviewer_id: null, decision_note: null, sla_deadline: null,
+    created_at: '2026-09-26T11:47:00Z',
     title: '权限申请 ACC-09 · 陈晨申请 kb:write',
     summary: '403 申请权限闭环：目标资源「配网停电分析知识库」，通过后自动授权并审计',
-    applicant: '陈晨', department: '服务集成组', submitted_at: '2026-09-26T11:47:00Z',
+    applicant: '陈晨', department: '服务集成组',
     payload: {
       scope: 'kb:write', resource: '配网停电分析知识库（kb-outage）',
       reason: '工单连接器需要把抽取确认后的设备台账写回知识库（每月约 40 条，均走候选审核）',
@@ -183,9 +213,12 @@ const REVIEWS: Approval[] = [
   // 已办（列表 done Tab）
   {
     id: 'CR-028', type: 'changeset_publish', high_risk: true, status: 'approved',
+    target_type: 'ontology_candidate', target_id: '01J97GK2N6P1W8XRZ4B3T9MDCA',
+    submitter_id: 'u-02', reviewer_id: 'u-01', decision_note: '发布为 v2.1', sla_deadline: null,
+    created_at: '2026-09-02T09:00:00Z',
     title: '本体变更发布 CR-028 · 故障域类目对齐设备事件',
     summary: 'v2.0 → v2.1：+8/−1/~2，已发布（逆向 changeset 自动生成走评审）',
-    applicant: '王工', department: '知识工程师', submitted_at: '2026-09-02T09:00:00Z',
+    applicant: '王工', department: '知识工程师',
     payload: { project: '配网停电分析本体', base: 'v2.0', target: 'v2.1', stats: { add: 8, del: 1, mod: 2 } },
     chain: [
       { label: '提交', actor: '王工', at: '09-02 09:00', state: 'done' },
@@ -194,9 +227,12 @@ const REVIEWS: Approval[] = [
   },
   {
     id: 'PLG-05', type: 'plugin_install', high_risk: false, status: 'rejected',
+    target_type: 'plugin_listing', target_id: '01J97MBP8T4Q2WYCN6V1R5HSXK',
+    submitter_id: 'u-05', reviewer_id: 'u-01', decision_note: 'beta 未经安全扫描，待 v1.0 正式版再议', sla_deadline: null,
+    created_at: '2026-09-22T15:20:00Z',
     title: '插件安装 PLG-05 · PDF 批量导出插件 v0.9.0-beta',
     summary: '驳回：beta 版本未经安全扫描，附意见「待 v1.0 正式版再议」',
-    applicant: '赵敏', department: '本体组', submitted_at: '2026-09-22T15:20:00Z',
+    applicant: '赵敏', department: '本体组',
     payload: { plugin: 'PDF 批量导出', version: 'v0.9.0-beta', publisher: '社区', scopes: ['pdf.export'] },
     chain: [
       { label: '提交', actor: '赵敏', at: '09-22 15:20', state: 'done' },
@@ -544,22 +580,73 @@ const ANALYTICS_OVERVIEW = {
   },
 }
 
+// ============================================================
+// §5.8 ★ writeback 台账 —— 回写台账（后端 live：services/writeback/api/ledger.py +
+// schemas/ledger.py WritebackLedgerOut；DTO 复用 features/admin/api.ts 类型防两处漂移。
+// W2 2026-10-04 首个前端消费面：本组 handler=live 实装投影同形（非预登记，不计 R 清单）。
+// 状态机 §2.5（pending→accepted→succeeded|failed|compensated 含 unknown）；处置三动作 §3.3；
+// 种子 5 行覆盖 待人工(unknown/failed)/成功/已冲正/投递中 五形态，语境与 TRACES['tr-b71c9e2d']
+// 的 WB-0311 台账行对齐）。
+// ============================================================
+
+const LEDGER: WritebackLedgerRow[] = [
+  {
+    ledger_id: 'WB-0311', idempotency_key: 't_88:a_01P', status: 'unknown',
+    receipt: null, action_instance_id: 'a_01P', attempts: 1, needs_human: true,
+    last_error: 'execute timeout after 30s（错误码 4820） || RECON_DEADLINE: unknown 超对账时限（24h）不可核实',
+    updated_at: '2026-09-26T01:12:44Z',
+  },
+  {
+    ledger_id: 'WB-0302', idempotency_key: 't_88:a_01Q', status: 'failed',
+    receipt: null, action_instance_id: 'a_01Q', attempts: 3, needs_human: true,
+    last_error: 'BIZ_FAILED: 业务侧终态 rejected（预算科目冻结校验不通过）',
+    updated_at: '2026-09-25T16:06:41Z',
+  },
+  {
+    ledger_id: 'WB-0298', idempotency_key: 't_88:a_01M', status: 'succeeded',
+    receipt: { accepted: true, receipt_no: 'ERP-20260925-004417', idempotency_key: 't_88:a_01M', occurred_at: '2026-09-25T10:31:02Z' },
+    action_instance_id: 'a_01M', attempts: 1, needs_human: false,
+    last_error: null, updated_at: '2026-09-25T10:31:03Z',
+  },
+  {
+    ledger_id: 'WB-0287', idempotency_key: 't_88:a_01K', status: 'compensated',
+    receipt: {
+      accepted: true, receipt_no: '', idempotency_key: 't_88:a_01K:compensate',
+      occurred_at: '2026-09-24T15:20:11Z', manual: true,
+      note: '业务侧确认未过账，人工标记冲正', marked_by: 'u-01',
+    },
+    action_instance_id: 'a_01K', attempts: 2, needs_human: false,
+    last_error: 'BIZ_FAILED: 重发后仍失败 || REDISPATCH: 重发一次（同幂等键新 attempt） || 冲正完成（人工标记，§3.3）',
+    updated_at: '2026-09-24T15:20:11Z',
+  },
+  {
+    ledger_id: 'WB-0310', idempotency_key: 't_88:a_01R', status: 'pending',
+    receipt: null, action_instance_id: 'a_01R', attempts: 1, needs_human: false,
+    last_error: null, updated_at: '2026-09-26T14:25:10Z',
+  },
+]
+
 export const adminHandlers = [
   // ---- 数据分析（p-analytics 轻量版，预登记见文件头注） ----
   http.get('*/api/v1/admin/analytics/overview', () => ok(ANALYTICS_OVERVIEW)),
 
-  // ---- 审批中心（§5.8 reviews 三行 + 批量预登记；status 口径=后端 review_tickets，fe1-F1） ----
+  // ---- 审批中心（§5.8 reviews 五行 + W2 冻结详情/批量；status 口径=后端 review_tickets，fe1-F1）
+  // 列表信封=B1 {code,message,data:{data,meta:{page,page_size,total}}}（services/review/api/admin.py
+  // AdminReviewListOut 实测，2026-10-04 对齐；旧 {items,next_cursor} 裸分页体废止）
   http.get('*/api/v1/admin/reviews', ({ request }) => {
     const status = new URL(request.url).searchParams.get('status')
     const items = status === 'pending' || status === 'done'
       ? REVIEWS.filter(r => (status === 'pending' ? r.status === 'pending_review' : r.status !== 'pending_review'))
       : REVIEWS
-    return ok({ items, next_cursor: null })
+    return ok({ data: items, meta: { page: 1, page_size: 20, total: items.length } })
   }),
 
+  // W2 契约冻结 + W1 实装对齐（AdminReviewDetailOut=AdminReviewOut 基座 + payload/chain；
+  // mock 行另携带 type/title/summary/applicant/department/high_risk 前端富形状为演示过渡，
+  // 后端不返回、normalizeReview 兜底；404 文案=「审核单不存在」W1 同口径）
   http.get('*/api/v1/admin/reviews/:id', ({ params }) => {
     const r = REVIEWS.find(x => x.id === String(params.id))
-    return r ? ok(r) : err(4041, '审批工单不存在', 404)
+    return r ? ok(r) : err(404, '审核单不存在', 404)
   }),
 
   http.post('*/api/v1/admin/reviews/:id/decision', async ({ request, params }) => {
@@ -567,9 +654,11 @@ export const adminHandlers = [
     const body = (await request.json()) as { action?: 'approve' | 'reject'; note?: string; reason?: string }
     const note = body.note ?? body.reason
     const r = REVIEWS.find(x => x.id === String(params.id))
-    if (!r) return err(4041, '审批工单不存在', 404)
+    if (!r) return err(404, '审批工单不存在', 404)
     if (body.action === 'reject' && !note?.trim()) return err(3001, '驳回必须附意见（审批链留痕）', 422)
     r.status = body.action === 'approve' ? 'approved' : 'rejected'
+    if (body.action === 'reject') r.decision_note = note ?? r.decision_note
+    r.reviewer_id = 'u-01'
     r.chain = r.chain.map(s => (s.state === 'current'
       ? { ...s, state: (body.action === 'approve' ? 'done' : 'rejected') as 'done' | 'rejected', at: '刚刚', actor: '刘以在（管理员）', note: note || s.note }
       : s))
@@ -577,22 +666,35 @@ export const adminHandlers = [
     return ok({ ticket_id: r.id, status: r.status, governance_tier: 'team', signatures_required: 1, signatures_collected: 1, complete: true })
   }),
 
-  // 预登记：批量端点（IX-APR-02；高危类服务端同拒，前端已先行禁用）
+  // W2 契约冻结 + W1 追认实装对齐（2026-10-04，services/review/api/admin.py batch_review）：
+  // body={ids(1..100),action,note?}——note 与 DecisionIn 同词汇；驳回必附 note（422，DTO 同规）；
+  // 高危类（ontology_candidate 面）服务端不整批 409 而=逐单落 failed[{id,reason}]（IX-APR-02，
+  // 成功单不受牵连）；响应=BatchDecisionOut {succeeded,failed,updated,ids}（updated/ids 恒镜像
+  // succeeded）；chain 驳回步进=rejected
   http.post('*/api/v1/admin/reviews/batch', async ({ request }) => {
     const body = (await request.json()) as { ids?: string[]; action?: 'approve' | 'reject'; note?: string; reason?: string }
     const note = body.note ?? body.reason
     const ids = body.ids ?? []
-    const items = REVIEWS.filter(r => ids.includes(r.id))
-    if (items.length === 0) return err(3001, '未选中任何工单', 422)
-    if (new Set(items.map(i => i.type)).size > 1) return err(3003, '仅允许同类型批量审批', 422)
-    if (items.some(i => i.high_risk)) return err(3003, '高危类（变更发布 / MCP 接入）须逐件终审，不可批量', 422)
-    for (const r of items) {
+    if (ids.length === 0) return err(3001, '未选中任何工单', 422)
+    if (body.action === 'reject' && !note?.trim()) return err(3001, '驳回必附理由（与单条 decision 同规）', 422)
+    const succeeded: string[] = []
+    const failed: { id: string; reason: string }[] = []
+    for (const id of ids) {
+      const r = REVIEWS.find(x => x.id === id)
+      if (!r) { failed.push({ id, reason: '审核单不存在' }); continue }
+      if (r.target_type === 'ontology_candidate' || r.type === 'changeset_publish') {
+        failed.push({ id, reason: '高危类型不可批量（IX-APR-02 服务端同拒）' }); continue
+      }
+      if (r.status !== 'pending_review') { failed.push({ id, reason: '非待审工单，不可决策' }); continue }
       r.status = body.action === 'approve' ? 'approved' : 'rejected'
+      if (body.action === 'reject') r.decision_note = note ?? r.decision_note
+      r.reviewer_id = 'u-01'
       r.chain = r.chain.map(s => (s.state === 'current'
-        ? { ...s, state: 'done' as const, at: '刚刚', actor: '刘以在（管理员）', note: note || s.note }
+        ? { ...s, state: (body.action === 'approve' ? 'done' : 'rejected') as 'done' | 'rejected', at: '刚刚', actor: '刘以在（管理员）', note: note || s.note }
         : s))
+      succeeded.push(id)
     }
-    return ok({ updated: items.length, ids: items.map(i => i.id) })
+    return ok({ succeeded, failed, updated: succeeded.length, ids: succeeded })
   }),
 
   // ---- 用户（§5.8 POST/GET/PATCH/DELETE /admin/users） ----
@@ -998,9 +1100,13 @@ export const adminHandlers = [
     const ticketId = `ACC-${accessTicketSeq++}`
     REVIEWS.unshift({
       id: ticketId, type: 'permission_request', high_risk: false, status: 'pending_review',
+      // AdminReviewOut 基座（W2 契约冻结对齐）：权限申请类 target_type 枚举后端暂缺，取最近似值演示
+      target_type: 'knowledge_instance', target_id: route,
+      submitter_id: null, reviewer_id: null, decision_note: null, sla_deadline: null,
+      created_at: req.created_at,
       title: `权限申请 ${ticketId} · ${name}申请 ${route}`,
       summary: `403 申请权限闭环：目标资源「${route}」，通过后自动授权并审计`,
-      applicant: name, department: '—', submitted_at: req.created_at,
+      applicant: name, department: '—',
       payload: {
         scope: req.desired_role ?? req.permission ?? 'access',
         resource: route, reason,
@@ -1028,6 +1134,77 @@ export const adminHandlers = [
       ? ACCESS_REQUESTS.filter(r => r.status === 'pending')
       : ACCESS_REQUESTS
     return ok({ items, next_cursor: null })
+  }),
+
+  // ---- ★ 回写台账（§5.8 三端点已登记且后端 live：services/writeback/api/ledger.py；
+  //      mock=live 投影同形。守卫与 ActionDispatcher §3.3 同口径：redispatch 仅
+  //      unknown/failed/pending+needs_human；close 终态不可且 note 必填；无凭证冲正 note 必填；
+  //      3001→422、3003→409、404 跨租户同口径；202=受理即返，响应体=落库后最新投影 ----
+  http.get('*/api/v1/admin/writeback/ledger', ({ request }) => {
+    const url = new URL(request.url)
+    const status = url.searchParams.get('status')
+    const needsHuman = url.searchParams.get('needs_human')
+    let items = LEDGER
+    if (status) items = items.filter(r => r.status === status)
+    if (needsHuman !== null) items = items.filter(r => r.needs_human === (needsHuman === 'true'))
+    return ok({
+      items,
+      total: items.length,
+      offset: Number(url.searchParams.get('offset') ?? 0),
+      limit: Number(url.searchParams.get('limit') ?? 50),
+    })
+  }),
+
+  http.get('*/api/v1/admin/writeback/ledger/:id', ({ params }) => {
+    const r = LEDGER.find(x => x.ledger_id === String(params.id))
+    return r ? ok(r) : err(404, '台账行不存在（按所给键未命中或跨租户）', 404)
+  }),
+
+  http.post('*/api/v1/admin/writeback/ledger/:id/dispose', async ({ request, params }) => {
+    const body = (await request.json()) as { action?: string; note?: string }
+    const r = LEDGER.find(x => x.ledger_id === String(params.id))
+    if (!r) return err(404, '台账行不存在（按所给键未命中或跨租户）', 404)
+    const action = body.action
+    if (action !== 'redispatch' && action !== 'mark_compensated' && action !== 'close') {
+      return err(3001, 'action 须为 redispatch/mark_compensated/close 之一', 422)
+    }
+    const now = new Date().toISOString()
+    const appendErr = (msg: string) => { r.last_error = r.last_error ? `${r.last_error} || ${msg}` : msg }
+    if (action === 'redispatch') {
+      if (r.status === 'succeeded' || r.status === 'compensated' || r.status === 'accepted') {
+        return err(3003, `台账状态不可重发: ${r.status}（终态/accepted 不可重发——accepted 处置走冲正或关闭，§3.3）`, 409)
+      }
+      if (r.status === 'pending' && !r.needs_human) {
+        return err(3003, 'pending 态在投递窗口内（对账/重试自然续投），无需人工重发', 409)
+      }
+      r.status = 'pending'
+      r.needs_human = false
+      appendErr(`REDISPATCH: ${body.note?.trim() || '人工重发（同幂等键新 attempt）'}`)
+    } else if (action === 'mark_compensated') {
+      if (r.status === 'compensated' || r.status === 'pending') {
+        return err(3003, `台账状态不可冲正: ${r.status}（§2.5 迁移闸门：pending/终态外均可）`, 409)
+      }
+      if (!r.receipt && !body.note?.trim()) {
+        return err(3001, '无凭证的人工标记冲正必须附 note（审计留痕，§3.3）', 422)
+      }
+      r.status = 'compensated'
+      r.receipt = r.receipt ?? {
+        accepted: true, receipt_no: '',
+        idempotency_key: `${r.idempotency_key}:compensate`,
+        occurred_at: now, manual: true,
+        note: body.note?.trim() ?? '', marked_by: 'u-01',
+      }
+    } else {
+      if (!body.note?.trim()) return err(3001, '关闭必须附理由（§3.3 关闭附理由，审计留痕）', 422)
+      if (r.status === 'succeeded' || r.status === 'compensated') {
+        return err(3003, `终态不可关闭: ${r.status}（succeeded/compensated 已终局，§2.5）`, 409)
+      }
+      r.status = 'failed'
+      r.needs_human = false
+      appendErr(`CLOSED: ${body.note.trim()}`)
+    }
+    r.updated_at = now
+    return ok(r, 202)
   }),
 ]
 

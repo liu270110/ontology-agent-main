@@ -293,6 +293,20 @@ class PgSessionRepository:
         row = (await self._db.execute(stmt)).scalar_one_or_none()
         return _message_to_domain(row) if row is not None else None
 
+    async def delete_cascade(self, session_id: uuid.UUID) -> None:
+        """删除会话及其消息与群成员（api/01 §5.2 DELETE；硬删级联，FK 无 ondelete 逐表逆序删）。
+
+        证据引用随消息行一并清除（citations/ag_ui_events 内嵌于 messages JSONB，无独立表）。"""
+        for stmt in (
+            delete(MessageORM).where(MessageORM.session_id == session_id, MessageORM.tenant_id == self._tenant_id),
+            delete(SessionMemberORM).where(
+                SessionMemberORM.session_id == session_id, SessionMemberORM.tenant_id == self._tenant_id
+            ),
+            delete(SessionORM).where(SessionORM.id == session_id, SessionORM.tenant_id == self._tenant_id),
+        ):
+            await self._db.execute(stmt)
+        await self._db.flush()
+
     async def _load_members(self, session_id: uuid.UUID) -> list[GroupMember]:
         stmt = (
             select(SessionMemberORM)
@@ -428,6 +442,28 @@ class PgTaskRepository:
         )
         row = (await self._db.execute(stmt)).scalar_one_or_none()
         return _task_to_domain(row, runs=[]) if row is not None else None
+
+    async def find_by_run(self, run_id: uuid.UUID) -> Task | None:
+        """按 Run 反查所属任务（POST /sessions/{id}/cancel 定位 run 载体；runs 全量随载）。"""
+        stmt = (
+            select(TaskORM)
+            .join(RunORM, RunORM.task_id == TaskORM.id)
+            .where(TaskORM.tenant_id == self._tenant_id, RunORM.id == run_id)
+            .limit(1)
+        )
+        row = (await self._db.execute(stmt)).scalar_one_or_none()
+        return _task_to_domain(row, runs=await self._load_runs(row.id)) if row is not None else None
+
+    async def delete_by_session(self, session_id: uuid.UUID) -> None:
+        """删除会话关联任务及其 Run/事件（DELETE /sessions 级联；FK 逆序 task_events→runs→tasks）。"""
+        task_ids = select(TaskORM.id).where(TaskORM.session_id == session_id, TaskORM.tenant_id == self._tenant_id)
+        for stmt in (
+            delete(TaskEventORM).where(TaskEventORM.task_id.in_(task_ids), TaskEventORM.tenant_id == self._tenant_id),
+            delete(RunORM).where(RunORM.task_id.in_(task_ids), RunORM.tenant_id == self._tenant_id),
+            delete(TaskORM).where(TaskORM.session_id == session_id, TaskORM.tenant_id == self._tenant_id),
+        ):
+            await self._db.execute(stmt)
+        await self._db.flush()
 
     async def list(
         self,

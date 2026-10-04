@@ -93,6 +93,14 @@ class SessionPatchIn(BaseModel):
     routing: str | None = Field(default=None, pattern="^(mention|round_robin|all|orchestrator)$")
 
 
+class SessionCancelIn(BaseModel):
+    """停止生成请求体（api/01 §5.2 POST /sessions/{id}/cancel；契约冻结 2026-10-04 前端 W3：
+    ChatPage.handleStop body {run_id}。run_id 缺省=定位会话活跃 Run 的降级面，前端恒传）。"""
+
+    model_config = ConfigDict(extra="forbid")
+    run_id: uuid.UUID | None = None
+
+
 class SessionListOut(BaseModel):
     """会话列表（api/01 §3.1 信封：{data, meta:{page,page_size,total}}，B1 批统一）。"""
 

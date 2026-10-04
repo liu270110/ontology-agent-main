@@ -466,6 +466,85 @@ async def test_429限流_仍按瞬时错误重试_成功落retry_succeeded():
     assert journal[4][1] == "llm.retry_succeeded"
 
 
+# ── ④续 伪 transport：HTTP 状态码透传（M4.6-D3 联调收口）──────────────────
+# 上两例以 _HttpStatusError 桩验证韧性判定；本组用真实 OpenAICompatibleModelPort +
+# MockTransport 验证「resp.status_code → 异常 status_code」的网关透传链路（桩补不出的缝）。
+
+
+async def test_伪transport_400_异常携带status_code_零重试():
+    # Arrange：非流式恒 400（4xx 客户端错误=确定性失败，重发同请求无意义）
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(400, json={"error": "bad request"})
+
+    events: list[str] = []
+
+    async def emitter(event_type: str, data: dict[str, Any]) -> None:
+        events.append(event_type)
+
+    port = FailoverModelPort(
+        OpenAICompatibleModelPort(
+            base_url="http://llm",
+            api_key="k",
+            model="m",
+            client=httpx.AsyncClient(transport=httpx.MockTransport(handler)),
+        ),
+        provider="openai_compatible",
+        model="m",
+        retry_max_attempts=3,  # 配额充足：400 也不得进重试调度
+        retry_backoff_ms=0,
+        clock=_FakeClock(),
+        sleeper=_NoopSleeper(),
+    )
+    token = set_llm_event_emitter(emitter)
+    try:
+        # Act + Assert：上抛原始错误；异常携带 status_code=400（网关透传收口）
+        with pytest.raises(ModelGatewayUnavailableError, match="模型服务返回 400") as ei:
+            await port.complete([{"role": "user", "content": "hi"}])
+    finally:
+        reset_llm_event_emitter(token)
+        await port.aclose()
+    assert ei.value.status_code == 400
+    # Assert：零重试——未落任何 retry_scheduled（_is_transient_error 鸭型 4xx 排除自动激活）
+    assert events == []
+
+
+async def test_伪transport_429_异常携带status_code_按瞬时错误重试():
+    # Arrange：非流式恒 429（限流=4xx 白名单例外，退避后可自愈；单凭证无池不轮换）
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(429, json={"error": "rate limited"})
+
+    events: list[str] = []
+
+    async def emitter(event_type: str, data: dict[str, Any]) -> None:
+        events.append(event_type)
+
+    port = FailoverModelPort(
+        OpenAICompatibleModelPort(
+            base_url="http://llm",
+            api_key="k",
+            model="m",
+            client=httpx.AsyncClient(transport=httpx.MockTransport(handler)),
+        ),
+        provider="openai_compatible",
+        model="m",
+        retry_max_attempts=2,
+        retry_backoff_ms=0,
+        clock=_FakeClock(),
+        sleeper=_NoopSleeper(),
+    )
+    token = set_llm_event_emitter(emitter)
+    try:
+        # Act + Assert：耗尽上抛且携带 status_code=429（透传不断链）
+        with pytest.raises(ModelGatewayUnavailableError, match="模型服务返回 429") as ei:
+            await port.complete([{"role": "user", "content": "hi"}])
+    finally:
+        reset_llm_event_emitter(token)
+        await port.aclose()
+    assert ei.value.status_code == 429
+    # Assert：重试链正常——首次失败落 retry_scheduled，末次失败无后续调度
+    assert events == ["llm.retry_scheduled"]
+
+
 # ── ⑤审计收口（G-1 后半）：韧性层在内、审计层在外 ─────────────────────────
 
 

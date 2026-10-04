@@ -1,18 +1,16 @@
 import '@testing-library/jest-dom/vitest'
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
-import { afterEach, beforeAll, afterAll, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it } from 'vitest'
 import { App } from '@/app/App'
-import { server } from '@/mocks/node'
 import { useAuthStore } from '@/stores/auth-store'
 
-beforeAll(() => server.listen({ onUnhandledRequest: 'bypass' }))
+// MSW 生命周期归全局 setupFiles（src/mocks/node-setup.ts）：listen/resetHandlers/close 均由其接管，
+// 本文件不重复 listen/close（重复会抛 Invariant Violation），也无 server.use 注入需求。
 afterEach(() => {
-  server.resetHandlers()
   cleanup()
   localStorage.clear()
   useAuthStore.getState().clearSession()
 })
-afterAll(() => server.close())
 
 /** S8 Tooltip 切片 · 审批中心：六类类型徽标包 Tooltip（一句话说明，对齐 APPROVAL_TYPE 六枚举）。
  *  hover 前 aria-hidden=true → mouseOver 触发 React onMouseEnter（150ms 防抖）→ aria-hidden=false 且文案可见。 */

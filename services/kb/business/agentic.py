@@ -45,8 +45,11 @@ EXPLAIN_TRACE_PREFIX = "kb-agentic:"  # §8.1：explain_trace_id = 前缀 + uuid
 # 评级阈值（§2.2 G2 规则先行评级）：top1 **归一分**低于此值判 score_below_threshold。
 # 归一分 = top1 RRF 融合分 / 当轮参与通道集理论满分 Σ w_c/(k+1)（与 retrieve.hybrid_search
 # 的 confidence 同口径；RRF_K=60、通道权重沿用 retrieve.py 实际常量 CHANNEL_WEIGHTS[_GRAPH]，
-# 只读 import 不改 retrieval 层）。0.5 为占位值（语义=top1 至少取得当前通道集理论满分一半）
-# ——待 PoC 标定（golden QA 扩展 agentic 用例集后冻结，方案 §7 待办）。
+# 只读 import 不改 retrieval 层）。PoC 标定 2026-09-28：金标评级 22 条（命中/零命中/低分/
+# 降级单路/含图路各 4 + span 门禁 3），准确率 100%（22/22）；阈值 0.05~0.95 步进 0.05 扫描
+# 19 档，唯一 100% 档=0.50（0.45/0.55 均 95.5%——归一 0.45 与恰等 0.5 两探针卡边）→ 0.5
+# 为实测最优档，维持不变（合成语料结论，待真实语料校准；标定器
+# services/kb/business/agentic_calibration.py，金标 tests/kb/test_agentic_golden.py）。
 # 修复背景（OCR F1）：原绝对阈值 0.15 与生产唯一分数口径（RRF 融合分，上界 Σ w_c/(k+1)，
 # k=60：两路≈0.016、含图路≈0.023）相差一个数量级——生产路径恒 fail/score_below_threshold，
 # pass 快速返回成死代码、所有查询以 degraded=agentic_exhausted 收尾且白烧一轮改写。
@@ -84,6 +87,9 @@ class AgenticTrace(BaseModel):
 # 寒暄词面小集合（§3 ①：规则词面判别先行）。匹配口径=整条查询剥除空白/标点/表情符号、
 # 去语气尾字后全词命中（大小写不敏感）——组合句（如「你好，查一下OO-…」）不判寒暄，落回
 # 工单号/默认分支。小集合刻意保守：误跳过检索的代价（漏召回）远大于多查一次。
+# PoC 标定 2026-09-28：金标判别 38 条准确率 100%（38/38），词面集合零增删——唯一误判
+# 「哈喽」归因语气尾字剥除冲突（见 _SMALLTALK_TAIL_PARTICLES 标定注），非词面缺项；
+# 纯应答词（嗯嗯/哦哦等）按保守裁决不扩表（模拟口径，待真实语料复核）。
 _SMALLTALK_TERMS = frozenset(
     {
         "你好",
@@ -112,8 +118,11 @@ _SMALLTALK_TERMS = frozenset(
         "在么",
     }
 )
-# 语气尾字（剥除后允许「谢谢呀/你好啊」等口语变体；逐字剥除至不再命中）
-_SMALLTALK_TAIL_PARTICLES = "呀啊哈呢哦噢喔呗啦咯喽哟捏嘛吧您"
+# 语气尾字（剥除后允许「谢谢呀/你好啊」等口语变体；逐字剥除至不再命中）。
+# PoC 标定 2026-09-28：金标判别 38 条，误判唯一项「哈喽」归因尾字「喽」剥除冲突——哈喽尾字
+# 即喽，剥除后落「哈」永不命中词面（词表不可达项）。裁决删「喽」保词面完整（误跳过代价＞
+# 多查一次，agentic.py 判别保守准则）；代价=谢谢喽等喽尾变体失去剥除、保守放行检索（可接受）。
+_SMALLTALK_TAIL_PARTICLES = "呀啊哈呢哦噢喔呗啦咯哟捏嘛吧您"
 
 # 工单号模式（确定性任务判别，§2.2 G1「任务本体先判」的 v1 词面版）：
 # OO-\d{6} 与种子本体 R004 SHACL pattern ^OO-[0-9]{6}$ 同款（services/seeds/power_seed.ttl）；

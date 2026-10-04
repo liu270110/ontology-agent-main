@@ -10,7 +10,8 @@ export function LayerBadge({ layer }: { layer: FactLayer }) {
 }
 
 export function FactStatusBadge({ status }: { status: FactStatus }) {
-  const cls = status === 'active' ? 'b-green' : status === 'candidate' ? 'b-orange' : 'b-red'
+  // 双口径：mock candidate/active/invalidated ∪ live superseded（接真批 2026-10-05，墓碑留痕）
+  const cls = status === 'active' ? 'b-green' : status === 'candidate' ? 'b-orange' : status === 'superseded' ? 'b-gray' : 'b-red'
   return <span className={`badge ${cls}`}>{FACT_STATUS_LABEL[status]}</span>
 }
 
@@ -33,6 +34,7 @@ export function FactTimeline({ events, variant = 'full' }: { events: TimelineEve
             {ev.invalid_edge && <span className="badge b-red mr-1.5">失效边</span>}
             {ev.type === 'current' && <span className="badge b-green mr-1.5">当前</span>}
             {ev.type === 'promoted' && <span className="badge b-blue mr-1.5">升级</span>}
+            {ev.type === 'superseded' && <span className="badge b-gray mr-1.5">被取代</span>}
             {ev.label}
           </div>
           <div className="mt-0.5 text-[11px] text-label-3">

@@ -55,6 +55,10 @@ class OntologyCriterionProjection:
             data = self._data_provider(criterion.focus_iri, ctx)
         except Exception as exc:  # 数据面不可得：结构化不可求值（禁裸异常逃逸，端口契约）
             return ProjectionReport(evaluated=False, detail=f"数据图不可得: {type(exc).__name__}: {exc}")
+        if not any(criterion.focus_iri in (str(s), str(o)) for s, _, o in data):
+            # 焦点节点不在数据图：单点求值将平凡 conforms=True（值域/闭合形状族对缺席节点零违例），
+            # 属 fail-open——按「求值不可得」保守退化（B2：不可得≠满足）。（ocr 2026-10-05 评审发现）
+            return ProjectionReport(evaluated=False, detail=f"焦点节点不在数据图中: {criterion.focus_iri}")
         report = shacl_validate(
             data,  # 位置传参（shacl.py 坑注释：data_graph 禁关键字路径）
             shapes,

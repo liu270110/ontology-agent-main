@@ -109,3 +109,11 @@ def test_适配器契约面构造_注册表与供给器必填注入() -> None:
         OntologyCriterionProjection(shapes_registry={_SHAPES_IRI: _shapes_graph()})  # type: ignore[call-arg]
     with pytest.raises(TypeError):
         OntologyCriterionProjection(data_provider=lambda focus_iri, ctx: _data_graph())  # type: ignore[call-arg]
+
+
+async def test_适配器焦点缺失_平凡conforms防fail_open_结构化不可求值() -> None:
+    # ocr 2026-10-05 发现：焦点节点不在数据图时，单点求值对缺席节点平凡 conforms=True
+    # （值域/闭合形状族零违例）——B2 禁「不可得当满足」，必须 evaluated=False 退 blocked
+    report = await _projection().evaluate(_criterion(str(EX.task_absent)), make_ctx())
+    assert report.evaluated is False
+    assert "焦点节点不在数据图中" in report.detail

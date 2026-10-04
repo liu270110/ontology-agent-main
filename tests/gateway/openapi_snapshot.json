@@ -1,6 +1,108 @@
 {
   "components": {
     "schemas": {
+      "AdminReviewDetailOut": {
+        "additionalProperties": false,
+        "description": "审核工单详情（api/01 §5.8 W1 实装行 GET /admin/reviews/{ticket_id}；契约源=\nfrontend/src/features/approvals/api.ts getReview → normalizeReview）。\n\n详情=列表查询面加 id 过滤 + 全量富字段：payload（review_tickets.payload JSONB 原样透传，\n含 gate_result/approvals 审批留痕）+ chain（由 payload.approvals 派生的前端\nApprovalChainStep 视图，见路由层 _chain_from_payload；终态单无 current 步）。\n前端 normalizeReview 对 title/summary/applicant 等富字段可选兜底（缺省回退\ntarget_type/target_id 等），后端不伪造、缺省不返回。",
+        "properties": {
+          "chain": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Chain",
+            "type": "array"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "decision_note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decision Note"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "payload": {
+            "additionalProperties": true,
+            "title": "Payload",
+            "type": "object"
+          },
+          "reviewer_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reviewer Id"
+          },
+          "sla_deadline": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sla Deadline"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "submitter_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Submitter Id"
+          },
+          "target_id": {
+            "format": "uuid",
+            "title": "Target Id",
+            "type": "string"
+          },
+          "target_type": {
+            "title": "Target Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "target_type",
+          "target_id",
+          "status",
+          "submitter_id",
+          "reviewer_id",
+          "decision_note",
+          "sla_deadline",
+          "created_at"
+        ],
+        "title": "AdminReviewDetailOut",
+        "type": "object"
+      },
       "AdminReviewListOut": {
         "additionalProperties": false,
         "description": "审核工单列表（api/01 §3.1 信封：{data, meta:{page,page_size,total}}，B1 批统一——\n原 {code,message,data:{items,total,offset,limit,next_cursor}} 旧信封废止，A-5 证据端点；\nR50 前端别名 pending/done 的 status 过滤面保留不变）。",
@@ -722,23 +824,61 @@
         "title": "BatchCandidateDecisionOut",
         "type": "object"
       },
-      "BatchDecisionIn": {
+      "BatchDecisionFailure": {
         "additionalProperties": false,
-        "description": "批量终审决策请求体（api/01 §5.4 ★ batch-decision；上限 200 条/批在端点侧断言 → 3001）。",
+        "description": "批量审批逐单失败项（id + 原因文案；不中断整批——逐单独立决策、失败不回滚已成功单）。",
         "properties": {
-          "decisions": {
-            "items": {
-              "$ref": "#/components/schemas/BatchCandidateDecisionIn"
-            },
-            "minItems": 1,
-            "title": "Decisions",
-            "type": "array"
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
           }
         },
         "required": [
-          "decisions"
+          "id",
+          "reason"
         ],
-        "title": "BatchDecisionIn",
+        "title": "BatchDecisionFailure",
+        "type": "object"
+      },
+      "BatchDecisionOut": {
+        "additionalProperties": false,
+        "description": "批量审批结果（{succeeded, failed} 为本端点冻结口径；updated/ids 为前端\napi.ts batchReviews 返回类型 {updated:number, ids:string[]} 的兼容镜像面，\n值恒等于 succeeded——消费方两形状皆可用）。",
+        "properties": {
+          "failed": {
+            "items": {
+              "$ref": "#/components/schemas/BatchDecisionFailure"
+            },
+            "title": "Failed",
+            "type": "array"
+          },
+          "ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "title": "Ids",
+            "type": "array"
+          },
+          "succeeded": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "title": "Succeeded",
+            "type": "array"
+          },
+          "updated": {
+            "default": 0,
+            "title": "Updated",
+            "type": "integer"
+          }
+        },
+        "title": "BatchDecisionOut",
         "type": "object"
       },
       "BlockIn": {
@@ -5866,6 +6006,26 @@
         "title": "SendMessageIn",
         "type": "object"
       },
+      "SessionCancelIn": {
+        "additionalProperties": false,
+        "description": "停止生成请求体（api/01 §5.2 POST /sessions/{id}/cancel；契约冻结 2026-10-04 前端 W3：\nChatPage.handleStop body {run_id}。run_id 缺省=定位会话活跃 Run 的降级面，前端恒传）。",
+        "properties": {
+          "run_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Run Id"
+          }
+        },
+        "title": "SessionCancelIn",
+        "type": "object"
+      },
       "SessionCreateIn": {
         "additionalProperties": false,
         "properties": {
@@ -6343,6 +6503,65 @@
         "title": "TaskListOut",
         "type": "object"
       },
+      "TaskLogOut": {
+        "additionalProperties": false,
+        "description": "run 日志行（api/01 §5.2 GET /tasks/{id}/logs；契约源=frontend tasks/api.ts TaskLog）。\n\n数据源=task_events 投影：ts=事件 created_at、level 由 event_type 关键词收敛\n（ERROR/FAIL→error，WARN→warn，余 info）、line=event_type + 紧凑 data JSON。",
+        "properties": {
+          "level": {
+            "title": "Level",
+            "type": "string"
+          },
+          "line": {
+            "title": "Line",
+            "type": "string"
+          },
+          "ts": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ts"
+          }
+        },
+        "required": [
+          "level",
+          "line"
+        ],
+        "title": "TaskLogOut",
+        "type": "object"
+      },
+      "TaskLogPageOut": {
+        "additionalProperties": false,
+        "description": "日志行分页（游标 after_seq 续读；契约冻结「以 items 形状为冻结口径」，next_cursor\n为字符串游标，取尽为 null——与 mocks/admin-handlers 形状一致）。",
+        "properties": {
+          "items": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/TaskLogOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          }
+        },
+        "title": "TaskLogPageOut",
+        "type": "object"
+      },
       "TaskOut": {
         "additionalProperties": false,
         "properties": {
@@ -6422,6 +6641,61 @@
           "active_run_id"
         ],
         "title": "TaskOut",
+        "type": "object"
+      },
+      "TaskRetryIn": {
+        "additionalProperties": false,
+        "description": "重试请求体（api/01 §5.2 POST /tasks/{id}/retry；契约冻结 body {scope}）。",
+        "properties": {
+          "scope": {
+            "default": "all",
+            "enum": [
+              "failed_steps",
+              "all"
+            ],
+            "title": "Scope",
+            "type": "string"
+          }
+        },
+        "title": "TaskRetryIn",
+        "type": "object"
+      },
+      "TaskRetryOut": {
+        "additionalProperties": false,
+        "description": "重试受理（202 异步口径；status=queued 指重建 Run 已入队交 worker 认领——聚合任务行\n状态经 start_retry_run 落 running（04 §3 权威路径），终态真值以 GET /tasks/{id} 轮询为准；\nrun_id 为附加回执面便于前端跟踪新 Run）。",
+        "properties": {
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "run_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Run Id"
+          },
+          "scope": {
+            "title": "Scope",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "status",
+          "scope"
+        ],
+        "title": "TaskRetryOut",
         "type": "object"
       },
       "ToggleOut": {
@@ -6782,6 +7056,61 @@
         ],
         "title": "WritebackLedgerPageOut",
         "type": "object"
+      },
+      "services__kb__api__schemas__kb__BatchDecisionIn": {
+        "additionalProperties": false,
+        "description": "批量终审决策请求体（api/01 §5.4 ★ batch-decision；上限 200 条/批在端点侧断言 → 3001）。",
+        "properties": {
+          "decisions": {
+            "items": {
+              "$ref": "#/components/schemas/BatchCandidateDecisionIn"
+            },
+            "minItems": 1,
+            "title": "Decisions",
+            "type": "array"
+          }
+        },
+        "required": [
+          "decisions"
+        ],
+        "title": "BatchDecisionIn",
+        "type": "object"
+      },
+      "services__review__api__schemas__admin__BatchDecisionIn": {
+        "additionalProperties": false,
+        "description": "批量审批请求（api/01 §5.8 W1 实装行 POST /admin/reviews/batch；契约源=approvals/api.ts\nbatchReviews body {ids, action, reason}——字段名 reason 为前端预登记名，本轮追认）。\n\n「驳回必附理由」与单条 DecisionIn 同规（08 §4 REJ 回边，DTO 前置校验→422）；\nids 空列表 422（Field min_length=1，前端批量按钮不可能发出，防御面）。",
+        "properties": {
+          "action": {
+            "enum": [
+              "approve",
+              "reject"
+            ],
+            "title": "Action",
+            "type": "string"
+          },
+          "ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "maxItems": 100,
+            "minItems": 1,
+            "title": "Ids",
+            "type": "array"
+          },
+          "reason": {
+            "default": "",
+            "maxLength": 2000,
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ids",
+          "action"
+        ],
+        "title": "BatchDecisionIn",
+        "type": "object"
       }
     }
   },
@@ -6887,6 +7216,92 @@
           }
         },
         "summary": "审核工单列表（open 待审队列；target_type/status 过滤；api/01 §3.1 信封）",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/api/v1/admin/reviews/batch": {
+      "post": {
+        "description": "ids 逐单独立决策（复用 decision 端点同一 ReviewApprovalService.decide——三档审批链/\n禁自批/非待审单约束全部生效），失败不中断整批、不回滚已成功单：\n\n- 单不存在（LookupError）/ 非待审或越档（DomainError 4702/4703）→ failed[{id, reason}]；\n- target_type ∈ 高危面（ontology_candidate）→ 不进决策，直接 failed（IX-APR-02 服务端同拒）；\n- 空 ids 422（DTO min_length=1）；批量驳回必附 reason 422（与单条 decision 同规）。\n\n装配未初始化（503）与 scope 门禁沿用 decision 端点同款依赖。",
+        "operationId": "batch_review_api_v1_admin_reviews_batch_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/services__review__api__schemas__admin__BatchDecisionIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BatchDecisionOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "批量审批（逐单走单条 decision 业务；高危类服务端同拒 IX-APR-02）",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/api/v1/admin/reviews/{ticket_id}": {
+      "get": {
+        "description": "详情=列表同一查询面加 id 过滤 + payload/chain 全量（契约源=前端 getReview +\nApprovalDetailModal；404 同 decision 口径）。零 ORM import 纪律同列表（text() 直查）。",
+        "operationId": "get_review_detail_api_v1_admin_reviews__ticket_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "ticket_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Ticket Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminReviewDetailOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "审核工单详情（payload/审批链全量字段；api/01 §5.8 W1 实装行）",
         "tags": [
           "admin"
         ]
@@ -8382,7 +8797,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/BatchDecisionIn"
+                "$ref": "#/components/schemas/services__kb__api__schemas__kb__BatchDecisionIn"
               }
             }
           },
@@ -12175,6 +12590,41 @@
       }
     },
     "/api/v1/sessions/{session_id}": {
+      "delete": {
+        "description": "删除会话及其从属数据（契约源=SessionList.tsx DELETE + mocks/handlers 204；契约冻结\n2026-10-04 ①「级联删除会话消息与证据引用」）：\n\n- 级联面（本批不动表结构，FK 无 ondelete 逐表逆序删）：task_events → runs → tasks →\n  messages（证据引用 citations/ag_ui_events 内嵌其中，随行清除）→ session_members → sessions；\n- 范围注记：outbox 投影行（enqueue_projection 已落库者）与本地 spill 文件不随删——前者\n  为审计/投影留痕（04 §6.1 消费方处理），后者随 M4 MinIO spill 清理批；\n- 权限：会话所有者本人（user_id 比对，非所有者一律 404 防存在性探测）；幂等性无——\n  二次删除 404（前端 deleteSession 对 204 空体按成功放行，见 SessionList 注释）。",
+        "operationId": "delete_session_api_v1_sessions__session_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "删除会话（硬删级联：消息/成员/任务/Run/事件；W1 缺口批追认前端）",
+        "tags": [
+          "sessions"
+        ]
+      },
       "get": {
         "operationId": "get_session_api_v1_sessions__session_id__get",
         "parameters": [
@@ -12263,6 +12713,62 @@
           }
         },
         "summary": "会话元信息更新（routing 切换仅 group；不含归档）",
+        "tags": [
+          "sessions"
+        ]
+      }
+    },
+    "/api/v1/sessions/{session_id}/cancel": {
+      "post": {
+        "description": "IX-CHT-06 停止生成（契约源=ChatPage.handleStop body {run_id} → 202；契约冻结 2026-10-04 ②）。\n\n语义=定位 run 并标记终态 cancelled（幂等：已终态/无活跃 run 同样 202，前端 .catch 兜底\n不依赖响应体）；无 run_manager 实例——进程内编排器中断（CancellationCoordinator 清单化\n传播）归执行编排 M3+（04 §3 cancelled 注记，同 tasks/cancel 端点口径），本端点只做\n聚合状态迁移与级联保存，worker 侧对已 cancelled 的 run 不再认领。\n\n定位：run_id 给定→按 run 反查任务（跨会话 404）；缺省→会话活跃任务（find_running_by_session）。",
+        "operationId": "cancel_session_run_api_v1_sessions__session_id__cancel_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SessionCancelIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Cancel Session Run Api V1 Sessions  Session Id  Cancel Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "停止生成（标记 run 终态 cancelled；幂等——已终态同样 202；W1 缺口批追认前端）",
         "tags": [
           "sessions"
         ]
@@ -12953,6 +13459,133 @@
           }
         },
         "summary": "任务事件时间线（Accept: text/event-stream 订阅，否则 JSON 游标分页）",
+        "tags": [
+          "tasks"
+        ]
+      }
+    },
+    "/api/v1/tasks/{task_id}/logs": {
+      "get": {
+        "description": "api/01 §5.15 登记行 + 契约冻结 2026-10-04 ③（前端 tasks/api.ts listTaskLogs：\n`{items:[{ts,level,line}], next_cursor}`，items 为冻结口径）。数据源=task_events 只读\n投影（与 /events 同源不同视图）；next_cursor=after_seq 续读游标（字符串），取尽为 null。",
+        "operationId": "list_task_logs_api_v1_tasks__task_id__logs_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "task_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Task Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "after_seq",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "After Seq"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 200,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskLogPageOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "run 日志行视图（task_events 投影 ts/level/line；区别于 /events 事件流）",
+        "tags": [
+          "tasks"
+        ]
+      }
+    },
+    "/api/v1/tasks/{task_id}/retry": {
+      "post": {
+        "description": "api/01 §5.15 登记行 + 契约冻结 2026-10-04 ④（202 受理，`{id, status:\"queued\", scope}`）。\n\n重试=编排器主权动作的 REST 面（04 §3）：经聚合方法 start_retry_run 重建 Run——\nattempt_count+1、新 Run queued（TaskRunWorker 秒级认领）、任务行落 running（04 §3\n「重试期间 task 保持 RUNNING」，持久层任务五态无 queued，响应 status=queued 指重建\nRun 已入队，终态真值以 GET /tasks/{id} 轮询为准）。非失败/非重试任务拒绝：\n\n- 任务不存在 → 404；succeeded/cancelled 等非 running/failed 态 → 4102 → 409；\n- 活跃 Run 未终态 → 4102 TASK_ALREADY_RUNNING → 409；\n- 最近失败 retryable=false（RunRetryPolicy 口径：cancelled/判据满足/预算耗尽类）→ 409；\n- attempt_count 已达 3（含首次）→ 聚合内断言 4102 → 409。",
+        "operationId": "retry_task_api_v1_tasks__task_id__retry_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "task_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Task Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TaskRetryIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskRetryOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "重试（失败任务重建 Run：attempt_count+1、新 Run queued 交 worker 认领）",
         "tags": [
           "tasks"
         ]

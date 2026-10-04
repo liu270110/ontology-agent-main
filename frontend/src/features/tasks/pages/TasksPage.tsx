@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { ApiError } from '@/api/client'
 import { ErrorState, SkeletonRows } from '@/components/states'
+import { relativeTime } from '@/lib/reltime'
 import { TASK_STATUS_BADGE, TASK_STATUS_LABEL, TASK_TYPE_LABEL, getTask, listTasks, type TaskStatus } from '../api'
 import { TaskDetailDrawer } from '../components/TaskDetailDrawer'
 
@@ -139,7 +140,7 @@ export function TasksPage() {
                     <span className="mono text-[11px] text-label-3">{t.progress}%</span>
                   </span>
                 </td>
-                <td className="px-4 py-2.5 text-label-2">{t.created_at}</td>
+                <td className="px-4 py-2.5 text-label-2">{t.created_at ? relativeTime(t.created_at) : "—"}</td>
                 <td className="px-4 py-2.5 text-label-2">{t.created_by}</td>
               </tr>
             ))}

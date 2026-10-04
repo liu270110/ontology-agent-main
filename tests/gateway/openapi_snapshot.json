@@ -6854,6 +6854,22 @@
         "title": "SessionPatchIn",
         "type": "object"
       },
+      "SessionRewindIn": {
+        "additionalProperties": false,
+        "description": "回退请求体（M4.6-D2 POST /sessions/{id}/rewind；docs/Agent/13 §2.3）。\n\nbefore_seq=回退锚：仅用户消息 seq 可作锚（不存在/非用户轮 → 4106 SESSION_REWIND_INVALID）；\n该 seq 起（含）之后的消息软删。",
+        "properties": {
+          "before_seq": {
+            "minimum": 0.0,
+            "title": "Before Seq",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "before_seq"
+        ],
+        "title": "SessionRewindIn",
+        "type": "object"
+      },
       "SessionStatus": {
         "enum": [
           "created",
@@ -13901,7 +13917,7 @@
     },
     "/api/v1/sessions": {
       "get": {
-        "description": "偏移分页改 page/page_size（B1 批，api/01 §3.1；offset=(page-1)*page_size 内部换算）。",
+        "description": "偏移分页改 page/page_size（B1 批，api/01 §3.1；offset=(page-1)*page_size 内部换算）。\n\nM4.6-D2（docs/Agent/13 §2.3）：query 非空 → 检索面过滤（simple tsvector 全文 OR\npg_trgm 相似，repo 层同口径），排序维持 recency 现状（相关性排序登记后续）；空/空白\nquery 行为不变。page/page_size 语义不变，count 同过滤口径。",
         "operationId": "list_sessions_api_v1_sessions_get",
         "parameters": [
           {
@@ -13943,6 +13959,23 @@
               ],
               "title": "Type"
             }
+          },
+          {
+            "in": "query",
+            "name": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 256,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Query"
+            }
           }
         ],
         "responses": {
@@ -13967,7 +14000,7 @@
             "description": "Validation Error"
           }
         },
-        "summary": "当前用户会话列表（api/01 §3.1 信封）",
+        "summary": "当前用户会话列表（api/01 §3.1 信封；M4.6-D2 增 query 检索）",
         "tags": [
           "sessions"
         ]
@@ -14619,6 +14652,62 @@
           }
         },
         "summary": "发送消息（Accept: text/event-stream → SSE 流；否则 202+占位 run）",
+        "tags": [
+          "sessions"
+        ]
+      }
+    },
+    "/api/v1/sessions/{session_id}/rewind": {
+      "post": {
+        "description": "会话回退（docs/Agent/13 §2.3，G-07；api/01 登记随文档批）：\n\n- 锚点：仅用户消息 seq 可作锚——get_message_by_seq 不过滤软删行，重复同锚幂等\n  202/零新增软删；不存在或非用户轮 → 4106 SESSION_REWIND_INVALID（HTTP 409）；\n- 软删：seq>=before_seq 置 deleted_at（仓储 soft_delete_from，幂等），last_message_at\n  回退到边界前最后一条未删消息，检索面同点重算（被删正文退出检索面）；\n- L1 失效：事务提交后 RedisL1Store.delete_all 三键（就近取 app.state 单例注入；\n  无实例跳过并日志；失败仅告警——TTL 兜底过期，memory §4 底线）；\n- 审计：session.rewound → task_events（复用既有 append_event 路径，payload\n  before_seq/deleted_count/session_id；会话无任务载体时告警跳过，审计不阻断主流程）；\n- closed/archived 会话 4101 拒（状态机口径同 send_message）。",
+        "operationId": "rewind_session_api_v1_sessions__session_id__rewind_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SessionRewindIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Rewind Session Api V1 Sessions  Session Id  Rewind Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "回退会话（before_seq 起软删；M4.6-D2 G-07）",
         "tags": [
           "sessions"
         ]

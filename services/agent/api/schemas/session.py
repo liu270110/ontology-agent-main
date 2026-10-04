@@ -101,6 +101,16 @@ class SessionCancelIn(BaseModel):
     run_id: uuid.UUID | None = None
 
 
+class SessionRewindIn(BaseModel):
+    """回退请求体（M4.6-D2 POST /sessions/{id}/rewind；docs/Agent/13 §2.3）。
+
+    before_seq=回退锚：仅用户消息 seq 可作锚（不存在/非用户轮 → 4106 SESSION_REWIND_INVALID）；
+    该 seq 起（含）之后的消息软删。"""
+
+    model_config = ConfigDict(extra="forbid")
+    before_seq: int = Field(ge=0)
+
+
 class SessionListOut(BaseModel):
     """会话列表（api/01 §3.1 信封：{data, meta:{page,page_size,total}}，B1 批统一）。"""
 

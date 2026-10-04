@@ -6,6 +6,7 @@ import uuid
 from datetime import datetime
 
 from sqlalchemy import (
+    Boolean,
     CheckConstraint,
     DateTime,
     ForeignKey,
@@ -60,6 +61,11 @@ class Session(Base, PkMixin, TenantMixin, TimestampMixin):
     routing: Mapped[str] = mapped_column(String(16), default="round_robin", nullable=False)  # 发言编排四模式
     last_message_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     token_usage: Mapped[dict] = mapped_column(JSONB, default=dict, nullable=False)
+    # M4.6-D2 会话用户面（docs/Agent/13 §2.1）：滚动检索面 + 定题单向闸 + 会话级软删预留。
+    # deleted_at 不做 select 默认过滤——查询点显式过滤（本批仅 schema 预留，无置值路径）。
+    search_text: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    title_generated: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     __table_args__ = (
         CheckConstraint("channel IN ('web','api','cli')", name="ck_sessions_channel"),
         CheckConstraint("status IN ('created','active','idle','closed','archived')", name="ck_sessions_status"),
@@ -67,6 +73,10 @@ class Session(Base, PkMixin, TenantMixin, TimestampMixin):
         CheckConstraint("routing IN ('mention','round_robin','all','orchestrator')", name="ck_sessions_routing"),
         # 2026-09-26 缺口核查修复：recent 索引补 DESC（会话列表按最近消息倒序）
         Index("ix_sessions_tenant_user_recent", "tenant_id", "user_id", text("last_message_at DESC")),
+        # M4.6-D2 检索双索引（迁移 d8f2a4c6e0b7 同文；create_all 需 pg_trgm 扩展先行——
+        # tests/agent/pg_testdb.py 建一次性库时创建）
+        Index("ix_sessions_search_gin", text("to_tsvector('simple', search_text)"), postgresql_using="gin"),
+        Index("ix_sessions_search_trgm", text("search_text gin_trgm_ops"), postgresql_using="gin"),
     )
 
 
@@ -84,6 +94,9 @@ class Message(Base, PkMixin, TenantMixin):  # 只追加；先落库后推送（0
     token_in: Mapped[int | None] = mapped_column(Integer)
     token_out: Mapped[int | None] = mapped_column(Integer)
     latency_ms: Mapped[int | None] = mapped_column(Integer)
+    # M4.6-D2 rewind 软删（docs/Agent/13 §2.3）：软删行物理保留，查询点显式过滤；
+    # seq 分配（max(seq)）与锚点校验不过滤（幂等重放与 seq 单调不受软删影响）。
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     __table_args__ = (
         UniqueConstraint("session_id", "seq", name="uk_messages_session_id_seq"),

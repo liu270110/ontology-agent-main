@@ -189,6 +189,24 @@ async def test_manager_refresh_外部tool以server前缀登记进注册表():
     await manager.close()
 
 
+async def test_manager_refresh_外部tool推导非空最小scope_空名拒登记并告警(caplog):
+    client = FakeRemoteClient(
+        tools=[{"name": "create_order", "description": "创建工单"}, {"name": "", "description": "异常空名工具"}]
+    )
+    manager = ExternalMcpManager([_target()], client_factory=lambda t: client)
+    registry = CapabilityRegistry()
+    with caplog.at_level("WARNING", logger="services.mcp.client"):
+        registered = await manager.refresh(registry)
+    # Assert：正常工具推导 external:{server}:{local} 非空最小集（K3-2，call 段不再空转）
+    _found, descriptor = registry.get("power-erp.create_order")  # type: ignore[misc]
+    assert descriptor.required_scopes == ("external:power-erp:create_order",)
+    # 空名工具：推导为空集 → 拒登记 + 告警
+    assert registered == ["power-erp.create_order"]
+    assert registry.get("power-erp.") is None
+    assert any("required_scopes 推导为空" in r.message for r in caplog.records)
+    await manager.close()
+
+
 async def test_manager出向调用审计留痕_含circuit_open状态():
     audit = InMemoryAuditSink()
     state = {"client": FakeRemoteClient()}  # 先健康：发现登记成功

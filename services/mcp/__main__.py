@@ -13,7 +13,10 @@ writeback.status 五 provider 全量注册：
 - action.invoke：回写执行面（Mock 电力工单连接器 + ActionDispatcher，工厂内装配）；
 - writeback.status：台账状态查询面（api/03 §3.9，同一 dispatcher 承载）。
 
-鉴权（M4.1）：``--anonymous-scopes`` 显式授予匿名授权集（缺省空=deny-by-default 全拒）；
+鉴权（M4.1 + Agent13 §4 K3 双层授权）：``--anonymous-scopes`` 显式授予匿名授权集（缺省空=
+deny-by-default 全拒），语义保持为 list/call 两组授权集的**默认值**；``--anonymous-list-scopes``
+单独覆盖 list 可见性组（外部 tool 挂载面过滤；call 段始终由 ``--anonymous-scopes`` 承载）。
+外部 tool 须显式授予其推导 scope（``external:{server}:{tool}``）方可挂载。
 ``--tenant-id`` 绑定匿名通道租户（缺省 NIL 租户；数据类工具须绑定真实租户方可见数据）。
 审计：PG audit_logs 汇（PgInvocationAuditSink；NIL 租户/PG 不可用降级日志汇，不阻塞）。
 OAuth 2.1 / API Key 通道随供给篇 C4（M5+）替换。
@@ -48,7 +51,12 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--anonymous-scopes",
         default="",
-        help="逗号分隔的匿名授权 scope 集（缺省空=全拒；M5 换 OAuth/API Key 通道）",
+        help="逗号分隔的匿名授权 scope 集（缺省空=全拒；call 段权威，list 段缺省同值；M5 换 OAuth/API Key 通道）",
+    )
+    parser.add_argument(
+        "--anonymous-list-scopes",
+        default=None,
+        help="list 可见性授权集（逗号分隔；K3 双层授权第一段覆盖位，缺省与 --anonymous-scopes 同值）",
     )
     parser.add_argument(
         "--tenant-id",
@@ -93,10 +101,16 @@ def main(argv: list[str] | None = None) -> int:
     manager = asyncio.run(_bootstrap(args, registry))
 
     scopes = tuple(s.strip() for s in args.anonymous_scopes.split(",") if s.strip())
+    list_scopes = (
+        None
+        if args.anonymous_list_scopes is None
+        else tuple(s.strip() for s in args.anonymous_list_scopes.split(",") if s.strip())
+    )
     mcp = build_mcp_server(
         registry,
         audit_sink=PgInvocationAuditSink(session_factory),
         granted_scopes=scopes,
+        list_granted_scopes=list_scopes,
         include_external=not args.no_external,
         default_tenant_id=args.tenant_id,
     )

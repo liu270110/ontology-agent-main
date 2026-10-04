@@ -9,8 +9,10 @@ CapabilityProvider.invoke → 结构化结果；全 tool 走审计（trace_id �
 ToolAnnotations（readOnlyHint 等）与 ``_meta.x-ontology`` 语义标注仅作 UI 提示/发布元数据，
 **永不进入授权代码路径**（api/03 §6 annotations 红线；用例见 tests/mcp/test_server_tools.py）。
 
-鉴权形态（M4.1 子集）：独立进程暂无网关 JWT/OAuth 中间件——``granted_scopes`` 由入口显式
-授予（匿名授权集，缺省空=全拒）；``default_tenant_id`` 绑定匿名通道租户（缺省 NIL 租户）；
+鉴权形态（M4.1 子集 + Agent13 §4 K3 双层授权）：独立进程暂无网关 JWT/OAuth 中间件——
+``granted_scopes`` 由入口显式授予（匿名授权集，缺省空=全拒）；K3 起拆 list/call 两组独立
+授权集（``list_granted_scopes`` 过滤外部 tool 挂载面=第一段可见性；``_check_scopes`` 对
+call 集强制=第二段）；``default_tenant_id`` 绑定匿名通道租户（缺省 NIL 租户）；
 OAuth 2.1/API Key 通道随供给篇 C4（M5+）替换为逐调用提取。
 
 错误映射（api/03 §8）：领域错误 → isError 结果 + 四字段错误体 JSON（errors.py）；
@@ -119,13 +121,19 @@ _NIL_TENANT = uuid.UUID(int=0)
 
 @dataclass(frozen=True, slots=True)
 class McpAccessPolicy:
-    """出口访问策略（M4.1 子集）：入口显式授予的匿名授权集；空集 = deny-by-default 全拒。
+    """出口访问策略（M4.1 子集 + K3 双层授权）：入口显式授予的匿名授权集；空集 = deny-by-default 全拒。
 
-    M5 OAuth 2.1/API Key 通道落地后替换为逐调用凭据提取（供给篇 §3.2），本类仅承载
-    「调用方 scopes 来源」一处变化点；PDP 判定本体（authorize 精确匹配）不变。
+    双层授权（Agent13 §4 K3，对标 fastmcp F-1「list 过滤 + 调用拦截」两组独立）：``granted_scopes``
+    为 call 授权集（第二段强制点，``_check_scopes`` 逐 scope 精确匹配）；``list_granted_scopes``
+    为 list 可见性授权集（第一段，外部 tool 挂载面过滤）——两组独立授出；现行挂载式过滤下
+    仅「可见不可调」可表达：未过 list 集的外部 tool 不挂载，故不可见亦不可调（「可调不可见」
+    须待查询期 tools/list 过滤收口，挂载面过滤将可见性与可达性耦合；ocr 2026-10-05 评审勘正）。
+    M5 OAuth 2.1/API Key 通道落地后替换为逐调用凭据提取（供给篇 §3.2），本类仅承载「调用方
+    scopes 来源」一处变化点；PDP 判定本体（authorize 精确匹配）不变。
     """
 
     granted_scopes: tuple[str, ...] = ()
+    list_granted_scopes: tuple[str, ...] = ()
     caller_type: str = "external"
 
 
@@ -237,15 +245,23 @@ def build_mcp_server(
     *,
     audit_sink: InvocationAuditSink,
     granted_scopes: tuple[str, ...] = (),
+    list_granted_scopes: tuple[str, ...] | None = None,
     caller_type: str = "external",
     include_external: bool = True,
     default_tenant_id: uuid.UUID | None = None,
 ) -> FastMCP:
     """MCP Server 工厂：七 tool + 补充项按 api/03 契约挂载；外部 tool 动态注册（命名空间隔离）。
 
+    ``list_granted_scopes``（K3 双层授权）：外部 tool 的 list 可见性授权集；None=与
+    ``granted_scopes`` 同源（现行单集语义，向后兼容——``--anonymous-scopes`` 保持为两组默认值，
+    新入口参数单独覆盖 list 组）。
     ``default_tenant_id`` 仅独立进程匿名通道生效（见 ``_dispatch`` 说明）。
     """
-    policy = McpAccessPolicy(granted_scopes=tuple(granted_scopes), caller_type=caller_type)
+    policy = McpAccessPolicy(
+        granted_scopes=tuple(granted_scopes),
+        list_granted_scopes=tuple(granted_scopes) if list_granted_scopes is None else tuple(list_granted_scopes),
+        caller_type=caller_type,
+    )
     mcp: FastMCP = FastMCP(name=SERVER_NAME)
     dispatch = functools.partial(  # 绑定出口装配的统一调度（含匿名租户绑定）
         _dispatch, registry=registry, audit_sink=audit_sink, policy=policy, default_tenant_id=default_tenant_id
@@ -377,8 +393,18 @@ def build_mcp_server(
 def _wire_external_tools(
     mcp: FastMCP, registry: CapabilityRegistry, audit_sink: InvocationAuditSink, policy: McpAccessPolicy
 ) -> int:
-    """外部 tool 动态挂载：经注册表命名空间隔离后的外部 descriptor（全名已带 server 前缀）。"""
-    from fastmcp.tools.tool import Tool
+    """外部 tool 动态挂载：经注册表命名空间隔离后的外部 descriptor（全名已带 server 前缀）。
+
+    K3 双层授权第一段：启动期静态挂载改按 **list 授权集** 过滤（挂载面即外部 tool 的
+    tools/list 面——未授予者不挂载，不可见亦不可达，堵「启动期无鉴权静态挂载」的洞）；
+    第二段不变：调用仍由 ``_dispatch`` → ``_check_scopes`` 对 **call 授权集** 强制
+    descriptor.required_scopes（两组独立，annotations 永不参与）。
+
+    挂载形态：直构 ``FunctionTool``（不经 ``from_function``——其对 ``**kwargs`` 签名有解析期
+    禁令，而外部 tool 须按远端透传 Schema 接收任意平铺参数；调用期校验基准是闭包签名，
+    远端 Schema 仅作 tools/list 广告面，真实校验由远端 server 承担）。
+    """
+    from fastmcp.tools.tool import FunctionTool
     from mcp.types import ToolAnnotations
 
     def _make_closure(full_name: str) -> Any:
@@ -388,24 +414,21 @@ def _wire_external_tools(
         return _external_call
 
     count = 0
-    for descriptor in registry.list_tools():
+    for descriptor in registry.list_tools(granted_scopes=policy.list_granted_scopes):
         if not descriptor.external:
             continue
         full_name = descriptor.name
         hints = {k: v for k, v in descriptor.annotations.items() if k in ToolAnnotations.model_fields}
-        tool = Tool.from_function(
-            _make_closure(full_name),
+        tool = FunctionTool(
+            fn=_make_closure(full_name),
             name=full_name,
             description=descriptor.description,
+            # 远端 Schema 透传（tools/list 广告面）；缺省给宽松 object（远端 server 负责真实校验）
+            parameters=dict(descriptor.input_schema) or {"type": "object", "additionalProperties": True},
+            output_schema=None,  # 禁自动输出 Schema（fastmcp 2.14 签名 dict|None）
             annotations=ToolAnnotations(**hints) if hints else None,
             meta=dict(descriptor.semantic) or None,
-            output_schema=False,
         )
-        if descriptor.input_schema:
-            try:
-                tool.parameters = dict(descriptor.input_schema)  # 远端 Schema 透传（pydantic 模型直赋值）
-            except Exception:  # noqa: BLE001 ——Schema 透传失败保留泛型 object，不阻塞挂载
-                pass
         mcp.add_tool(tool)
         count += 1
     return count

@@ -178,12 +178,12 @@ def _v2_turtle(seed: str) -> str:
     pwr = Namespace(PWR)
     graph.remove((pwr.Feeder, RDFS.label, None))
     graph.add((pwr.Feeder, RDFS.label, Literal("10kV 馈线（v2 修订）", lang="zh")))
-    graph.add((pwr.PlannedMaintenance, RDF.type, OWL.Class))
-    graph.add((pwr.PlannedMaintenance, RDFS.subClassOf, pwr.ScheduledOutage))
-    graph.add((pwr.PlannedMaintenance, RDFS.label, Literal("计划检修停运", lang="zh")))
+    graph.add((pwr.EmergencyMaintenance, RDF.type, OWL.Class))
+    graph.add((pwr.EmergencyMaintenance, RDFS.subClassOf, pwr.ScheduledOutage))
+    graph.add((pwr.EmergencyMaintenance, RDFS.label, Literal("应急抢修", lang="zh")))
     graph.add((pwr.NewSensor, RDF.type, OWL.Class))
     graph.add((pwr.NewSensor, RDFS.label, Literal("新增传感类", lang="zh")))
-    graph.add((pwr.outageDemo, RDF.type, pwr.PlannedMaintenance))
+    graph.add((pwr.outageDemo, RDF.type, pwr.EmergencyMaintenance))
     return graph.serialize(format="turtle")
 
 
@@ -308,15 +308,15 @@ async def test_DIFF_两版本读模型差异_增删改清单(gap_api: GapApiEnv)
     assert resp.status_code == 200, resp.text
     body = resp.json()
     assert (body["base_version"], body["target_version"]) == ("v1", "v2")
-    # 类：新增 NewSensor；修改 Feeder（label 字段级 before/after）
+    # 类：新增 NewSensor 与 EmergencyMaintenance；修改 Feeder（label 字段级 before/after）
     added_keys = [e["key"] for e in body["classes"]["added"]]
-    assert f"{PWR}NewSensor" in added_keys and f"{PWR}PlannedMaintenance" in added_keys
+    assert f"{PWR}NewSensor" in added_keys and f"{PWR}EmergencyMaintenance" in added_keys
     modified = {e["key"]: e["changes"] for e in body["classes"]["modified"]}
     assert f"{PWR}Feeder" in modified
     label_change = next(c for c in modified[f"{PWR}Feeder"] if c["field"] == "label")
     assert label_change["after"] == "10kV 馈线（v2 修订）"
-    # 公理：新增 PlannedMaintenance subClassOf ScheduledOutage
-    assert any(f"{PWR}PlannedMaintenance" in e["key"] and "subClassOf" in e["key"] for e in body["axioms"]["added"])
+    # 公理：新增 EmergencyMaintenance subClassOf ScheduledOutage
+    assert any(f"{PWR}EmergencyMaintenance" in e["key"] and "subClassOf" in e["key"] for e in body["axioms"]["added"])
     # summary 扁平计数与分组一致
     assert body["summary"]["classes_added"] == len(body["classes"]["added"]) >= 2
     assert body["summary"]["classes_modified"] == len(body["classes"]["modified"]) >= 1
@@ -431,7 +431,7 @@ async def test_REASON_闭包_分类与推导(gap_api: GapApiEnv) -> None:
     assert body["type"] == "classification" and body["engine"] == "owl2_rl" and body["conforms"] is True
     assert body["conclusion_count"] >= 2 and body["elapsed_ms"] >= 0
     conclusions = {(c["subject"], c["predicate"], c["object"]) for c in body["conclusions"]}
-    assert (f"{PWR}PlannedMaintenance", f"{RDFS}subClassOf", f"{PWR}OutageEvent") in conclusions  # 传递闭包
+    assert (f"{PWR}EmergencyMaintenance", f"{RDFS}subClassOf", f"{PWR}OutageEvent") in conclusions  # 传递闭包
     assert (f"{PWR}outageDemo", f"{RDF}type", f"{PWR}OutageEvent") in conclusions  # 实例归类
     # entailment：全谓词闭包 ⊇ 分类子集
     resp = await gap_api.client.post(f"/ontologies/{ontology_id}/reason", json={"type": "entailment"})

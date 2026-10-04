@@ -13,12 +13,15 @@ import { adminHandlers } from './admin-handlers'
  *  （后端 M1 未实现，前端代码就绪，live 不触发）：mfa@example.com → 200 {mfa_required, mfa_token}
  *  （X17 两段式，一次性）；locked@example.com 恒 1002（防枚举）；失败 5 次/10min → 429 2005 RATE_LIMITED + Retry-After（api/01 §4.3，2026-09-27 对账 §8 裁决：1005 号段不存在）。 */
 
-/** 角色码权威 = 08 篇 §2.2；scope 词汇 = 11 篇 资源:动作（与 routes.tsx meta.permission 对齐） */
+/** 角色码权威 = 08 篇 §2.2；scope 词汇 = 11 篇 资源:动作（与 routes.tsx meta.permission 对齐）。
+ *  B8-WC 基线修复（2026-10-04）：268dcda 将 /console/admin 门禁改 permission:'user:read'
+ *  （后端 RBAC 词表无 user:manage），本目录词表对齐「另批」在此补齐——admin/super 两账号
+ *  增补 user:read（保留 user:manage 不动，避免牵连其他消费方），否则 mock 态 /admin 全量 403。 */
 const DIRECTORY: Record<string, { name: string; roles: string[]; scopes: string[] }> = {
   'admin@example.com': {
     name: '刘以在',
     roles: ['admin'],
-    scopes: ['user:manage', 'tenant:manage', 'session:chat', 'session:write', 'ontology:read', 'ontology:write', 'kb:read', 'kb:write', 'memory:read', 'agent:read', 'agent:write', 'plugin:read', 'tool:read', 'tool:manage', 'approval:decide', 'dashboard:view'],
+    scopes: ['user:read', 'user:manage', 'tenant:manage', 'session:chat', 'session:write', 'ontology:read', 'ontology:write', 'kb:read', 'kb:write', 'memory:read', 'agent:read', 'agent:write', 'plugin:read', 'tool:read', 'tool:manage', 'approval:decide', 'dashboard:view'],
   },
   'member@example.com': {
     name: '成员样例',
@@ -29,7 +32,7 @@ const DIRECTORY: Record<string, { name: string; roles: string[]; scopes: string[
   'super@example.com': {
     name: '平台管理员',
     roles: ['super_admin'],
-    scopes: ['user:manage', 'tenant:manage', 'admin:read', 'admin:write', 'session:chat', 'session:read', 'session:write', 'ontology:read', 'ontology:write', 'kb:read', 'kb:write', 'memory:read', 'agent:read', 'agent:write', 'plugin:read', 'tool:read', 'tool:manage', 'review:read', 'review:approve', 'approval:decide', 'dashboard:view', 'audit:read'],
+    scopes: ['user:read', 'user:manage', 'tenant:manage', 'admin:read', 'admin:write', 'session:chat', 'session:read', 'session:write', 'ontology:read', 'ontology:write', 'kb:read', 'kb:write', 'memory:read', 'agent:read', 'agent:write', 'plugin:read', 'tool:read', 'tool:manage', 'review:read', 'review:approve', 'approval:decide', 'dashboard:view', 'audit:read'],
   },
   'mfa@example.com': {
     name: '双因子用户',

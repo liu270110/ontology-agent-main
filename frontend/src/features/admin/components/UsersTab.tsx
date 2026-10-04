@@ -8,13 +8,15 @@ import { Modal } from '@/components/modal'
 import { relativeTime } from '@/lib/reltime'
 import { Select } from '@/components/select'
 import {
-  ROLE_BADGE, ROLE_LABEL, createInviteLink, disableUser, inviteUsers, inviteUrlOf, listInviteLinks, listUsers,
+  ROLE_BADGE, ROLE_LABEL, GRANTABLE_ROLES, createInviteLink, disableUser, inviteUrlOf, listInviteLinks, listUsers,
   revokeInviteLink, updateUser,
   type AdminUser, type InviteLink,
 } from '../api'
 
-/** 用户 Tab（26 篇 §10.2 p-admin users）：用户表 + IX-ADM-01 邀请成员（邮箱 chip 化批量）
- *  + IX-ADM-02 编辑（角色调整影响提示）/ 停用（danger 输用户名）。 */
+/** 用户 Tab（26 篇 §10.2 p-admin users）：用户表 + IX-ADM-01 邀请成员（链接邀请流——
+ *  B8-WC 契约卡 2026-10-04：POST /admin/users 不存在（405），邮箱批量邀请分支移除，
+ *  生成链接分享自助加入）+ IX-ADM-02 编辑（角色调整影响提示）/ 停用（danger 输用户名）。
+ *  契约口径：department 恒 '—' 展示位；invited 行真实数据恒无；409 文案按后端 message 透出。 */
 
 /** 角色 → 可见菜单映射（编辑弹窗「将失去/获得」提示口径，对齐 routes.tsx meta） */
 const ROLE_MENUS: Record<string, string[]> = {
@@ -32,8 +34,10 @@ export function UsersTab() {
   const [editing, setEditing] = useState<AdminUser | null>(null)
   const [disabling, setDisabling] = useState<AdminUser | null>(null)
 
-  const { data, isLoading, isError, error, refetch } = useQuery({ queryKey: ['admin', 'users'], queryFn: listUsers })
-  const users = useMemo(() => data?.items ?? [], [data])
+  const { data, isLoading, isError, error, refetch } = useQuery({ queryKey: ['admin', 'users'], queryFn: () => listUsers() })
+  // B8-WA live 化（2026-10-04）：listUsers 改 api.list 归一形态（{data,meta}），
+  // total 落 meta（筛选分页接通后此行换 meta.total，当前全量口径不变）
+  const users = useMemo(() => data?.data ?? [], [data])
 
   // 启用（PATCH status=active；api/01 §5.8 PATCH 字段扩展，软禁用的可逆出口）。
   // 停用走 DisableUserModal → DELETE，不经过本 mutation，故变量只收 { id }
@@ -165,45 +169,18 @@ function countdownText(expiresAt: string): string {
   return `${Math.floor(h / 24)} 天后失效`
 }
 
-/** IX-ADM-01 邀请成员（520px）：双模式 seg（邮箱邀请｜链接邀请，2026-09-28 链接邀请切片——
- *  Dify 式链接自助加入：角色/有效期 → 生成 → 复制分享，成员经 /login?join= 自助加入）。
+/** IX-ADM-01 邀请成员（520px，2026-10-04 B8-WC 契约卡：链接邀请单模式——POST /admin/users
+ *  不存在（405），邮箱批量邀请分支移除；顶部提示走链接流。Dify 式链接自助加入：
+ *  角色/有效期 → 生成 → 复制分享，成员经 /login?join= 自助加入。
  *  2026-10-04 链接绝对化（32 篇 §一）：展示/复制一律 {origin}/login?join={token} 绝对 URL——
- *  origin=管理员访问平台所用地址（局域网 IP/域名/公网域名天然自洽），后端只管 token 不回传 URL。
- *  邮箱分支（chip 化批量 Enter/逗号/批量粘贴解析 + 角色下拉 + 附言 + 已存在账号检测）原样保留。 */
+ *  origin=管理员访问平台所用地址（局域网 IP/域名/公网域名天然自洽），后端只管 token 不回传 URL。 */
 function InviteModal({ onClose }: { onClose: () => void }) {
   const qc = useQueryClient()
-  const [mode, setMode] = useState<'email' | 'link'>('email')
-  const [chips, setChips] = useState<string[]>([])
-  const [draft, setDraft] = useState('')
-  const [role, setRole] = useState('member')
-  const [note, setNote] = useState('')
-  const [existing, setExisting] = useState<{ email: string; name: string }[]>([])
   // 链接邀请态：角色 + 有效期（24h/7d/30d）+ 已生成链接 + 复制反馈（2s 还原）
   const [linkRole, setLinkRole] = useState('member')
   const [expiresHours, setExpiresHours] = useState<24 | 168 | 720>(24)
   const [createdLink, setCreatedLink] = useState<InviteLink | null>(null)
   const [copied, setCopied] = useState(false)
-
-  const addChips = (raw: string) => {
-    const parts = raw.split(/[,;\s]+/).map(s => s.trim()).filter(Boolean)
-    const valid = parts.filter(p => p.includes('@'))
-    setChips(prev => [...prev, ...valid.filter(p => !prev.includes(p))])
-    setDraft('')
-  }
-
-  const mutation = useMutation({
-    mutationFn: () => inviteUsers(chips, role, note.trim() || undefined),
-    onSuccess: res => {
-      setExisting(res.existing)
-      if (res.invited > 0) {
-        toast.success(`已向 ${res.invited} 位成员发送邀请（列表「已邀请」态）`)
-        void qc.invalidateQueries({ queryKey: ['admin', 'users'] })
-      }
-      if (res.invited === 0) setChips([])
-      else setChips([])
-    },
-    onError: e => toast.error(e.message),
-  })
 
   // 已生成的邀请链接（弹窗下方列表：GET 拉取 + DELETE 撤销）
   const linksQuery = useQuery({ queryKey: ['admin', 'invite-links'], queryFn: listInviteLinks })
@@ -245,138 +222,66 @@ function InviteModal({ onClose }: { onClose: () => void }) {
       title="邀请成员"
       width={520}
       footer={
-        mode === 'email' ? (
-          <>
-            <button type="button" className="btn btn-g" onClick={onClose}>取消</button>
-            <button
-              type="button"
-              className="btn btn-p"
-              data-testid="adm-invite-send"
-              disabled={chips.length === 0 || mutation.isPending}
-              onClick={() => mutation.mutate()}
-            >
-              发送邀请（{chips.length}）
-            </button>
-          </>
-        ) : (
-          /* 链接模式 footer 只留「关闭」：生成按钮在表单内，与「发送邀请」互斥 */
-          <button type="button" className="btn btn-g" data-testid="adm-invite-close" onClick={onClose}>关闭</button>
-        )
+        <button type="button" className="btn btn-g" data-testid="adm-invite-close" onClick={onClose}>关闭</button>
       }
     >
-      {/* 双模式切换（生成按钮在表单内，footer 随模式切换） */}
-      <div className="seg mb-4" data-testid="adm-invite-mode">
-        <button type="button" className={`seg-btn ${mode === 'email' ? 'on' : ''}`} data-testid="adm-invite-mode-email" onClick={() => setMode('email')}>邮箱邀请</button>
-        <button type="button" className={`seg-btn ${mode === 'link' ? 'on' : ''}`} data-testid="adm-invite-mode-link" onClick={() => setMode('link')}>链接邀请</button>
+      {/* 邮箱直邀未开放提示（契约卡 ⑥：POST /admin/users 405 → 提示走链接流） */}
+      <div className="al-info alert mb-4" data-testid="adm-invite-email-hint">
+        <div>邮箱直邀暂未开放：请生成邀请链接分享给成员，经链接注册后自助加入并自动归入所选角色。</div>
       </div>
-      {mode === 'email' ? (
-        <>
-          <div className="field">
-            <label className="field-label" htmlFor="adm-invite-emails">邮箱（回车 / 逗号分隔，支持批量粘贴）</label>
-            <div className="flex min-h-[38px] flex-wrap items-center gap-1.5 rounded-xl border border-separator bg-surface px-2 py-1.5">
-              {chips.map(c => (
-                <span key={c} className="badge b-blue" data-testid={`adm-invite-chip-${c}`}>
-                  {c}
-                  <button type="button" aria-label={`移除 ${c}`} onClick={() => setChips(prev => prev.filter(x => x !== c))}>×</button>
-                </span>
-              ))}
-              <input
-                id="adm-invite-emails"
-                data-testid="adm-invite-input"
-                className="min-w-[180px] flex-1 border-0 bg-transparent text-[13px] outline-none"
-                placeholder="name@example.com"
-                value={draft}
-                onChange={e => setDraft(e.target.value)}
-                onKeyDown={e => {
-                  if (e.key === 'Enter' || e.key === ',') { e.preventDefault(); if (draft) addChips(draft) }
-                  if (e.key === 'Backspace' && !draft && chips.length) setChips(prev => prev.slice(0, -1))
-                }}
-                onBlur={() => draft && addChips(draft)}
-                onPaste={e => {
-                  const text = e.clipboardData.getData('text')
-                  if (text && /[,;\s]/.test(text)) { e.preventDefault(); addChips(text) }
-                }}
-              />
-            </div>
+      <div className="field">
+        <label className="field-label" htmlFor="adm-invite-link-role">初始角色（加入即获此角色）</label>
+        <Select id="adm-invite-link-role" data-testid="adm-invite-link-role" className="input" value={linkRole} onChange={e => setLinkRole(e.target.value)}>
+          {GRANTABLE_ROLES.map(k => (
+            <option key={k} value={k}>{ROLE_LABEL[k] ?? k}</option>
+          ))}
+        </Select>
+      </div>
+      <div className="field">
+        <span className="field-label">有效期</span>
+        <div className="seg" data-testid="adm-invite-exp-seg">
+          {([['24 小时', 24], ['7 天', 168], ['30 天', 720]] as [string, 24 | 168 | 720][]).map(([label, hours]) => (
+            <button
+              key={hours}
+              type="button"
+              className={`seg-btn ${expiresHours === hours ? 'on' : ''}`}
+              data-testid={`adm-invite-exp-${hours}`}
+              onClick={() => setExpiresHours(hours)}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      </div>
+      <button
+        type="button"
+        className="btn btn-p w-full"
+        data-testid="adm-invite-link-create"
+        disabled={createLink.isPending}
+        onClick={() => createLink.mutate()}
+      >
+        生成邀请链接
+      </button>
+      {createdLink && (
+        <div className="mt-3 rounded-xl border border-separator bg-surface-2 p-3" data-testid="adm-invite-link-result">
+          <div className="flex items-start gap-2">
+            {/* 绝对 URL（mono 可换行展示，title 存全文） */}
+            <code className="mono min-w-0 flex-1 break-all text-[11px] leading-4 text-label-2" data-testid="adm-invite-link-url" title={inviteUrlOf(createdLink.token)}>
+              {inviteUrlOf(createdLink.token)}
+            </code>
+            <button type="button" className="btn btn-g btn-sm flex-none" data-testid="adm-invite-link-copy" onClick={() => void copyLink()}>
+              {copied ? '已复制 ✓' : '复制链接'}
+            </button>
           </div>
-          <div className="field">
-            <label className="field-label" htmlFor="adm-invite-role">初始角色（默认 member）</label>
-            <Select id="adm-invite-role" data-testid="adm-invite-role" className="input" value={role} onChange={e => setRole(e.target.value)}>
-              {Object.entries(ROLE_LABEL).filter(([k]) => k !== 'super_admin').map(([k, v]) => (
-                <option key={k} value={k}>{v}</option>
-              ))}
-            </Select>
+          <div className="mt-1.5 text-[11px] text-label-3" data-testid="adm-invite-link-countdown">
+            {ROLE_LABEL[createdLink.role] ?? createdLink.role} · {countdownText(createdLink.expires_at)} · 成员经链接注册后自助加入
           </div>
-          <div className="field">
-            <label className="field-label" htmlFor="adm-invite-note">附言（可选）</label>
-            <input id="adm-invite-note" className="input" value={note} onChange={e => setNote(e.target.value)} placeholder="将随邀请邮件展示" />
+          <div className="mt-1 text-[11px] text-label-3" data-testid="adm-invite-link-note">
+            链接对访问平台所用的地址生效——局域网内同事使用同一地址即可打开；公网部署时使用平台域名
           </div>
-          {existing.length > 0 && (
-            <div className="al-warn alert" data-testid="adm-invite-existing">
-              <div>
-                <b>{existing.length} 个账号已存在，已跳过</b>
-                {existing.map(x => <div key={x.email} className="mono text-[11px]">{x.email} · {x.name}</div>)}
-              </div>
-            </div>
-          )}
-        </>
-      ) : (
-        <>
-          <div className="field">
-            <label className="field-label" htmlFor="adm-invite-link-role">初始角色（加入即获此角色）</label>
-            <Select id="adm-invite-link-role" data-testid="adm-invite-link-role" className="input" value={linkRole} onChange={e => setLinkRole(e.target.value)}>
-              {Object.entries(ROLE_LABEL).filter(([k]) => k !== 'super_admin').map(([k, v]) => (
-                <option key={k} value={k}>{v}</option>
-              ))}
-            </Select>
-          </div>
-          <div className="field">
-            <span className="field-label">有效期</span>
-            <div className="seg" data-testid="adm-invite-exp-seg">
-              {([['24 小时', 24], ['7 天', 168], ['30 天', 720]] as [string, 24 | 168 | 720][]).map(([label, hours]) => (
-                <button
-                  key={hours}
-                  type="button"
-                  className={`seg-btn ${expiresHours === hours ? 'on' : ''}`}
-                  data-testid={`adm-invite-exp-${hours}`}
-                  onClick={() => setExpiresHours(hours)}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-          </div>
-          <button
-            type="button"
-            className="btn btn-p w-full"
-            data-testid="adm-invite-link-create"
-            disabled={createLink.isPending}
-            onClick={() => createLink.mutate()}
-          >
-            生成邀请链接
-          </button>
-          {createdLink && (
-            <div className="mt-3 rounded-xl border border-separator bg-surface-2 p-3" data-testid="adm-invite-link-result">
-              <div className="flex items-start gap-2">
-                {/* 绝对 URL（mono 可换行展示，title 存全文） */}
-                <code className="mono min-w-0 flex-1 break-all text-[11px] leading-4 text-label-2" data-testid="adm-invite-link-url" title={inviteUrlOf(createdLink.token)}>
-                  {inviteUrlOf(createdLink.token)}
-                </code>
-                <button type="button" className="btn btn-g btn-sm flex-none" data-testid="adm-invite-link-copy" onClick={() => void copyLink()}>
-                  {copied ? '已复制 ✓' : '复制链接'}
-                </button>
-              </div>
-              <div className="mt-1.5 text-[11px] text-label-3" data-testid="adm-invite-link-countdown">
-                {ROLE_LABEL[createdLink.role] ?? createdLink.role} · {countdownText(createdLink.expires_at)} · 成员经链接注册后自助加入
-              </div>
-              <div className="mt-1 text-[11px] text-label-3" data-testid="adm-invite-link-note">
-                链接对访问平台所用的地址生效——局域网内同事使用同一地址即可打开；公网部署时使用平台域名
-              </div>
-            </div>
-          )}
-        </>
+        </div>
       )}
-      {/* 已生成的邀请链接（弹窗下方，双模式均可见）：链接/角色/倒计时/状态/撤销 */}
+      {/* 已生成的邀请链接：链接/角色/倒计时/状态/撤销 */}
       <div className="hairline-t mt-4 pt-3">
         <div className="flex items-center gap-2">
           <span className="text-xs font-semibold text-label-2">已生成的邀请链接</span>
@@ -412,17 +317,23 @@ function InviteModal({ onClose }: { onClose: () => void }) {
   )
 }
 
-/** IX-ADM-02 编辑（520px）：角色调整影响提示「将失去：…」/「将获得：…」+ 部门。 */
+/** IX-ADM-02 编辑（520px）：改名（display_name，B8-WA PATCH 字段）+ 角色调整影响提示
+ *  「将失去：…」/「将获得：…」。B8-WC 契约卡：角色选择器仅 GRANTABLE_ROLES（guest 409 /
+ *  analyst 422 / super_admin 保留均不下掉自锁）；用户既有角色仍可勾选移除；roles=全量替换
+ *  且后端拒绝空数组（422/3001），前端同规拦截；department 恒 '—' 展示位（无编辑字段）。 */
 function EditUserModal({ user, onClose }: { user: AdminUser; onClose: () => void }) {
   const qc = useQueryClient()
+  const [displayName, setDisplayName] = useState(user.display_name)
   const [roles, setRoles] = useState<string[]>(user.roles)
-  const [department, setDepartment] = useState(user.department)
+
+  // 可勾选角色=可授予白名单 ∪ 用户既有角色（既有 guest 等历史角色可见可移除；super_admin 恒隐藏）
+  const roleOptions = [...new Set([...GRANTABLE_ROLES, ...user.roles])].filter(k => k !== 'super_admin')
 
   const gained = roles.filter(r => !user.roles.includes(r)).flatMap(r => ROLE_MENUS[r] ?? [])
   const lost = user.roles.filter(r => !roles.includes(r)).flatMap(r => ROLE_MENUS[r] ?? [])
 
   const mutation = useMutation({
-    mutationFn: () => updateUser(user.id, { roles, department }),
+    mutationFn: () => updateUser(user.id, { display_name: displayName.trim() || user.display_name, roles }),
     onSuccess: () => {
       toast.success('用户已更新（角色调整即时生效并写审计）')
       void qc.invalidateQueries({ queryKey: ['admin', 'users'] })
@@ -440,7 +351,7 @@ function EditUserModal({ user, onClose }: { user: AdminUser; onClose: () => void
       footer={
         <>
           <button type="button" className="btn btn-g" onClick={onClose}>取消</button>
-          <button type="button" className="btn btn-p" data-testid="adm-edit-save" disabled={mutation.isPending} onClick={() => mutation.mutate()}>保存</button>
+          <button type="button" className="btn btn-p" data-testid="adm-edit-save" disabled={roles.length === 0 || mutation.isPending} onClick={() => mutation.mutate()}>保存</button>
         </>
       }
     >
@@ -449,9 +360,19 @@ function EditUserModal({ user, onClose }: { user: AdminUser; onClose: () => void
         <div className="mono text-xs text-label-2">{user.email}</div>
       </div>
       <div className="field">
+        <label className="field-label" htmlFor="adm-edit-name">姓名（改名即时生效）</label>
+        <input
+          id="adm-edit-name"
+          className="input"
+          data-testid="adm-edit-name"
+          value={displayName}
+          onChange={e => setDisplayName(e.target.value)}
+        />
+      </div>
+      <div className="field">
         <span className="field-label">角色（可多选调整）</span>
         <div className="flex flex-wrap gap-2">
-          {Object.entries(ROLE_LABEL).filter(([k]) => k !== 'super_admin').map(([k, v]) => (
+          {roleOptions.map(k => (
             <label key={k} className="flex cursor-pointer items-center gap-1.5 text-xs">
               <input
                 type="checkbox"
@@ -459,10 +380,15 @@ function EditUserModal({ user, onClose }: { user: AdminUser; onClose: () => void
                 checked={roles.includes(k)}
                 onChange={e => setRoles(prev => (e.target.checked ? [...prev, k] : prev.filter(x => x !== k)))}
               />
-              {v}
+              {ROLE_LABEL[k] ?? k}
             </label>
           ))}
         </div>
+        {roles.length === 0 && (
+          <div className="fhint mt-1 text-[11px] text-orange" data-testid="adm-edit-roles-empty">
+            至少保留一个角色（后端拒绝空数组：422，防自锁全部权限）
+          </div>
+        )}
       </div>
       {(gained.length > 0 || lost.length > 0) && (
         <div className="al-warn alert" data-testid="adm-edit-impact">
@@ -473,21 +399,25 @@ function EditUserModal({ user, onClose }: { user: AdminUser; onClose: () => void
           </div>
         </div>
       )}
+      {/* department 形状差异（契约卡 ①）：后端无存储列恒回 '—'，不提供编辑字段 */}
       <div className="field">
-        <label className="field-label" htmlFor="adm-edit-dept">部门</label>
-        <input id="adm-edit-dept" className="input" value={department} onChange={e => setDepartment(e.target.value)} />
+        <span className="field-label">部门</span>
+        <div className="text-xs text-label-3" data-testid="adm-edit-dept">—（暂未开放，展示位）</div>
       </div>
     </Modal>
   )
 }
 
-/** IX-ADM-02 停用（danger 440px）：影响说明（会话保留、立即下线）+ 输入用户名确认。 */
+/** IX-ADM-02 停用（danger 440px）：影响说明（会话保留、立即下线）+ 输入用户名确认。
+ *  DELETE=200 信封体 {id,status:'disabled'}（软删幂等）；删自己/删超管 409 文案按后端
+ *  message 透出（USER_SELF_DISABLE / SUPER_ADMIN_PROTECTED）。 */
 function DisableUserModal({ user, onClose, onDone }: { user: AdminUser; onClose: () => void; onDone: () => void }) {
   const [name, setName] = useState('')
   const mutation = useMutation({
     mutationFn: () => disableUser(user.id),
-    onSuccess: () => {
-      toast.success(`已停用 ${user.display_name}（软删可追溯，会话保留）`)
+    onSuccess: res => {
+      // 200 信封体断言（契约卡 ④）：status 恒 'disabled'（幂等软删，非 204）
+      toast.success(`已停用 ${user.display_name}（${res.status === 'disabled' ? '软删可追溯' : res.status}，会话保留）`)
       onDone()
     },
     onError: e => toast.error(e.message),

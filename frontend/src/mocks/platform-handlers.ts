@@ -6,8 +6,10 @@ import { http, HttpResponse } from 'msw'
  *  与画板 ix-06-platform / ix-07-extensions 口径一致）。
  *
  *  预登记口径（26 篇 §14 铁律 2，禁止默写为已登记，交付报告 R 清单同步）：
- *  - GET  /memory/l1（列表）——契约仅 GET /memory/l1/{session_id} 单条（§5.5）
- *  - GET  /memory/promotions + POST /memory/promotions/{id}/decision——§5.5 仅 POST /memory/promotions（发起），无审核队列读/决策端点
+ *  - GET  /memory/l1（列表）+ POST /memory/promotions/{id}/decision——已实装（B8-WB 断头补齐
+ *    2026-10-04，services/memory/api/memory.py；B8-WC 契约卡终对齐：l1 裸 DTO {items} 无信封、
+ *    ttl_remaining 降序、Redis 降级 items=[]；decision 信封壳 + X-Tenant-Id/X-User-Id 双 header
+ *    缺失 422、4705 对账缝 409、404 未命中/跨租户）
  *  - GET  /agents/adapter-schemas / POST /agents/connection-test / POST /agents/{id}/start|stop / debug-chat——§5.1 无适配器 Schema、预注册连接测试、启停、调试对话端点
  *  - GET  /sessions?agent=——§5.2 GET /sessions 未登记 agent 过滤参数（26 篇 IX-AGT-02 引用）；无 agent 参时回落 handlers.ts 既有 mock
  *  - POST /tools / GET /tools/{id} / POST /tools/{id}/enable|disable / POST /tools/dry-run / GET /tools/{id}/stats——§5.6 仅有 GET /tools 目录（名称+摘要）与 search
@@ -121,29 +123,31 @@ const REFERENCES: Record<string, { answer_id: string; session_id: string; snippe
   ],
 }
 
+/** L1 会话种子（GET /memory/l1 单条形状=live L1SessionOut 逐字段：blocks=[{key,value,masked}]，
+ *  masked=服务端脱敏标记；handler 侧按 ttl_remaining_s 降序输出，契约卡二 2026-10-04） */
 export const L1_SESSIONS = [
   {
     session_id: 's-2417', title: '3 号机组停电影响推演', ttl_total_s: 1800, ttl_remaining_s: 1122,
     blocks: [
-      { key: 'task_draft', value: '生成停电影响范围报告（草稿 · 第 2 版）' },
-      { key: 'window_sum', value: '已讨论 F12 负荷转移路径与保电名单范围' },
-      { key: 'state', value: 'stage=impact_analysis' },
+      { key: 'task_draft', value: '生成停电影响范围报告（草稿 · 第 2 版）', masked: false },
+      { key: 'window_sum', value: '已讨论 F12 负荷转移路径与保电名单范围', masked: false },
+      { key: 'state', value: 'stage=impact_analysis', masked: false },
     ],
   },
   {
     session_id: 's-2402', title: '馈线 F12 过载归档核验', ttl_total_s: 1800, ttl_remaining_s: 435,
     blocks: [
-      { key: 'task_draft', value: '输出复归操作票（草稿）' },
-      { key: 'window_sum', value: '已比对 F12 电流 91% → 78% 回落趋势' },
-      { key: 'state', value: 'stage=recovery_check' },
+      { key: 'task_draft', value: '输出复归操作票（草稿）', masked: false },
+      { key: 'window_sum', value: '已比对 F12 电流 91% → 78% 回落趋势', masked: false },
+      { key: 'state', value: 'stage=recovery_check', masked: false },
     ],
   },
   {
     session_id: 's-2398', title: '保电名单会签', ttl_total_s: 1800, ttl_remaining_s: 1563,
     blocks: [
-      { key: 'user_pref', value: '输出偏好：条款依据 + 表格' },
+      { key: 'user_pref', value: '输出偏好：条款依据 + 表格', masked: false },
       { key: 'contact', value: '张** · 138*****5678', masked: true },
-      { key: 'state', value: 'stage=counter_sign' },
+      { key: 'state', value: 'stage=counter_sign', masked: false },
     ],
   },
 ]
@@ -635,8 +639,17 @@ const SYS_LOGS: {
 
 export const platformHandlers = [
   // ---------- §5.5 memory ----------
-  // R 预登记：GET /memory/l1 列表（仅供分层容量卡计数；视图层已改契约单条，见下——F8⑤/B:A-11）
-  http.get('*/api/v1/memory/l1', () => ok({ items: L1_SESSIONS })),
+  // ★ GET /memory/l1 列表（B8-WB 实装、B8-WC 契约卡终对齐 2026-10-04）：**裸 DTO 无信封**
+  //   （live L1SessionListOut {items} 直返）；ttl_remaining_s 降序；?limit= 截断（live ge=1 le=100
+  //   默认 50）；Redis 降级 → items=[]（空态不阻塞页面）
+  http.get('*/api/v1/memory/l1', ({ request }) => {
+    const limitRaw = Number(new URL(request.url).searchParams.get('limit') ?? 50)
+    const limit = Number.isFinite(limitRaw) && limitRaw >= 1 ? Math.min(limitRaw, 100) : 50
+    const items = [...L1_SESSIONS]
+      .sort((a, b) => b.ttl_remaining_s - a.ttl_remaining_s)
+      .slice(0, limit)
+    return HttpResponse.json({ items })
+  }),
   // F8⑤ 对位：GET /memory/l1/{session_id}（契约单条 §5.5；由 L1_SESSIONS 种子转 contract
   // 形态——blocks dict / window 近期消息；未登记会话 404 与 live 行为一致）
   http.get('*/api/v1/memory/l1/:sid', ({ params }) => {
@@ -674,13 +687,28 @@ export const platformHandlers = [
     tl.unshift({ seq: tl.length + 1, type: 'invalidated', label: `人工失效标记 · 理由：${body.reason}`, at: fact.updated_at, danger: true })
     return ok({ id: fact.id, status: 'invalidated' }, 202)
   }),
-  // R 预登记：审核队列读 + 决策（§5.5 仅登记 POST /memory/promotions 发起；IX-MEM-01 需要队列与决策）
+  // GET /memory/promotions（R 预登记审核队列读，mock 供 IX-MEM-01）+ ★ POST decision
+  // （B8-WB 实装、B8-WC 契约卡终对齐 2026-10-04=services/memory/api/memory.py
+  // decide_record_promotion 投影）：**信封壳 {code,message,data}**；X-Tenant-Id 与 X-User-Id
+  // 双 header 缺失/空 → 422；reason ≤500；未命中/跨租户 → 404（不泄露存在性）；升级单无审批
+  // 工单（4705 对账缝）→ 409（mock 以 PM-X 前缀演示，不入队列种子）；data={pm_id,action,fact_id,fact_layer}
   http.get('*/api/v1/memory/promotions', () => ok({ items: PROMOTIONS })),
   http.post('*/api/v1/memory/promotions/:id/decision', async ({ params, request }) => {
+    // 双 header 门禁（终审须可归因 + 租户硬隔离；缺失 422——live 为 FastAPI 422，码取 3001 同语义）
+    const tenantId = request.headers.get('X-Tenant-Id')
+    const userId = request.headers.get('X-User-Id')
+    if (!tenantId?.trim()) return err(3001, 'X-Tenant-Id 缺失（records 链路租户头必带）', 422)
+    if (!userId?.trim()) return err(3001, 'X-User-Id 缺失或非法（终审决策须可归因）', 422)
+    const body = (await request.json()) as { action?: 'approve' | 'reject'; reason?: string }
+    if (body.action !== 'approve' && body.action !== 'reject') return err(3001, 'action 须为 approve / reject', 422)
+    if (body.reason !== undefined && body.reason.length > 500) return err(3001, 'reason 长度须 ≤500', 422)
+    if (body.action === 'reject' && !body.reason?.trim()) return err(3001, '拒绝原因必填', 422)
+    // 4705 对账缝（409）：升级单存在但无审批工单可对账（演示前缀，不入 PROMOTIONS 种子/队列）
+    if (String(params.id).startsWith('PM-X')) {
+      return err(4705, '4705 PROMOTION_NO_TICKET: 升级单无待对账审批工单（对账缝）', 409)
+    }
     const pm = PROMOTIONS.find(p => p.id === String(params.id))
-    if (!pm) return err(3001, '升红单不存在', 404)
-    const body = (await request.json()) as { action: 'approve' | 'reject'; reason?: string }
-    if (body.action === 'reject' && !body.reason?.trim()) return err(3001, '拒绝原因必填', 400)
+    if (!pm) return err(404, '升红单不存在（未命中或跨租户）', 404)
     pm.status = body.action === 'approve' ? 'approved' : 'rejected'
     if (body.action === 'reject') pm.reject_reason = body.reason
     const fact = FACTS.find(f => f.id === pm.fact_id)
@@ -697,7 +725,8 @@ export const platformHandlers = [
       const tl = factTimeline(fact.id)
       tl.unshift({ seq: tl.length + 1, type: 'created', label: `升级被拒（${pm.id}）：${body.reason}`, at: now, danger: true })
     }
-    return ok({ pm_id: pm.id, action: body.action, fact_id: pm.fact_id, fact_layer: fact?.layer, status: pm.status })
+    // data 形状=live PromotionDecisionOut 逐字段（fact_layer='L3'|'L2'）
+    return ok({ pm_id: pm.id, action: body.action, fact_id: pm.fact_id, fact_layer: fact?.layer === 'L3' ? 'L3' : 'L2' })
   }),
 
   // ---------- §5.1 agents ----------

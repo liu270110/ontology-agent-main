@@ -166,9 +166,9 @@ export interface KbCollectionOut {
 }
 
 /** POST /kb/collections —— 创建知识库集合（live 实测 201 裸 DTO；同名 409「同名知识库已存在」）。
- *  GET /kb/collections 列表端点已落地（R53 补齐，2026-10-03 kb 摄取加固批，{code,message,data}
- *  强信封）——ensureCollectionId 的 localStorage 缓存仍保留（上传链路少一次往返），迁移到
- *  列表端点随后续批次。 */
+ *  GET /kb/collections 列表端点已落地（R53 补齐，2026-10-03 kb 摄取加固批；openapi 实测
+ *  2026-10-05 为 {data,meta} 强信封——旧 {code,message,data} 信封废止）——ensureCollectionId
+ *  已切「先 GET 按名查重再 POST」（接真批 2026-10-05），localStorage 缓存降级保留。 */
 export function createCollection(body: { name: string; description?: string; embedding_model?: string }) {
   return postKbRaw<KbCollectionOut>('/kb/collections', body)
 }
@@ -203,10 +203,24 @@ function clearCollectionId(name: string) {
   }
 }
 
-/** 目标知识库名 → collection_id：缓存命中直接用；未命中 POST /kb/collections 创建并缓存。 */
+/** 目标知识库名 → collection_id（接真批 2026-10-05，依据 .zcode/oa_openapi GET /kb/collections）：
+ *  ① GET /kb/collections?page_size=200 按名查重（R53 列表端点 live 已实装，{data,meta} 强信封
+ *     → api.list 归一；命中即直接复用既有集合，不再依赖本地缓存单源）；
+ *  ② 列表请求失败（网络/降级）→ 回落 localStorage 缓存（降级路径保留）；
+ *  ③ 仍未命中 → POST /kb/collections 创建并回填缓存（同名 409 交调用方行内错误提示）。 */
 export async function ensureCollectionId(name: string): Promise<string> {
-  const hit = cachedCollectionId(name)
-  if (hit) return hit
+  try {
+    const list = await api.list<KbCollectionOut>('/kb/collections?page_size=200')
+    const hit = list.data.find(c => c.name === name)
+    if (hit) {
+      cacheCollectionId(name, hit.id)
+      return hit.id
+    }
+  } catch {
+    /* 列表查询失败不阻塞上传：降级走缓存 → 创建 */
+  }
+  const cached = cachedCollectionId(name)
+  if (cached) return cached
   const col = await createCollection({ name })
   cacheCollectionId(name, col.id)
   return col.id

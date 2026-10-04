@@ -243,8 +243,13 @@ describe('S3 知识域', () => {
   }, 30_000)
 
   it('⑥ S8 上传 collection 解析失败（409 同名知识库）→ 横幅映射文案 + 行内失败', async () => {
-    // live 缺口（R53）：后端无 GET /kb/collections 列表，409 时前端拿不到既有集合 id → 须报错可重试
+    // 接真批 2026-10-05：ensureCollectionId 已切「先 GET 查重再 POST」（R53 列表端点 live 已实装）——
+    // 本用例模拟并发创建竞态：查重时同名集合尚不存在（GET 空列表），POST 创建时同名 409
+    // → 仍须报错可重试（旧用例前提「后端无 GET 列表端点」已废止）
     server.use(
+      http.get('*/api/v1/kb/collections', () =>
+        HttpResponse.json({ data: [], meta: { page: 1, page_size: 200, total: 0 } }),
+      ),
       http.post('*/api/v1/kb/collections', () =>
         HttpResponse.json({ code: 409, message: '同名知识库已存在', data: null }, { status: 409 }),
       ),

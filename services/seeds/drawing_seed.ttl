@@ -1,0 +1,177 @@
+# services/seeds/drawing_seed.ttl —— 电力图纸本体种子 v0（A4 原子能力交付）
+#
+# 范围（docs/Agent/09-设计图纸能力达标分析与原子能力扩展方案.md §G4 收窄裁决）：「电力图纸本体 v0」
+# ——电气一次/二次图 + GB/T 制图规范的通用图元词汇（图纸/图幅/零件/材料/尺寸标注/技术要求/
+# 图纸版本 + 标题栏·BOM 确定性字段），与电力停电分析 wedge（pw: 种子）闭环；不做通用机械全谱。
+# 本种子 = A4「图纸本体 schema+种子词典」：v0 只含对象层 + SHACL 门禁（R2 路由）；
+# 行为/事件/R3 规则类留待图纸 C1（图纸理解）/C2（图纸生成）批次按 OB2 补齐。
+#
+# OB2 建模法（平台宪法 1）：对象（第一性）—行为（后续批次）—规则（R001~R005，全部 R2 shacl
+# 路由=确定性约束，本体核心设计 §2.3）。权威依据：docs/ontology/本体核心设计.md（§2 OB2 落库、
+# §2.3 三路由判定表、§4.1 IRI 与命名空间规范、§5.2 SHACL 门禁）。
+#
+# 命名空间（§4.1 同款形态）：drw: = 本体默认命名空间 http://ontology-agent.local/o/{tenant}/{slug}#
+#（t1/drawing 为种子租户占位）。自持命名空间：与 pw:/ob2:/task: 互不污染（§2 平台级命名空间
+#「分命名空间隔离、互不污染」纪律）。
+#
+# 命名借鉴声明（09 篇 §11.3 R5「电力本体锚定 CIM 词汇」）：类 PascalCase、属性 camelCase 的命名
+# 习惯借鉴 IEC CIM（IEC 61970/61968，如 IdentifiedObject.name 属性风格、Breaker 类风格），但**未
+# 直接导入 CIM 词汇**——全图零 cim: 命名空间引用，仅借鉴词形习惯；电力设备类与 CIM 的语义对齐
+# （断路器/母线/量测等）留待后续版本。
+#
+# 脱敏声明（docs/standards/02 §11 推送远程脱敏）：词汇表为通用电力制图术语，不含任何客户/项目
+# 真实标识；图号、牌号等示例值一律 SAMPLE-* 占位（真实样例经消费方环境注入）。
+# profile=rl（平台默认档）：公理全部落在 RL 封闭集；SHACL 全部为 R2 算子封闭集内构造
+#（datatype/nodeKind/pattern/in/minCount/maxCount/minInclusive + path/property 组合子，§2.3）。
+
+@prefix ob2:  <https://ontology-agent.dev/ns/ob2#> .
+@prefix drw:  <http://ontology-agent.local/o/t1/drawing#> .
+@prefix sh:   <http://www.w3.org/ns/shacl#> .
+@prefix owl:  <http://www.w3.org/2002/07/owl#> .
+@prefix rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd:  <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+
+# ============================================================ 本体头（profile/版本声明）
+
+<http://ontology-agent.local/o/t1/drawing> a owl:Ontology ;
+    rdfs:label "电力图纸本体种子 v0"@zh ;
+    skos:definition "A4 电力图纸本体 v0：图纸/图幅/零件/材料/尺寸/技术要求/版本 对象层 + SHACL 门禁（G4 收窄：电气一次/二次图 + GB/T 制图规范）"@zh ;
+    ob2:profile "rl" ;
+    owl:versionInfo "v1" .
+
+# ============================================================ 平台顶类词汇（ob2:，与 power_seed 同源最小集）
+# 仅取本种子用到的顶类与标注属性（对齐/投影链路按 IRI 引用平台词表，重声明保持单图自持可解析）。
+
+ob2:Object a owl:Class ; rdfs:label "对象"@zh .
+ob2:Rule a owl:Class ; rdfs:label "规则"@zh .
+ob2:profile a owl:DatatypeProperty ; rdfs:label "推理 profile 声明（rl|el|dl）"@zh .
+ob2:route a owl:DatatypeProperty ; rdfs:domain ob2:Rule ;
+    rdfs:label "路由标注（初始值由 lint 判定写入，§2.3）"@zh .
+
+# ============================================================ 类（对象层；7 类 = A4 交付清单）
+# 层级只收相对稳定的图纸领域对象（§2.1），不建易变流程。
+
+drw:Drawing a owl:Class ; rdfs:subClassOf ob2:Object ; rdfs:label "图纸"@zh ;
+    skos:definition "工程图纸档案：一张图纸文件（标题栏 + 图幅 + 零件表 + 技术要求的载体）"@zh .
+drw:DrawingSheet a owl:Class ; rdfs:subClassOf ob2:Object ; rdfs:label "图幅"@zh ;
+    skos:definition "图纸的单幅图页（GB/T 14689 幅面与比例的承载单位）"@zh .
+drw:Part a owl:Class ; rdfs:subClassOf ob2:Object ; rdfs:label "零件"@zh ;
+    skos:definition "图中表达的零部件/器材（BOM 表项：材料、数量、单重）"@zh .
+drw:Material a owl:Class ; rdfs:subClassOf ob2:Object ; rdfs:label "材料"@zh ;
+    skos:definition "材料牌号词条（受控词表；v0 开放字符串，牌号词表固化待 C1 批次裁决）"@zh .
+drw:Dimension a owl:Class ; rdfs:subClassOf ob2:Object ; rdfs:label "尺寸标注"@zh ;
+    skos:definition "图上几何尺寸标注（数值 + 单位，GB/T 4458.4 尺寸注法）"@zh .
+drw:TechRequirement a owl:Class ; rdfs:subClassOf ob2:Object ; rdfs:label "技术要求"@zh ;
+    skos:definition "图纸技术要求条目（施工/验收/试验等文字性约束）"@zh .
+drw:DrawingRevision a owl:Class ; rdfs:subClassOf ob2:Object ; rdfs:label "图纸版本"@zh ;
+    skos:definition "图纸版本记录：版本链单链推进（previousRevision 至多一个前驱，禁多父分叉）"@zh .
+
+# ============================================================ 数据属性（标题栏/BOM/签署确定性字段，14 条）
+# 命名借鉴 IEC CIM camelCase 属性风格（见文件头借鉴声明）。
+
+# ---- Drawing 标题栏字段（GB/T 10609.1 标题栏）
+drw:drawingNo a owl:DatatypeProperty ; rdfs:domain drw:Drawing ; rdfs:range xsd:string ;
+    rdfs:label "图号"@zh .        # 图纸唯一标识；格式契约随项目词表定制（v0 不锁 pattern，防真实图号入种子）
+drw:drawingName a owl:DatatypeProperty ; rdfs:domain drw:Drawing ; rdfs:range xsd:string ;
+    rdfs:label "图名"@zh .
+drw:drawingType a owl:DatatypeProperty ; rdfs:domain drw:Drawing ; rdfs:range xsd:string ;
+    rdfs:label "图纸类型"@zh .    # 电气一次/二次等分类词表待 C1 批次裁决（G4 收窄落点）
+# ---- DrawingSheet 图幅字段
+drw:sheetSize a owl:DatatypeProperty ; rdfs:domain drw:DrawingSheet ; rdfs:range xsd:string ;
+    rdfs:label "幅面"@zh .        # GB/T 14689 幅面系列（R002 受控词表 A0~A4）
+drw:scale a owl:DatatypeProperty ; rdfs:domain drw:DrawingSheet ; rdfs:range xsd:string ;
+    rdfs:label "比例"@zh .        # 如 1:50（v0 开放字符串：含「无」等图例例外）
+# ---- Part / Material BOM 字段
+drw:quantity a owl:DatatypeProperty ; rdfs:domain drw:Part ; rdfs:range xsd:integer ;
+    rdfs:label "数量"@zh .
+drw:weight a owl:DatatypeProperty ; rdfs:domain drw:Part ; rdfs:range xsd:decimal ;
+    rdfs:label "重量"@zh .      # 单位 kg（标注属性，不入 label 保对齐纯术语）
+drw:materialGrade a owl:DatatypeProperty ; rdfs:domain drw:Material ; rdfs:range xsd:string ;
+    rdfs:label "材料牌号"@zh .
+# ---- Dimension 尺寸字段
+drw:dimensionValue a owl:DatatypeProperty ; rdfs:domain drw:Dimension ; rdfs:range xsd:decimal ;
+    rdfs:label "尺寸值"@zh .
+drw:dimensionUnit a owl:DatatypeProperty ; rdfs:domain drw:Dimension ; rdfs:range xsd:string ;
+    rdfs:label "尺寸单位"@zh .    # R005 受控词表（GB/T 4458.4：mm 为默认注出单位）
+# ---- TechRequirement
+drw:requirementText a owl:DatatypeProperty ; rdfs:domain drw:TechRequirement ; rdfs:range xsd:string ;
+    rdfs:label "要求文本"@zh .
+# ---- DrawingRevision 版本签署字段（GB/T 10609.1 签署区）
+drw:revisionNo a owl:DatatypeProperty ; rdfs:domain drw:DrawingRevision ; rdfs:range xsd:string ;
+    rdfs:label "版本号"@zh .
+drw:designedBy a owl:DatatypeProperty ; rdfs:domain drw:DrawingRevision ; rdfs:range xsd:string ;
+    rdfs:label "设计"@zh .
+drw:designDate a owl:DatatypeProperty ; rdfs:domain drw:DrawingRevision ; rdfs:range xsd:date ;
+    rdfs:label "设计日期"@zh .
+drw:checkedBy a owl:DatatypeProperty ; rdfs:domain drw:DrawingRevision ; rdfs:range xsd:string ;
+    rdfs:label "审核"@zh .
+
+# ============================================================ 对象属性（结构关系，8 条）
+
+drw:hasSheet a owl:ObjectProperty ; rdfs:domain drw:Drawing ; rdfs:range drw:DrawingSheet ;
+    rdfs:label "图幅组成"@zh .
+drw:hasRevision a owl:ObjectProperty ; rdfs:domain drw:Drawing ; rdfs:range drw:DrawingRevision ;
+    rdfs:label "版本链"@zh .
+drw:hasPart a owl:ObjectProperty ; rdfs:domain drw:Drawing ; rdfs:range drw:Part ;
+    rdfs:label "零件表项"@zh .
+drw:hasTechRequirement a owl:ObjectProperty ; rdfs:domain drw:Drawing ; rdfs:range drw:TechRequirement ;
+    rdfs:label "技术要求条目"@zh .
+drw:ofMaterial a owl:ObjectProperty ; rdfs:domain drw:Part ; rdfs:range drw:Material ;
+    rdfs:label "材料"@zh .
+drw:hasDimension a owl:ObjectProperty ; rdfs:domain drw:Part ; rdfs:range drw:Dimension ;
+    rdfs:label "尺寸标注"@zh .
+drw:revisionOf a owl:ObjectProperty ; rdfs:domain drw:DrawingRevision ; rdfs:range drw:Drawing ;
+    rdfs:label "所属图纸（版本→图纸）"@zh .
+drw:previousRevision a owl:ObjectProperty ; rdfs:domain drw:DrawingRevision ; rdfs:range drw:DrawingRevision ;
+    rdfs:label "前一版本（单链前驱）"@zh .
+
+# ============================================================ 规则（全部 R2 shacl 路由，§2.3 确定性约束）
+
+# R2 shacl：图纸标识必填（A4 门禁主例：Drawing 必填图号/图名 + 至少一图幅 + 版本链头必挂）
+drw:R001 a ob2:Rule, sh:NodeShape ; rdfs:label "图纸标识必填约束"@zh ; ob2:route "shacl" ;
+    sh:targetClass drw:Drawing ;
+    sh:property [
+        sh:path drw:drawingNo ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        sh:path drw:drawingName ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ;
+    ] ;
+    sh:property [ sh:path drw:hasSheet ; sh:minCount 1 ] ;
+    sh:property [ sh:path drw:hasRevision ; sh:minCount 1 ] .
+
+# R2 shacl：图幅受控词表（GB/T 14689 幅面系列 A0~A4；加长幅面留待词表扩充）
+drw:R002 a ob2:Rule, sh:NodeShape ; rdfs:label "图幅幅面受控词表约束"@zh ; ob2:route "shacl" ;
+    sh:targetClass drw:DrawingSheet ;
+    sh:property [
+        sh:path drw:sheetSize ; sh:datatype xsd:string ;
+        sh:in ( "A0" "A1" "A2" "A3" "A4" ) ; sh:minCount 1 ; sh:maxCount 1 ;
+    ] ;
+    sh:property [ sh:path drw:scale ; sh:datatype xsd:string ; sh:maxCount 1 ] .
+
+# R2 shacl：版本链约束——每版本必挂唯一图纸、版本号唯一、前驱至多一个（单链成链，禁多父分叉）
+drw:R003 a ob2:Rule, sh:NodeShape ; rdfs:label "图纸版本链约束"@zh ; ob2:route "shacl" ;
+    sh:targetClass drw:DrawingRevision ;
+    sh:property [ sh:path drw:revisionNo ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ] ;
+    sh:property [ sh:path drw:revisionOf ; sh:nodeKind sh:IRI ; sh:minCount 1 ; sh:maxCount 1 ] ;
+    sh:property [ sh:path drw:previousRevision ; sh:nodeKind sh:IRI ; sh:maxCount 1 ] ;
+    sh:property [ sh:path drw:designedBy ; sh:datatype xsd:string ; sh:maxCount 1 ] ;
+    sh:property [ sh:path drw:designDate ; sh:datatype xsd:date ; sh:maxCount 1 ] ;
+    sh:property [ sh:path drw:checkedBy ; sh:datatype xsd:string ; sh:maxCount 1 ] .
+
+# R2 shacl：零件表项约束（BOM 行：数量≥1、重量非负形态、材料必挂唯一牌号词条）
+drw:R004 a ob2:Rule, sh:NodeShape ; rdfs:label "零件表项约束"@zh ; ob2:route "shacl" ;
+    sh:targetClass drw:Part ;
+    sh:property [ sh:path drw:quantity ; sh:datatype xsd:integer ; sh:minInclusive 1 ; sh:minCount 1 ; sh:maxCount 1 ] ;
+    sh:property [ sh:path drw:weight ; sh:datatype xsd:decimal ; sh:maxCount 1 ] ;
+    sh:property [ sh:path drw:ofMaterial ; sh:nodeKind sh:IRI ; sh:minCount 1 ; sh:maxCount 1 ] .
+
+# R2 shacl：尺寸标注约束（数值必填 + 单位受控词表）
+drw:R005 a ob2:Rule, sh:NodeShape ; rdfs:label "尺寸标注约束"@zh ; ob2:route "shacl" ;
+    sh:targetClass drw:Dimension ;
+    sh:property [ sh:path drw:dimensionValue ; sh:datatype xsd:decimal ; sh:minCount 1 ; sh:maxCount 1 ] ;
+    sh:property [
+        sh:path drw:dimensionUnit ; sh:datatype xsd:string ;
+        sh:in ( "mm" "m" "°" ) ; sh:minCount 1 ; sh:maxCount 1 ;
+    ] .

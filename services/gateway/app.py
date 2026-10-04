@@ -77,9 +77,9 @@ from services.platform.deps import dispose_gateways, get_engine, get_redis
 from services.platform.errors import error_response
 from services.plugin.api.plugins import router as plugin_router
 from services.review.api.admin import router as review_admin_router
-from services.tools.api.tools import router as tools_market_router  # S1 工具集市（docs/Agent/14 §3）
 from services.rsi.api.capabilities import router as orsi_router  # M4.6-S3：ORSI 注册表三端点（docs/Agent/14 §3）
 from services.skills.api.skills import router as skills_router  # S2 技能集市四端点（docs/Agent/14 §3）
+from services.tools.api.tools import router as tools_market_router  # S1 工具集市（docs/Agent/14 §3）
 from services.writeback.api.ledger import router as writeback_ledger_router
 from services.writeback.business.relay import LoggingEventPublisher, OutboxRelay
 from services.writeback.data.repo_impl.writeback_repo import PgOutboxPoller
@@ -318,7 +318,16 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     worker_task: asyncio.Task | None = None
     if getattr(s, "task_worker_enabled", True):
         try:
+            import inspect as _inspect
+
             from services.agent.api.control import get_or_build_estop_store  # M4.5-A：estop 前检（§1.2 生效点①）
+
+            _hub = app.state.sse_hub  # 2026-10-05：worker 事件实时转发会话 SSE（async 202 路径唯一实时通道）
+
+            async def _worker_event_publisher(session_id, name, data):  # noqa: ANN001
+                res = _hub.publish(session_id, name, data)  # 进程内=同步二元组 / Redis=协程
+                if _inspect.isawaitable(res):
+                    await res
 
             worker = TaskRunWorker(
                 uow=app.state.uow,
@@ -327,6 +336,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
                 policy=RunRetryPolicy(),
                 poll_interval_s=s.task_worker_poll_interval_s,
                 estop_store=get_or_build_estop_store(app.state, redis=get_redis(s)),  # 与 API/编排器同一单例
+                event_publisher=_worker_event_publisher,
             )
             worker_task = asyncio.create_task(worker.run(worker_stop))
             logger.info("task worker started: poll_interval=%ss", s.task_worker_poll_interval_s)

@@ -21,9 +21,11 @@ from pydantic import BaseModel, ConfigDict, Field
 
 
 class ChatEventName(StrEnum):
-    """主干波 11 事件（02 §5 波次列 M3 主干行，一个不多一个不少；wire 名=AG-UI 大写）。
+    """SSE 事件名单一事实源（wire 名=AG-UI 大写）。
 
-    M4+ 扩展波（STATE_*/MESSAGES_SNAPSHOT/GATE_VERDICT）不在此登记——M3 网关不外发，
+    主干波 11 事件（02 §5 波次列 M3 主干行）+ 群聊路由决策（27 篇 X15）+
+    执行结构波六事件（40 篇 §4.1「执行结构波」，2026-10-04 R2 登记；契约权威=api/02 §3）。
+    其余 M4+ 扩展波（STATE_*/MESSAGES_SNAPSHOT/GATE_VERDICT）不在此登记——
     前端对未知 event 名一律忽略（02 §5 事件分波裁决，协议向前兼容）。
     """
 
@@ -42,6 +44,13 @@ class ChatEventName(StrEnum):
     # M4.5-A 运行中输入面回执（docs/Agent/12-M4.5运行中输入面与模型韧性设计（主仓本地）§1.4；
     # 用户可见回执：inbox 提交受理即发布，消费面后续批；前端对未知事件名静默忽略已核实）
     INBOX_SPLICED = "INBOX_SPLICED"
+    # ── 执行结构波（40 篇 §4.1；payload schema=40 篇 §4.2，转译/落库纪律=exec_events.py）──
+    PLAN_UPDATED = "PLAN_UPDATED"  # 计划整表快照（last-wins；发射点=规划 R4）
+    SUBRUN_STARTED = "SUBRUN_STARTED"  # 子 run 生命周期（发射点=spawn，40 篇 R2）
+    SUBRUN_UPDATED = "SUBRUN_UPDATED"  # 子 run 心跳（纯实时不落库；R5 可缓发）
+    SUBRUN_FINISHED = "SUBRUN_FINISHED"  # 子 run 终态（含 rejected_artifact，40 篇 §3.2）
+    WORKFLOW_NODE_STARTED = "WORKFLOW_NODE_STARTED"  # 工作流节点开始（X16 才有发射点，R7）
+    WORKFLOW_NODE_FINISHED = "WORKFLOW_NODE_FINISHED"  # 工作流节点终态（X16 才有发射点，R7）
 
 
 class ChatEvent(BaseModel):
@@ -49,6 +58,8 @@ class ChatEvent(BaseModel):
 
     data 载荷形状按 02 §5 事件表逐事件登记（见 chat_orchestrator 各发布点注释）；
     一律 JSON 可序列化标量/容器（standards/01 §2.4）。
+    trace_id（40 篇 §4.2 公共字段，R2 增补、可选向后兼容）：经 :func:`wire_data`
+    只补缺合并进 wire payload 与 task_events.data（宪法 5 可追溯 + 40 篇 §7.3 trace 瀑布）。
     """
 
     model_config = ConfigDict(frozen=True)
@@ -56,6 +67,20 @@ class ChatEvent(BaseModel):
     name: ChatEventName
     data: dict[str, Any] = Field(default_factory=dict)
     run_id: UUID | None = None  # 贯穿标识（审计对账用，不进 wire data）
+    trace_id: str | None = None  # C2 贯穿（40 篇 §4.2；None=不进 wire data，主干事件行为不变）
+
+
+def wire_data(event: ChatEvent) -> dict[str, Any]:
+    """事件外发/落库统一载荷（40 篇 §4.2）：data 浅拷贝 + trace_id 只补缺（不覆盖）。
+
+    SSE 发布（sessions._chat_stream_response）与 task_events 双写（双写钩子/task_worker
+    _drain_orchestrator）同源取本函数——wire payload 与回放行 data 保持一致；未设
+    trace_id 的既有主干事件行为不变（向后兼容）。
+    """
+    data = dict(event.data)
+    if event.trace_id and "trace_id" not in data:
+        data["trace_id"] = event.trace_id
+    return data
 
 
 class ChatCommand(BaseModel):
@@ -71,6 +96,7 @@ class ChatCommand(BaseModel):
     agent_id: UUID | None = None
     message: str  # 本条用户消息（已落 PG messages）
     trace_id: str  # C2 贯穿（内核拒收空 trace_id）
+    task_type: str = "chat"  # task.type 透传（40 篇 §4.2：RUN_STARTED.task_type；chat|workflow_run|…，缺省 chat）
     scopes: tuple[str, ...] = ("session:chat",)  # 主体授权面（B1 R3 唯一依据）
     adapter: str = "builtin"  # 适配器路由键（builtin | claude，Agent 服务设计 §3.2）
     member_system_prompt: str | None = None  # 群聊成员人格（27 篇；单 agent 会话 None）

@@ -41,9 +41,10 @@ from services.agent.api.schemas.session import (
     message_from_domain,
     to_domain,
 )
-from services.agent.business.chat_events import ChatCommand, ChatOutcome
+from services.agent.business.chat_events import ChatCommand, ChatEvent, ChatOutcome, wire_data
 from services.agent.business.chat_group import stream_group_turn
 from services.agent.business.chat_orchestrator import build_chat_orchestrator
+from services.agent.business.exec_events import EXEC_PERSISTED_EVENTS
 from services.agent.domain.model.agent import AgentError
 from services.agent.domain.model.kernel_context import KernelEvent
 from services.agent.domain.model.session import MemberRole, Message, RoutingMode, SessionError
@@ -181,6 +182,36 @@ def build_llm_event_emitter_factory(
         return emit
 
     return factory
+def build_exec_event_dual_write(
+    uow: AsyncUnitOfWork, tenant_id: uuid.UUID
+) -> Callable[[uuid.UUID, ChatEvent], Awaitable[None]]:
+    """40 篇 R2 双写钩子工厂（组合根，2026-10-04）：SSE 内联主路径执行结构事件 → task_events。
+
+    现网用户聊天主路径事件只 hub.publish 不落 task_events（落库仅 task_worker 路径）——
+    本钩子为执行结构波（40 篇 §4.1）补回放根（40 篇 §4.5：否则「断线重连回放可重建」
+    验收不成立）。纪律：
+    - SUBRUN_UPDATED 设计为纯实时心跳**不落库**（EXEC_PERSISTED_EVENTS 之外，40 篇 §4.1
+      控回放窗口挤占），钩子内守卫直接跳过（含 SUBRUN_UPDATED 之外的任何非回放根事件）；
+    - 落库走 R11 串行化+SAVEPOINT 重试（append_event replay_root=True，回放根不可吞——
+      重试耗尽上抛中断本连接流，运行侧经取消清单收敛，防半截回放）；
+    - data=wire_data(event)（trace_id 只补缺，wire payload 与回放行同源一致）；
+    - kernel.* 账本投影（build_kernel_ledger_sink_factory）与本钩子并存不互替：前者=
+      内核审计流（event_type=kernel.*，全部锚点），后者=回放协议流（event_type=事件名，
+      仅执行结构事件，40 篇 §3.1）。
+    本函数是编排器事件流（业务层）与 UoW 之间的注入边界——同 build_kernel_ledger_sink_factory。
+    """
+
+    async def dual_write(task_id: uuid.UUID, event: ChatEvent) -> None:
+        if event.name not in EXEC_PERSISTED_EVENTS:
+            return  # 非回放根事件（主干波/SUBRUN_UPDATED 心跳）不落库
+        async with uow.for_tenant(tenant_id) as tx:
+            await tx.tasks.append_event(
+                task_id,
+                TaskEvent(task_id=task_id, event_type=event.name.value, data=wire_data(event)),
+                replay_root=True,
+            )
+
+    return dual_write
 
 
 def get_or_build_chat_orchestrator(state: Any) -> Any:
@@ -538,6 +569,7 @@ async def send_message(
         message=body.content,
         trace_id=getattr(request.state, "trace_id", "") or f"req-{run.id}",
         adapter=body.adapter,
+        task_type=task.type,  # 40 篇 §4.2：RUN_STARTED.task_type 透传（chat 路径恒 chat）
     )
     return _chat_stream_response(
         request,
@@ -588,6 +620,7 @@ def _chat_stream_response(
     orchestrator = _get_chat_orchestrator(request)
     uow = request.app.state.uow
     settings = request.app.state.settings
+    dual_write = build_exec_event_dual_write(uow, command.tenant_id)  # 40 篇 R2 执行结构回放根钩子
 
     async def count_assistant() -> int:
         async with uow.for_tenant(command.tenant_id) as tx:
@@ -606,9 +639,13 @@ def _chat_stream_response(
         else:
             source = orchestrator.stream_chat(command)
         async for event in source:
+            data = wire_data(event)  # trace_id 只补缺：wire payload 与回放行 data 同源（40 篇 §4.2）
+            # 先落库后推送（04 §2）：执行结构事件经 R11 串行化+重试落 task_events（回放根），
+            # 非回放根事件钩子内 no-op；重试耗尽上抛 → 本流中断 → 运行侧取消清单收敛。
+            await dual_write(command.task_id, event)
             # hub 形态二态：进程内 publish=同步二元组，Redis Stream publish=协程（双副本形态）——
             # 双副本压测（批次 B-①）暴露的形态差异 bug，统一在此收敛
-            published = hub.publish(session_id, event.name.value, event.data)
+            published = hub.publish(session_id, event.name.value, data)
             if inspect.isawaitable(published):
                 published = await published
             _, frame = published

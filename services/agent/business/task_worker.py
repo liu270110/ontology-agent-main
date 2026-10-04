@@ -37,7 +37,8 @@ from collections.abc import Callable
 from datetime import UTC, datetime
 from typing import Any, Protocol
 
-from services.agent.business.chat_events import ChatCommand, ChatEventName, ChatOutcome
+from services.agent.business.chat_events import ChatCommand, ChatEventName, ChatOutcome, wire_data
+from services.agent.business.exec_events import EXEC_PERSISTED_EVENTS, EXEC_REALTIME_ONLY_EVENTS
 from services.agent.business.resume_repair import plan_interrupted_closures
 from services.agent.domain.model.kernel_actions import ApprovalTicket
 from services.agent.domain.model.task import RunStatus, TaskEvent, TaskStatus
@@ -404,6 +405,7 @@ class TaskRunWorker:
             trace_id=f"worker-{run.id}",
             adapter="builtin",
             resumed_validated=resumed,
+            task_type=task.type,  # 40 篇 §4.2：RUN_STARTED.task_type 透传
         )
         await self._drain_orchestrator(command)
         return True
@@ -497,6 +499,7 @@ class TaskRunWorker:
             adapter="builtin",
             approvals=tickets,
             resumed_validated=resumed,
+            task_type=task.type,  # 40 篇 §4.2：RUN_STARTED.task_type 透传
         )
         await self._drain_orchestrator(command)
         return True
@@ -544,6 +547,8 @@ class TaskRunWorker:
         """消费事件流：非终态事件逐条落 task_events（先落库后推送，04 §2；时间线端点取数口）。
 
         RUN_FINISHED/RUN_ERROR 的落账归结果汇（含 usage/citations 全载荷），此处跳过防双写；
+        SUBRUN_UPDATED 心跳纯实时不落库（40 篇 §4.1，控回放窗口挤占；SSE 双写钩子同口径）；
+        执行结构事件按回放根重试追加（R11 replay_root=True，失败仍按本路径既有口径转义留痕）。
         落库失败结构化转义留痕不阻断执行（审计不阻塞主流程，02 §3 ⑥ 纪律）。
         """
         orchestrator = self._orchestrator_provider()
@@ -556,11 +561,14 @@ class TaskRunWorker:
                 final_error = dict(event.data)
             if event.name in (ChatEventName.RUN_FINISHED, ChatEventName.RUN_ERROR):
                 continue
+            if event.name in EXEC_REALTIME_ONLY_EVENTS:
+                continue  # 40 篇 §4.1：SUBRUN_UPDATED 纯实时不落库
             try:
                 async with self._uow.for_tenant(command.tenant_id) as tx:
                     await tx.tasks.append_event(
                         command.task_id,
-                        TaskEvent(task_id=command.task_id, event_type=event.name.value, data=dict(event.data)),
+                        TaskEvent(task_id=command.task_id, event_type=event.name.value, data=wire_data(event)),
+                        replay_root=event.name in EXEC_PERSISTED_EVENTS,  # 执行结构=回放根（R11 重试）
                     )
             except Exception as exc:  # 事件留痕失败不阻断执行（转义留痕，standards/01 §2.6）
                 logger.warning("task worker 事件落库失败（run=%s type=%s）: %s", command.run_id, event.name, exc)

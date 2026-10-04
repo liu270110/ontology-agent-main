@@ -1,4 +1,4 @@
-"""SSE 帧编码（02 §5 帧格式权威）：主干波 11 事件 → text/event-stream 帧。
+"""SSE 帧编码（02 §5 帧格式权威）：主干波 11 事件 + 执行结构波 → text/event-stream 帧。
 
 帧格式（02 §5，每帧以空行结尾；id=会话内单调递增 seq，跨任务由 M4 Redis Stream
 回放窗口定位）：
@@ -9,6 +9,7 @@
 
 - 事件名单一事实源 = services.agent.business.chat_events.ChatEventName（生产侧），
   本模块只做编码与主干波校验（M3 不外发扩展波事件，前端对未知 event 名忽略）；
+  2026-10-04 执行结构波六事件（40 篇 §4.1，R2）随枚举扩容进入校验集（40 篇 §9 回填）；
 - 心跳为注释帧 ``: ping\\n\\n``，防代理层空闲断连，不计入事件序列（02 §5；
   间隔 config.sse_heartbeat_seconds，建议值 15s，压测后冻结）；
 - 响应头固定 Content-Type/Cache-Control/X-Accel-Buffering 由端点层（sessions.py）落。

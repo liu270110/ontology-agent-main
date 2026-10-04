@@ -114,7 +114,10 @@ def load_skill_catalog(
         if not md.is_file():
             continue
         try:
-            name, description = parse_skill_frontmatter(md.read_text(encoding="utf-8"))
+            # utf-8-sig：吸收可选 BOM（U+FEFF 属 Cf 类非空白，strip() 不除——BOM 文件会被
+            # 误判「frontmatter 起始缺失」整技能降级跳过）；无 BOM 文件零差异（验收批 ocr
+            # session 404643c9 发现，bug/low）
+            name, description = parse_skill_frontmatter(md.read_text(encoding="utf-8-sig"))
         except (OSError, UnicodeDecodeError, SkillCatalogError) as exc:
             logger.warning("skills catalog 跳过坏文件（降级不影响其余装载）: %s (%s)", md, exc)
             continue

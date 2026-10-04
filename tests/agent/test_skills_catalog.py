@@ -135,6 +135,18 @@ def test_装载_坏文件跳过留痕_其余正常装载(tmp_path: Path):
     assert [e.name for e in entries] == ["demo-skill"]  # frontmatter name（非目录名）
 
 
+def test_装载_BOM前缀文件正常装载_不误降级(tmp_path: Path):
+    """验收批 ocr 落修回归（session 404643c9，bug/low）：BOM（U+FEFF，Cf 类非空白，strip()
+    不除）不得把合法 SKILL.md 误判为「frontmatter 起始缺失」而静默剔除。"""
+    skill_dir = tmp_path / "bom-skill"
+    skill_dir.mkdir()
+    (skill_dir / "SKILL.md").write_bytes(
+        b"\xef\xbb\xbf" + GOOD_MD.encode("utf-8")
+    )  # 真实 UTF-8 BOM 字节（write_text 无 BOM 编码写不出）
+    entries = load_skill_catalog(tmp_path)
+    assert [e.name for e in entries] == ["demo-skill"]
+
+
 def test_装载_exclude排除项生效(tmp_path: Path):
     _write_skill(tmp_path, "keep", GOOD_MD)
     _write_skill(tmp_path, "quoted", QUOTED_MD)

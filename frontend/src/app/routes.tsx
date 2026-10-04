@@ -96,7 +96,7 @@ export const ROUTES: RouteMeta[] = [
   { path: '/console/approvals', title: '审批中心', icon: 'shield', group: '治理', console: true, consoleGroup: '治理', roles: ['admin', 'curator', 'super_admin'] },
   // S6 系统管理（26 篇 §10.2 宿主路径 /admin→/console/admin；Tab 深链 ?tab=users|groups|roles|
   // models|audit，租户 Tab super_admin 可见）；审计日志控制台入口 = /console/admin?tab=audit
-  { path: '/console/admin', title: '系统管理', icon: 'gear', group: '治理', console: true, consoleGroup: '治理', permission: 'user:manage', roles: ['admin', 'super_admin'] },
+  { path: '/console/admin', title: '系统管理', icon: 'gear', group: '治理', console: true, consoleGroup: '治理', permission: 'user:read', roles: ['admin', 'super_admin'] },
 ]
 
 /** 主页区路由（AppShell 侧栏/⌘K 事实源） */

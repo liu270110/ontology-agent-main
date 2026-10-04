@@ -152,12 +152,13 @@ export function testConnection(body: { adapter: string; endpoint: string; token:
 
 /** POST /agents/{id}/stop —— 停止（R 预登记；N 个进行中会话被终止） */
 export function stopAgent(id: string) {
-  return api.post<{ id: string; status: string; terminated_sessions: number }>(`/agents/${id}/stop`)
+  // api/01 §5.15 定稿动词：start/stop → enable/disable（live 后端同款；mock handlers 已同步改名）
+  return api.post<{ id: string; status: string; terminated_sessions: number }>(`/agents/${id}/disable`)
 }
 
-/** POST /agents/{id}/start —— 启动（R 预登记；前端先跑健康自检三步进度） */
+/** POST /agents/{id}/enable —— 启用（api/01 §5.15 定稿动词 start→enable；前端先跑健康自检三步进度） */
 export function startAgent(id: string) {
-  return api.post<{ id: string; status: string }>(`/agents/${id}/start`)
+  return api.post<{ id: string; status: string }>(`/agents/${id}/enable`)
 }
 
 /** POST /agents/{id}/debug-chat —— 调试对话（R 预登记；trace 标 debug 不计正式历史） */

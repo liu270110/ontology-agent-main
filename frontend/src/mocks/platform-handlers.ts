@@ -741,7 +741,7 @@ export const platformHandlers = [
     return ok({ ok: true, rtt_ms: agent.health.rtt_ms || 86, protocol: agent.adapter === 'openclaw' ? 'MCP' : 'RPC/JSONL', last_probe: new Date().toISOString() })
   }),
   // R 预登记：启停端点（26 篇 IX-AGT-04 引「api/01 §5.1 agents 启停端点」，表内未列）
-  http.post('*/api/v1/agents/:id/stop', ({ params }) => {
+  http.post('*/api/v1/agents/:id/disable', ({ params }) => {
     const agent = AGENTS.find(a => a.id === String(params.id))
     if (!agent) return err(3001, 'Agent 不存在', 404)
     agent.status = 'stopped'
@@ -749,7 +749,7 @@ export const platformHandlers = [
     agent.active_sessions = 0
     return ok({ id: agent.id, status: 'stopped', terminated_sessions: affected })
   }),
-  http.post('*/api/v1/agents/:id/start', ({ params }) => {
+  http.post('*/api/v1/agents/:id/enable', ({ params }) => {
     const agent = AGENTS.find(a => a.id === String(params.id))
     if (!agent) return err(3001, 'Agent 不存在', 404)
     agent.status = 'running'

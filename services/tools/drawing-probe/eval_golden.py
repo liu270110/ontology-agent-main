@@ -1,7 +1,7 @@
 """golden 评测脚本（kb v1.5 wedge 裁决卡 1/3 配套）：客户资产 golden × 平台终审候选 → 字段级 P/R/F1。
 
 用法（仓库根目录）：
-    GOLDEN_PATH=/path/to/golden.json python tools/drawing-probe/eval_golden.py [--base URL]
+    GOLDEN_PATH=/path/to/golden.json python services/tools/drawing-probe/eval_golden.py [--base URL]
 
 golden JSON（本地客户资产，永不入库——路径经环境变量 GOLDEN_PATH 注入，本仓库零样例值）：
     {"documents": [{"file": "<本地文件名>", "titleblock": {"图号": "...", "材料": "..."}}]}
@@ -34,7 +34,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-ROOT = Path(__file__).resolve().parents[2]
+ROOT = Path(__file__).resolve().parents[3]  # services/tools/drawing-probe/ → 仓库根
 sys.path.insert(0, str(ROOT))
 
 import httpx  # noqa: E402

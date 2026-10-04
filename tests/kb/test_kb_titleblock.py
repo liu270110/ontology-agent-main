@@ -85,6 +85,59 @@ def test_投影_英文别名与中文主标签():
     }
 
 
+# 英文标签样例（SAMPLE-* 占位，零真实图号——脱敏门禁 §11）：真实图纸标题栏常见英文标签
+# 紧凑形态（label<空格>value），映射到同一九字段词表。
+_EN_TITLEBLOCK_TEXT = (
+    "PUMP ASSEMBLY\n"
+    "Drawing No SAMPLE-1001\n"
+    "Title BRACKET_A\n"
+    "Material AL6061\n"
+    "Qty 4\n"
+    "Scale 1:50\n"
+    "Size A3\n"
+    "Rev. B\n"
+    "Date 2026-10-05\n"
+)
+
+
+def test_投影_紧凑级_英文标签全字段命中():
+    """英文标签紧凑形态（label<空格>value）全字段命中，映射到同一九字段（不扩字段）。"""
+    projection = project_titleblock(_EN_TITLEBLOCK_TEXT)
+    assert projection.fields == {
+        "图号": "SAMPLE-1001",  # Drawing No
+        "名称": "BRACKET_A",  # Title
+        "材料": "AL6061",  # Material
+        "数量": "4",  # Qty
+        "比例": "1:50",  # Scale（比值形态）
+        "幅面": "A3",  # Size
+        "版本": "B",  # Rev.
+        "日期": "2026-10-05",  # Date
+    }
+    # span 指回原文（含英文标签区间，逐字对齐门禁）
+    start, end = projection.spans["图号"]
+    segment = _EN_TITLEBLOCK_TEXT[start:end]
+    assert "Drawing No" in segment and projection.fields["图号"] in segment
+
+
+def test_投影_分隔级_英文别名Pcs与Size():
+    """Qty/Pcs、Size 英文别名同样适用分隔级（label: value 形态）。"""
+    projection = project_titleblock("Pcs: 6\nSize: A2")
+    assert projection.fields == {"数量": "6", "幅面": "A2"}
+
+
+def test_投影_英文标签不在九字段词表_不扩字段不误收():
+    """Finish/Design/Approval/Check 等标签不在九字段词表——不扩字段（词表演进属契约变更，留裁决）。"""
+    projection = project_titleblock("Finish ZN_PLATED\nDesign LY\nApproval WANG\nCheck LI\n")
+    assert projection.fields == {}
+
+
+def test_投影_英文别名左侧词边界_普通英文词不误收():
+    """ocr 评审条目（6b5a29a3）：英文别名须左侧非字母数字——普通英文词内子串不命中。"""
+    prose = "Update 2026-10-05\nSubtitle BRACKET_A\nPrev. B\nDownscale 1:2\nFileSize: 1024\n"
+    projection = project_titleblock(prose)
+    assert projection.fields == {}
+
+
 def test_投影_紧凑级_中文标签字母数字开头值():
     projection = project_titleblock("图号 SAMPLE-0003\n材料 Q235\n幅面 A1")
     assert projection.fields == {"图号": "SAMPLE-0003", "材料": "Q235", "幅面": "A1"}

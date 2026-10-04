@@ -1,6 +1,6 @@
 ---
 name: pdf-carrier-probe
-description: PDF 图纸/文档载体诊断技能。拿到 PDF 需要判断它是矢量导出图还是扫描件、有无文本层、字体与幅面,以决定摄取与解析策略时使用。纯工程诊断,不做语义判读。配套工具 tools/drawing-probe/probe_pdf.py。
+description: PDF 图纸/文档载体诊断技能。拿到 PDF 需要判断它是矢量导出图还是扫描件、有无文本层、字体与幅面,以决定摄取与解析策略时使用。纯工程诊断,不做语义判读。配套工具 services/tools/drawing-probe/probe_pdf.py。
 ---
 
 # pdf-carrier-probe:PDF 载体诊断
@@ -12,7 +12,7 @@ description: PDF 图纸/文档载体诊断技能。拿到 PDF 需要判断它是
 1. **跑探针**(纯标准库,无需安装解析库):
 
    ```
-   .venv/Scripts/python.exe tools/drawing-probe/probe_pdf.py "<文件1.pdf>" "<文件2.pdf>"
+   .venv/Scripts/python.exe services/tools/drawing-probe/probe_pdf.py "<文件1.pdf>" "<文件2.pdf>"
    ```
 
 2. **按指标判读**(探针输出):

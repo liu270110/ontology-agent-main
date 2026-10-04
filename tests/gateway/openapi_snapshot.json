@@ -4973,6 +4973,202 @@
         "title": "OntologyValidateIn",
         "type": "object"
       },
+      "OrsiCapabilityItemOut": {
+        "additionalProperties": false,
+        "description": "单条响应信封 {data: {...}, meta: {}}（EmptyMeta 序列化恒 {}）。",
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/OrsiCapabilityOut"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/EmptyMeta"
+          }
+        },
+        "required": [
+          "data",
+          "meta"
+        ],
+        "title": "OrsiCapabilityItemOut",
+        "type": "object"
+      },
+      "OrsiCapabilityOut": {
+        "additionalProperties": false,
+        "description": "能力登记行投影（含指纹与审计列时间戳；软删行不外露——仓储读面已滤）。",
+        "properties": {
+          "capability_fingerprint": {
+            "title": "Capability Fingerprint",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "evidence_uri": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Evidence Uri"
+          },
+          "face": {
+            "title": "Face",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "source_channel": {
+            "title": "Source Channel",
+            "type": "string"
+          },
+          "source_face_track": {
+            "title": "Source Face Track",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "face",
+          "name",
+          "version",
+          "source_channel",
+          "source_face_track",
+          "status",
+          "capability_fingerprint",
+          "evidence_uri",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "OrsiCapabilityOut",
+        "type": "object"
+      },
+      "OrsiCapabilityPageOut": {
+        "additionalProperties": false,
+        "description": "列表响应信封 {data: [...], meta: PageMeta}（api/01 §3.1 be2 口径）。",
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/OrsiCapabilityOut"
+            },
+            "title": "Data",
+            "type": "array"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/PageMeta"
+          }
+        },
+        "required": [
+          "data",
+          "meta"
+        ],
+        "title": "OrsiCapabilityPageOut",
+        "type": "object"
+      },
+      "OrsiCapabilityRegisterIn": {
+        "additionalProperties": false,
+        "description": "注册请求（POST /api/v1/orsi/capabilities；docs/Agent/14 §3 orsi 行）。\n\nstatus 只开放 nominal|candidate——promoted 不可注册直达（红线：status→promoted\n必经 review 工单迁移位，v1 恒拒，Agent14 §4）。",
+        "properties": {
+          "evidence_uri": {
+            "anyOf": [
+              {
+                "maxLength": 512,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Evidence Uri"
+          },
+          "face": {
+            "enum": [
+              "O1",
+              "O2",
+              "O3",
+              "O4",
+              "O5",
+              "O6",
+              "O7",
+              "O8"
+            ],
+            "title": "Face",
+            "type": "string"
+          },
+          "name": {
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "source_channel": {
+            "enum": [
+              "L0",
+              "L1",
+              "L2",
+              "L3"
+            ],
+            "title": "Source Channel",
+            "type": "string"
+          },
+          "source_face_track": {
+            "default": "normal",
+            "enum": [
+              "normal",
+              "shortgap",
+              "critical"
+            ],
+            "title": "Source Face Track",
+            "type": "string"
+          },
+          "status": {
+            "default": "candidate",
+            "enum": [
+              "nominal",
+              "candidate"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "version": {
+            "maxLength": 32,
+            "minLength": 1,
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "face",
+          "name",
+          "version",
+          "source_channel"
+        ],
+        "title": "OrsiCapabilityRegisterIn",
+        "type": "object"
+      },
       "PageMeta": {
         "additionalProperties": false,
         "description": "偏移分页 meta（api/01 §3.1：page≥1，page_size 上限随端点既有值）。",
@@ -7215,6 +7411,206 @@
         "title": "SettleRequest",
         "type": "object"
       },
+      "SkillCreateIn": {
+        "additionalProperties": false,
+        "description": "登记入参（14 §3：name/description/source_uri/version/body 可选——body_bytes 侧面）。",
+        "properties": {
+          "body_bytes": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Body Bytes",
+            "type": "integer"
+          },
+          "description": {
+            "default": "",
+            "maxLength": 2048,
+            "title": "Description",
+            "type": "string"
+          },
+          "name": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "source_uri": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Source Uri",
+            "type": "string"
+          },
+          "version": {
+            "default": "1.0.0",
+            "maxLength": 32,
+            "minLength": 1,
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "source_uri"
+        ],
+        "title": "SkillCreateIn",
+        "type": "object"
+      },
+      "SkillDetailEnvelope": {
+        "additionalProperties": false,
+        "description": "详情/注册/生命周期信封 {data, meta: 空对象}。",
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/SkillOut"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/EmptyMeta"
+          }
+        },
+        "required": [
+          "data"
+        ],
+        "title": "SkillDetailEnvelope",
+        "type": "object"
+      },
+      "SkillLifecycleIn": {
+        "additionalProperties": false,
+        "description": "生命周期入参（{action, reason?}；reason 随审计通道留痕，本批不落表）。",
+        "properties": {
+          "action": {
+            "enum": [
+              "delist",
+              "restore",
+              "revoke"
+            ],
+            "title": "Action",
+            "type": "string"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          }
+        },
+        "required": [
+          "action"
+        ],
+        "title": "SkillLifecycleIn",
+        "type": "object"
+      },
+      "SkillListEnvelope": {
+        "additionalProperties": false,
+        "description": "列表信封 {data: [...], meta: PageMeta}（api/01 §3.1 偏移分页）。",
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/SkillOut"
+            },
+            "title": "Data",
+            "type": "array"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/PageMeta"
+          }
+        },
+        "required": [
+          "data",
+          "meta"
+        ],
+        "title": "SkillListEnvelope",
+        "type": "object"
+      },
+      "SkillOut": {
+        "additionalProperties": false,
+        "description": "技能登记项投影（详情元数据口径：body 只回长度不回正文，14 §3）。",
+        "properties": {
+          "body_bytes": {
+            "title": "Body Bytes",
+            "type": "integer"
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "origin": {
+            "title": "Origin",
+            "type": "string"
+          },
+          "source_uri": {
+            "title": "Source Uri",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          },
+          "version": {
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "description",
+          "source_uri",
+          "version",
+          "status",
+          "body_bytes",
+          "origin"
+        ],
+        "title": "SkillOut",
+        "type": "object"
+      },
+      "SourceChannel": {
+        "description": "能力来源通道（14 §4：L0~L3 纯元数据标注，与 06 篇四通道衔接）。",
+        "enum": [
+          "L0",
+          "L1",
+          "L2",
+          "L3"
+        ],
+        "title": "SourceChannel",
+        "type": "string"
+      },
       "SourceRefsIn": {
         "description": "溯源指针（memory §9.2：来源指针必填；§5.4 幂等依赖它）。",
         "properties": {
@@ -7895,6 +8291,223 @@
         ],
         "title": "ToolBindingOut",
         "type": "object"
+      },
+      "ToolCreateIn": {
+        "additionalProperties": false,
+        "description": "注册工具条目（POST /tools；清单语义校验在 business 用例——DTO 只管形状）。",
+        "properties": {
+          "action_iri": {
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Action Iri",
+            "type": "string"
+          },
+          "evidence_uri": {
+            "anyOf": [
+              {
+                "maxLength": 512,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Evidence Uri"
+          },
+          "health_hint": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Health Hint"
+          },
+          "name": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "semantic_annotation": {
+            "additionalProperties": true,
+            "title": "Semantic Annotation",
+            "type": "object"
+          },
+          "source_channel": {
+            "$ref": "#/components/schemas/SourceChannel"
+          },
+          "version": {
+            "maxLength": 32,
+            "minLength": 1,
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "action_iri",
+          "source_channel",
+          "semantic_annotation",
+          "version"
+        ],
+        "title": "ToolCreateIn",
+        "type": "object"
+      },
+      "ToolEnvelope": {
+        "additionalProperties": false,
+        "description": "单件响应（api/01 §3.1 非列表包裹 {data, meta}，meta=空对象；data 直接承载资源，kb 同款）。",
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/ToolOut"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/EmptyMeta"
+          }
+        },
+        "required": [
+          "data"
+        ],
+        "title": "ToolEnvelope",
+        "type": "object"
+      },
+      "ToolLifecycleIn": {
+        "additionalProperties": false,
+        "description": "生命周期动作（POST /tools/{id}/lifecycle；v1 词汇=下架/恢复/撤销，14 §2）。",
+        "properties": {
+          "action": {
+            "enum": [
+              "delist",
+              "restore",
+              "revoke"
+            ],
+            "title": "Action",
+            "type": "string"
+          },
+          "reason": {
+            "default": "",
+            "maxLength": 512,
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "action"
+        ],
+        "title": "ToolLifecycleIn",
+        "type": "object"
+      },
+      "ToolListEnvelope": {
+        "additionalProperties": false,
+        "description": "列表响应（api/01 §3.1 {data: [...], meta: PageMeta}）。",
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/ToolOut"
+            },
+            "title": "Data",
+            "type": "array"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/PageMeta"
+          }
+        },
+        "required": [
+          "data",
+          "meta"
+        ],
+        "title": "ToolListEnvelope",
+        "type": "object"
+      },
+      "ToolOut": {
+        "additionalProperties": false,
+        "description": "工具条目视图（含语义标注/来源通道 L0~L3/版本/健康提示，14 §3 GET /tools/{id} 口径）。",
+        "properties": {
+          "action_iri": {
+            "title": "Action Iri",
+            "type": "string"
+          },
+          "evidence_uri": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Evidence Uri"
+          },
+          "health_hint": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Health Hint"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "semantic_annotation": {
+            "additionalProperties": true,
+            "title": "Semantic Annotation",
+            "type": "object"
+          },
+          "source_channel": {
+            "$ref": "#/components/schemas/SourceChannel"
+          },
+          "status": {
+            "$ref": "#/components/schemas/ToolStatus"
+          },
+          "tenant_id": {
+            "format": "uuid",
+            "title": "Tenant Id",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "tenant_id",
+          "name",
+          "action_iri",
+          "source_channel",
+          "semantic_annotation",
+          "version",
+          "status",
+          "health_hint",
+          "evidence_uri"
+        ],
+        "title": "ToolOut",
+        "type": "object"
+      },
+      "ToolStatus": {
+        "description": "上架状态机五态（14 §2；与存储 tools_registry.status 逐字一致）。",
+        "enum": [
+          "draft",
+          "in_review",
+          "listed",
+          "deprecated",
+          "revoked"
+        ],
+        "title": "ToolStatus",
+        "type": "string"
       },
       "ValidationError": {
         "properties": {
@@ -13411,6 +14024,215 @@
         ]
       }
     },
+    "/api/v1/orsi/capabilities": {
+      "get": {
+        "description": "分页列出本租户能力登记行（updated_at 倒序；api/01 §3.1 信封）。\n\n读公开：免 scope（JWT 必带取租户上下文）；face/track/status 三过滤对齐 Agent14 §3\n「进化面/缺口轨状态过滤」。",
+        "operationId": "list_orsi_capabilities_api_v1_orsi_capabilities_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "face",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "O1",
+                    "O2",
+                    "O3",
+                    "O4",
+                    "O5",
+                    "O6",
+                    "O7",
+                    "O8"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Face"
+            }
+          },
+          {
+            "in": "query",
+            "name": "track",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "normal",
+                    "shortgap",
+                    "critical"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Track"
+            }
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "nominal",
+                    "candidate",
+                    "promoted"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Page",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page_size",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Page Size",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrsiCapabilityPageOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "ORSI 原子能力列表（face/track/status 过滤；读公开免 scope）",
+        "tags": [
+          "orsi"
+        ]
+      },
+      "post": {
+        "description": "注册原子能力（face 枚举校验+指纹计算在业务层；同指纹重复 409）。\n\n红线：注册只落登记行与审计行，不触发任何自进化动作（Agent14 §4 红线继承；\napply 恒拒语义不变）。",
+        "operationId": "register_orsi_capability_api_v1_orsi_capabilities_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OrsiCapabilityRegisterIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrsiCapabilityItemOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "ORSI 原子能力注册（rsi:write；零进化副作用——只登记不触任何进化路径）",
+        "tags": [
+          "orsi"
+        ]
+      }
+    },
+    "/api/v1/orsi/capabilities/{capability_id}": {
+      "get": {
+        "description": "按 id 读本租户能力登记行（租户过滤在仓储层；不存在不泄露存在性）。",
+        "operationId": "get_orsi_capability_api_v1_orsi_capabilities__capability_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "capability_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Capability Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrsiCapabilityItemOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "ORSI 原子能力详情（读公开免 scope；跨租户一律 404）",
+        "tags": [
+          "orsi"
+        ]
+      }
+    },
     "/api/v1/plugins": {
       "get": {
         "operationId": "list_plugins_api_v1_plugins_get",
@@ -15142,6 +15964,215 @@
         ]
       }
     },
+    "/api/v1/skills": {
+      "get": {
+        "description": "偏移分页（page/page_size，B1 批 api/01 §3.1 口径；offset=(page-1)*page_size 换算）。",
+        "operationId": "list_skills_api_v1_skills_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 200,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Q"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Page",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page_size",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Page Size",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SkillListEnvelope"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "技能列表（query 模糊 name/description，ILIKE）",
+        "tags": [
+          "skills"
+        ]
+      },
+      "post": {
+        "operationId": "create_skill_api_v1_skills_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SkillCreateIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SkillDetailEnvelope"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "登记技能（v1 直通 listed；幂等键冲突 4602）",
+        "tags": [
+          "skills"
+        ]
+      }
+    },
+    "/api/v1/skills/{skill_id}": {
+      "get": {
+        "operationId": "get_skill_api_v1_skills__skill_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "skill_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Skill Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SkillDetailEnvelope"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "详情（元数据+body 长度+来源 uri；不回 body 正文）",
+        "tags": [
+          "skills"
+        ]
+      }
+    },
+    "/api/v1/skills/{skill_id}/lifecycle": {
+      "post": {
+        "operationId": "skill_lifecycle_api_v1_skills__skill_id__lifecycle_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "skill_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Skill Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SkillLifecycleIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SkillDetailEnvelope"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "生命周期（delist 下架/restore 恢复/revoke 废弃）",
+        "tags": [
+          "skills"
+        ]
+      }
+    },
     "/api/v1/tasks": {
       "get": {
         "description": "偏移分页改 page/page_size（B1 批，api/01 §3.1；offset=(page-1)*page_size 内部换算）。",
@@ -15652,6 +16683,246 @@
         "summary": "当前待审批动作视图（waiting_tool 态；H-0b，api/01 §5.15）",
         "tags": [
           "approvals"
+        ]
+      }
+    },
+    "/api/v1/tools": {
+      "get": {
+        "operationId": "list_tools_api_v1_tools_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 128,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Query"
+            }
+          },
+          {
+            "in": "query",
+            "name": "channel",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/SourceChannel"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Channel"
+            }
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/ToolStatus"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Page",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page_size",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Page Size",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ToolListEnvelope"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "集市列表（query/来源通道/状态过滤+count；api/01 §3.1 信封）",
+        "tags": [
+          "tools"
+        ]
+      },
+      "post": {
+        "operationId": "create_tool_api_v1_tools_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ToolCreateIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ToolEnvelope"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "注册工具条目（清单校验→v1 直通 listed；14 §2）",
+        "tags": [
+          "tools"
+        ]
+      }
+    },
+    "/api/v1/tools/{tool_id}": {
+      "get": {
+        "operationId": "get_tool_api_v1_tools__tool_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "tool_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Tool Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ToolEnvelope"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "详情（含语义标注/来源通道 L0~L3/版本/健康提示）",
+        "tags": [
+          "tools"
+        ]
+      }
+    },
+    "/api/v1/tools/{tool_id}/lifecycle": {
+      "post": {
+        "operationId": "tool_lifecycle_api_v1_tools__tool_id__lifecycle_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "tool_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Tool Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ToolLifecycleIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ToolEnvelope"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "生命周期动作（下架/恢复/撤销；迁移合法+审计行，14 §2）",
+        "tags": [
+          "tools"
         ]
       }
     }

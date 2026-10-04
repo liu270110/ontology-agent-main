@@ -102,6 +102,11 @@ async def sleep_time_reflection_task(deps: Deps, *, tenant_id: uuid.UUID, now=No
             done.update(str(s) for s in (r.source_ref[0].get("supported_by") or []))
         if {str(u) for u in d.supported_by} & done:
             continue  # 有事实已被上一轮固化，整份草稿跳过（不二次固化）
+        # K2-b §11.2 落库前显式断言（consolidate_observations/ObsDraft 不变量已保证，此处为
+        # 防御纵深）：mem:Observation 无证据链拒绝落库——supported_by 非空且与 proof_count 自洽。
+        assert d.supported_by and len(d.supported_by) == d.proof_count, (
+            f"固化草稿证据链缺失/不自洽：proof_count={d.proof_count} supported_by={len(d.supported_by)}"
+        )
         obs = MemoryRecord(
             id=uuid.uuid4(),
             tenant_id=tenant_id,

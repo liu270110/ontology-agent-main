@@ -30,12 +30,27 @@ class ConflictVerdict:
 
 @dataclass(slots=True)
 class ObsDraft:
-    """观察固化草稿（应用层落 mem:Observation 记录）。"""
+    """观察固化草稿（应用层落 mem:Observation 记录）。
+
+    模型级不变量（K2-b §11.2 固化强制证据链，hindsight 范式）：proof_count == len(supported_by)
+    且 ≥ min_proof，违规 ValueError——**无证据链/证据链不自洽一律拒绝构造**（拒绝而非降级写入，
+    为 memory §9.2 写入侧来源校验的强化项）。min_proof 由调用方传管线阈值（缺省 1=至少一条
+    支撑事实）；consolidate_observations 是唯一合法生产者，手工构造同样被不变量把守。
+    """
 
     subject_iri: str
     content: str
     proof_count: int
     supported_by: list[uuid.UUID] = field(default_factory=list)
+    min_proof: int = 1  # 最小证据数（管线阈值透传；模型级下限红线）
+
+    def __post_init__(self) -> None:
+        if self.proof_count != len(self.supported_by):
+            raise ValueError(
+                f"ObsDraft 证据链不自洽：proof_count={self.proof_count} != len(supported_by)={len(self.supported_by)}"
+            )
+        if self.proof_count < self.min_proof:
+            raise ValueError(f"ObsDraft 证据不足：proof_count={self.proof_count} < min_proof={self.min_proof}")
 
 
 def detect_conflicts(
@@ -83,6 +98,7 @@ def consolidate_observations(records: Sequence[MemoryRecord], *, min_proof: int,
                 content=f"{attr}：{'；'.join(values)}（{len(group)} 条独立事实支持）",
                 proof_count=len(group),
                 supported_by=[g.id for g in group],
+                min_proof=min_proof,  # §11.2：模型级不变量复核（≥min_proof 由 ObsDraft 构造期把守）
             )
         )
     return drafts

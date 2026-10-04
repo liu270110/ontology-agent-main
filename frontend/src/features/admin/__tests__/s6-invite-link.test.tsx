@@ -63,9 +63,10 @@ describe('S6 链接邀请', () => {
     fireEvent.click(await screen.findByTestId('adm-invite-open', {}, { timeout: 10_000 }))
     const dialog = await screen.findByRole('dialog', { name: '邀请成员' })
 
-    // 邮箱分支原样保留（seg 切到链接邀请前可见）
-    expect(within(dialog).getByTestId('adm-invite-input')).toBeInTheDocument()
-    fireEvent.click(within(dialog).getByTestId('adm-invite-mode-link'))
+    // B8-WC 契约卡 ⑥（2026-10-04）：POST /admin/users 不存在（405）→ 邮箱分支移除，
+    // 顶部提示走链接流；链接表单即开即用
+    expect(within(dialog).getByTestId('adm-invite-email-hint')).toHaveTextContent('邮箱直邀暂未开放')
+    expect(within(dialog).queryByTestId('adm-invite-input')).not.toBeInTheDocument()
 
     // 默认 member + 24 小时 → 生成（POST /invites 载荷断言）
     fireEvent.click(within(dialog).getByTestId('adm-invite-link-create'))

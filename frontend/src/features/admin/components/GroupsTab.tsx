@@ -14,7 +14,7 @@ export function GroupsTab() {
   const [createOpen, setCreateOpen] = useState(false)
   const { data, isLoading } = useQuery({ queryKey: ['admin', 'groups'], queryFn: listGroups })
   // fe3 信封收口：listGroups 改 api.list 归一（{data,meta}），读 .data（下方建组成员候选
-  // 仍走 listUsers=api.get，未列入本批，读 .items 不变）
+  // 同走 listUsers=api.list 归一形态，B8-WC 修复 B8-WA 遗留的 .items 旧读法）
   const groups = useMemo(() => data?.data ?? [], [data])
 
   return (
@@ -69,9 +69,9 @@ function GroupModal({ onClose }: { onClose: () => void }) {
   const [picked, setPicked] = useState<AdminUser[]>([])
   const [keyword, setKeyword] = useState('')
 
-  const { data } = useQuery({ queryKey: ['admin', 'users'], queryFn: listUsers })
+  const { data } = useQuery({ queryKey: ['admin', 'users'], queryFn: () => listUsers() })
   const candidates = useMemo(
-    () => (data?.items ?? []).filter(u =>
+    () => (data?.data ?? []).filter(u =>
       u.status !== 'disabled' &&
       !picked.some(p => p.id === u.id) &&
       (!keyword || u.display_name.includes(keyword) || u.email.includes(keyword))),

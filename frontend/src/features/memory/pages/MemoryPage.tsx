@@ -3,9 +3,9 @@ import { useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import {Brain, SearchX, Gavel, Lock, Search, X} from 'lucide-react'
 import { toast } from 'sonner'
-import { api, ApiError } from '@/api/client'
+import { ApiError } from '@/api/client'
 import {ErrorState, SkeletonCards, SkeletonRows, EmptyState} from '@/components/states'
-import { listFacts, listL1, listPromotions, getL1BySession, type FactLayer, type MemoryFact } from '../api'
+import { listFacts, listL1, listPromotions, type FactLayer, type MemoryFact } from '../api'
 import { LAYER_META } from '../api'
 import { FactStatusBadge, LayerBadge, relativeTime } from '../components/shared'
 import { ReviewModal } from '../components/ReviewModal'
@@ -15,7 +15,9 @@ import { FactDetailSheet } from '../components/FactDetailSheet'
  *  LayerTabs 四层（L1 工作记忆/L2 会话摘要/L3 组织图谱/L4 长期知识）
  *  + IX-MEM-01 升级审核对照弹窗（L2 候选「升级审核」入口）
  *  + IX-MEM-02 条目详情抽屉（时间线/引用/失效）
- *  + IX-MEM-03 L1 只读视图（热数据卡 TTL 倒计时 + 脱敏展示，不可编辑）。
+ *  + IX-MEM-03 L1 只读视图（B8-WC 契约卡 2026-10-04：消费 GET /memory/l1?limit= 列表——
+ *    多会话卡渲染 title/条目数/TTL 剩余/脱敏块 masked 徽标，不可编辑；live 裸 DTO、
+ *    Redis 降级 items=[] 空态）。
  *  层级查询 ?layer=L1..L4（26 篇 §11 路由表）。
  *  B3-P 转实：⌘F 搜索 / 导出为纯客户端能力——搜索=当前层内按标题/内容客户端过滤
  *  （react-query 数据 useMemo filter，无检索端点）；导出=当前层清单 JSON 下载
@@ -24,6 +26,15 @@ import { FactDetailSheet } from '../components/FactDetailSheet'
  *  「含已失效」开关（mock 默认已返回 invalidated 项，开关为纯前端过滤切换）。 */
 
 const LAYERS: FactLayer[] = ['L1', 'L2', 'L3', 'L4']
+
+/** TTL 剩余倒计时文案（mm:ss，≥1h 进位 h:mm:ss；负值钳 0） */
+function ttlText(s: number): string {
+  const t = Math.max(0, Math.floor(s))
+  const h = Math.floor(t / 3600)
+  const mm = String(Math.floor((t % 3600) / 60)).padStart(2, '0')
+  const ss = String(t % 60).padStart(2, '0')
+  return h > 0 ? `${h}:${mm}:${ss}` : `${mm}:${ss}`
+}
 
 export function MemoryPage() {
   const [sp, setSp] = useSearchParams()
@@ -51,23 +62,10 @@ export function MemoryPage() {
     queryFn: () => listFacts({ layer: layer === 'L1' ? undefined : layer }),
     enabled: layer !== 'L1',
   })
-  // F8⑤（B:A-11）：L1 视图改契约形态 GET /memory/l1/{session_id}——会话列表取最近会话
-  // （默认首条，可切换选择器）；无会话空态；失败判错（原列表端点 /memory/l1 live 未实装，
-  // 404 被当空列表渲染，无错误判定）
-  const l1SessionsQ = useQuery({
-    queryKey: ['sessions', 'for-l1'],
-    queryFn: () => api.get<{ items: { id: string; title: string | null; updated_at?: string | null }[] }>('/sessions'),
-    enabled: layer === 'L1',
-  })
-  const l1SessionItems = useMemo(() => l1SessionsQ.data?.items ?? [], [l1SessionsQ.data])
-  const [l1SidPick, setL1SidPick] = useState<string | null>(null)
-  const l1SelectedSid =
-    l1SidPick && l1SessionItems.some(s => s.id === l1SidPick) ? l1SidPick : l1SessionItems[0]?.id ?? null
-  const l1Query = useQuery({
-    queryKey: ['memory', 'l1', l1SelectedSid],
-    queryFn: () => getL1BySession(l1SelectedSid as string),
-    enabled: layer === 'L1' && !!l1SelectedSid,
-  })
+  // B8-WC 契约卡（2026-10-04）：L1 视图消费列表端点 GET /memory/l1?limit=（live 实装，
+  // 裸 DTO 归一 {data,meta}）——多会话卡渲染；与容量卡同 queryKey 共享缓存
+  const l1ListQ = useQuery({ queryKey: ['memory', 'l1'], queryFn: () => listL1() })
+  const l1Sessions = useMemo(() => l1ListQ.data?.data ?? [], [l1ListQ.data])
   const promotionsQuery = useQuery({
     queryKey: ['memory', 'promotions'],
     queryFn: listPromotions,
@@ -77,21 +75,20 @@ export function MemoryPage() {
   const facts = useMemo(() => factsQuery.data?.items ?? [], [factsQuery])
 
   // ---- S-EF 分层容量卡：四层计数并行 query（mock 按层过滤，无全量端点；L1 计会话数）。
-  //      与现有 factsQuery / l1Query 同 queryKey → 命中同一缓存，不重复请求。
-  const l1CountQuery = useQuery({ queryKey: ['memory', 'l1'], queryFn: listL1 })
+  //      L1 与上方 l1ListQ 同 queryKey → 命中同一缓存，不重复请求。
   const l2CountQuery = useQuery({ queryKey: ['memory', 'facts', 'L2'], queryFn: () => listFacts({ layer: 'L2' }) })
   const l3CountQuery = useQuery({ queryKey: ['memory', 'facts', 'L3'], queryFn: () => listFacts({ layer: 'L3' }) })
   const l4CountQuery = useQuery({ queryKey: ['memory', 'facts', 'L4'], queryFn: () => listFacts({ layer: 'L4' }) })
   const layerStats = useMemo(() => {
     const rows: { layer: FactLayer; count: number }[] = [
-      { layer: 'L1', count: l1CountQuery.data?.items.length ?? 0 },
+      { layer: 'L1', count: l1Sessions.length },
       { layer: 'L2', count: l2CountQuery.data?.items.length ?? 0 },
       { layer: 'L3', count: l3CountQuery.data?.items.length ?? 0 },
       { layer: 'L4', count: l4CountQuery.data?.items.length ?? 0 },
     ]
     const max = Math.max(1, ...rows.map(r => r.count))
     return rows.map(r => ({ ...r, pct: Math.round((r.count / max) * 100) }))
-  }, [l1CountQuery.data, l2CountQuery.data, l3CountQuery.data, l4CountQuery.data])
+  }, [l1Sessions, l2CountQuery.data, l3CountQuery.data, l4CountQuery.data])
 
   const pendingPromotions = useMemo(
     () => (promotionsQuery.data?.items ?? []).filter(p => p.status === 'pending'),
@@ -102,29 +99,20 @@ export function MemoryPage() {
     [facts, pendingPromotions, reviewId],
   )
 
-  // F8⑤：L1 快照视图模型——blocks dict → [key,value] 行 + window 近期消息
-  const l1Snapshot = layer === 'L1' ? l1Query.data ?? null : null
-  const l1BlockRows = useMemo(
-    () => Object.entries(l1Snapshot?.blocks ?? {}).map(([key, value]) => ({ key, value: String(value ?? '') })),
-    [l1Snapshot],
-  )
-  const l1WindowRows = useMemo(() => l1Snapshot?.window ?? [], [l1Snapshot])
-  const activeL1 = l1SessionItems.length
+  // B8-WC：L1 列表视图模型——多会话卡（title/条目数/TTL 剩余/脱敏块）
+  const activeL1 = l1Sessions.length
 
-  // ---- B3-P：客户端搜索（当前层内过滤；口径=L2/L4 按标题+内容，L1 按会话 id+块 key·value+窗口内容）
+  // ---- B3-P：客户端搜索（当前层内过滤；口径=L2/L4 按标题+内容，L1 按会话 id/标题+块 key·value）
   //      + S-EF「含已失效」开关：关=前端过滤 invalidated（mock 已返回失效项，无新参数）
   const q = kw.trim().toLowerCase()
-  // F8⑤：单快照命中为布尔（搜索词命中会话 id / 块 key·value / 窗口内容任一）
-  const l1Searched = useMemo(() => {
-    if (!q) return true
-    return (
-      !!l1SelectedSid && (
-        l1SelectedSid.toLowerCase().includes(q) ||
-        l1BlockRows.some(b => b.key.toLowerCase().includes(q) || b.value.toLowerCase().includes(q)) ||
-        l1WindowRows.some(w => String(w.content ?? '').toLowerCase().includes(q))
-      )
-    )
-  }, [q, l1SelectedSid, l1BlockRows, l1WindowRows])
+  // B8-WC：L1 列表过滤（会话 id/标题/块 key·value 命中 → 保留该会话卡）
+  const visibleL1 = useMemo(() => {
+    if (!q) return l1Sessions
+    return l1Sessions.filter(s =>
+      s.session_id.toLowerCase().includes(q) ||
+      (s.title ?? '').toLowerCase().includes(q) ||
+      s.blocks.some(b => b.key.toLowerCase().includes(q) || b.value.toLowerCase().includes(q)))
+  }, [l1Sessions, q])
   const invalidFiltered = useMemo(
     () => (includeInvalid ? facts : facts.filter(f => f.status !== 'invalidated')),
     [facts, includeInvalid],
@@ -148,10 +136,10 @@ export function MemoryPage() {
   function exportLayer() {
     const now = new Date()
     const ymd = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`
-    // F8⑤：L1 导出=当前快照（blocks 行 + 窗口消息）；L2-L4=过滤后条目清单
+    // B8-WC：L1 导出=过滤后活跃会话清单（title/blocks/TTL）；L2-L4=过滤后条目清单
     const items =
       layer === 'L1'
-        ? [{ session_id: l1SelectedSid, blocks: l1BlockRows, window: l1WindowRows }]
+        ? visibleL1
         : visibleFacts
     const filename = `memory-export-${layer}-${ymd}.json`
     const payload = {
@@ -262,7 +250,7 @@ export function MemoryPage() {
           </label>
           {q && (
             <span className="flex-none text-[11px] text-label-3" data-testid="mem-search-count">
-              {layer === 'L1' ? (l1Searched ? 1 : 0) : visibleFacts.length}/{layer === 'L1' ? 1 : facts.length} 条匹配
+              {layer === 'L1' ? visibleL1.length : visibleFacts.length}/{layer === 'L1' ? l1Sessions.length : facts.length} 条匹配
             </span>
           )}
           <button
@@ -280,99 +268,67 @@ export function MemoryPage() {
         </div>
       )}
 
-      {/* ---- IX-MEM-03：L1 只读视图（F8⑤ 契约形态：会话选择器 + GET /memory/l1/{session_id} 快照） ---- */}
+      {/* ---- IX-MEM-03：L1 只读视图（B8-WC 契约形态：GET /memory/l1?limit= 列表 → 多会话卡） ---- */}
       {layer === 'L1' && (
         <div className="mt-4">
           <div className="flex flex-wrap items-center gap-2 rounded-xl border border-separator bg-surface-2 px-4 py-2.5 text-[11px] text-label-2">
             <Lock size={13} aria-hidden />
-            <b>L1 为会话内临时记忆，脱敏展示，不可编辑</b> · 只读视图，TTL 到期自动清除；敏感字段以掩码显示
-            <span className="mono ml-auto text-[11px] text-label-3">GET /memory/l1/&#123;session_id&#125;</span>
+            <b>L1 为会话内临时记忆，脱敏展示，不可编辑</b> · 只读视图，TTL 到期自动清除；敏感字段以掩码显示（Redis 降级 → 空列表）
+            <span className="mono ml-auto text-[11px] text-label-3">GET /memory/l1?limit=</span>
           </div>
 
-          {/* 会话选择器（F8⑤：默认=列表首条最近会话，可切换；列表失败→错误态；无会话→空态） */}
-          {l1SessionsQ.isPending && <SkeletonRows rows={1} rowHeight={32} className="mt-3" />}
-          {l1SessionsQ.isError && (
+          {/* S8 状态切片：列表首载骨架 / 失败错误态（重试=refetch） */}
+          {l1ListQ.isLoading && <SkeletonCards count={2} className="mt-3" />}
+          {l1ListQ.isError && (
             <ErrorState
               className="mt-4"
-              title="会话列表加载失败"
-              message={l1SessionsQ.error instanceof Error ? l1SessionsQ.error.message : undefined}
-              code={l1SessionsQ.error instanceof ApiError ? l1SessionsQ.error.code : undefined}
-              onRetry={() => void l1SessionsQ.refetch()}
+              title="L1 会话列表加载失败"
+              message={l1ListQ.error instanceof Error ? l1ListQ.error.message : undefined}
+              code={l1ListQ.error instanceof ApiError ? l1ListQ.error.code : undefined}
+              onRetry={() => void l1ListQ.refetch()}
             />
           )}
-          {!l1SessionsQ.isPending && !l1SessionsQ.isError && l1SessionItems.length === 0 && (
+
+          {/* 空态：无活跃会话或 Redis 降级（items=[] 同语义，契约卡二：空态不阻塞页面） */}
+          {!l1ListQ.isLoading && !l1ListQ.isError && l1Sessions.length === 0 && (
             <EmptyState
               className="mt-6"
               icon={Brain}
-              title="当前没有会话"
-              desc="L1 随会话创建——先在对话页开启一段会话，关闭时触发归档与 L2 沉淀。"
+              title="当前没有活跃的 L1 会话"
+              desc="L1 随会话创建、TTL 到期自动清除（Redis 降级时同样显示为空）。先在对话页开启一段会话，关闭时触发归档与 L2 沉淀。"
             />
-          )}
-          {l1SessionItems.length > 0 && (
-            <div className="mt-3 flex items-center gap-2" data-testid="l1-session-picker">
-              <label htmlFor="l1-session-select" className="flex-none text-[11px] text-label-3">会话</label>
-              <select
-                id="l1-session-select"
-                className="input h-7 max-w-[420px] flex-none text-xs"
-                data-testid="l1-session-select"
-                value={l1SelectedSid ?? ''}
-                onChange={e => setL1SidPick(e.target.value)}
-              >
-                {l1SessionItems.map(s => (
-                  <option key={s.id} value={s.id}>
-                    {s.title || '新会话'} · {s.id.slice(0, 8)}
-                  </option>
-                ))}
-              </select>
-              {l1Snapshot?.degraded && <span className="badge b-orange flex-none">降级</span>}
-            </div>
           )}
 
-          {/* 快照卡：blocks 记忆块（服务端已脱敏）+ window 滑动窗口近期消息 */}
-          {l1SelectedSid && l1Query.isPending && <SkeletonCards count={1} className="mt-3" />}
-          {l1SelectedSid && l1Query.isError && (
-            <ErrorState
-              className="mt-6"
-              title="L1 工作记忆加载失败"
-              message={l1Query.error instanceof Error ? l1Query.error.message : undefined}
-              code={l1Query.error instanceof ApiError ? l1Query.error.code : undefined}
-              onRetry={() => void l1Query.refetch()}
-            />
-          )}
-          {l1SelectedSid && !l1Query.isPending && !l1Query.isError && l1Snapshot && (
-            <div className="card mt-3 !p-4" data-testid={`l1-snapshot-${l1SelectedSid}`}>
-              <div className="flex items-center gap-2">
-                <span className="mono text-xs font-bold">{l1Snapshot.session_id}</span>
-                <span className="badge b-blue">会话内</span>
-                <span className="ml-auto text-label-3" title="只读"><Lock size={12} aria-hidden /></span>
-              </div>
-              <div className="mt-2 space-y-1.5" data-testid="l1-blocks">
-                {l1BlockRows.length === 0 && <div className="text-[11px] text-label-3">暂无记忆块。</div>}
-                {l1BlockRows.map(b => (
-                  <div key={b.key} className="flex gap-2 text-[11px]">
-                    <span className="mono w-[68px] flex-none text-label-3">{b.key}</span>
-                    <span className="text-label-2">{b.value}</span>
+          {/* 多会话卡：title/条目数/TTL 剩余/脱敏块 masked 徽标（B8-WC 契约卡二渲染口径） */}
+          {!l1ListQ.isLoading && !l1ListQ.isError && visibleL1.length > 0 && (
+            <div className="mt-3 space-y-2" data-testid="l1-session-list">
+              {visibleL1.map(s => (
+                <div key={s.session_id} className="card !p-4" data-testid={`l1-card-${s.session_id}`}>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <b className="text-[13px]">{s.title || '未命名会话'}</b>
+                    <span className="mono text-[11px] text-label-3">{s.session_id}</span>
+                    <span className="badge b-blue" data-testid={`l1-ttl-${s.session_id}`} title={`总窗口 ${Math.round(s.ttl_total_s / 60)} 分钟`}>
+                      TTL 剩余 {ttlText(s.ttl_remaining_s)}
+                    </span>
+                    <span className="ml-auto text-[11px] text-label-3">{s.blocks.length} 个记忆块</span>
                   </div>
-                ))}
-              </div>
-              {l1WindowRows.length > 0 && (
-                <div className="mt-3 border-t border-separator pt-2" data-testid="l1-window">
-                  <div className="text-[11px] font-semibold text-label-3">滑动窗口 · 近 {l1WindowRows.length} 条</div>
-                  <div className="mt-1.5 space-y-1.5">
-                    {l1WindowRows.map((w, i) => (
-                      <div key={w.message_id ?? i} className="flex gap-2 text-[11px]">
-                        <span className={`badge flex-none ${w.role === 'user' ? 'b-gray' : 'b-blue'}`}>{w.role === 'user' ? '用户' : '助手'}</span>
-                        <span className="min-w-0 flex-1 truncate text-label-2" title={String(w.content ?? '')}>{String(w.content ?? '')}</span>
+                  <div className="mt-2 space-y-1.5" data-testid={`l1-blocks-${s.session_id}`}>
+                    {s.blocks.length === 0 && <div className="text-[11px] text-label-3">暂无记忆块。</div>}
+                    {s.blocks.map(b => (
+                      <div key={b.key} className="flex items-center gap-2 text-[11px]">
+                        <span className="mono w-[92px] flex-none text-label-3">{b.key}</span>
+                        <span className="min-w-0 flex-1 text-label-2">{b.value}</span>
+                        {b.masked && <span className="badge b-orange flex-none" data-testid={`l1-masked-${s.session_id}`}>已脱敏</span>}
                       </div>
                     ))}
                   </div>
                 </div>
-              )}
+              ))}
             </div>
           )}
-          {/* 搜索无匹配（q 命中口径=会话 id/块 key·value/窗口内容） */}
-          {l1Snapshot && !l1Searched && (
-            <EmptyState className="mt-6" icon={SearchX} title="无匹配内容" desc={<>当前会话的 L1 中没有包含「{kw.trim()}」的记忆块或窗口消息。</>} />
+          {/* 搜索无匹配（q 命中口径=会话 id/标题/块 key·value） */}
+          {!l1ListQ.isLoading && !l1ListQ.isError && l1Sessions.length > 0 && visibleL1.length === 0 && (
+            <EmptyState className="mt-6" icon={SearchX} title="无匹配内容" desc={<>活跃会话的 L1 中没有包含「{kw.trim()}」的会话标题或记忆块。</>} />
           )}
           <div className="mt-3 text-[11px] text-label-3">
             L1 写入仅限系统沉淀与用户自编辑记忆块（PUT /memory/l1/&#123;session_id&#125;）；平台管理页对本层只读。脱敏规则待权限矩阵评审定稿（25 篇 §14）。

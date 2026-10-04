@@ -4,45 +4,72 @@ import { api, ApiError } from '@/api/client'
  *  groups/roles-matrix/models-写入/trace 展开/导出为预登记，见 mocks/admin-handlers.ts 头注）。
  *  DTO 手写过渡，TODO: 后端 /meta/openapi 可用后 gen:api 生成。 */
 
-// ---- 用户（§5.8 users CRUD） ----
+// ---- 用户（§5.8 users CRUD；B8-WC 契约卡终对齐 2026-10-04=后端 iam 域实装
+//      services/iam/api/schemas/users.py AdminUserOut 逐字段） ----
 export interface AdminUser {
   id: string
   username: string
   email: string
   display_name: string
   roles: string[]
+  /** 形状差异（契约卡 ①）：users 表无此列，后端恒回占位 '—'（展示位） */
   department: string
   status: 'active' | 'invited' | 'disabled'
   last_login_at: string | null
-  /** 链接邀请加入（2026-09-28 ★ invite-links 切片）：invited 行携带来源标记 */
-  invited_via?: 'email' | 'link'
-  invite_link_id?: string
+  /** 形状差异（契约卡 ②③）：invited 行真实数据恒无；invited_via/invite_link_id 显式序列化
+   *  null（`=== 'link'` 判定兼容） */
+  invited_via: 'email' | 'link' | null
+  invite_link_id: string | null
 }
+
+/** 可授予角色白名单（契约卡终裁：前端角色选择器仅保留此四码——guest 不可授予（409/3409）、
+ *  analyst 未种子化（422/3001）、super_admin 平台保留，均不下拉） */
+export const GRANTABLE_ROLES = ['member', 'curator', 'ontologist', 'admin'] as const
 
 export { ROLE_LABEL } from '@/lib/invite'
 export const ROLE_BADGE: Record<string, string> = {
   super_admin: 'b-purple', admin: 'b-blue', ontologist: 'b-orange', curator: 'b-green', member: 'b-gray', guest: 'b-gray',
 }
 
-export const listUsers = () => api.get<{ items: AdminUser[]; next_cursor: null }>('/admin/users')
+// fe3 信封收口（联调缺陷台账 2026-10-04）：admin 列表端点读取统一 api.list 归一形态
+// （{data,meta}；未实装时 404 照抛 ApiError 进错误态，行为不变），标量副载荷（total 等）
+// 经 normalizeList 落 meta。B8-WA 用户 CRUD live 化（2026-10-04）：listUsers 并入归一
+// （裸分页体 {items,total} / B1 信封 {data,meta} 双形态均归一，切 live 零改动）；
+// listInviteLinks 仍保持 api.get（mock=live 同形 {items,next_cursor}，勿动）。
 
-// fe3 信封收口（联调缺陷台账 2026-10-04）：admin 四 tab 列表（groups/models/audit-logs/
-// system-logs）端点后端未实装（live 404）——读取统一改 api.list 归一形态（{data,meta}，
-// 端点未实装时 404 照抛 ApiError 进错误态，行为不变），未来后端按 api/01 §3.1 实装即通；
-// 标量副载荷（total 等）经 normalizeList 落 meta（SystemLogsTab 的分级计数 total 对象同通道）。
-// listUsers/listInviteLinks 未列入本批裁决清单，保持 api.get 不动。
-
-/** 邀请成员（预登记批量形态：emails[]；契约现仅单用户创建，见 R 清单） */
-export function inviteUsers(emails: string[], role: string, note?: string) {
-  return api.post<{ invited: number; existing: { email: string; name: string }[] }>('/admin/users', { emails, role, note })
+/** 用户列表筛选参数（B8-WC 契约卡口径：query 关键词 / status / role 三维；
+ *  live 无 offset/limit——M1 全量列表游标留空，参数名=api/01 §5.8 登记名） */
+export interface ListUsersParams {
+  /** 关键词（邮箱/姓名/账号子串匹配） */
+  query?: string
+  status?: AdminUser['status']
+  role?: string
 }
-/** PATCH /admin/users/{id} 请求体（api/01 §5.8；mock 与真实调用共用此类型，防两处漂移） */
+
+export function listUsers(params: ListUsersParams = {}) {
+  const qs = new URLSearchParams()
+  if (params.query) qs.set('query', params.query)
+  if (params.status) qs.set('status', params.status)
+  if (params.role) qs.set('role', params.role)
+  const query = qs.toString()
+  return api.list<AdminUser>(`/admin/users${query ? `?${query}` : ''}`)
+}
+
+/** 用户单条详情（§5.8 GET /admin/users/{id}，含 roles 数组；未命中/跨租户 404） */
+export const getUser = (id: string) => api.get<AdminUser>(`/admin/users/${id}`)
+
+/** PATCH /admin/users/{id} 请求体（api/01 §5.8；mock 与真实调用共用此类型，防两处漂移）。
+ *  roles=全量替换语义：[] → 422；guest 授予 → 409；analyst 未种子化 → 422（前端已下掉）。 */
 export type AdminUserPatch = { roles?: string[]; department?: string; display_name?: string; status?: 'active' | 'disabled' }
 
 export function updateUser(id: string, body: AdminUserPatch) {
   return api.patch<AdminUser>(`/admin/users/${id}`, body)
 }
-export const disableUser = (id: string) => api.delete<void>(`/admin/users/${id}`)
+/** 停用（DELETE 软删，B8-WA live 化）：200+信封体 {id,status:'disabled'}——禁 204 空体
+ *  （apiFetchEnvelope 对 null body 抛错，同 invites revoke「200+信封体」先例钉死口径）；
+ *  软删幂等（重复删除同响应）；删自己/删 super_admin → 409/3409 */
+export const disableUser = (id: string) =>
+  api.delete<{ id: string; status: 'disabled' }>(`/admin/users/${id}`)
 
 // ---- 用户组（§5.10 预登记） ----
 export interface AdminGroup {

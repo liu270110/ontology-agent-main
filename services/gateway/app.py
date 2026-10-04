@@ -67,6 +67,7 @@ from services.gateway.middlewares import (
 from services.gateway.sse.redis_hub import build_sse_hub
 from services.iam.api.auth import router as auth_router
 from services.iam.api.invites import router as invites_router  # 邀请链接五端点（架构设计/32，api/01 §5.8）
+from services.iam.api.users import router as admin_users_router  # 用户管理 CRUD 四端点（api/01 §5.8，B8-WA 追认实装）
 from services.kb.api.kb import router as kb_router
 from services.memory.api.memory import router as memory_router
 from services.ontology.api.ontology import router as ontology_router
@@ -475,6 +476,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # ---- 路由（02 §4：统一前缀 /api/v1；M1 已落 auth / sessions / tasks，余随批次补齐）----
     app.include_router(auth_router, prefix=settings.api_prefix)
     app.include_router(invites_router, prefix=settings.api_prefix)  # 邀请链接五端点（api/01 §5.8）
+    app.include_router(admin_users_router, prefix=settings.api_prefix)  # 用户管理 CRUD 四端点（api/01 §5.8，B8-WA）
     app.include_router(agents_router, prefix=settings.api_prefix)  # M3.1：agents CRUD（api/01 §5.1）
     app.include_router(sessions_router, prefix=settings.api_prefix)
     app.include_router(run_control_router, prefix=settings.api_prefix)  # M4.5-A：inbox 提交 + admin estop（§1.4）

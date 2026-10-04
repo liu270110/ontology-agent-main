@@ -11,7 +11,8 @@ import type { AdminUserPatch, WritebackLedgerRow } from '@/features/admin/api'
  *    mock，后端 W1 按 card 追认实装）；mock 字段名已对齐后端真实 DTO（AdminReviewOut 基座
  *    + DecisionIn 同词汇 note），不再列 R 清单
  *  - GET  /admin/reviews/:id——同上 W2 冻结（api/01 §5.8 ☆：AdminReviewOut 基座 + 详情富扩展）
- *  - POST /admin/users 批量邀请（emails[]）——契约仅单用户创建；IX-ADM-01 chip 化批量需批量端点或循环调用
+ *  - POST /admin/users——端点不存在（live 405，B8-WC 契约卡 2026-10-04 终对齐；前端邮箱批量
+ *    邀请分支已移除，邀请统一走 /invites 链接流；mock 显式回 405 防误接）
  *  - GET/PUT /admin/roles/matrix——角色权限矩阵读写未登记（IX-ADM-04）
  *  - POST/DELETE /admin/models(/:id)——§5.8 仅 GET 列表 / PUT 更新，接入与删除端点缺（IX-ADM-05/06）
  *  - POST /admin/models/test——渠道连通性测试端点缺（IX-ADM-05「成功才可保存」依赖）
@@ -251,23 +252,29 @@ export interface AdminUser {
   email: string
   display_name: string
   roles: string[]
+  /** 形状差异（B8-WC 契约卡 ①）：users 表无此列，后端恒回占位 '—'（展示位） */
   department: string
   status: 'active' | 'invited' | 'disabled'
   last_login_at: string | null
-  /** 链接邀请加入（2026-09-28 ★ invite-links 切片）：join 落库行携带来源标记 */
-  invited_via?: 'email' | 'link'
-  invite_link_id?: string
+  /** 形状差异（B8-WC 契约卡 ②③）：invited 行真实数据恒无；invited_via/invite_link_id
+   *  显式序列化 null（前端 `=== 'link'` 判定兼容） */
+  invited_via: 'email' | 'link' | null
+  invite_link_id: string | null
 }
 
+/** 种子（B8-WC 契约卡终对齐 2026-10-04，后端 iam 域实装投影 tests/gateway/test_admin_users.py）：
+ *  - department 恒 '—'（无存储列，展示位）；invited_via/invite_link_id 显式 null；
+ *  - u-07（invited）删除——invited 真实数据恒无；
+ *  - u-09 super_admin 行=「删超管 409」演示（MATRIX_ROLES affected 同步 2）。 */
 const USERS: AdminUser[] = [
-  { id: 'u-01', username: '刘以在', email: 'admin@example.com', display_name: '刘以在', roles: ['admin'], department: '数字化部', status: 'active', last_login_at: '2026-09-26T09:12:00Z' },
-  { id: 'u-02', username: '王工', email: 'wang.gong@example.com', display_name: '王工', roles: ['curator', 'ontologist'], department: '知识工程师', status: 'active', last_login_at: '2026-09-26T08:40:00Z' },
-  { id: 'u-03', username: '李倩', email: 'li.qian@example.com', display_name: '李倩', roles: ['curator'], department: '调度中心', status: 'active', last_login_at: '2026-09-26T09:05:00Z' },
-  { id: 'u-04', username: '陈晨', email: 'chen.chen@example.com', display_name: '陈晨', roles: ['member'], department: '服务集成组', status: 'active', last_login_at: '2026-09-26T11:47:00Z' },
-  { id: 'u-05', username: '赵敏', email: 'zhao.min@example.com', display_name: '赵敏', roles: ['ontologist'], department: '本体组', status: 'active', last_login_at: '2026-09-25T17:30:00Z' },
-  { id: 'u-06', username: 'guest-audit', email: 'guest@example.com', display_name: 'guest-audit', roles: ['guest'], department: '外审', status: 'active', last_login_at: '2026-09-24T10:11:00Z' },
-  { id: 'u-07', username: '孙宇', email: 'sun.yu@example.com', display_name: '孙宇', roles: ['member'], department: '运检部', status: 'invited', last_login_at: null },
-  { id: 'u-08', username: '钱进', email: 'qian.jin@example.com', display_name: '钱进', roles: ['member'], department: '营销部', status: 'disabled', last_login_at: '2026-09-10T16:02:00Z' },
+  { id: 'u-01', username: '刘以在', email: 'admin@example.com', display_name: '刘以在', roles: ['admin'], department: '—', status: 'active', last_login_at: '2026-09-26T09:12:00Z', invited_via: null, invite_link_id: null },
+  { id: 'u-02', username: '王工', email: 'wang.gong@example.com', display_name: '王工', roles: ['curator', 'ontologist'], department: '—', status: 'active', last_login_at: '2026-09-26T08:40:00Z', invited_via: null, invite_link_id: null },
+  { id: 'u-03', username: '李倩', email: 'li.qian@example.com', display_name: '李倩', roles: ['curator'], department: '—', status: 'active', last_login_at: '2026-09-26T09:05:00Z', invited_via: null, invite_link_id: null },
+  { id: 'u-04', username: '陈晨', email: 'chen.chen@example.com', display_name: '陈晨', roles: ['member'], department: '—', status: 'active', last_login_at: '2026-09-26T11:47:00Z', invited_via: null, invite_link_id: null },
+  { id: 'u-05', username: '赵敏', email: 'zhao.min@example.com', display_name: '赵敏', roles: ['ontologist'], department: '—', status: 'active', last_login_at: '2026-09-25T17:30:00Z', invited_via: null, invite_link_id: null },
+  { id: 'u-06', username: 'guest-audit', email: 'guest@example.com', display_name: 'guest-audit', roles: ['guest'], department: '—', status: 'active', last_login_at: '2026-09-24T10:11:00Z', invited_via: null, invite_link_id: null },
+  { id: 'u-08', username: '钱进', email: 'qian.jin@example.com', display_name: '钱进', roles: ['member'], department: '—', status: 'disabled', last_login_at: '2026-09-10T16:02:00Z', invited_via: null, invite_link_id: null },
+  { id: 'u-09', username: 'root', email: 'root@example.com', display_name: '平台超管', roles: ['super_admin'], department: '—', status: 'active', last_login_at: '2026-09-26T08:00:00Z', invited_via: null, invite_link_id: null },
 ]
 
 export interface AdminGroup {
@@ -697,48 +704,77 @@ export const adminHandlers = [
     return ok({ succeeded, failed, updated: succeeded.length, ids: succeeded })
   }),
 
-  // ---- 用户（§5.8 POST/GET/PATCH/DELETE /admin/users） ----
-  http.get('*/api/v1/admin/users', () => ok({ items: USERS, next_cursor: null })),
-
-  // 预登记：emails[] 批量邀请（IX-ADM-01；契约现仅单用户创建，见交付报告 R 清单）
-  http.post('*/api/v1/admin/users', async ({ request }) => {
-    const body = (await request.json()) as { emails?: string[]; role?: string; note?: string }
-    const emails = (body.emails ?? []).map(e => e.trim().toLowerCase()).filter(Boolean)
-    if (emails.length === 0) return err(3001, '至少填入一个邮箱', 422)
-    const existing = USERS.filter(u => emails.includes(u.email)).map(u => ({ email: u.email, name: u.display_name }))
-    const created = emails
-      .filter(e => !existing.some(x => x.email === e))
-      .map(email => {
-        const u: AdminUser = {
-          id: `u-${String(++userSeq).padStart(2, '0')}`,
-          username: email.split('@')[0] ?? email,
-          email, display_name: email.split('@')[0] ?? email,
-          roles: [body.role ?? 'member'], department: '—',
-          status: 'invited', last_login_at: null,
-        }
-        USERS.unshift(u)
-        return u
-      })
-    return ok({ invited: created.length, existing, items: created }, 201)
+  // ---- 用户（§5.8 users CRUD；B8-WC 契约卡终对齐 2026-10-04=后端 iam 域实装投影
+  //      services/iam/api/users.py + tests/gateway/test_admin_users.py）：
+  //      · GET 列表三维筛选 query/status/role，信封 data={items, next_cursor:null}
+  //        （无 offset/limit——M1 全量列表游标留空）
+  //      · GET 单条（含 roles）；404 错误码统一 404（无 4041）
+  //      · PATCH roles 全量替换：[] → 422/3001；guest 授予 → 409/3409；analyst 未种子化 →
+  //        422/3001；super_admin 持有者不可停用/改绑角色 → 409/3409；department 接受不落库
+  //      · DELETE 软删幂等=200+信封体 {id,status:'disabled'}（禁 204 空体：apiFetchEnvelope
+  //        对 null body 抛错，同 invites revoke 先例）；删自己/删 super_admin → 409/3409
+  //      · POST 不存在（405）——邮箱邀请统一走 /invites 链接流 ----
+  http.get('*/api/v1/admin/users', ({ request }) => {
+    const url = new URL(request.url)
+    const query = url.searchParams.get('query')?.trim().toLowerCase() ?? ''
+    const status = url.searchParams.get('status')
+    const role = url.searchParams.get('role')
+    let items = USERS
+    if (query) {
+      items = items.filter(u =>
+        `${u.email} ${u.display_name} ${u.username}`.toLowerCase().includes(query))
+    }
+    if (status) items = items.filter(u => u.status === status)
+    if (role) items = items.filter(u => u.roles.includes(role))
+    return ok({ items, next_cursor: null })
   }),
+
+  http.get('*/api/v1/admin/users/:id', ({ params }) => {
+    const u = USERS.find(x => x.id === String(params.id))
+    return u ? ok(u) : err(404, `用户不存在: ${String(params.id)}`, 404)
+  }),
+
+  // 端点不存在（405，live 同口径）：批量邮箱邀请分支已删除，误接显式报错防静默
+  http.post('*/api/v1/admin/users', () =>
+    err(1004, '邮箱批量邀请端点不存在（405）——请改用邀请链接流（POST /invites）', 405)),
 
   http.patch('*/api/v1/admin/users/:id', async ({ request, params }) => {
     const u = USERS.find(x => x.id === String(params.id))
-    if (!u) return err(4041, '用户不存在', 404)
+    if (!u) return err(404, `用户不存在: ${String(params.id)}`, 404)
     const body = (await request.json()) as AdminUserPatch
-    if (body.roles) u.roles = body.roles
-    if (body.department !== undefined) u.department = body.department
+    const isSuperAdmin = u.roles.includes('super_admin')
+    if (isSuperAdmin && (body.roles !== undefined || body.status === 'disabled')) {
+      return err(3409, 'SUPER_ADMIN_PROTECTED: 平台超管账号不可停用/删除/改绑角色', 409)
+    }
+    if (body.roles !== undefined) {
+      if (body.roles.length === 0) return err(3001, 'roles 至少保留一个角色（防自锁全部权限）', 422)
+      const ungrantable = body.roles.filter(r => r === 'guest' || r === 'super_admin')
+      if (ungrantable.length) {
+        return err(3409, `ROLE_NOT_GRANTABLE: 角色不在可授予白名单（super_admin 平台保留）: ${ungrantable.join('、')}`, 409)
+      }
+      // analyst 在授予白名单但未种子化（live roles 表无此行）→ 未知角色码 422/3001
+      const unknown = body.roles.filter(r => !['member', 'curator', 'ontologist', 'admin'].includes(r))
+      if (unknown.length) return err(3001, `未知角色码（未种子化）: ${unknown.join('、')}`, 422)
+      u.roles = body.roles
+    }
     if (body.display_name) u.display_name = body.display_name
-    // status 扩展（api/01 §5.8 PATCH 登记）：软禁用（DELETE）的可逆出口——启用回 active
+    // status 启停可逆出口（api/01 §5.8 PATCH）：软禁用（DELETE）的回程
     if (body.status) u.status = body.status
+    // department 形状差异（契约卡 ①）：接受但不落库，响应恒 '—'（extra=forbid 同款宽容）
     return ok(u)
   }),
 
   http.delete('*/api/v1/admin/users/:id', ({ params }) => {
     const u = USERS.find(x => x.id === String(params.id))
-    if (!u) return err(4041, '用户不存在', 404)
+    if (!u) return err(404, `用户不存在: ${String(params.id)}`, 404)
+    // 禁删自己（409/3409）：当前登录=demo 单管理员 admin@example.com；
+    // live 检测=网关 principal 与目标行对比（services/iam/api/users.py USER_SELF_DISABLE）
+    if (u.email === 'admin@example.com') return err(3409, 'USER_SELF_DISABLE: 不可停用当前登录账号自己', 409)
+    // 超管保护（409/3409）：SUPER_ADMIN_PROTECTED（u-09 演示行）
+    if (u.roles.includes('super_admin')) return err(3409, 'SUPER_ADMIN_PROTECTED: 平台超管账号不可停用/删除/改绑角色', 409)
     u.status = 'disabled'
-    return new HttpResponse(null, { status: 204 })
+    // 200+信封体（禁 204 空体：apiFetchEnvelope 对 null body 抛错，同 invites revoke 口径）；幂等
+    return ok({ id: u.id, status: u.status })
   }),
 
   // ---- 用户组（§5.10 预登记，IX-ADM-09） ----

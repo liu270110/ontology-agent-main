@@ -21,7 +21,14 @@ from uuid import UUID
 
 from redis import asyncio as aioredis
 
-from services.memory.domain.model.l1 import L1Snapshot, MemoryBlock, WindowMessage, empty_snapshot
+from services.memory.domain.model.l1 import (
+    L1BlockEntry,
+    L1SessionSummary,
+    L1Snapshot,
+    MemoryBlock,
+    WindowMessage,
+    empty_snapshot,
+)
 
 logger = logging.getLogger("services.memory.data.l1")
 
@@ -100,6 +107,57 @@ class RedisL1Store:
         window = [WindowMessage.model_validate_json(item) for item in raw_window]
         state = json.loads(raw_state) if raw_state else None
         return L1Snapshot(tenant_id=tenant_id, session_id=session_id, blocks=blocks, window=window, state=state)
+
+    async def list_sessions(self, tenant_id: UUID, *, limit: int = 50) -> list[L1SessionSummary]:
+        """活跃 L1 会话列表（GET /memory/l1 数据面；与 read 同源键规范，会话维聚合）。
+
+        - 聚合口径：SCAN mem:l1:{tenant}:* 三键（blocks/window/state）任一存在即活跃会话；
+          blocks hash 解析复用 read 同款 MemoryBlock 反序列化；ttl_remaining_s=三键 TTL 最大值
+          （同管线续期近似相等；缺失/无过期/已过期 → 0），ttl_total_s=本实例配置 TTL；
+        - title=首个非空块 title 的块级代理（会话权威标题归 agent sessions 表，跨域聚合随
+          gateway 聚合面接入——read_l1_snapshot 同款分期口径）；
+        - 排序：ttl_remaining_s 降序（最近活跃在前），并列按 session_id 稳定序；
+        - Redis 不可达 → 降级空列表（read 同款降级契约，不阻塞容量卡渲染）。
+        """
+        if not await self._available():
+            return []
+        prefix = f"mem:l1:{tenant_id}:"
+        session_ids: list[UUID] = []
+        seen: set[str] = set()
+        try:
+            async for key in self._redis.scan_iter(match=f"{prefix}*", count=100):
+                sid_raw = key[len(prefix):].rsplit(":", 1)[0]  # 剥 blocks/window/state 后缀
+                if sid_raw in seen:
+                    continue
+                try:
+                    session_ids.append(UUID(sid_raw))
+                except ValueError:
+                    continue  # 非会话键（防御：键空间被旁路写入时跳过，不炸列表）
+                seen.add(sid_raw)
+                if len(session_ids) >= limit:
+                    break
+            summaries: list[L1SessionSummary] = []
+            for sid in session_ids:
+                raw_blocks = await self._redis.hgetall(self._blocks_key(tenant_id, sid))
+                parsed = {k: MemoryBlock.model_validate_json(v) for k, v in raw_blocks.items()}
+                pipe = self._redis.pipeline()
+                for key_of in (self._blocks_key, self._window_key, self._state_key):
+                    pipe.ttl(key_of(tenant_id, sid))
+                ttls = await pipe.execute()
+                summaries.append(
+                    L1SessionSummary(
+                        session_id=sid,
+                        title=next((b.title for _, b in sorted(parsed.items()) if b.title), ""),
+                        ttl_total_s=self._ttl_seconds,
+                        ttl_remaining_s=max((int(t) for t in ttls if int(t) > 0), default=0),
+                        blocks=[L1BlockEntry(key=k, value=b.content) for k, b in sorted(parsed.items())],
+                    )
+                )
+        except (aioredis.RedisError, OSError) as exc:
+            self._degrade(exc)
+            return []
+        summaries.sort(key=lambda s: (-s.ttl_remaining_s, str(s.session_id)))
+        return summaries
 
     # ---------------------------------------------------------------- 写入
     async def write_blocks(self, tenant_id: UUID, session_id: UUID, blocks: list[MemoryBlock]) -> int:

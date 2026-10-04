@@ -25,6 +25,9 @@
     POST /memory/promotions（records 权威版）  记录升级申请（memory_promotions 表 + 同请求建审批
                                               中心工单 memory_l2_upgrade，M4P3-T5；fact 版
                                               过渡路由改挂 /memory/facts/{id}/promotions）
+    ── 断头补齐切片（B8-WB，2026-10-04；前端 api.ts R27 消费方追认）──
+    GET  /memory/l1                           列出租户活跃 L1 会话工作记忆（容量卡计数 + TTL）
+    POST /memory/promotions/{id}/decision      升级单终审决策（approve→L3 生效 / reject→驳回退回）
 
 scope：memory:read / memory:write，deny-by-default（08 §2.5）。
 授权矩阵（memory §5.3）：用户读写本人记忆；跨用户 → 403（2002）。
@@ -51,10 +54,14 @@ from services.memory.api.schemas.memory import (
     FactTimelineOut,
     FactWrittenOut,
     L1ReadOut,
+    L1SessionListOut,
+    L1SessionOut,
     MemoryContextOut,
     MemorySearchIn,
     MemorySearchOut,
     MemoryWriteIn,
+    PromotionDecisionIn,
+    PromotionDecisionOut,
     PromotionIn,
     PromotionOut,
     PromotionPageOut,
@@ -96,6 +103,7 @@ from services.memory.domain.repo.fact_repo import L1MemoryStore  # 运行时 imp
 from services.memory.domain.repo.review_port import PromotionDecisionPort, PromotionReviewPort
 from services.platform.deps import Principal, SessionDep, get_redis, require_scope
 from services.platform.errors import ErrorCode, GatewayError
+from services.platform.kernel import DomainError
 
 if TYPE_CHECKING:  # 仅类型注解（运行时零 import——app.py 同款纪律）
     from sqlalchemy.ext.asyncio import AsyncSession
@@ -330,6 +338,20 @@ async def memory_context(
 
 
 # ---------------------------------------------------------------- ★ 端点（api/01 §5.5 登记册补齐）
+
+
+@router.get("/l1", summary="列出当前租户活跃 L1 会话工作记忆（容量卡计数 + TTL 倒计时）")
+async def list_l1_sessions(
+    principal: MemoryReadDep,
+    l1: L1StoreDep,
+    limit: Annotated[int, Query(ge=1, le=100)] = 50,
+) -> L1SessionListOut:
+    """活跃 L1 会话列表（★ GET /memory/l1，B8-WB 断头补齐 2026-10-04；前端 listL1 消费方）：
+    数据源=L1 Redis 三键空间 SCAN 聚合（与 GET /memory/l1/{session_id} 同源 RedisL1Store，
+    会话维聚合，见 data.l1.list_sessions）；title 为块级代理（会话权威标题归 agent sessions 表，
+    read_l1_snapshot 同款分期口径）；Redis 降级 → items=[]（容量卡空态，不阻塞页面）。"""
+    sessions = await l1.list_sessions(principal.tenant_id, limit=limit)
+    return L1SessionListOut(items=[L1SessionOut.from_summary(s) for s in sessions])
 
 
 @router.get("/l1/{session_id}", summary="读 L1 工作记忆（blocks / window / state，memory §5.1）")
@@ -652,6 +674,15 @@ def _promotion_review(request: Request, repo: Any) -> PromotionReviewService:
     return PromotionReviewService(repo, review, approvals)
 
 
+def _promotion_domain_error(exc: DomainError) -> GatewayError:
+    """DomainError → 统一错误体（review/api/admin.py _domain_error 同款映射：码取消息前缀，
+    HTTP 按段映射）。decide 路径预期仅 4705（升级单无审批工单=对账缝）→ 409。"""
+    message = str(exc)
+    head = message[:4]
+    code = int(head) if head.isdigit() else 4702
+    return GatewayError(code, message, status_code=409)
+
+
 @router.post("/promotions", response_model=dict, summary="记录升级申请（records 三表权威实现）")
 async def create_record_promotion(
     body: PromotionCreateRequest,
@@ -689,3 +720,54 @@ async def create_record_promotion(
             "duplicate": data["duplicate"],  # 幂等返回：同记录已有 open 升级单（200 语义）
         },
     }
+
+
+@router.post(
+    "/promotions/{promotion_id}/decision",
+    response_model=dict,
+    summary="升级单终审决策（approve→过审批链落 L3 生效 / reject→驳回退回 L2）",
+)
+async def decide_record_promotion(
+    promotion_id: uuid.UUID,
+    body: PromotionDecisionIn,
+    pipe: Pipe,
+    tid: Tid,
+    request: Request,
+    x_user_id: Annotated[str | None, Header(alias="X-User-Id")] = None,
+) -> dict:
+    """终审决策断头补齐（B8-WB 2026-10-04；前端 ReviewModal 通过/驳回消费方，R27 登记）：
+    复用 records 权威链路编排（PromotionReviewService.decide）——approve=治理三档审批链落决策
+    （禁自批/四眼由收敛点保证）→ apply_promotion（records.layer 2→3，L3 生效）+ 工单 published；
+    reject=升级单 rejected、记录保留 L2 不动（06 篇 §5.4 驳回退回，候选样本不写入 L3）。
+    多签未集齐（enterprise 首签）→ pending_review 续等（fact_layer=L2）；工单已 approved 的
+    重入走幂等补齐。决策人=X-User-Id dev 头——终审须可归因（审批决策行必有 approver），
+    缺失/非法 422，区别于 settle 的静默忽略；TODO(M1) JWT 收口。不存在/跨租户 → 404（不泄露
+    存在性）；升级单无审批工单（4705 对账缝）→ 409 统一错误体。响应 data 形状=前端逐字段
+    {pm_id, action, fact_id, fact_layer}。"""
+    _pipeline, repo = pipe
+    svc = _promotion_review(request, repo)
+    approver_id = _parse_optional_uuid(x_user_id)
+    if approver_id is None:  # 终审须可归因（审计决策行 approver 必填；M1 JWT 后由令牌派生）
+        raise HTTPException(status_code=422, detail="X-User-Id 缺失或非法（终审决策须可归因）")
+    promo = await repo.get_promotion(tid, promotion_id)
+    if promo is None:  # 未命中或跨租户一律 404（不泄露存在性）
+        raise HTTPException(status_code=404, detail="promotion not found")
+    try:
+        outcome = await svc.decide(
+            tenant_id=tid,
+            promotion_id=promotion_id,
+            action=body.action,
+            approver_id=approver_id,
+            note=body.reason or "",
+        )
+    except LookupError as exc:  # 防御性兜底（上方已预检）；编排内部工单缺失走 DomainError
+        raise HTTPException(status_code=404, detail="promotion not found") from exc
+    except DomainError as exc:  # 4705 无审批工单等对账缝 → 统一错误体（review admin 同款映射）
+        raise _promotion_domain_error(exc) from exc
+    data = PromotionDecisionOut(
+        pm_id=promotion_id,
+        action=body.action,
+        fact_id=promo["record_id"],
+        fact_layer="L3" if outcome["promotion_state"] == "applied" else "L2",
+    )
+    return {"code": 0, "message": "ok", "data": data.model_dump(mode="json")}

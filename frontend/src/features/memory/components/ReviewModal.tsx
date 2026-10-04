@@ -3,13 +3,15 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { Check, Layers, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { Modal } from '@/components/modal'
-import { decidePromotion, type MemoryFact, type MemoryPromotion } from '../api'
+import { decidePromotion, type MemoryFact, type MemoryPromotion, type PromotionDecisionOut } from '../api'
 import { FactTimeline } from './shared'
 
 /** IX-MEM-01 升级审核对照弹窗（26 篇 §8.1；画板 ix-mem-01）：720px 双栏——
  *  左候选记忆卡（摘要/来源会话/置信度/已复用次数），右原文对照（会话消息片段高亮）
  *  + 沉淀轨迹迷你时间线；底部「通过并入 L3」（写入组织图谱）/「拒绝」（原因必填）。
- *  通过/拒绝均写时间线与审计留痕（设计宪法 3：候选非成品 + 全程可追溯）。 */
+ *  通过/拒绝均写时间线与审计留痕（设计宪法 3：候选非成品 + 全程可追溯）。
+ *  B8-WC 契约卡（2026-10-04）：决策接 live 端点（decidePromotion 双 header），决策成功后
+ *  invalidate promotions + facts 两查询（队列摘单 / L3 列表与时间线刷新）。 */
 
 export function ReviewModal({
   promotion,
@@ -27,10 +29,17 @@ export function ReviewModal({
   const decide = useMutation({
     mutationFn: (body: { action: 'approve' | 'reject'; reason?: string }) =>
       decidePromotion(promotion!.id, body),
-    onSuccess: res => {
-      void qc.invalidateQueries({ queryKey: ['memory'] })
+    onSuccess: (res: PromotionDecisionOut) => {
+      // 决策后两查询失效（契约卡二）：promotions=队列摘单；facts=L2/L3 列表与时间线刷新
+      void qc.invalidateQueries({ queryKey: ['memory', 'promotions'] })
+      void qc.invalidateQueries({ queryKey: ['memory', 'facts'] })
       if (res.action === 'approve') {
-        toast.success(`已通过并入 L3 · 升级单 ${res.pm_id}`, { description: '时间线留痕 + 记忆审计已写入' })
+        toast.success(
+          res.fact_layer === 'L3'
+            ? `已通过并入 L3 · 升级单 ${res.pm_id}`
+            : `已通过 · 升级单 ${res.pm_id}（多签未集齐，续等审批链）`,
+          { description: '时间线留痕 + 记忆审计已写入' },
+        )
       } else {
         toast.success(`已拒绝 · 升级单 ${res.pm_id}`, { description: '候选样本进负样本池，不写入 L3' })
       }
@@ -38,6 +47,7 @@ export function ReviewModal({
       setReason('')
       onClose()
     },
+    onError: e => toast.error(e.message),
   })
 
   if (!promotion) return null

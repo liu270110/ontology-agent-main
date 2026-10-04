@@ -23,6 +23,7 @@ import logging
 from collections.abc import Awaitable, Callable, Sequence
 
 from services.agent.business.kernel.execution import ExecutionStage
+from services.agent.business.kernel.plan import KERNEL_PLAN_UPDATED, plan_updated_data
 from services.agent.business.kernel.run_context import Emit, RunContext
 from services.agent.domain.model.kernel_actions import ExecutionMode
 from services.agent.domain.model.kernel_planning import PlanCandidate, PlanStep
@@ -76,6 +77,18 @@ class ToolGroupDispatcher:
             if rc.states[step.seq].status is StepStatus.GATED:
                 admitted.append(step)
         concurrency = max(1, min(parallelism, len(admitted)))
+        # R4 计划推进（40 篇 §8）：入池步整批 begin 后发一次快照（in_progress；批内合并
+        # =低频整表快照语义，40 篇 §4.1 PLAN_UPDATED 不节流也无高频风险）
+        plan = rc.plan
+        began = [s.seq for s in admitted if plan is not None and plan.begin(s.seq)]
+        if began:
+            self._emit(
+                rc.ledger,
+                ctx,
+                rc.task.run_id,
+                KERNEL_PLAN_UPDATED,
+                plan_updated_data(plan, str(rc.task.run_id)),  # type: ignore[arg-type]  # began 非空蕴含 plan 非空
+            )
         self._emit(
             rc.ledger,
             ctx,
@@ -109,10 +122,21 @@ class ToolGroupDispatcher:
                     t.cancel()  # 父任务取消不传播到子任务：显式取消在途步，收尾时间才有界（对齐 §2.4 清单 5s 纪律）
                 await asyncio.gather(*tasks, return_exceptions=True)  # 段任务走完取消路径再上抛（零悬挂）
                 raise
+        finished = False
         for step in steps:  # 声明序收口：observation＋步数记账（与串行执行完全一致的顺序）
             if rc.states[step.seq].status is StepStatus.EXECUTING:
                 await self._observe(rc, step)
+            if plan is not None and plan.finish(step.seq):  # R4：步终态（validated/failed）→ completed
+                finished = True
             rc.tracker.add_step()
+        if finished:  # R4：整批终态合并为一发快照（零变化零事件）
+            self._emit(
+                rc.ledger,
+                ctx,
+                rc.task.run_id,
+                KERNEL_PLAN_UPDATED,
+                plan_updated_data(plan, str(rc.task.run_id)),  # type: ignore[arg-type]  # finished 蕴含 plan 非空
+            )
         self._emit(
             rc.ledger,
             ctx,

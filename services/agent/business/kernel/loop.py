@@ -31,6 +31,7 @@ from services.agent.business.kernel.gate_baseline import BaselineGate, canonical
 from services.agent.business.kernel.grounding import ContextAssemblyStage
 from services.agent.business.kernel.inbox import InboxItem, KernelInbox
 from services.agent.business.kernel.ledger import KernelLedger, LedgerSink
+from services.agent.business.kernel.plan import KERNEL_PLAN_UPDATED, PlanProjection, plan_updated_data
 from services.agent.business.kernel.run_context import RunContext
 from services.agent.business.kernel.spill import SpillStore
 from services.agent.business.kernel.subagent import ParentBindable
@@ -235,9 +236,13 @@ class AgentKernel:
                         state = rc.states[step.seq]
                         await self._stage_gate(rc, candidate, step)
                         if state.status is StepStatus.GATED:
+                            if rc.plan is not None and rc.plan.begin(step.seq):
+                                self._emit_plan_snapshot(rc)  # R4：步开跑 → in_progress
                             await self._execution_stage.run(rc, step)
                         if state.status is StepStatus.EXECUTING:
                             await self._stage_observation(rc, step)
+                        if rc.plan is not None and rc.plan.finish(step.seq):
+                            self._emit_plan_snapshot(rc)  # R4：步终态（validated/failed）→ completed
                         rc.tracker.add_step()  # 步数预算记账（步后累计，下一步检查点生效）
                     else:  # 多步段：段前预算检查点一次，段执行器负责门禁先行+池执行+声明序收口
                         rc.tracker.check()
@@ -275,6 +280,7 @@ class AgentKernel:
                 if not state.is_terminal:
                     state.cancel(reason="运行被取消（清单完毕落终态，02 §2.4）")
                 rc.ledger.record_step(state)
+            self._emit_plan_terminal_sweep(rc)  # R4：已开跑未终态项随取消收敛推进 completed
             rc.ledger.assert_no_open_calls()  # 清单已强制闭合：落终态即零未闭合调用
             self._emit(
                 rc.ledger,
@@ -324,6 +330,10 @@ class AgentKernel:
                 "watermark": rc.tracker.watermark().model_dump(),
             },
         )
+        # R4 计划投影（40 篇 §4.2/§8）：规划产出即建 items 整表（全 pending）并发
+        # revision=1 快照（kernel.plan_updated → 转译 PLAN_UPDATED）；后续步推进增量快照。
+        rc.plan = PlanProjection(candidate.steps)
+        self._emit_plan_snapshot(rc)
         return candidate
 
     # ── M4.5-A：P-4 resume 计划对账（docs/Agent/12 §1.3）──────────────────
@@ -662,6 +672,7 @@ class AgentKernel:
             if not state.is_terminal:
                 state.cancel(reason=reason)
             rc.ledger.record_step(state)
+        self._emit_plan_terminal_sweep(rc)  # R4：已开跑未终态项随中断收敛推进 completed
         rc.ledger.assert_no_open_calls()  # 清单执行完毕才落终态（落态即零未闭合调用）
         self._emit(
             rc.ledger,
@@ -679,6 +690,28 @@ class AgentKernel:
         )
 
     # ── 审计事件（C2）────────────────────────────────────────────────────
+    def _emit_plan_snapshot(self, rc: RunContext) -> None:
+        """计划整表快照发射（R4，40 篇 §4.2/§4.3）：kernel.plan_updated 锚点 →
+        H-0a 广播转译 PLAN_UPDATED（revision 自 1 严格递增，last-wins 整表替换）。
+        规划前（rc.plan=None）零发射；调用方在 items 有变化时才调用（零变化零事件）。"""
+        if rc.plan is None:
+            return
+        self._emit(
+            rc.ledger,
+            rc.ctx,
+            rc.task.run_id,
+            KERNEL_PLAN_UPDATED,
+            plan_updated_data(rc.plan, str(rc.task.run_id)),
+        )
+
+    def _emit_plan_terminal_sweep(self, rc: RunContext) -> None:
+        """中断/取消路径的计划终局收敛（R4）：状态已终态的已开跑项推进 completed 后补一发
+        快照（无变化零发射）——防取消收敛后前端计划卡滞留 in_progress 旋转。"""
+        if rc.plan is None:
+            return
+        if rc.plan.finish_terminal(seq for seq, state in rc.states.items() if state.is_terminal):
+            self._emit_plan_snapshot(rc)
+
     def _slot_emitter(self, rc: RunContext) -> Any:
         """子 Run 事件发射通道（40 篇 §8 R2，2026-10-04 批）：闭包父 Run 账本+上下文。
 

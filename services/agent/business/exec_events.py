@@ -1,6 +1,6 @@
 """执行结构事件管道（40 篇 §4「执行结构波」/§8 R2；2026-10-04 管道步——发射点随后续批次）。
 
-职责边界（R2 管道部分；发射点=spawn/close（subagent.py）、规划（R4）、节点执行器（X16）逐步落地）：
+职责边界（R2 管道 + R4 规划发射点，2026-10-04；余下发射点=节点执行器（X16）后续落地）：
 1. **payload 值对象**：SUBRUN_* / PLAN_UPDATED / WORKFLOW_NODE_* 逐一对照 40 篇 §4.2 schema
    （字段名对齐 Hermes SubagentEventPayload，蓝本 40 篇 §2.1）；WORKFLOW_NODE_* 本步仅登记
    枚举与模型（节点执行器随 X16，40 篇 R7；STEP_* 语义辨析见 40 篇 §4.1 命名裁决）；
@@ -20,7 +20,8 @@
 - ``kernel.subrun_updated``  data={sub_run_id, phase?, tool_name?, tool_count?, preview?, tokens?}
 - ``kernel.subrun_finished`` data={sub_run_id, status∈SubRunTerminalStatus, duration_ms?,
   summary?, artifact?, usage?, error?}
-- ``kernel.plan_updated``    data={revision, items[{id, content, status}]，plan_id?（缺省=run_id，40 篇 §4.2）}
+- ``kernel.plan_updated``    data={plan_id（=run_id，kernel/plan.py 发射面）, revision,
+  items[{id, content, status}]}（发射点=规划 R4：kernel/plan.py PlanProjection）
 
 session_id/trace_id 不来自内核 data：session_id 由转译器上下文补齐（内核无会话概念），
 trace_id 取 KernelEvent.trace_id（C2 强制既有，内核账本拒收空 trace）。
@@ -37,6 +38,7 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from services.agent.business.chat_events import ChatEvent, ChatEventName
+from services.agent.business.kernel.plan import KERNEL_PLAN_UPDATED
 from services.agent.business.kernel.subagent import KERNEL_SUBRUN_FINISHED, KERNEL_SUBRUN_STARTED
 from services.agent.domain.model.kernel_context import KernelEvent
 
@@ -64,10 +66,9 @@ __all__ = [
 ]
 
 # ── 内核发射点事件名（{聚合名}.{过去式 snake_case}，standards/01 §2.2）────────────────
-# STARTED/FINISHED 常量本体归内核发射侧自有（kernel/subagent.py；02 §7 import 白名单禁内核
+# 常量本体归内核发射侧自有（kernel/subagent.py、kernel/plan.py；02 §7 import 白名单禁内核
 # 触 business 层），本模块顶部反向 import 再导出=转译侧唯一对照（漂移即 ImportError fail-fast）。
 KERNEL_SUBRUN_UPDATED = "kernel.subrun_updated"  # 心跳事件 v1 无发射点（R5 可缓发），仅登记
-KERNEL_PLAN_UPDATED = "kernel.plan_updated"
 
 
 # ── 枚举（40 篇 §3.2/§4.2）────────────────────────────────────────────────

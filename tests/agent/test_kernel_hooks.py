@@ -34,15 +34,19 @@ from tests.agent.conftest import (
     make_tool_dispatcher,
 )
 
-# 单步成功运行的锚点事件名序列（grounding 三条 + planning + gate + observation + settlement；
-# M4.5-B 增 kernel.prefix_fingerprint：前缀指纹随组装落账/广播，additive 锚点事件）
+# 单步成功运行的锚点事件名序列（grounding 两条 + prefix_fingerprint[M4.5-B] + planning +
+# 计划快照[R4] + gate + 计划推进[R4] + observation + 计划推进[R4] + settlement；
+# 40 篇 R4：plan_updated 三发=规划整表 pending / 步开跑 in_progress / 步终态 completed）
 _ANCHOR_SEQUENCE = [
     "kernel.grounded",
     "kernel.context_assembled",
     "kernel.prefix_fingerprint",
     "kernel.planned",
+    "kernel.plan_updated",
     "kernel.gated",
+    "kernel.plan_updated",
     "kernel.step_validated",
+    "kernel.plan_updated",
     "kernel.settled",
 ]
 

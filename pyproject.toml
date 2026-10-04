@@ -185,6 +185,7 @@ forbidden_modules = ["services.kb.data"]
 ignore_imports = [
     "services.gateway.app -> services.kb.api.kb",
     "services.kb.business.usage_service -> services.kb.data.usage_orm",  # 知识活性计数落库（TODO(M5) 随 kb-usage-counters 收口）
+    "services.agent.business.chat_context -> services.kb.business.search_service",  # M3 检索装配挂载边（standards/01 §2.1 规则 3 显式服务调用；importlinter 连传递链算，agentic 新链触发显形）
 ]
 
 [[tool.importlinter.contracts]]

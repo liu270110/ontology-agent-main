@@ -159,7 +159,10 @@ async function rawJsonRequest<T>(path: string, init: RequestInit): Promise<T> {
   if (!res.ok) {
     // 错误响应恒为四字段信封（api/01 §4）：错误码/文案从信封提取（1002 防枚举、1005 限速等）
     const err = body as { code?: number; message?: string } | null
-    throw new ApiError(err?.code ?? -1, err?.message ?? `HTTP ${res.status}`, res.status)
+    // 1004 路由不存在 → mock 退役后的「后端未实装」语义（40 号文档）：前端已登记调用、
+    // 网关无此路由=端点待交付，ErrorState 文案统一为可行动的待办语义而非裸 404
+    const msg = err?.code === 1004 ? '后端未实装：该功能接口待交付' : err?.message ?? `HTTP ${res.status}`
+    throw new ApiError(err?.code ?? -1, msg, res.status)
   }
   if (!body) throw new ApiError(-1, `HTTP ${res.status}`, res.status)
   // 双形态兼容：auth 组端点（api/01 §5.9）返回裸 DTO；其余端点返回 {code,message,data} 信封（§3.1）。

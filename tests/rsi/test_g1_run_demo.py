@@ -1,5 +1,5 @@
 # tests/rsi/test_g1_run_demo.py
-"""run_g1 demo 模式端到端用例（subprocess 真跑 tools/orsi/run_g1.py --demo）。
+"""run_g1 demo 模式端到端用例（subprocess 真跑 services/tools/orsi/run_g1.py --demo）。
 
 断言目标：退出码 0；两簇分别命中 L1（组合/O5）与 L2（市场/O1）；demo 标注在场（合成数据
 非真实信号）；--no-demo-market 时跨域簇如实降级（未命中 + L3 skipped）；报告含生命周期
@@ -25,7 +25,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 def _run(args: list[str], cwd: Path | None = None) -> subprocess.CompletedProcess[str]:
     env = {**os.environ, "PYTHONUTF8": "1", "PYTHONIOENCODING": "utf-8"}
     return subprocess.run(
-        [sys.executable, str(REPO_ROOT / "tools" / "orsi" / "run_g1.py"), *args],
+        [sys.executable, str(REPO_ROOT / "services" / "tools" / "orsi" / "run_g1.py"), *args],
         cwd=cwd or REPO_ROOT,
         capture_output=True,
         text=True,
@@ -93,7 +93,7 @@ def test_run_g1_参数校验_双模式互斥_live须租户() -> None:
 async def test_open_ledger_repo返回零参可重复调用工厂(monkeypatch) -> None:
     """LedgerFailureSink.open_repo 契约=工厂：drain 内 ``async with self._open_repo()`` 每次调用
     取新上下文——返回 ``_ctx()`` 实例（上下文管理器不可调用）时 drain 即 TypeError。"""
-    import tools.orsi.run_g1 as run_g1
+    import services.tools.orsi.run_g1 as run_g1
 
     engine_calls: list[str] = []
     session_opens: list[object] = []

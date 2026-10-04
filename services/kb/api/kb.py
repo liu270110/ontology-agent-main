@@ -13,8 +13,13 @@
     DELETE /kb/documents/{id}                 删除文档（B6 墓碑式软删：documents.valid_to 封口
                                               下线检索，chunks/kb_facts/审计物理保留；幂等
                                               恒 200，已删态与不存在对调用方等价不 404）
-    POST /kb/documents                        JSON 内容直传（MinIO 随 M3；checksum 幂等；
+    POST /kb/documents                        JSON 内容直传（checksum 幂等；
                                               文本类 mime 白名单 + NUL 拒收 → 415 业务错误）
+    POST /kb/documents/file                   文件直传通道（v1.5 wedge：multipart 仅收
+                                              application/pdf；原件落 MinIO
+                                              raw-docs/{tenant}/{collection}/{doc}/source.pdf，
+                                              checksum 幂等；文本走 JSON 通道、图片随 v2 → 415/3004；
+                                              大小上限 Settings.kb_file_upload_max_bytes → 413/3001）
     POST /kb/documents/{id}/pipeline/start    后台流水线（202 受理；M2 lite 四步 / M2 full
                                               七步中段 extract/align/validate 已插回）
     POST /kb/documents/{id}/pipeline/retry    失败文档流水线重试（B6：202 受理 + 后台断点续跑，
@@ -60,7 +65,17 @@ from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Annotated, Any
 
-from fastapi import APIRouter, BackgroundTasks, Depends, Query, Request, status
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Depends,
+    File,
+    Form,
+    Query,
+    Request,
+    UploadFile,
+    status,
+)
 from sqlalchemy import bindparam, func, or_, select, text
 from sqlalchemy.dialects.postgresql import UUID as PgUuid
 from sqlalchemy.exc import IntegrityError
@@ -167,6 +182,7 @@ from services.ontology.business.hierarchy_service import get_class_hierarchy
 # 类层次读模型（database/01 §3.4）经 ontology 公开服务获取（kb 禁入 ontology.data）；
 # 消费场景 = LazyGraphRAG lite 类闭包扩展（docs/OntRAG §4.0）。禁放 ontology.api——api 链触达
 # ontology.data 会击穿「ontology.data 模块私有」契约（import-linter 强制）。
+from services.platform.db.clients.minio_client import MinioObjectStore
 from services.platform.deps import Principal, SessionDep, get_session_factory, require_scope
 from services.platform.errors import ErrorCode, GatewayError
 from services.platform.ports.model_port import ModelPort
@@ -384,6 +400,123 @@ async def create_document(body: DocumentCreateIn, principal: KbWriteDep, session
         minio_key=f"raw-docs/{principal.tenant_id}/{body.collection_id}/{doc_id}/source.md",
         checksum_sha256=checksum,
         meta={"content": body.content},  # M2 直传内容暂存 meta；MinIO 迁移随 M3
+        status="uploaded",
+    )
+    session.add(doc)
+    try:
+        await session.commit()
+    except IntegrityError as exc:  # 并发重复上传兜底（uk checksum，部分唯一索引同键）
+        await session.rollback()
+        raced = (await session.execute(select(Document).where(*live_checksum))).scalar_one_or_none()
+        if raced is None:
+            raise GatewayError(409, "文档写入冲突", status_code=409) from exc
+        return _document_out(raced, created=False)
+    await session.refresh(doc)
+    return _document_out(doc, created=True)
+
+
+# 文件直传通道（v1.5 wedge）mime 白名单：仅 PDF（图纸摄取场景）；application/x-pdf 为常见别名。
+# content_type 缺失/通用二进制（application/octet-stream）时按 .pdf 后缀放行（curl/脚本客户端
+# 不带真实 mime 的兜底）；其余一律 415/3004——文本类走 POST /kb/documents（JSON 通道），
+# 图片通道随 v2。
+_PDF_MIME_EXACT = frozenset({"application/pdf", "application/x-pdf"})
+_FILE_FALLBACK_MIMES = frozenset({"", "application/octet-stream"})
+
+
+def _object_store(request: Request) -> MinioObjectStore:
+    """进程内复用的对象存储门面（挂 app.state；组合根装配点同 _embedder 口径，测试可替换）。"""
+    cached = getattr(request.app.state, "_kb_object_store", None)
+    if cached is None:
+        cached = MinioObjectStore.from_settings(request.app.state.settings)
+        request.app.state._kb_object_store = cached
+    return cached
+
+
+@router.post(
+    "/documents/file",
+    summary="文件直传通道（multipart 仅收 application/pdf；原件落 MinIO raw-docs，checksum 幂等）",
+)
+async def create_document_file(
+    principal: KbWriteDep,
+    request: Request,
+    session: SessionDep,
+    collection_id: Annotated[uuid.UUID, Form()],
+    title: Annotated[str, Form(min_length=1, max_length=512)],
+    file: Annotated[UploadFile, File()],
+) -> DocumentOut:
+    """v1.5 文件通道（api/01 kb 行 POST /kb/documents/file）：multipart 字段 collection_id/title/file。
+
+    - 仅收 application/pdf（含别名 x-pdf；缺 mime/通用二进制按 .pdf 后缀兜底放行），
+      其余 415/3004：文案提示文本走 JSON 通道、图片随 v2；
+    - 大小上限 Settings.kb_file_upload_max_bytes（缺省 50MB，OA_KB_FILE_UPLOAD_MAX_BYTES 可调），
+      超限 413/3001（02 §7 既有段内就近码，无专用 413 码——新增码须先回 02 §7 登记）；
+    - 幂等与 JSON 通道同契约（§8.0 同源检测①）：同 checksum（sha256 字节）既有有效文档
+      直接幂等返回（created=false），不重复落对象；
+    - 落盘顺序：MinIO put 成功才落库（无半截 DB 行；DB 落库失败的孤儿对象无害——对象按
+      doc_id 寻址且 doc_id 不复用，重传产生新 id 新对象）；minio_key 形态对齐既有契约
+      raw-docs/{tenant}/{collection}/{doc}/source.pdf（首段=桶名，documents.minio_key 同款）；
+    - 落库行：minio_key 写入、status=uploaded、meta 不存 content（内容源抽象见
+      kb_pipeline._run_preprocess：preprocess 拉对象解析），mime_type 恒 application/pdf。
+    存储异常 → 5004/503（STORAGE_UNAVAILABLE，既有段）。
+    """
+    collection = (
+        await session.execute(
+            select(KbCollection).where(KbCollection.id == collection_id, KbCollection.tenant_id == principal.tenant_id)
+        )
+    ).scalar_one_or_none()
+    if collection is None:
+        raise GatewayError(404, "知识库不存在", status_code=404)
+
+    mime = (file.content_type or "").split(";", 1)[0].strip().lower()
+    filename = file.filename or ""
+    if mime not in _PDF_MIME_EXACT and not (mime in _FILE_FALLBACK_MIMES and filename.lower().endswith(".pdf")):
+        raise GatewayError(
+            ErrorCode.UNSUPPORTED_MEDIA_TYPE,
+            f"不支持的文件类型 {mime or '未声明'}：文件通道仅接受 application/pdf（图纸 PDF）；"
+            "文本类请走 POST /kb/documents（JSON 通道），图片通道随 v2",
+            status_code=415,
+        )
+    data = await file.read()
+    if not data:
+        raise GatewayError(ErrorCode.PARAM_INVALID, "上传文件为空", status_code=422)
+    max_bytes = request.app.state.settings.kb_file_upload_max_bytes
+    if len(data) > max_bytes:
+        raise GatewayError(
+            ErrorCode.PARAM_INVALID,
+            f"文件 {len(data)} 字节超过上限 {max_bytes}（OA_KB_FILE_UPLOAD_MAX_BYTES 可调）",
+            status_code=413,
+        )
+
+    checksum = hashlib.sha256(data).hexdigest()
+    live_checksum = (  # 唯一性=部分唯一索引（valid_to IS NULL）：同 JSON 通道契约
+        Document.tenant_id == principal.tenant_id,
+        Document.kb_collection_id == collection_id,
+        Document.checksum_sha256 == checksum,
+        Document.valid_to.is_(None),
+    )
+    existing = (await session.execute(select(Document).where(*live_checksum))).scalar_one_or_none()
+    if existing is not None:
+        return _document_out(existing, created=False)  # 幂等命中既有文档（不重复落对象）
+
+    doc_id = uuid.uuid4()  # 显式生成以拼 minio_key（orm/base 默认值仅作用于未赋值主键）
+    minio_key = f"raw-docs/{principal.tenant_id}/{collection_id}/{doc_id}/source.pdf"
+    try:
+        await _object_store(request).put_bytes(minio_key, data, content_type="application/pdf")
+    except Exception as exc:  # noqa: BLE001 —— SDK 网络面异常形态发散，统一映射 5004
+        raise GatewayError(
+            ErrorCode.STORAGE_UNAVAILABLE, f"对象存储写入失败: {type(exc).__name__}: {exc}", status_code=503
+        ) from exc
+
+    doc = Document(
+        id=doc_id,
+        tenant_id=principal.tenant_id,
+        kb_collection_id=collection_id,
+        title=title,
+        mime_type="application/pdf",
+        size_bytes=len(data),
+        minio_key=minio_key,
+        checksum_sha256=checksum,
+        meta={},  # 内容源抽象：文件通道内容在 MinIO，preprocess 按引擎抽取后写 meta.content
         status="uploaded",
     )
     session.add(doc)

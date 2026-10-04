@@ -154,6 +154,10 @@ class Settings(BaseSettings):
     # 一级精确/包含未命中的候选名 × 种子类表层全量嵌入，余弦 ≥ 阈值即对齐；嵌入不可用整级跳过（降级不失败）。
     align_embed_threshold: float = Field(default=0.92, ge=0.0, le=1.0)
 
+    # kb 文件直传通道（v1.5 wedge，feature/kb-file-parse）：multipart PDF 单文件字节上限；
+    # 超限 413（错误码 3001 PARAM_INVALID，02 §7 既有段）。图纸 PDF 50MB 起步值，实测后冻结。
+    kb_file_upload_max_bytes: int = Field(default=50 * 1024 * 1024, gt=0)
+
     # kb nightly 例程（OntRAG §8.4 v1 收缩范围，KB-G1b）：预算三项的 v1 合并简化 + 调度互斥参数。
     # max_items_per_run = 单次运行硬上限（补嵌 chunk 数与归档动作数同源预算；超限顺延次夜记 stats.deferred）；
     # token_budget = 记录用（v1 不硬停：随 kb_maintenance_runs.stats 落账供成本对账，§8.4 纪律 1 的记账面）。

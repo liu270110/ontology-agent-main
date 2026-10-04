@@ -62,8 +62,9 @@ from services.kb.business.pipeline_base import (
     StepContext,
     StepRunner,
 )
+from services.kb.business.titleblock import project_titleblock
 from services.kb.data.orm import Document, DocumentChunk, KbPipelineStep
-from services.kb.retrieval.chunking import chunk_document
+from services.kb.retrieval.chunking import Chunk, chunk_document, estimate_tokens
 from services.kb.retrieval.embed import (
     EmbeddingUnavailableError,
     OllamaEmbedder,
@@ -214,6 +215,8 @@ async def _run_preprocess(ctx: StepContext) -> None:
     抽取无文本层（扫描件）→ 409 显式失败（OCR 通道随 v2；不静默产空内容让 chunk 步报
     更差的错）。幂等：分支①命中即不再拉对象/重解析（checkpoint done 跳过之外的第二重）。
     事务边界（03 §6.1）：MinIO 拉取与引擎抽取为长调用——读源/写回各自短事务，中间件在事务外。
+    标题栏投影（v1.5 裁决卡）：对最终 content 跑九字段正则投影（business/titleblock.py，
+    纯确定性零 LLM），非空才写 meta["titleblock"]={字段: 值}（chunk 步消费为额外语义块）。
     """
     async with ctx.session_factory() as session, session.begin():  # 短事务①：读内容源坐标
         doc = await _load_document(session, ctx)
@@ -224,11 +227,14 @@ async def _run_preprocess(ctx: StepContext) -> None:
         if not inline and not source_key:
             raise PipelineError("409 文档无内联内容且无 minio_key（无可用内容源：JSON 直传或文件通道二者其一）")
 
-    if inline:  # 分支①：内联文本，现行为不变（仅换行规整）
+    if inline:  # 分支①：内联文本，现行为不变（仅换行规整 + 标题栏投影）
         normalized = _normalize_newlines(str(content))
         async with ctx.session_factory() as session, session.begin():  # 短事务②：写回
             doc = await _load_document(session, ctx)
-            doc.meta = {**(dict(doc.meta or {})), "content": normalized}
+            meta = dict(doc.meta or {})
+            meta["content"] = normalized
+            _apply_titleblock(meta, normalized)
+            doc.meta = meta  # JSONB 原地变更不可追踪，整体重赋值
         return
 
     data = await _object_store().get_bytes(source_key)  # 网络 I/O（03 §6.1：事务外）
@@ -246,7 +252,15 @@ async def _run_preprocess(ctx: StepContext) -> None:
             degraded = set(meta.get("degraded") or [])
             degraded.add("parser")
             meta["degraded"] = sorted(degraded)
+        _apply_titleblock(meta, meta["content"])
         doc.meta = meta  # JSONB 原地变更不可追踪，整体重赋值
+
+
+def _apply_titleblock(meta: dict, content: str) -> None:
+    """标题栏投影落位（两内容源分支共用的收敛点）：投影非空才写 meta["titleblock"]。"""
+    projection = project_titleblock(content)
+    if projection.fields:
+        meta["titleblock"] = projection.fields
 
 
 def _normalize_newlines(content: str) -> str:
@@ -255,7 +269,13 @@ def _normalize_newlines(content: str) -> str:
 
 
 async def _run_chunk(ctx: StepContext) -> None:
-    """语义分块（L5 knowledge.chunking）：按 (document_id, seq) upsert，步级重跑幂等。"""
+    """语义分块（L5 knowledge.chunking）：按 (document_id, seq) upsert，步级重跑幂等。
+
+    标题栏语义块（v1.5 裁决卡）：meta["titleblock"] 非空时，对原文重跑同一确定性投影
+    （spans 不落盘，单一事实源=titleblock.py），序列化``字段: 值``行集为一条额外语义块
+    （seq=尾片 +1；meta.span 指回原文首字段区间——出处指针门禁同源；kind=titleblock），
+    检索可命中字段行（BM25 词法面）。upsert 幂等：同 seq 重跑整块覆写。
+    """
     async with ctx.session_factory() as session, session.begin():  # 短事务
         doc = await _load_document(session, ctx)
         content = (doc.meta or {}).get("content")
@@ -264,6 +284,20 @@ async def _run_chunk(ctx: StepContext) -> None:
         pieces = chunk_document(content)
         if not pieces:
             raise PipelineError("409 分块结果为空（空文档不可索引）")
+        titleblock_meta = (doc.meta or {}).get("titleblock")
+        if isinstance(titleblock_meta, dict) and titleblock_meta:
+            projection = project_titleblock(content)
+            block_span = projection.block_span()
+            if projection.fields and block_span is not None:
+                block = projection.block_text()
+                pieces.append(
+                    Chunk(
+                        seq=len(pieces),
+                        content=block,
+                        token_count=estimate_tokens(block),
+                        meta={"kind": "titleblock", "span": list(block_span), "heading": "标题栏投影"},
+                    )
+                )
         for piece in pieces:
             stmt = (
                 pg_insert(DocumentChunk)

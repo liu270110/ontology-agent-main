@@ -8,6 +8,10 @@ v1 三件事：
   催办为只读不占预算（动作=状态变更，口径见 §8.4 预算纪律）；
 - ③ 悬空出处：evidence.source_ref 四元组指向不存在的 document / chunk（两类，纯廉价项）→
   报告 issues；扫描面=live 词汇（candidate/authoritative），rejected（含本轮刚归档者）不再巡检。
+- ④ 零引用清理候选（多源接入 §6.1 v1 知识活性反馈环消费面，2026-10-04 A3 激活批）：live chunk
+  created_at 严格超 zero_ref_days（默认 90；恰满不计=清理候选宁保守）且 usage 表缺行（从未被
+  检索引用）或 search_hits=0（全零）→ 计数入 stats.zero_ref_candidates；**v1 只报告不动数据**
+  （删除动作与评审流随 v1.5；kb_usage_counters 不可用=观测缺失，置 -1 不拖垮例程）。
 
 lite 取舍（kb_facts.status CheckConstraint 仅 candidate|rejected|authoritative，无 archived 枚举，
 database/01 §3.3 v1 权威）：处置 = status 就近映射 rejected + meta.maintenance={'action':
@@ -172,13 +176,16 @@ async def run_kb_maintenance(
     overdue_days: int = 14,
     archive_days: int = 30,
     max_actions: int = 500,
+    zero_ref_days: int = 90,
     lock: MaintenanceLock | None = None,
 ) -> MaintenanceReport:
-    """夜检三件事：催办聚合（只报告）→ 超时归档（计动作/预算截断）→ 悬空出处告警。
+    """夜检四件事：催办聚合（只报告）→ 超时归档（计动作/预算截断）→ 悬空出处告警 → 零引用清理候选（只报告）。
 
     - 催办带 = [now-overdue_days, now-archive_days)：满 14 天即催办；达归档线不再催办，
       转入 ② 处置（一条候选任一时刻至多出现在一个面，报告不重复计数）；
     - 归档 = created_at ≤ now-archive_days，按 (created_at, id) 序处置至多 max_actions 条；
+    - 零引用清理候选 = live chunk created_at ≤ now-zero_ref_days 且 usage 表缺行/全零（§6.1），
+      v1 只报告计数（stats.zero_ref_candidates），不改任何数据；
     - lock 注入时未抢到 → skipped 报告原样返回（零写零扫）；抢到则 finally 必释放；
     - 幂等：同 now 重跑状态收敛（见模块头）——archived 幂等空、reminded/issues 复现。
     """
@@ -202,6 +209,7 @@ async def run_kb_maintenance(
             overdue_days=overdue_days,
             archive_days=archive_days,
             max_actions=max_actions,
+            zero_ref_days=zero_ref_days,
         )
     finally:
         if lock is not None:
@@ -216,6 +224,7 @@ async def _run(
     overdue_days: int,
     archive_days: int,
     max_actions: int,
+    zero_ref_days: int,
 ) -> MaintenanceReport:
     archive_cutoff = now - timedelta(days=archive_days)
     remind_cutoff = now - timedelta(days=overdue_days)
@@ -332,6 +341,33 @@ async def _run(
                     )
                 )
 
+        # ── ④ 零引用清理候选（多源接入 §6.1 v1；悬空出处扫描步旁的活性反馈环消费面）──
+        # live chunk created_at 严格超 zero_ref_days（「超 N 天」= age > N，恰满不计——
+        # 清理候选宁保守）且 usage 表缺行（从未被检索引用）或 search_hits=0（全零）→ 计数；
+        # v1 只报告不动数据（模块头 ④）。chunk_id 全局唯一（usage 行 uk 含 chunk_id）→
+        # LEFT JOIN 不翻倍。表缺失（迁移未应用）= 观测缺失，置 -1 可辨且不拖垮例程
+        # （同 vector_column_ready 容错先例）。
+        zero_cutoff = now - timedelta(days=zero_ref_days)
+        try:
+            zero_ref_candidates = int(
+                (
+                    await session.execute(
+                        text(
+                            "SELECT COUNT(*) FROM document_chunks c"
+                            " JOIN documents d ON d.id = c.document_id"
+                            " LEFT JOIN kb_usage_counters u ON u.chunk_id = c.id"
+                            " WHERE c.valid_to IS NULL AND d.valid_to IS NULL"
+                            " AND c.created_at < :zero_cutoff"
+                            " AND (u.chunk_id IS NULL OR u.search_hits = 0)"
+                        ),
+                        {"zero_cutoff": zero_cutoff},
+                    )
+                ).scalar_one()
+            )
+        except Exception:  # noqa: BLE001 —— 统计面容错：不掩盖 ①②③ 已产出结果
+            logger.warning("零引用扫描跳过: kb_usage_counters 不可用（迁移未应用？）", exc_info=True)
+            zero_ref_candidates = -1
+
         stats = {
             "candidates_scanned": candidates_scanned,
             "remind_groups": len(reminded),
@@ -341,6 +377,7 @@ async def _run(
             "actions_used": len(archived),
             "issues_missing_document": sum(1 for i in issues if i.kind == "missing_document"),
             "issues_missing_chunk": sum(1 for i in issues if i.kind == "missing_chunk"),
+            "zero_ref_candidates": zero_ref_candidates,
         }
         return MaintenanceReport(
             run_id=run_id,

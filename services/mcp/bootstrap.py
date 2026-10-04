@@ -109,6 +109,7 @@ def build_capability_registry(
     后续 REST 回写端点同源）。
     """
     from services.kb.business.search_service import KnowledgeSearchService
+    from services.kb.business.usage_service import UsageStore
     from services.memory.business.runtime import build_l1_store, build_l2_repo
     from services.platform.deps import get_redis
     from services.writeback.adapters.base import ConnectorRegistry
@@ -121,8 +122,14 @@ def build_capability_registry(
     from services.writeback.business.policy import WritebackPolicy
 
     registry = CapabilityRegistry()
-    # ① knowledge.search（检索降级链由 KnowledgeSearchService 内建：嵌入不可达 → BM25-only）
-    search_fn = knowledge_search_fn or KnowledgeSearchService(session_factory, ollama_base_url=settings.ollama_base_url)
+    # ① knowledge.search（检索降级链由 KnowledgeSearchService 内建：嵌入不可达 → BM25-only；
+    #    知识活性埋点 usage_store 同 REST/chat 注入（§6.1 A3 激活：三路组合根一致））
+    search_fn = (
+        knowledge_search_fn
+        or KnowledgeSearchService(
+            session_factory, ollama_base_url=settings.ollama_base_url, usage_store=UsageStore(session_factory)
+        )
+    )
     registry.register(KnowledgeCapabilityProvider(search_fn))
     # ② ontology（制品装载器=组合根注入参数；未注入工具结构化降级 5004，不阻塞其余能力）
     registry.register(OntologyCapabilityProvider(artifact_loader=artifact_loader, session_factory=session_factory))

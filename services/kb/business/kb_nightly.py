@@ -240,6 +240,8 @@ async def _run(
             "archived": report.stats.get("archived", 0),
             "dangling_refs": report.stats.get("issues_missing_document", 0)
             + report.stats.get("issues_missing_chunk", 0),
+            # 零引用清理候选（多源接入 §6.1 v1，A3 激活批）：maintenance ④ 只报告计数透传
+            "zero_ref_candidates": report.stats.get("zero_ref_candidates", 0),
         }
     )
     if report.reminded:  # 催办动作 v1 = stats + 结构化日志（通知通道接 event_sink 登记遗留）

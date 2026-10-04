@@ -15,7 +15,7 @@ degraded=true，上下文留空继续；证据正文进提示词时一律带 B3 
 from __future__ import annotations
 
 import logging
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from datetime import UTC, datetime
 from uuid import UUID
 
@@ -24,6 +24,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from services.agent.business.chat_events import ChatPolicy  # 叶子契约模块（零依赖，防参数环依赖）
 from services.kb.business.search_service import KnowledgeSearchResult, KnowledgeSearchService
+from services.kb.business.usage_service import UsageStore
 from services.memory.business.context import ContextBundle, build_memory_context
 from services.memory.business.runtime import build_l2_repo  # memory 公开装配面（memory.data 模块私有，P2-2 收口）
 from services.memory.domain.model.l1 import WindowMessage
@@ -85,14 +86,26 @@ class ChatContextAssembler:
 
     # ── 组装（事务外）────────────────────────────────────────────────────
     async def assemble(
-        self, *, tenant_id: UUID, user_id: UUID, session_id: UUID, query: str, top_k: int | None = None
+        self,
+        *,
+        tenant_id: UUID,
+        user_id: UUID,
+        session_id: UUID,
+        query: str,
+        top_k: int | None = None,
+        acl_tags: Sequence[str] | None = None,
     ) -> ChatContext:
-        """读记忆（L1+L2）+ 检索证据；任一面失败降级不阻断（返回值永不抛赖于外部可用性）。"""
+        """读记忆（L1+L2）+ 检索证据；任一面失败降级不阻断（返回值永不抛赖于外部可用性）。
+
+        ``acl_tags``=调用方 acl 标签面（OntRAG §4.3，C1 断链修复）：调用方 principal/会话
+        携带标签面则透传检索（开关开启时文档级谓词生效），None=维持现状 no-op（不改变
+        默认关闭语义，只修「开关开了也不生效」）。
+        """
         k = top_k if top_k is not None else self._top_k
         memory, memory_degraded = await self._load_memory(
             tenant_id=tenant_id, user_id=user_id, session_id=session_id, top_k=k
         )
-        evidence = await self._search_evidence(tenant_id=tenant_id, query=query, top_k=k)
+        evidence = await self._search_evidence(tenant_id=tenant_id, query=query, top_k=k, acl_tags=acl_tags)
         evidence_degraded = evidence is None
         if evidence is None:
             evidence = KnowledgeSearchResult(query=query, degraded=True, degraded_reasons=["search_unavailable"])
@@ -133,11 +146,15 @@ class ChatContextAssembler:
             logger.warning("对话记忆组装降级（session=%s）: %s", session_id, exc)
             return None, True
 
-    async def _search_evidence(self, *, tenant_id: UUID, query: str, top_k: int) -> KnowledgeSearchResult | None:
+    async def _search_evidence(
+        self, *, tenant_id: UUID, query: str, top_k: int, acl_tags: Sequence[str] | None = None
+    ) -> KnowledgeSearchResult | None:
         """检索证据链（自动重试 retrieval_retry_max 次 → 仍败 None=无检索上下文继续）。"""
         for attempt in range(self._retrieval_retry_max + 1):
             try:
-                return await self._knowledge.search(tenant_id=tenant_id, query=query, top_k=top_k)
+                return await self._knowledge.search(
+                    tenant_id=tenant_id, query=query, top_k=top_k, acl_tags=acl_tags
+                )  # acl_tags 透传（OntRAG §4.3，C1）：None=调用方未接入标签面 no-op
             except Exception as exc:  # 降级链末端兜底（hybrid 内部已做 vector→bm25 降级）
                 logger.warning("对话检索降级（attempt=%d）: %s", attempt + 1, exc)
         return None
@@ -171,7 +188,11 @@ def build_chat_context_assembler(
     对 kb 零直接 import，import 链收敛于本文件——「kb.retrieval 模块私有」契约的新增豁免边
     落在此处，见报告）。ChatPolicy 从叶子契约模块 chat_events 取（防编排器参数环依赖）。"""
     chat_policy = policy or ChatPolicy()
-    knowledge = KnowledgeSearchService(session_factory, ollama_base_url=ollama_base_url)
+    # 知识活性埋点（多源接入 §6.1 v1，A3 激活）：chat 链路同 REST/MCP 注入 usage_store
+    # （检索服务内建 fire-and-forget 调度，kb_id 非 None 才记、统计失败不伤主链路）。
+    knowledge = KnowledgeSearchService(
+        session_factory, ollama_base_url=ollama_base_url, usage_store=UsageStore(session_factory)
+    )
     return ChatContextAssembler(
         l1_store=l1_store,
         session_factory=session_factory,

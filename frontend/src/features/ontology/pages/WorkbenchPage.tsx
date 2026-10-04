@@ -47,6 +47,7 @@ export function WorkbenchPage() {
   const selectedIri = useWorkbenchStore(s => s.selectedIri)
   const select = useWorkbenchStore(s => s.select)
   const dirtyCount = useWorkbenchStore(s => s.dirtyCount)
+  const pendingDeleteCount = useWorkbenchStore(s => s.pendingDeletes.length)
   const resetDirty = useWorkbenchStore(s => s.resetDirty)
   const changesetId = useWorkbenchStore(s => s.changesetId)
   const setChangesetId = useWorkbenchStore(s => s.setChangeset)
@@ -304,9 +305,9 @@ export function WorkbenchPage() {
       base_version: detail.data?.draft_version ?? detail.data?.head_version ?? '',
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
-      stats: { add: 1 + dirtyCount, del: 0, mod: 2 },
+      stats: { add: 1 + dirtyCount, del: pendingDeleteCount, mod: 2 }, // del 接真实删除标记数（评审 P2-4）；mod 随 V4 真实 diff 化
     }),
-    [changesetId, projectId, detail.data, dirtyCount],
+    [changesetId, projectId, detail.data, dirtyCount, pendingDeleteCount],
   )
 
   async function handleSubmitReview() {
@@ -434,7 +435,7 @@ export function WorkbenchPage() {
           onToggleCollapse={() => setValCollapsed(v => !v)}
           onRunValidate={() => void runValidate()}
           onLocate={focus => locate(focus.split('·')[0]?.trim() ?? focus)}
-          draftOps={{ add: 1 + dirtyCount, del: 0, mod: 2 }}
+          draftOps={{ add: 1 + dirtyCount, del: pendingDeleteCount, mod: 2 }}
         />
       )}
 

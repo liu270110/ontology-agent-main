@@ -25,7 +25,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 def _run(args: list[str], cwd: Path | None = None) -> subprocess.CompletedProcess[str]:
     env = {**os.environ, "PYTHONUTF8": "1", "PYTHONIOENCODING": "utf-8"}
     return subprocess.run(
-        [sys.executable, str(REPO_ROOT / "services" / "tools" / "orsi" / "run_g1.py"), *args],
+        [sys.executable, str(REPO_ROOT / "services" / "devtools" / "orsi" / "run_g1.py"), *args],
         cwd=cwd or REPO_ROOT,
         capture_output=True,
         text=True,

@@ -23,7 +23,7 @@ def test_run_g0_demo端到端(tmp_path: Path) -> None:
     proc = subprocess.run(
         [
             sys.executable,
-            str(REPO_ROOT / "services" / "tools" / "orsi" / "run_g0.py"),
+            str(REPO_ROOT / "services" / "devtools" / "orsi" / "run_g0.py"),
             "--demo",
             "--store-dir",
             str(store_dir),
@@ -62,7 +62,7 @@ def test_run_g0_demo端到端(tmp_path: Path) -> None:
 
 def test_run_g0_参数校验_双模式互斥_live须租户() -> None:
     env = {**os.environ, "PYTHONUTF8": "1", "PYTHONIOENCODING": "utf-8"}
-    base = [sys.executable, str(REPO_ROOT / "services" / "tools" / "orsi" / "run_g0.py")]
+    base = [sys.executable, str(REPO_ROOT / "services" / "devtools" / "orsi" / "run_g0.py")]
     for args in (
         ["--demo", "--live"],  # 互斥
         [],  # 必选其一

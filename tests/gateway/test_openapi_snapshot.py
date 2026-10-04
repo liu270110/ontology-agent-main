@@ -16,7 +16,7 @@ import pytest
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _SNAPSHOT_PATH = Path(__file__).resolve().parent / "openapi_snapshot.json"
-_TOOL_SCRIPT = _REPO_ROOT / "services" / "tools" / "openapi_snapshot.py"
+_TOOL_SCRIPT = _REPO_ROOT / "services" / "devtools" / "openapi_snapshot.py"
 
 _DIFF_LIMIT = 30
 

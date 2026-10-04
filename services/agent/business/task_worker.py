@@ -312,6 +312,21 @@ class TaskRunWorker:
         )
         for row in synthetic:
             await tx.tasks.append_event(claim.task_id, row)
+        # 40 篇 §3.2/§8 R6（2026-10-04 批）：撕裂子 Run 行状态回写——孤儿 sweep 只认根
+        # active_run_id，子 Run 行会永久 running；按合成行 sub_run_id 定向推进 cancelled
+        # （R1 独立写入口，同一 uow 事务原子生效）。行缺失（账本 sink 未投影过）返回
+        # False 静默跳过：事件行已合成，回放终态权威在 task_events。
+        for row in synthetic:
+            if row.event_type != "SUBRUN_FINISHED":
+                continue
+            sub_run_id = row.data.get("sub_run_id")
+            if not isinstance(sub_run_id, str):
+                continue
+            try:
+                sid = uuid.UUID(sub_run_id)
+            except ValueError:
+                continue
+            await tx.tasks.update_subrun_status(sid, RunStatus.CANCELLED)
         return len(synthetic)
 
     # ── 认领执行 ──────────────────────────────────────────────────────────

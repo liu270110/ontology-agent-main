@@ -81,6 +81,9 @@ class SubagentSlotPort(Protocol):
         context_budget: int,
         artifact_schema: dict[str, Any],
         timeout_ms: int = 600_000,
+        label: str | None = None,
+        index: int | None = None,
+        total: int | None = None,
     ) -> str: ...
 
     def receipt(self, handle_id: str) -> SubRunReceipt | None: ...
@@ -299,7 +302,7 @@ class SubagentSpawnTool:
         parent = self._task_resolver(ctx)
         group = _SpawnGroup(group_id=uuid.uuid4().hex, parent_run_id=parent.run_id)
         for index, (spec, budget) in enumerate(zip(specs, allocations, strict=True)):
-            self._schedule_entry(group, index, spec, budget, ctx, depth)
+            self._schedule_entry(group, index, spec, budget, ctx, depth, total=len(specs))
         self._registry.register(group)
 
         self._emit(
@@ -338,8 +341,15 @@ class SubagentSpawnTool:
         budget: int,
         ctx: TenantContext,
         depth: int,
+        *,
+        total: int,
     ) -> _SpawnEntry:
-        """登记一个成员并调度其内核派生调用任务（深度上下文随任务下派，子 Run 本体由内核派生）。"""
+        """登记一个成员并调度其内核派生调用任务（深度上下文随任务下派，子 Run 本体由内核派生）。
+
+        ``index``/``total``（40 篇 §8 R2）：本批并行批次序号/总量，随 spawn_sub 透传内核
+        发 SUBRUN_STARTED（Hermes task_index/task_count 同构）；``label``=agent_type
+        （能力层最接近的显示名来源；深度由内核 TaskRef 血统自维护，不接受本层申报）。
+        """
         self._registry.admit()
         cell: list[_SpawnEntry] = []
 
@@ -353,6 +363,9 @@ class SubagentSpawnTool:
                     context_budget=entry.budget_allocated,
                     artifact_schema=spec.artifact_schema,
                     timeout_ms=spec.timeout_ms,
+                    label=spec.agent_type,
+                    index=index,
+                    total=total,
                 )
             finally:
                 self._settle(entry)

@@ -37,6 +37,7 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from services.agent.business.chat_events import ChatEvent, ChatEventName
+from services.agent.business.kernel.subagent import KERNEL_SUBRUN_FINISHED, KERNEL_SUBRUN_STARTED
 from services.agent.domain.model.kernel_context import KernelEvent
 
 logger = logging.getLogger(__name__)
@@ -62,10 +63,10 @@ __all__ = [
     "WorkflowNodeType",
 ]
 
-# ── 内核发射点事件名（{聚合名}.{过去式 snake_case}，standards/01 §2.2；发射侧唯一对照）──
-KERNEL_SUBRUN_STARTED = "kernel.subrun_started"
-KERNEL_SUBRUN_UPDATED = "kernel.subrun_updated"
-KERNEL_SUBRUN_FINISHED = "kernel.subrun_finished"
+# ── 内核发射点事件名（{聚合名}.{过去式 snake_case}，standards/01 §2.2）────────────────
+# STARTED/FINISHED 常量本体归内核发射侧自有（kernel/subagent.py；02 §7 import 白名单禁内核
+# 触 business 层），本模块顶部反向 import 再导出=转译侧唯一对照（漂移即 ImportError fail-fast）。
+KERNEL_SUBRUN_UPDATED = "kernel.subrun_updated"  # 心跳事件 v1 无发射点（R5 可缓发），仅登记
 KERNEL_PLAN_UPDATED = "kernel.plan_updated"
 
 

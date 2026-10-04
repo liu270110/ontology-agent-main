@@ -378,10 +378,23 @@ class ChatAdapter:
         context_budget: int,
         artifact_schema: dict[str, Any],
         timeout_ms: int = 600_000,
+        label: str | None = None,
+        index: int | None = None,
+        total: int | None = None,
     ) -> str:
-        """派生子代理：经 BuiltinAgentSlot 同步执行（子 Run 终态先于父步后验，§4.2）。"""
+        """派生子代理：经 BuiltinAgentSlot 同步执行（子 Run 终态先于父步后验，§4.2）。
+
+        label/index/total 为 SUBRUN_STARTED 发射面元数据（40 篇 §8 R2），原样透传。
+        """
         return await self.sub_slot.spawn_sub(
-            task, ctx, context_budget=context_budget, artifact_schema=artifact_schema, timeout_ms=timeout_ms
+            task,
+            ctx,
+            context_budget=context_budget,
+            artifact_schema=artifact_schema,
+            timeout_ms=timeout_ms,
+            label=label,
+            index=index,
+            total=total,
         )
 
     def sub_receipt(self, handle_id: str) -> SubRunReceipt | None:

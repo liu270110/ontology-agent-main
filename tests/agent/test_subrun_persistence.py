@@ -17,13 +17,18 @@ import asyncio
 import sys
 import uuid
 from collections.abc import AsyncIterator
+from datetime import UTC, datetime
 
 import pytest
 import sqlalchemy as sa
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
+from services.agent.api.sessions import build_kernel_ledger_sink_factory
+from services.agent.business.kernel.ledger import KernelLedger
 from services.agent.data.orm import Run as RunORM
+from services.agent.data.orm import TaskEvent as TaskEventORM
+from services.agent.domain.model.kernel_context import KernelEvent
 from services.agent.domain.model.task import Run, RunStatus, Task, TaskError, TaskEvent
 from services.iam.data.orm import Tenant as TenantORM
 from services.platform.config import Settings
@@ -220,3 +225,134 @@ async def test_唯一索引已收窄为根run(pg_env) -> None:
     assert "parent_run_id IS NULL" in indexdef
     # 收窄后仍保留活跃态过滤（旧口径不回退）
     assert all(f"'{s}'" in indexdef for s in ("queued", "running", "waiting_tool"))
+
+
+# ── R1 接线：C1 账本 sink 投影子 Run 行（40 篇 §8 R1+R2，2026-10-04 批）──────
+
+
+def _subrun_started_event(
+    tenant_id: uuid.UUID, root_id: uuid.UUID, sub_run_id: uuid.UUID, *, trace: str = "trace-subrun-row"
+) -> KernelEvent:
+    return KernelEvent(
+        event_type="kernel.subrun_started",
+        tenant_id=tenant_id,
+        run_id=root_id,  # 归属 run=父 Run（SUBRUN_* 恒落父 RUN_STARTED 与父 RUN_FINISHED 之间）
+        trace_id=trace,
+        data={
+            "sub_run_id": str(sub_run_id),
+            "parent_run_id": str(root_id),
+            "task_id": "00000000-0000-0000-0000-000000000000",
+            "depth": 1,
+            "label": "数据抽取员",
+            "goal": "从工单正文抽取停电时间与范围",
+            "index": 0,
+            "total": 2,
+            "context_budget": 8000,
+            "started_at": datetime.now(UTC).isoformat(),
+        },
+    )
+
+
+async def _seed_root_for_sink(uow: AsyncUnitOfWork, factory: async_sessionmaker[AsyncSession]) -> tuple[Task, Run]:
+    tenant_id = await _seed_tenant(factory)
+    task = Task(tenant_id=tenant_id, type="chat")
+    root = task.start_run()
+    root.start()
+    async with uow.for_tenant(tenant_id) as tx:
+        await tx.tasks.save(task)
+    return task, root
+
+
+async def test_账本sink投影_子Run行随STARTED_FINISHED生命周期迁移(pg_env) -> None:
+    """STARTED → create_subrun 落行(running, 血统列齐全)；FINISHED → update_subrun_status 推进终态。"""
+    uow, factory = pg_env
+    task, root = await _seed_root_for_sink(uow, factory)
+    sink = build_kernel_ledger_sink_factory(uow)(task.id, root.id)
+    ledger = KernelLedger(tenant_id=task.tenant_id, trace_id="trace-subrun-row", sink=sink)
+    sub_id = uuid.uuid4()
+    ledger.append_event(_subrun_started_event(task.tenant_id, root.id, sub_id))
+    await ledger.drain_sink()
+
+    async with factory() as db:
+        row = (await db.execute(select(RunORM).where(RunORM.id == sub_id))).scalar_one()
+    assert row.parent_run_id == root.id and row.task_id == task.id
+    assert row.status == "running" and row.depth == 1
+    assert row.label == "数据抽取员" and row.goal == "从工单正文抽取停电时间与范围"
+    assert row.started_at is not None
+
+    ledger.append_event(
+        KernelEvent(
+            event_type="kernel.subrun_finished",
+            tenant_id=task.tenant_id,
+            run_id=root.id,
+            trace_id="trace-subrun-row",
+            data={
+                "sub_run_id": str(sub_id),
+                "status": "completed",
+                "duration_ms": 18230,
+                "usage": {"total_tokens": 966},
+            },
+        )
+    )
+    await ledger.drain_sink()
+    async with factory() as db:
+        row = (await db.execute(select(RunORM).where(RunORM.id == sub_id))).scalar_one()
+    assert row.status == "completed" and row.usage == {"total_tokens": 966}
+    assert row.ended_at is not None  # 终态兜底回填（R1 仓储语义）
+    # 审计流并存不互替：kernel.* 锚点行照常投影 task_events
+    async with factory() as db:
+        types = (
+            await db.execute(
+                select(TaskEventORM.event_type).where(
+                    TaskEventORM.task_id == task.id, TaskEventORM.event_type.like("kernel.subrun%")
+                )
+            )
+        ).scalars().all()
+    assert sorted(types) == ["kernel.subrun_finished", "kernel.subrun_started"]
+
+
+async def test_账本sink投影_rejected_artifact_行落completed_error留痕(pg_env) -> None:
+    """七态行映射（40 篇 §3.2）：rejected_artifact=执行成功产物被拒 → 行 completed + error 留痕。"""
+    uow, factory = pg_env
+    task, root = await _seed_root_for_sink(uow, factory)
+    sink = build_kernel_ledger_sink_factory(uow)(task.id, root.id)
+    ledger = KernelLedger(tenant_id=task.tenant_id, trace_id="trace-subrun-row", sink=sink)
+    sub_id = uuid.uuid4()
+    ledger.append_event(_subrun_started_event(task.tenant_id, root.id, sub_id))
+    ledger.append_event(
+        KernelEvent(
+            event_type="kernel.subrun_finished",
+            tenant_id=task.tenant_id,
+            run_id=root.id,
+            trace_id="trace-subrun-row",
+            data={
+                "sub_run_id": str(sub_id),
+                "status": "rejected_artifact",
+                "error": {"message": "Artifact 未过回传契约校验: $.summary 缺必填字段"},
+            },
+        )
+    )
+    await ledger.drain_sink()
+    async with factory() as db:
+        row = (await db.execute(select(RunORM).where(RunORM.id == sub_id))).scalar_one()
+    assert row.status == "completed"  # 执行面终态（协议权威=事件 status，行状态只答执行得怎样）
+    assert row.error == {"message": "Artifact 未过回传契约校验: $.summary 缺必填字段"}
+    assert row.ended_at is not None
+
+
+async def test_账本sink投影_FINISHED行缺失_落空不阻断(pg_env) -> None:
+    """行缺失（如 STARTED 投影失败后）：update 返回 False → warning 留痕，投影链路不炸。"""
+    uow, factory = pg_env
+    task, root = await _seed_root_for_sink(uow, factory)
+    sink = build_kernel_ledger_sink_factory(uow)(task.id, root.id)
+    ledger = KernelLedger(tenant_id=task.tenant_id, trace_id="trace-subrun-row", sink=sink)
+    ledger.append_event(
+        KernelEvent(
+            event_type="kernel.subrun_finished",
+            tenant_id=task.tenant_id,
+            run_id=root.id,
+            trace_id="trace-subrun-row",
+            data={"sub_run_id": str(uuid.uuid4()), "status": "cancelled"},
+        )
+    )
+    await ledger.drain_sink(timeout_s=5)  # 不抛即通过（落空经 warning 留痕）

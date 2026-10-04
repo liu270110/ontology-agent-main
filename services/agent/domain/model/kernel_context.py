@@ -55,6 +55,10 @@ class TaskRef(BaseModel):
     task_iri: str  # 任务本体实例 IRI
     objective: str  # 任务目标（自然语言，供规划）
     goal_action_iris: tuple[str, ...] = ()  # 判据引用：目标行动类 IRI（B2 判据求值键）
+    # 派发深度（40 篇 §8 R10，2026-10-04 批）：根 Run=0；内核 spawn_sub 派生子 Run 时
+    # 置 父深度+1（内核自维护血统，嵌套 kernel.run 经 TaskRef 天然下传）——kernel 通道
+    # 深度护栏与 SUBRUN_STARTED.depth 的唯一事实源（能力层 ContextVar 护栏并存为第一线）。
+    depth: int = 0
 
 
 class StepRef(BaseModel):

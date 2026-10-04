@@ -190,7 +190,7 @@ class AgentKernel:
             inbox.attach_auditor(_inbox_auditor)
         slot = self._dispatcher.agent_slot()  # agent.slots（02 §4.2）：可绑定实现挂父作用域（分账+级联）
         if isinstance(slot, ParentBindable):
-            slot.bind_parent(task.run_id, rc.tracker, rc.coordinator)
+            slot.bind_parent(task.run_id, rc.tracker, rc.coordinator, emit=self._slot_emitter(rc))
         try:
             # 时长维硬兜底（A4）；未设时长预算按 24h 封顶。超限中断统一走取消清单收敛。
             hard_cap = budget.duration_s if budget.duration_s is not None else 86_400.0
@@ -679,6 +679,21 @@ class AgentKernel:
         )
 
     # ── 审计事件（C2）────────────────────────────────────────────────────
+    def _slot_emitter(self, rc: RunContext) -> Any:
+        """子 Run 事件发射通道（40 篇 §8 R2，2026-10-04 批）：闭包父 Run 账本+上下文。
+
+        交 AgentSlot.bind_parent 注入 BuiltinAgentSlot：spawn/close 发射的 SUBRUN 锚点
+        事件经本闭包走与内核锚点同一 :meth:`_emit` 口——父 Run 账本入账（C2 同 trace，
+        归属 run=父 Run，SUBRUN_STARTED 恒落在父 RUN_STARTED 与父 RUN_FINISHED 之间，
+        40 篇 §4.3-5）+ H-0a 广播（ExecEventTranslator 转译为 ChatEvent，发射点=
+        kernel/subagent.py）。
+        """
+
+        def emit(event_type: str, data: dict[str, Any]) -> None:
+            self._emit(rc.ledger, rc.ctx, rc.task.run_id, event_type, data)
+
+        return emit
+
     def _emit(
         self,
         ledger: KernelLedger,

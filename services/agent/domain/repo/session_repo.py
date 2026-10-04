@@ -40,18 +40,31 @@ class SessionRepository(Protocol):
         offset: int = 0,
         limit: int = 20,
         session_type: str | None = None,  # single|group（27 篇 X15：GET /sessions?type=group）
+        query: str | None = None,  # M4.6-D2：非空时检索过滤（tsvector OR trgm），排序维持 recency
     ) -> list[Session]: ...
 
-    async def count_for_user(self, user_id: UUID, *, session_type: str | None = None) -> int:
+    async def count_for_user(self, user_id: UUID, *, session_type: str | None = None, query: str | None = None) -> int:
         """用户会话总数（api/01 §3.1 分页 meta.total；筛选条件与 list_for_user 同口径）。"""
         ...
 
     async def list_messages(self, session_id: UUID, *, before_id: UUID | None = None, limit: int = 20) -> list[Message]:
-        """历史消息回放（api/01 §5.2：before_id 游标分页；seq 倒序）。"""
+        """历史消息回放（api/01 §5.2：before_id 游标分页；seq 倒序；M4.6-D2 起过滤软删行）。"""
         ...
 
     async def get_message_by_seq(self, session_id: UUID, seq: int) -> Message | None:
-        """按 seq 取单条消息（worker 重放：task.payload.message_seq → 触发消息内容）。"""
+        """按 seq 取单条消息（worker 重放：task.payload.message_seq → 触发消息内容）。
+
+        不过滤软删行：M4.6-D2 rewind 锚点校验须认得已删用户消息 seq（重复同锚幂等 202）。
+        """
+        ...
+
+    async def soft_delete_from(self, session_id: UUID, *, before_seq: int) -> int:
+        """M4.6-D2 rewind 软删（docs/Agent/13 §2.3）：seq>=before_seq 消息置 deleted_at。
+
+        幂等（已删行跳过），返回本次新增软删条数；last_message_at 回退到边界前最后一条
+        未删消息（全删置 NULL）；检索面同点重算。不走聚合 save：messages 只追加实体、
+        deleted_at 非聚合不变式（仓储级持久化细节，同 append_message 口径）。
+        """
         ...
 
     async def count_by_agent(self, agent_id: UUID) -> int:

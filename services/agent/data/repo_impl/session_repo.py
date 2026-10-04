@@ -17,7 +17,7 @@ import uuid
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import delete, func, select, update
+from sqlalchemy import delete, func, or_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -47,11 +47,34 @@ _TERMINAL_RUN_STATES = ("completed", "failed", "timeout", "cancelled")
 _APPEND_RETRIES = 3
 _APPEND_RETRY_DELAY_S = 0.05
 
+# M4.6-D2 会话用户面（docs/Agent/13 §2.2/§2.3/§2.4）：检索面滚动窗口与截断、定题截断。
+_SEARCH_WINDOW = 20  # 检索面=最近 20 条未删消息滚动拼接
+_SEARCH_MSG_CHARS = 200  # 每条消息截 200 字符
+_SEARCH_MAX_CHARS = 8000  # 拼接总长截 8000
+_TITLE_MAX_CHARS = 32  # 确定性定题截断（strip 后前 32 字符）
+_EMPTY_TITLE = "新会话"  # 首条用户消息 strip 后为空时的兜底标题
+
 logger = logging.getLogger(__name__)
 
 
 def _now() -> datetime:
     return datetime.now(UTC)
+
+
+def _session_search_filter(query: str | None) -> Any | None:
+    """M4.6-D2 检索过滤（docs/Agent/13 §2.3）：simple tsvector 全文命中 OR trgm 相似命中。
+
+    ``to_tsvector('simple',search_text) @@ plainto_tsquery('simple',:q) OR search_text % :q``
+    （% = pg_trgm 相似度 ≥ pg_trgm.similarity_threshold 默认 0.3；中文 simple 配置零分词，
+    由三元组相似度兜底）。空/纯空白 query 返回 None（不过滤，行为与无参一致）。
+    """
+    q = (query or "").strip()
+    if not q:
+        return None
+    return or_(
+        func.to_tsvector("simple", SessionORM.search_text).op("@@")(func.plainto_tsquery("simple", q)),
+        SessionORM.search_text.op("%")(q),
+    )
 
 
 def _session_to_domain(row: SessionORM, *, next_seq: int, members: list[GroupMember] | None = None) -> Session:
@@ -224,20 +247,112 @@ class PgSessionRepository:
                 created_at=now,
             )
         )
+        # M4.6-D2 检索面滚动维护（docs/Agent/13 §2.2）：重算=实现简洁者——只读最近 20 条
+        # 未删消息拼接（本条经 autoflush 已可见），免增量簿记；user/assistant 正文均入；
+        # 存量会话不回填（设计 §2.2 明确不做），仅追加/软删点滚动。
+        search_text = await self._refresh_search_face(session_id)
         # last_message_at 为持久化字段（列表排序索引 ix_sessions_tenant_user_recent 依赖），随追加维护
         await self._db.execute(
             update(SessionORM)
             .where(SessionORM.id == session_id, SessionORM.tenant_id == self._tenant_id)
-            .values(last_message_at=now)
+            .values(last_message_at=now, search_text=search_text)
         )
+        # M4.6-D2 确定性定题（docs/Agent/13 §2.4）：title 为空且未生成过 → 用户消息落库点
+        # strip 取前 32 字符（空则「新会话」）；title_generated 单向闸——用户显式 PATCH 的
+        # title 非空即不触发，生成过不再重定题。
+        if message.role == "user":
+            row = (
+                await self._db.execute(
+                    select(SessionORM.title, SessionORM.title_generated).where(
+                        SessionORM.id == session_id, SessionORM.tenant_id == self._tenant_id
+                    )
+                )
+            ).one()
+            if row.title is None and not row.title_generated:
+                title = message.content.strip()[:_TITLE_MAX_CHARS] or _EMPTY_TITLE
+                await self._db.execute(
+                    update(SessionORM)
+                    .where(SessionORM.id == session_id, SessionORM.tenant_id == self._tenant_id)
+                    .values(title=title, title_generated=True)
+                )
         return message.seq
 
+    async def soft_delete_from(self, session_id: uuid.UUID, *, before_seq: int) -> int:
+        """M4.6-D2 rewind 软删（docs/Agent/13 §2.3）：seq>=before_seq 消息置 deleted_at（幂等）。
+
+        - 仅更新 deleted_at IS NULL 行，返回本次新增软删条数（重复同锚=0，不复活已删行）；
+        - last_message_at 回退到软删边界前最后一条未删消息的 created_at（全删则置 NULL）；
+        - 检索面同点重算（未删口径，被删正文即刻退出检索面，与 GET messages 可见性一致）；
+        - 软删不走聚合 save：messages 为只追加实体、deleted_at 非聚合不变式（仓储级持久化
+          细节，同 append_message 口径）；seq 分配（max(seq)）不过滤软删行，单调性不受影响。
+        """
+        result = await self._db.execute(
+            update(MessageORM)
+            .where(
+                MessageORM.session_id == session_id,
+                MessageORM.tenant_id == self._tenant_id,
+                MessageORM.seq >= before_seq,
+                MessageORM.deleted_at.is_(None),
+            )
+            .values(deleted_at=_now())
+        )
+        deleted = int(result.rowcount or 0)
+        latest_created_at = (
+            await self._db.execute(
+                select(MessageORM.created_at)
+                .where(
+                    MessageORM.session_id == session_id,
+                    MessageORM.tenant_id == self._tenant_id,
+                    MessageORM.deleted_at.is_(None),
+                )
+                .order_by(MessageORM.seq.desc())
+                .limit(1)
+            )
+        ).scalar_one_or_none()
+        search_text = await self._refresh_search_face(session_id)
+        await self._db.execute(
+            update(SessionORM)
+            .where(SessionORM.id == session_id, SessionORM.tenant_id == self._tenant_id)
+            .values(last_message_at=latest_created_at, search_text=search_text)
+        )
+        await self._db.flush()
+        return deleted
+
+    async def _refresh_search_face(self, session_id: uuid.UUID) -> str:
+        """重算会话检索面并返回（不单独写库——调用方与 last_message_at 同 UPDATE 落值）。"""
+        contents = (
+            (
+                await self._db.execute(
+                    select(MessageORM.content)
+                    .where(
+                        MessageORM.session_id == session_id,
+                        MessageORM.tenant_id == self._tenant_id,
+                        MessageORM.deleted_at.is_(None),
+                    )
+                    .order_by(MessageORM.seq.desc())
+                    .limit(_SEARCH_WINDOW)
+                )
+            )
+            .scalars()
+            .all()
+        )
+        return "\n".join(content[:_SEARCH_MSG_CHARS] for content in reversed(contents))[:_SEARCH_MAX_CHARS]
+
     async def list_for_user(
-        self, user_id: uuid.UUID, *, offset: int = 0, limit: int = 20, session_type: str | None = None
+        self,
+        user_id: uuid.UUID,
+        *,
+        offset: int = 0,
+        limit: int = 20,
+        session_type: str | None = None,
+        query: str | None = None,
     ) -> list[Session]:
         filters = [SessionORM.tenant_id == self._tenant_id, SessionORM.user_id == user_id]
         if session_type is not None:
             filters.append(SessionORM.type == session_type)
+        search_filter = _session_search_filter(query)  # M4.6-D2：非空 query 才过滤，排序维持 recency 现状
+        if search_filter is not None:
+            filters.append(search_filter)
         stmt = (
             select(SessionORM)
             .where(*filters)
@@ -255,17 +370,27 @@ class PgSessionRepository:
         seq_map = await self._seq_map([r.id for r in rows])
         return [_session_to_domain(r, next_seq=seq_map.get(r.id, 0)) for r in rows]
 
-    async def count_for_user(self, user_id: uuid.UUID, *, session_type: str | None = None) -> int:
+    async def count_for_user(
+        self, user_id: uuid.UUID, *, session_type: str | None = None, query: str | None = None
+    ) -> int:
         filters = [SessionORM.tenant_id == self._tenant_id, SessionORM.user_id == user_id]
         if session_type is not None:
             filters.append(SessionORM.type == session_type)
+        search_filter = _session_search_filter(query)  # 与 list_for_user 同口径（分页 meta.total）
+        if search_filter is not None:
+            filters.append(search_filter)
         stmt = select(func.count()).select_from(SessionORM).where(*filters)
         return int((await self._db.execute(stmt)).scalar_one())
 
     async def list_messages(
         self, session_id: uuid.UUID, *, before_id: uuid.UUID | None = None, limit: int = 20
     ) -> list[Message]:
-        stmt = select(MessageORM).where(MessageORM.session_id == session_id, MessageORM.tenant_id == self._tenant_id)
+        # M4.6-D2：历史全路径过滤软删行（docs/Agent/13 §2.3「deleted_at IS NULL」）
+        stmt = select(MessageORM).where(
+            MessageORM.session_id == session_id,
+            MessageORM.tenant_id == self._tenant_id,
+            MessageORM.deleted_at.is_(None),
+        )
         if before_id is not None:
             # 游标定位：before_id → 其 seq，取更早的消息（seq 会话内严格递增，序稳定于 uuid7 随机位）
             cursor_seq = (
@@ -304,6 +429,7 @@ class PgSessionRepository:
         return int((await self._db.execute(stmt)).scalar_one())
 
     async def get_message_by_seq(self, session_id: uuid.UUID, seq: int) -> Message | None:
+        # 不过滤软删：rewind 锚点校验须认得已删用户消息 seq（重复同锚幂等 202 而非 4106）
         stmt = select(MessageORM).where(
             MessageORM.session_id == session_id, MessageORM.tenant_id == self._tenant_id, MessageORM.seq == seq
         )
@@ -544,9 +670,7 @@ class PgTaskRepository:
         return [_run_to_domain(r) for r in descendants]
 
     @staticmethod
-    def _reachable(
-        start: uuid.UUID, target: uuid.UUID, sub_by_id: dict[uuid.UUID, RunORM]
-    ) -> bool:
+    def _reachable(start: uuid.UUID, target: uuid.UUID, sub_by_id: dict[uuid.UUID, RunORM]) -> bool:
         """ancestor 链上溯判定：start 经 parent_run_id 逐级可达 target（target 命中即真）。"""
         cursor: uuid.UUID | None = start
         while cursor is not None:

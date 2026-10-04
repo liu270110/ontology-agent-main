@@ -40,9 +40,18 @@ from services.platform.llm.usage import LlmUsage, set_last_usage  # noqa: E402
 
 
 class ModelGatewayError(RuntimeError):
-    """模型网关错误基类：``code`` 为 02 篇 §7 已登记平台错误码，消息带码前缀可追溯。"""
+    """模型网关错误基类：``code`` 为 02 篇 §7 已登记平台错误码，消息带码前缀可追溯。
+
+    status_code：上游 HTTP 状态码（M4.6-D3 透传，M4.5 ocr C 批整改「4xx 误判可重试」
+    收口：非 200 路径把 resp.status_code 传入异常，resilience._is_transient_error 鸭型
+    读取 → 4xx（429/401 除外）不再误判瞬时重试；无 HTTP 语义的构造路径恒 None）。
+    """
 
     code = 5999
+
+    def __init__(self, message: str, *, status_code: int | None = None) -> None:
+        super().__init__(message)
+        self.status_code = status_code
 
 
 class ModelGatewayConfigError(ModelGatewayError):
@@ -297,7 +306,10 @@ class OpenAICompatibleModelPort:
             except httpx.HTTPError as exc:
                 raise ModelGatewayUnavailableError(f"模型服务不可达（{self._base_url}）: {exc}") from exc
             if resp.status_code != 200:
-                error = ModelGatewayUnavailableError(f"模型服务返回 {resp.status_code}: {resp.text[:200]}")
+                # status_code 透传（M4.6-D3）：下游 resilience 据此区分 4xx 确定性失败 vs 瞬时
+                error = ModelGatewayUnavailableError(
+                    f"模型服务返回 {resp.status_code}: {resp.text[:200]}", status_code=resp.status_code
+                )
                 if pool is not None and resp.status_code in (429, 401):
                     pool.report_failure(credential)  # type: ignore[arg-type] ——池面恒有凭证
                     last_error = error
@@ -430,7 +442,10 @@ class OpenAICompatibleModelPort:
                 ) as resp:
                     if resp.status_code != 200:
                         detail = (await resp.aread()).decode("utf-8", errors="replace")[:200]
-                        error = ModelGatewayUnavailableError(f"模型服务返回 {resp.status_code}: {detail}")
+                        # status_code 透传（M4.6-D3）：同 _post_chat_completions 非流式口径
+                        error = ModelGatewayUnavailableError(
+                            f"模型服务返回 {resp.status_code}: {detail}", status_code=resp.status_code
+                        )
                         if pool is not None and resp.status_code in (429, 401):
                             # 连接期失败：冷却+轮换（尚未产出任何增量，重试对调用方透明）
                             pool.report_failure(credential)  # type: ignore[arg-type]

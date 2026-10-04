@@ -31,6 +31,9 @@ class StubService:
     async def get_l1(self, session_id):
         return {"persona": "p"}
 
+    async def write_l1(self, session_id, block, content):
+        return None
+
     async def profile(self, *, tenant_id, user_id, per_type_limit=5):
         return {
             "mem:Preference": [{"content": "偏好深色主题", "confidence": 0.9, "created_at": NOW}],
@@ -196,19 +199,60 @@ def test_create_record(client):
     )
     assert resp.status_code == 200
     body = resp.json()
-    assert body["code"] == 0 and body["data"]["state"] == "active"
+    # 写入信封 {data}（M4.6-D3 联调收口：旧 {code,message,data} 信封废止，code 键不再出现）
+    assert set(body) == {"data"} and body["data"]["state"] == "active"
+
+
+def test_get_record_200_detail_envelope(client):
+    """详情 GET 信封 {data, meta:{}}（M4.6-D3 对齐 kb 详情模式；旧 {code:0} 信封废止）。"""
+    rid = uuid.uuid4()
+
+    class _OneRecordService(StubService):
+        async def get_record(self, tenant_id, record_id):
+            return MemoryRecord(
+                id=record_id,
+                tenant_id=tenant_id,
+                layer=2,
+                record_type=MemoryType.FACT_CLAIM,
+                content="张三",
+                created_at=NOW,
+                updated_at=NOW,
+            )
+
+    app = create_app()
+    app.dependency_overrides[get_memory_service] = lambda: _OneRecordService()
+    resp = TestClient(app).get(f"/api/v1/memory/records/{rid}", headers=_h())
+    assert resp.status_code == 200
+    body = resp.json()
+    # 详情信封 {data, meta}：meta=空对象（EmptyMeta 序列化恒 {}），data 面字段齐
+    assert set(body) == {"data", "meta"} and body["meta"] == {}
+    assert body["data"]["id"] == str(rid) and body["data"]["state"] == "active"
 
 
 def test_search_empty(client):
     resp = client.post("/api/v1/memory/records/search", headers=_h(), json={"text_q": "张三"})
     assert resp.status_code == 200
-    assert resp.json()["data"] == []
+    body = resp.json()
+    # 检索读面信封 {data, meta:{}}（M4.6-D3；v1 limit 截断无分页 meta）
+    assert body["data"] == [] and body["meta"] == {}
 
 
 def test_get_l1_blocks(client):
     resp = client.get(f"/api/v1/memory/sessions/{uuid.uuid4()}/blocks", headers=_h())
     assert resp.status_code == 200
-    assert resp.json()["data"]["persona"] == "p"
+    body = resp.json()
+    # 详情读面信封 {data, meta:{}}（M4.6-D3）
+    assert body["data"]["persona"] == "p" and body["meta"] == {}
+
+
+def test_put_block_200_write_envelope(client):
+    """PUT 写块信封 {data:null}（M4.6-D3 写面 {data}；旧 {code:0,data:null} 信封废止）。"""
+    resp = client.put(
+        f"/api/v1/memory/sessions/{uuid.uuid4()}/blocks/task", headers=_h(), json={"content": "停电归因分析"}
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert set(body) == {"data"} and body["data"] is None
 
 
 def test_missing_tenant_header_rejected(client):
@@ -248,7 +292,10 @@ def test_invalid_tenant_header_422(client):
 def test_settle_session_200(client):
     resp = client.post(f"/api/v1/memory/sessions/{uuid.uuid4()}/settle", headers=_h(), json={"transcript": "t"})
     assert resp.status_code == 200
-    assert resp.json()["data"] == {"added": 2, "duplicates": 1, "to_review": 0}
+    body = resp.json()
+    # 受理信封写面 {data}（M4.6-D3）；成功面无 skipped 键（exclude_none 与旧 data 形状逐字节对齐）
+    assert set(body) == {"data"}
+    assert body["data"] == {"added": 2, "duplicates": 1, "to_review": 0}
 
 
 def test_list_reviews_200(client):

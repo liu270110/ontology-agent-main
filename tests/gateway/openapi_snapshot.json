@@ -866,28 +866,21 @@
       },
       "AuditPageOut": {
         "additionalProperties": false,
-        "description": "GET /memory/audit 响应（按 user/session 回放；created_at 倒序分页）。",
+        "description": "GET /memory/audit 响应（api/01 §3.1 信封 {data, meta:{page,page_size,total}}，B1 批统一）。\n\nv1 口径（M4.6-D3）：query_memory_audit 无 count 能力，meta.total=len(data)（当前页\n行数，非全量总数）。",
         "properties": {
-          "items": {
+          "data": {
             "items": {
               "$ref": "#/components/schemas/AuditEntryOut"
             },
-            "title": "Items",
+            "title": "Data",
             "type": "array"
           },
-          "limit": {
-            "title": "Limit",
-            "type": "integer"
-          },
-          "offset": {
-            "title": "Offset",
-            "type": "integer"
+          "meta": {
+            "$ref": "#/components/schemas/PageMeta"
           }
         },
         "required": [
-          "items",
-          "offset",
-          "limit"
+          "meta"
         ],
         "title": "AuditPageOut",
         "type": "object"
@@ -1118,6 +1111,26 @@
           "content"
         ],
         "title": "BlockPutRequest",
+        "type": "object"
+      },
+      "BlockWriteEnvelope": {
+        "additionalProperties": false,
+        "description": "PUT /memory/sessions/{sid}/blocks/{blk} 写入信封（写面 {data}；v1 无回执体=data null）。",
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Data"
+          }
+        },
+        "title": "BlockWriteEnvelope",
         "type": "object"
       },
       "Body_create_document_file_api_v1_kb_documents_file_post": {
@@ -2713,27 +2726,22 @@
         "type": "object"
       },
       "FactPageOut": {
+        "additionalProperties": false,
+        "description": "GET /memory(/facts) 响应（api/01 §3.1 信封 {data, meta:{page,page_size,total}}，B1 批统一）。\n\nv1 口径（M4.6-D3）：仓储 list_for_user 无 count 能力，meta.total=len(data)（当前页行数，\n非全量总数）；count 能力随 M5 前端真分页批次补齐。",
         "properties": {
-          "items": {
+          "data": {
             "items": {
               "$ref": "#/components/schemas/FactOut"
             },
-            "title": "Items",
+            "title": "Data",
             "type": "array"
           },
-          "limit": {
-            "title": "Limit",
-            "type": "integer"
-          },
-          "offset": {
-            "title": "Offset",
-            "type": "integer"
+          "meta": {
+            "$ref": "#/components/schemas/PageMeta"
           }
         },
         "required": [
-          "items",
-          "offset",
-          "limit"
+          "meta"
         ],
         "title": "FactPageOut",
         "type": "object"
@@ -3716,8 +3724,15 @@
       },
       "KbGraphQueryOut": {
         "additionalProperties": false,
-        "description": "图三查统一响应（lite=类级图，retrieval/graph.py 纯函数）：节点/边列表。\n\n空结果非失败（OntRAG §4）：未知类 IRI / 无路径 → 200 空 nodes/rels，404 仅用于资源不存在。",
+        "description": "图三查统一响应（lite=类级图，retrieval/graph.py 纯函数）：节点/边列表。\n\n空结果非失败（OntRAG §4）：未知类 IRI / 无路径 → 200 空 nodes/rels，404 仅用于资源不存在。\nitems：实体条目消费面（M4.6-D3 联调收口补齐，实体卡片直读 {iri,name,type}）——\n契约注记：items 为规范键，与 nodes 同源逐项映射（_graph_query_out 单点生成）；\nnodes/rels 向后兼容保留（fe1 前端已双形态），不废止。",
         "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/KbGraphNodeOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
           "nodes": {
             "items": {
               "$ref": "#/components/schemas/KbGraphNodeOut"
@@ -4143,18 +4158,21 @@
       },
       "L1SessionListOut": {
         "additionalProperties": false,
-        "description": "GET /memory/l1 响应（前端 listL1 消费形状 {items}；空=无活跃会话或 Redis 降级）。",
+        "description": "GET /memory/l1 响应（api/01 §3.1 信封 {data, meta:{page,page_size,total}}，B1 批统一）。\n\nv1 口径（M4.6-D3）：L1 Redis SCAN 聚合无全量 count，meta.total=len(data)；limit 截断\n前的聚合面即本页（容量卡单页消费），page 恒 1。",
         "properties": {
-          "items": {
+          "data": {
             "items": {
               "$ref": "#/components/schemas/L1SessionOut"
             },
-            "title": "Items",
+            "title": "Data",
             "type": "array"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/PageMeta"
           }
         },
         "required": [
-          "items"
+          "meta"
         ],
         "title": "L1SessionListOut",
         "type": "object"
@@ -5573,28 +5591,21 @@
       },
       "PromotionPageOut": {
         "additionalProperties": false,
-        "description": "GET /memory/promotions 响应（created_at 倒序分页；无登记 → items=[] 契约形状）。",
+        "description": "GET /memory/promotions 响应（api/01 §3.1 信封 {data, meta:{page,page_size,total}}，B1 批统一）。\n\nv1 口径（M4.6-D3）：query_promotions（audit_logs 登记行投影）无 count 能力，\nmeta.total=len(data)（当前页行数，非全量总数）。",
         "properties": {
-          "items": {
+          "data": {
             "items": {
               "$ref": "#/components/schemas/PromotionRecordOut"
             },
-            "title": "Items",
+            "title": "Data",
             "type": "array"
           },
-          "limit": {
-            "title": "Limit",
-            "type": "integer"
-          },
-          "offset": {
-            "title": "Offset",
-            "type": "integer"
+          "meta": {
+            "$ref": "#/components/schemas/PageMeta"
           }
         },
         "required": [
-          "items",
-          "offset",
-          "limit"
+          "meta"
         ],
         "title": "PromotionPageOut",
         "type": "object"
@@ -6054,6 +6065,135 @@
           "content"
         ],
         "title": "RecordCreateRequest",
+        "type": "object"
+      },
+      "RecordDetailEnvelope": {
+        "additionalProperties": false,
+        "description": "GET /memory/records/{id} 详情信封（读面 {data, meta}，meta=空对象；对齐 kb 详情模式）。",
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/RecordResponse"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/EmptyMeta"
+          }
+        },
+        "required": [
+          "data"
+        ],
+        "title": "RecordDetailEnvelope",
+        "type": "object"
+      },
+      "RecordResponse": {
+        "properties": {
+          "confidence": {
+            "title": "Confidence",
+            "type": "number"
+          },
+          "content": {
+            "title": "Content",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "layer": {
+            "title": "Layer",
+            "type": "integer"
+          },
+          "proof_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Proof Count"
+          },
+          "record_type": {
+            "title": "Record Type",
+            "type": "string"
+          },
+          "scope": {
+            "title": "Scope",
+            "type": "string"
+          },
+          "state": {
+            "title": "State",
+            "type": "string"
+          },
+          "subject_iri": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Subject Iri"
+          },
+          "tenant_id": {
+            "format": "uuid",
+            "title": "Tenant Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "tenant_id",
+          "layer",
+          "record_type",
+          "subject_iri",
+          "content",
+          "scope",
+          "confidence",
+          "proof_count",
+          "state",
+          "created_at"
+        ],
+        "title": "RecordResponse",
+        "type": "object"
+      },
+      "RecordSearchEnvelope": {
+        "additionalProperties": false,
+        "description": "POST /memory/records/search 检索信封（读面 {data, meta}，meta=空对象；v1 limit 截断无分页）。",
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/SearchHitResponse"
+            },
+            "title": "Data",
+            "type": "array"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/EmptyMeta"
+          }
+        },
+        "title": "RecordSearchEnvelope",
+        "type": "object"
+      },
+      "RecordWriteEnvelope": {
+        "additionalProperties": false,
+        "description": "POST /memory/records 写入信封（写面 {data}；旧 {code,message,data} 信封废止）。",
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/RecordResponse"
+          }
+        },
+        "required": [
+          "data"
+        ],
+        "title": "RecordWriteEnvelope",
         "type": "object"
       },
       "RefreshRequest": {
@@ -6533,6 +6673,47 @@
         "title": "SearchHitOut",
         "type": "object"
       },
+      "SearchHitResponse": {
+        "properties": {
+          "content": {
+            "title": "Content",
+            "type": "string"
+          },
+          "record_id": {
+            "format": "uuid",
+            "title": "Record Id",
+            "type": "string"
+          },
+          "record_type": {
+            "title": "Record Type",
+            "type": "string"
+          },
+          "score": {
+            "title": "Score",
+            "type": "number"
+          },
+          "subject_iri": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Subject Iri"
+          }
+        },
+        "required": [
+          "record_id",
+          "score",
+          "content",
+          "record_type",
+          "subject_iri"
+        ],
+        "title": "SearchHitResponse",
+        "type": "object"
+      },
       "SearchRequest": {
         "properties": {
           "layer": {
@@ -6666,6 +6847,29 @@
           "content"
         ],
         "title": "SendMessageIn",
+        "type": "object"
+      },
+      "SessionBlocksEnvelope": {
+        "additionalProperties": false,
+        "description": "GET /memory/sessions/{sid}/blocks 信封（读面 {data, meta}，meta=空对象）。",
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Data"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/EmptyMeta"
+          }
+        },
+        "title": "SessionBlocksEnvelope",
         "type": "object"
       },
       "SessionCancelIn": {
@@ -6880,6 +7084,55 @@
         ],
         "title": "SessionStatus",
         "type": "string"
+      },
+      "SettleData": {
+        "additionalProperties": false,
+        "description": "手动沉淀回执 data 面：正常面 added/duplicates/to_review；幂等短路附 skipped（exclude_none\n序列化——成功面无 skipped 键，与旧 {code:0} 信封 data 形状逐字节对齐）。",
+        "properties": {
+          "added": {
+            "default": 0,
+            "title": "Added",
+            "type": "integer"
+          },
+          "duplicates": {
+            "default": 0,
+            "title": "Duplicates",
+            "type": "integer"
+          },
+          "skipped": {
+            "anyOf": [
+              {
+                "const": "idempotent",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Skipped"
+          },
+          "to_review": {
+            "default": 0,
+            "title": "To Review",
+            "type": "integer"
+          }
+        },
+        "title": "SettleData",
+        "type": "object"
+      },
+      "SettleEnvelope": {
+        "additionalProperties": false,
+        "description": "POST /memory/sessions/{sid}/settle 受理信封（写面 {data}；路由配 response_model_exclude_none）。",
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/SettleData"
+          }
+        },
+        "required": [
+          "data"
+        ],
+        "title": "SettleEnvelope",
+        "type": "object"
       },
       "SettleRequest": {
         "properties": {
@@ -11338,7 +11591,7 @@
     },
     "/api/v1/memory/l1": {
       "get": {
-        "description": "活跃 L1 会话列表（★ GET /memory/l1，B8-WB 断头补齐 2026-10-04；前端 listL1 消费方）：\n数据源=L1 Redis 三键空间 SCAN 聚合（与 GET /memory/l1/{session_id} 同源 RedisL1Store，\n会话维聚合，见 data.l1.list_sessions）；title 为块级代理（会话权威标题归 agent sessions 表，\nread_l1_snapshot 同款分期口径）；Redis 降级 → items=[]（容量卡空态，不阻塞页面）。",
+        "description": "活跃 L1 会话列表（★ GET /memory/l1，B8-WB 断头补齐 2026-10-04；前端 listL1 消费方）：\n数据源=L1 Redis 三键空间 SCAN 聚合（与 GET /memory/l1/{session_id} 同源 RedisL1Store，\n会话维聚合，见 data.l1.list_sessions）；title 为块级代理（会话权威标题归 agent sessions 表，\nread_l1_snapshot 同款分期口径）；Redis 降级 → data=[]（容量卡空态，不阻塞页面）。\n信封 {data, meta:{page,page_size,total}}（api/01 §3.1，B1 批统一）；total=len(data)（v1 口径）。",
         "operationId": "list_l1_sessions_api_v1_memory_l1_get",
         "parameters": [
           {
@@ -11733,9 +11986,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Create Record Api V1 Memory Records Post",
-                  "type": "object"
+                  "$ref": "#/components/schemas/RecordWriteEnvelope"
                 }
               }
             },
@@ -11787,9 +12038,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Search Records Api V1 Memory Records Search Post",
-                  "type": "object"
+                  "$ref": "#/components/schemas/RecordSearchEnvelope"
                 }
               }
             },
@@ -11841,9 +12090,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Get Record Api V1 Memory Records  Record Id  Get",
-                  "type": "object"
+                  "$ref": "#/components/schemas/RecordDetailEnvelope"
                 }
               }
             },
@@ -11980,9 +12227,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Get Blocks Api V1 Memory Sessions  Session Id  Blocks Get",
-                  "type": "object"
+                  "$ref": "#/components/schemas/SessionBlocksEnvelope"
                 }
               }
             },
@@ -12053,9 +12298,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Put Block Api V1 Memory Sessions  Session Id  Blocks  Block  Put",
-                  "type": "object"
+                  "$ref": "#/components/schemas/BlockWriteEnvelope"
                 }
               }
             },
@@ -12080,7 +12323,7 @@
     },
     "/api/v1/memory/sessions/{session_id}/settle": {
       "post": {
-        "description": "手动沉淀（在线路径，不过 IdleGate——§5.5.2 空闲调度只管后台自动沉淀）。\n\n幂等：确定性键 manual:{session_id}:{sha256(transcript)} 走登记闸门（与计划\"组装走 settle_session_task\"同语义），\n重复提交短路返回 skipped，不重复调管线。",
+        "description": "手动沉淀（在线路径，不过 IdleGate——§5.5.2 空闲调度只管后台自动沉淀）。\n\n幂等：确定性键 manual:{session_id}:{sha256(transcript)} 走登记闸门（与计划\"组装走 settle_session_task\"同语义），\n重复提交短路返回 skipped，不重复调管线。信封写面 {data}（M4.6-D3 旧信封废止；\nexclude_none：成功面无 skipped 键，幂等面才有）。",
         "operationId": "settle_session_api_v1_memory_sessions__session_id__settle_post",
         "parameters": [
           {
@@ -12134,9 +12377,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Settle Session Api V1 Memory Sessions  Session Id  Settle Post",
-                  "type": "object"
+                  "$ref": "#/components/schemas/SettleEnvelope"
                 }
               }
             },

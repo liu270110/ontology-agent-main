@@ -761,6 +761,9 @@ async def test_GET_graph_search_层次与关系扩展_candidate不入图_3001(do
         assert all(types)  # 缺谓词 authoritative 关系不入图（predicate 防呆，ocr 评审 4）
         out_alias = await search_graph_entities(principal, request, db, class_name="Feeder", depth=0)
         assert FEEDER in {n.iri for n in out_alias.nodes}  # 契约/任务双参数别名同义
+        # items=实体条目消费面（M4.6-D3）：与 nodes 同源逐项映射，条目恒 {iri,name,type} 三字段
+        assert [i.iri for i in out.items] == [n.iri for n in out.nodes]
+        assert all(set(i.model_dump()) == {"iri", "name", "type"} for i in out.items)
         with pytest.raises(GatewayError) as exc:
             await search_graph_entities(principal, request, db)
     assert exc.value.code == 3001 and exc.value.status_code == 422  # q/class_name 缺失防呆
@@ -781,6 +784,7 @@ async def test_GET_graph_neighborhood_别名_谓词过滤_未知IRI空结果_300
         assert "subclass_of" not in {rel.type for rel in out_f.rels}  # depth=0 无层次边
         ghost = await expand_neighborhood(principal, request, db, class_iri="http://x#Ghost")
         assert isinstance(ghost, KbGraphQueryOut) and ghost.nodes == [] and ghost.rels == []  # 空结果非失败
+        assert ghost.items == []  # items 与 nodes 同源：空图恒同空（M4.6-D3）
         with pytest.raises(GatewayError) as exc:
             await expand_neighborhood(principal, request, db)
     assert exc.value.code == 3001 and exc.value.status_code == 422

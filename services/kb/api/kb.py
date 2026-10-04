@@ -1218,6 +1218,8 @@ def _graph_query_out(result: GraphQueryResult) -> KbGraphQueryOut:
     return KbGraphQueryOut(
         nodes=[KbGraphNodeOut(iri=node.iri, name=node.name, type=node.type) for node in result.nodes],
         rels=[KbGraphRelOut(type=rel.type, weight=rel.weight) for rel in result.rels],
+        # items 与 nodes 同源逐项映射（M4.6-D3：实体条目消费面；nodes/rels 保留不废止）
+        items=[KbGraphNodeOut(iri=node.iri, name=node.name, type=node.type) for node in result.nodes],
     )
 
 
@@ -1850,17 +1852,14 @@ async def get_conflict(
     非本租户 / 非 conflict 工单 / 不存在 → 404（deny-by-default 同域口径）。
     """
     row = (
-        (
-            await session.execute(
-                text(_CONFLICT_LIST_SQL + " AND id = :ticket_id").bindparams(
-                    bindparam("tenant_id", type_=PgUuid(as_uuid=True)),  # 裸 text() 无类型引擎：sqlite 降 str
-                    bindparam("ticket_id", type_=PgUuid(as_uuid=True)),
-                ),
-                {"tenant_id": principal.tenant_id, "target_type": TARGET_TYPE_CONFLICT, "ticket_id": ticket_id},
-            )
+        await session.execute(
+            text(_CONFLICT_LIST_SQL + " AND id = :ticket_id").bindparams(
+                bindparam("tenant_id", type_=PgUuid(as_uuid=True)),  # 裸 text() 无类型引擎：sqlite 降 str
+                bindparam("ticket_id", type_=PgUuid(as_uuid=True)),
+            ),
+            {"tenant_id": principal.tenant_id, "target_type": TARGET_TYPE_CONFLICT, "ticket_id": ticket_id},
         )
-        .first()
-    )
+    ).first()
     if row is None:
         raise GatewayError(404, "冲突工单不存在", status_code=404)
     payload = _payload_of(row.payload)

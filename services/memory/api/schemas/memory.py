@@ -12,6 +12,7 @@ from services.memory.business.context import ContextBundle
 from services.memory.business.timeline import FactTimeline, TimelineEvent
 from services.memory.domain.model.l1 import L1SessionSummary, L1Snapshot, MemoryBlock, WindowMessage
 from services.memory.domain.model.l2_fact import FactCategory, L2Fact
+from services.platform.schemas import PageMeta
 
 _FORBID = ConfigDict(extra="forbid")  # 契约面：未知字段拒绝（api/01 §5.5 新增端点统一口径）
 
@@ -116,9 +117,16 @@ class FactOut(BaseModel):
 
 
 class FactPageOut(BaseModel):
-    items: list[FactOut]
-    offset: int
-    limit: int
+    """GET /memory(/facts) 响应（api/01 §3.1 信封 {data, meta:{page,page_size,total}}，B1 批统一）。
+
+    v1 口径（M4.6-D3）：仓储 list_for_user 无 count 能力，meta.total=len(data)（当前页行数，
+    非全量总数）；count 能力随 M5 前端真分页批次补齐。
+    """
+
+    model_config = _FORBID
+
+    data: list[FactOut] = Field(default_factory=list)
+    meta: PageMeta
 
 
 class FactWrittenOut(BaseModel):
@@ -184,11 +192,16 @@ class L1SessionOut(BaseModel):
 
 
 class L1SessionListOut(BaseModel):
-    """GET /memory/l1 响应（前端 listL1 消费形状 {items}；空=无活跃会话或 Redis 降级）。"""
+    """GET /memory/l1 响应（api/01 §3.1 信封 {data, meta:{page,page_size,total}}，B1 批统一）。
+
+    v1 口径（M4.6-D3）：L1 Redis SCAN 聚合无全量 count，meta.total=len(data)；limit 截断
+    前的聚合面即本页（容量卡单页消费），page 恒 1。
+    """
 
     model_config = _FORBID
 
-    items: list[L1SessionOut]
+    data: list[L1SessionOut] = Field(default_factory=list)
+    meta: PageMeta
 
 
 # ---------------------------------------------------------------- 检索与上下文
@@ -335,13 +348,16 @@ class PromotionRecordOut(BaseModel):
 
 
 class PromotionPageOut(BaseModel):
-    """GET /memory/promotions 响应（created_at 倒序分页；无登记 → items=[] 契约形状）。"""
+    """GET /memory/promotions 响应（api/01 §3.1 信封 {data, meta:{page,page_size,total}}，B1 批统一）。
+
+    v1 口径（M4.6-D3）：query_promotions（audit_logs 登记行投影）无 count 能力，
+    meta.total=len(data)（当前页行数，非全量总数）。
+    """
 
     model_config = _FORBID
 
-    items: list[PromotionRecordOut]
-    offset: int
-    limit: int
+    data: list[PromotionRecordOut] = Field(default_factory=list)
+    meta: PageMeta
 
 
 class PromotionDecisionIn(BaseModel):
@@ -387,10 +403,13 @@ class AuditEntryOut(BaseModel):
 
 
 class AuditPageOut(BaseModel):
-    """GET /memory/audit 响应（按 user/session 回放；created_at 倒序分页）。"""
+    """GET /memory/audit 响应（api/01 §3.1 信封 {data, meta:{page,page_size,total}}，B1 批统一）。
+
+    v1 口径（M4.6-D3）：query_memory_audit 无 count 能力，meta.total=len(data)（当前页
+    行数，非全量总数）。
+    """
 
     model_config = _FORBID
 
-    items: list[AuditEntryOut]
-    offset: int
-    limit: int
+    data: list[AuditEntryOut] = Field(default_factory=list)
+    meta: PageMeta

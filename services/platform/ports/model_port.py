@@ -94,11 +94,17 @@ class ModelPort(Protocol):
 
 
 class ModelPortError(Exception):
-    """模型端口领域错误基类（standards/01 §2.6：异常带平台错误码；5xxx 段=02 篇 §7）。"""
+    """模型端口领域错误基类（standards/01 §2.6：异常带平台错误码；5xxx 段=02 篇 §7）。
 
-    def __init__(self, code: int, message: str) -> None:
+    status_code：上游 HTTP 状态码（实现方拿到响应状态时透传——4xx 客户端错误=确定性
+    失败 vs 瞬时错误的调用级重试判定输入，resilience._is_transient_error 鸭型读取；
+    无 HTTP 语义（超时/不可达/未配置/输出不合法）恒 None）。
+    """
+
+    def __init__(self, code: int, message: str, status_code: int | None = None) -> None:
         super().__init__(message)
         self.code = code
+        self.status_code = status_code
 
 
 class ModelTimeoutError(ModelPortError):

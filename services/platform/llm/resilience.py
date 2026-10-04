@@ -61,10 +61,14 @@ def _is_transient_error(exc: BaseException) -> bool:
     """调用级重试只认瞬时错误：超时/不可达（5001/5002 网络/HTTP 族）。
 
     排除：输出不合法（宪法第 2 条域——audited 装饰器「校验失败反馈重试」承担，重发同
-    提示词不是治疗）、预算耗尽（5005 治理域，等待不恢复）、其余非模型族异常（编程错误
-    照常上抛响亮失败）。
+    提示词不是治疗）、预算耗尽（5005 治理域，等待不恢复）、4xx 客户端错误（400~499，
+    429 限流/401 凭证失效除外——前者退避后可自愈、后者由凭证池轮换处置，确定性失败
+    重发同请求无意义）、其余非模型族异常（编程错误照常上抛响亮失败）。
     """
     if isinstance(exc, (ModelGatewayOutputInvalidError, BudgetExhaustedError)):
+        return False
+    status = getattr(exc, "status_code", None)
+    if status is not None and 400 <= status < 500 and status not in (429, 401):
         return False
     return isinstance(exc, (ModelGatewayError, ModelPortError))
 

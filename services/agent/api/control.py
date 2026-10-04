@@ -123,6 +123,7 @@ async def _publish_inbox_receipt(
     """
     hub = getattr(request.app.state, "sse_hub", None)
     if hub is None:
+        logger.warning("SSE hub 未装配，INBOX_SPLICED 回执跳过（run=%s）", run_id)
         return
     try:
         published = hub.publish(

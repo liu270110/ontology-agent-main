@@ -159,9 +159,11 @@ class AgentKernel:
         - ``control_gate``（紧急停止闸门探针，同步 callable）：**段边界**先于 drain 查询，
           返回非 None（=激活原因）即走 :meth:`_finalize_interrupted` 优雅中断
           （reason_code=4104 ESTOP_ACTIVE，``run_checklist=False``）。
-          **estop 与 cancel 语义区别（钉死）**：cancel=杀在途（取消清单 4 步：子 Run 级联/
-          在途工具中止/租约强制释放/工作区标记）；estop=**闸门**——只挡新段调度，不打断
-          任何在途调用，在途工具自然收敛后运行落终态（A-7「只挡新工作」）。
+          **estop 与 cancel 语义区别（钉死，docs/Agent/12 §1.2 + 2026-10-04 真 vLLM 实测裁决）**：
+          estop=**暂停闸（pause gate），不是删除**——激活期新 Run 于认领/首个段边界被 4104
+          拒绝（零执行），解除后 retryable 的任务经既有重试监督自然恢复；cancel 才是杀在途
+          （取消清单 4 步：子 Run 级联/在途工具中止/租约强制释放/工作区标记）。本闸门只挡
+          新段调度，不打断任何在途调用，在途工具自然收敛后运行落终态（A-7「只挡新工作」）。
         - ``resumed_validated``（P-4 resume 计划对账锚点：seq/action_iri/param_hash 全等
           匹配且 execution_mode=READ 才跳过）：规划完成后对账，命中步走 planned→validated
           特批迁移（kernel.step_resumed_validated，resumed=true，不产生消息行）；存在偏差

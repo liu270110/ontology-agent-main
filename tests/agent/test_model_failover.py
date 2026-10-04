@@ -399,6 +399,73 @@ class _NoopSleeper:
         return None
 
 
+class _HttpStatusError(ModelGatewayUnavailableError):
+    """携带 HTTP status_code 的网关错误桩（端口/传输层鸭型携带状态码的可重试判定输入）。"""
+
+    def __init__(self, status_code: int) -> None:
+        super().__init__(f"模型服务返回 {status_code}")
+        self.status_code = status_code
+
+
+async def test_400客户端错误_确定性失败不重试_直接上抛():
+    # Arrange：脚本恒抛 status_code=400（4xx 确定性失败——重发同请求无意义，不退避不重试）
+    journal: list[tuple[str, Any]] = []
+
+    async def emitter(event_type: str, data: dict[str, Any]) -> None:
+        journal.append(("event", event_type))
+
+    port = FailoverModelPort(
+        _ScriptedPort("m", [_HttpStatusError(400)], journal=journal),
+        provider="openai_compatible",
+        model="m",
+        retry_max_attempts=2,
+        retry_backoff_ms=0,
+        clock=_FakeClock(),
+        sleeper=_NoopSleeper(),
+    )
+    token = set_llm_event_emitter(emitter)
+    try:
+        # Act + Assert：原样上抛，即使配额尚有（retry_max_attempts=2）也只打一次
+        with pytest.raises(ModelGatewayUnavailableError, match="模型服务返回 400"):
+            await port.complete([{"role": "user", "content": "hi"}])
+    finally:
+        reset_llm_event_emitter(token)
+    # Assert：恰一次调用；未落任何重试/成功事件（非瞬时错误不进重试调度）
+    assert [entry[0] for entry in journal] == ["call"]
+
+
+async def test_429限流_仍按瞬时错误重试_成功落retry_succeeded():
+    # Arrange：首试 429（限流退避后可自愈，4xx 白名单例外）、次试成功；退避睡眠进 journal（先落后等断言）
+    journal: list[tuple[str, Any]] = []
+
+    async def emitter(event_type: str, data: dict[str, Any]) -> None:
+        journal.append(("event", event_type))
+
+    async def sleeper(seconds: float) -> None:
+        journal.append(("sleep", seconds))
+
+    port = FailoverModelPort(
+        _ScriptedPort("m", [_HttpStatusError(429), "ok-text"], journal=journal),
+        provider="openai_compatible",
+        model="m",
+        retry_max_attempts=2,
+        retry_backoff_ms=200,
+        clock=_FakeClock(),
+        sleeper=sleeper,
+    )
+    token = set_llm_event_emitter(emitter)
+    try:
+        # Act
+        answer = await port.complete([{"role": "user", "content": "hi"}])
+    finally:
+        reset_llm_event_emitter(token)
+    # Assert：429 判瞬时——先落 retry_scheduled 再退避，重试成功落 retry_succeeded
+    assert answer == "ok-text"
+    assert [entry[0] for entry in journal] == ["call", "event", "sleep", "call", "event"]
+    assert journal[1][1] == "llm.retry_scheduled"
+    assert journal[4][1] == "llm.retry_succeeded"
+
+
 # ── ⑤审计收口（G-1 后半）：韧性层在内、审计层在外 ─────────────────────────
 
 

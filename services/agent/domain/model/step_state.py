@@ -86,11 +86,16 @@ class BudgetWatermark(BaseModel):
     estimated: bool = False  # M4.5-B：token 口径含未锚定估算时为 True（见类注释）
 
     def merged(self, *, tokens: int, steps: int, elapsed_s: float) -> BudgetWatermark:
-        """返回累计后的新水位（frozen 值对象不可原地改，替换式更新）。"""
+        """返回累计后的新水位（frozen 值对象不可原地改，替换式更新）。
+
+        estimated 口径随水位传递（M4.5-B）：聚合含估算口径的水位不得回落默认 False
+        （否则估算被误报为实测，水位消费方口径标注失真）。
+        """
         return BudgetWatermark(
             tokens_used=self.tokens_used + tokens,
             steps_done=self.steps_done + steps,
             duration_elapsed_s=max(self.duration_elapsed_s, elapsed_s),
+            estimated=self.estimated,
         )
 
 

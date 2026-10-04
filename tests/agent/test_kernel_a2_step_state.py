@@ -92,6 +92,15 @@ def test_预算水位快照_frozen不可原地改_替换式累计():
     assert watermark.tokens_used == 10  # 原快照不变（终态可追溯）
 
 
+def test_预算水位合并_estimated口径标注随水位传递():
+    watermark = BudgetWatermark(tokens_used=10, steps_done=1, duration_elapsed_s=0.5, estimated=True)
+    # Act：累计合并（M4.5-B：聚合含估算口径的水位）
+    merged = watermark.merged(tokens=5, steps=1, elapsed_s=1.0)
+    # Assert：estimated 不回落默认 False（估算不得误报为实测，口径标注失真即消费方被误导）
+    assert merged.estimated is True
+    assert merged.tokens_used == 15  # 累计数值不受口径标注影响
+
+
 def test_步状态携带预算水位与门禁结论_终态可追溯():
     state = StepState(
         run_id=uuid.uuid4(),

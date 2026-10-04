@@ -39,6 +39,9 @@ class ChatEventName(StrEnum):
     RUN_FINISHED = "RUN_FINISHED"
     RUN_ERROR = "RUN_ERROR"
     ROUTING_DECISION = "ROUTING_DECISION"  # 群聊路由决策系统事件（27 篇 X15；who/why 审计）
+    # M4.5-A 运行中输入面回执（docs/Agent/12-M4.5运行中输入面与模型韧性设计（主仓本地）§1.4；
+    # 用户可见回执：inbox 提交受理即发布，消费面后续批；前端对未知事件名静默忽略已核实）
+    INBOX_SPLICED = "INBOX_SPLICED"
 
 
 class ChatEvent(BaseModel):
@@ -73,6 +76,10 @@ class ChatCommand(BaseModel):
     member_system_prompt: str | None = None  # 群聊成员人格（27 篇；单 agent 会话 None）
     retrieval_top_k: int | None = None  # 覆盖 ChatPolicy.retrieval_top_k（缺省用策略值）
     approvals: tuple[Any, ...] = ()  # 运行中审批票（H-0b：worker 携票重放并入内核 approvals；预授权/审批回执两源）
+    # M4.5-A P-4 resume 计划对账锚点（docs/Agent/12 §1.3；元素形状 {seq, action_iri,
+    # param_hash}）：worker 重试/续跑重放时携前序 Run 的 kernel.step_validated 锚点，
+    # 内核规划完成后对账——全等匹配且 execution_mode=READ 才特批跳过。
+    resumed_validated: tuple[Any, ...] = ()
 
 
 class ChatOutcome(BaseModel):

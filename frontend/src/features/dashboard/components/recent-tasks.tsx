@@ -10,6 +10,7 @@ import { DASH_TASK_STAGE, DASH_TASK_STATUS, DASH_TASK_TYPE, type DashTask } from
 
 export function RecentTasks({
   tasks,
+  total,
   isPending,
   isError,
   error,
@@ -17,6 +18,8 @@ export function RecentTasks({
   pendingTotal,
 }: {
   tasks: DashTask[]
+  /** W-04（41 号验收）：计数=服务端 meta.total（截断展示 top3 不再误作总数）；缺 meta 回退列表长度 */
+  total?: number
   isPending: boolean
   isError: boolean
   error: unknown
@@ -30,7 +33,7 @@ export function RecentTasks({
         <h3 className="text-sm font-semibold">
           最近任务
           {!isPending && !isError && (
-            <span data-testid="dash-task-count" className="ml-2 font-normal text-[11px] text-label-3">共 {tasks.length} 个</span>
+            <span data-testid="dash-task-count" className="ml-2 font-normal text-[11px] text-label-3">共 {total ?? tasks.length} 个</span>
           )}
         </h3>
         <Link to="/tasks" className="text-[11px] text-label-3 hover:text-label-2">查看全部</Link>

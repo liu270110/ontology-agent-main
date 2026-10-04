@@ -1,9 +1,10 @@
 import { lazy, memo, Suspense, useEffect, useRef, useState } from 'react'
-import { AlertTriangle, Check, Copy, FileText, ListTree, MessagesSquare, RefreshCw, ThumbsDown, ThumbsUp } from 'lucide-react'
+import { AlertTriangle, Brain, Check, ChevronDown, Copy, FileText, ListTree, MessagesSquare, RefreshCw, ThumbsDown, ThumbsUp } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import Markdown, { type Components } from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { useSessionStore, type ChatMessage, type Evidence, type EvidenceChunk } from '@/stores/session-store'
+import { useAuthStore } from '@/stores/auth-store'
 import { api, ApiError } from '@/api/client'
 import { EmptyState, ErrorState, SkeletonRows } from '@/components/states'
 import { BASELINE } from '@/lib/toast-templates'
@@ -128,6 +129,48 @@ const AssistantMarkdown = memo(function AssistantMarkdown({ content }: { content
     </div>
   )
 })
+
+/** F-01（41 号验收 2026-10-05）：助手消息 `<think>…</think>` 推理段渲染层剥离——
+ *  推理原文与闭合标签字面量不再裸渲染进正文（历史消息由 GET /sessions/:id/messages
+ *  原样入库，剥离责任在渲染层；历史入库侧随后端约定清理）。
+ *  流式期未闭合（只有 `<think>` 无 `</think>`）→ 全部计入思考段（正文暂空）。 */
+function splitThinkContent(content: string): { think: string | null; body: string } {
+  const open = content.indexOf('<think>')
+  if (open === -1) return { think: null, body: content }
+  const close = content.indexOf('</think>', open)
+  const think = (close === -1 ? content.slice(open + 7) : content.slice(open + 7, close)).trim()
+  const body = (close === -1 ? '' : content.slice(0, open) + content.slice(close + 8)).trim()
+  return { think: think || null, body }
+}
+
+/** 思考过程折叠块（41 F-01：默认收起，点击展开；样式=既有 .think/.think-h/.think-b 设计稿类） */
+function ThinkBlock({ text, live }: { text: string; live: boolean }) {
+  const [open, setOpen] = useState(false)
+  return (
+    <div className="think my-1.5" data-testid="msg-think">
+      <button
+        type="button"
+        className="think-h w-full"
+        data-testid="msg-think-toggle"
+        aria-expanded={open}
+        onClick={() => setOpen(v => !v)}
+      >
+        <Brain size={13} aria-hidden />
+        <span>{live ? '正在深度思考…' : '已深度思考'}</span>
+        <ChevronDown
+          size={13}
+          className={`ml-auto transition-transform ${open ? '' : '-rotate-90'}`}
+          aria-hidden
+        />
+      </button>
+      {open && (
+        <div className="think-b whitespace-pre-wrap" data-testid="msg-think-body">
+          {text}
+        </div>
+      )}
+    </div>
+  )
+}
 
 /** 证据 chip 行（IX-CHT-03 触发源）：文档分片 + 图谱路径两类，点击滑出原文抽屉 */
 function EvidenceChips({
@@ -375,6 +418,11 @@ export function ChatStream({
   const evidence = useSessionStore(s => s.evidence)
   const running = useSessionStore(s => s.running)
   const runs = useSessionStore(s => s.runs)
+  const pendingReply = useSessionStore(s => s.pendingReply)
+  // F-02（41 号验收）：用户头像=登录展示名首字符（消息/会话载荷无用户标识，与侧栏头像
+  // 同源取 auth-store displayName；缺失回退「A」），替代 mock 残留硬编码「刘」
+  const displayName = useAuthStore(s => s.user?.displayName ?? '')
+  const userAvatarChar = (displayName.trim()[0] ?? 'A').toUpperCase()
   const bottomRef = useRef<HTMLDivElement>(null)
 
   // S8 状态切片：历史基线加载中（宿主 GET /sessions/{id}/messages → seed）。基线等待窗口内
@@ -488,7 +536,7 @@ export function ChatStream({
             <div className="bubble bubble-u max-w-[70%] whitespace-pre-wrap rounded-2xl rounded-br-md bg-accent px-4 py-2.5 text-sm text-white">
               {m.content}
             </div>
-            <span className="avatar mt-0.5 flex h-8 w-8 flex-none items-center justify-center rounded-full bg-accent-soft text-xs text-accent">刘</span>
+            <span className="avatar mt-0.5 flex h-8 w-8 flex-none items-center justify-center rounded-full bg-accent-soft text-xs text-accent">{userAvatarChar}</span>
           </div>
         ) : m.role === 'system' ? (
           // workspace.file.* 系统行（31 篇）：占满行宽、克制不抢戏
@@ -523,15 +571,33 @@ export function ChatStream({
                 })()}
                 {/* 助手正文：Markdown/代码块渲染（用户气泡保持纯文本）。
                     F6（C-5）：空内容区分「流式进行中」与「历史空记录」——仅活跃流末条显示
-                    「思考中…」；历史空 assistant（中断/异常导致无正文）渲染灰占位，不再伪装思考中 */}
+                    「思考中…」；历史空 assistant（中断/异常导致无正文）渲染灰占位，不再伪装思考中。
+                    F-01（41 号验收）：<think> 推理段折叠为可展开「思考过程」（默认收起），正文只渲染剩余部分 */}
                 {(() => {
                   const isStreamingTail = running && m.id === messages[messages.length - 1]?.id
-                  if (m.content) return <AssistantMarkdown content={m.content} />
-                  if (isStreamingTail) return <span className="text-label-3">思考中…</span>
+                  if (!m.content) {
+                    if (isStreamingTail) return <span className="text-label-3">思考中…</span>
+                    return (
+                      <span data-testid="chat-empty-assistant" className="text-label-3">
+                        {m.finishReason === 'stopped' ? '（已手动停止，无内容）' : '（无内容 · 已中断）'}
+                      </span>
+                    )
+                  }
+                  const { think, body } = splitThinkContent(m.content)
+                  if (!think) return <AssistantMarkdown content={body} />
                   return (
-                    <span data-testid="chat-empty-assistant" className="text-label-3">
-                      {m.finishReason === 'stopped' ? '（已手动停止，无内容）' : '（无内容 · 已中断）'}
-                    </span>
+                    <>
+                      <ThinkBlock text={think} live={isStreamingTail && !body} />
+                      {body ? (
+                        <AssistantMarkdown content={body} />
+                      ) : isStreamingTail ? (
+                        <span className="text-label-3">思考中…</span>
+                      ) : (
+                        <span data-testid="chat-empty-assistant" className="text-label-3">
+                          {m.finishReason === 'stopped' ? '（已手动停止，无内容）' : '（无内容 · 已中断）'}
+                        </span>
+                      )}
+                    </>
                   )
                 })()}
                 {running && m.id === messages[messages.length - 1]?.id && <span className="stream-caret ml-0.5 animate-pulse">▍</span>}
@@ -567,6 +633,22 @@ export function ChatStream({
           </div>
         ),
       )}
+      {/* W-02（41 号验收）：202 受理后→首帧到达前的乐观运行占位（「正在思考…」+ 流式光标；
+          复用 stream-caret 机制）。任一运行生命周期帧到达（running/助手消息上屏）即被真实流替换；
+          RUN_ERROR/停止 → store 清 pendingReply，占位随之消失 */}
+      {(() => {
+        const last = messages[messages.length - 1]
+        if (!(pendingReply || running) || last?.role !== 'user') return null
+        return (
+          <div data-testid="chat-pending-reply" className="msg flex gap-2">
+            <span className="avatar mt-0.5 flex h-8 w-8 flex-none items-center justify-center rounded-full bg-surface-2 text-xs" aria-hidden>✦</span>
+            <div className="bubble bubble-a max-w-[80%] rounded-2xl rounded-bl-md border border-separator bg-surface px-4 py-2.5 text-sm" style={{ borderLeft: '3px solid var(--src-system)' }}>
+              <span className="text-label-3">正在思考…</span>
+              <span className="stream-caret ml-0.5 animate-pulse">▍</span>
+            </div>
+          </div>
+        )
+      })()}
       {failedRun?.error && (
         // deslop 黑名单「emoji/字符当图标」：⚠ 字符换 AlertTriangle（与顶部警示条同语言），语义色走令牌
         <div className="err-banner flex items-center gap-2 rounded-lg border border-red/40 bg-red/10 px-3 py-2 text-xs text-red">

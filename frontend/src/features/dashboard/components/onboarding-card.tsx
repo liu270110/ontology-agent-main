@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import { ArrowRight, Check } from 'lucide-react'
+import { ApiError } from '@/api/client'
 import { getPreferences, putPreferences } from '@/lib/preferences'
 
 /** 新手引导 · 三步上手（宿主 p-dashboard 新手引导卡；S-AD 切片）：
@@ -9,7 +10,28 @@ import { getPreferences, putPreferences } from '@/lib/preferences'
  *  工作台既有 live 数据（最近会话非空 / 本体项目非空 / 知识文档非空，复用 useDashboardQueries
  *  缓存不重复拉，见 DashboardPage）。全完成 → PUT /me/preferences 写 onboarding_done=true
  *  （写一次，ref 防抖）→ 卡片隐藏；已 done（GET 读回 true）→ 不渲染。
+ *  W-03（41 号验收 2026-10-05）：live /me/preferences 未实装（404 {code:1004}）→ 写失败
+ *  静默降级 localStorage 兜底（不弹错、不闪重试，本地态继续），后端上线后回写转正。
  *  样式 = .card 玻璃 + 三行 checklist（完成项绿勾，未完成空心圈 + 跳转链接）。 */
+
+/** 本地兜底键：仅「全三步完成且 PUT 命中 404/501（端点未实装）」时写入（W-03 降级链） */
+const ONBOARDING_LOCAL_DONE_KEY = 'onboarding_done_local'
+
+function readLocalDone(): boolean {
+  try {
+    return localStorage.getItem(ONBOARDING_LOCAL_DONE_KEY) === '1'
+  } catch {
+    return false
+  }
+}
+
+function writeLocalDone() {
+  try {
+    localStorage.setItem(ONBOARDING_LOCAL_DONE_KEY, '1')
+  } catch {
+    /* 隐私模式等存储不可用：放弃本地兜底，行为退回写失败保持可见 */
+  }
+}
 
 interface Step {
   key: string
@@ -37,9 +59,10 @@ export function OnboardingCard({
   ready: boolean
 }) {
   const qc = useQueryClient()
-  // 引导完成标记：GET /me/preferences 读回（已 done → 不渲染）
+  // 引导完成标记：GET /me/preferences 读回（已 done → 不渲染）；W-03 本地兜底镜像（挂载时读一次）
   const prefsQ = useQuery({ queryKey: ['dashboard', 'onboarding-prefs'], queryFn: getPreferences })
   const [writtenDone, setWrittenDone] = useState(false)
+  const [localDone] = useState(readLocalDone)
   const writingRef = useRef(false)
 
   const prefsDone = prefsQ.data?.onboarding_done === true
@@ -52,12 +75,19 @@ export function OnboardingCard({
     void putPreferences({ onboarding_done: true })
       .then(() => setWrittenDone(true))
       .then(() => qc.invalidateQueries({ queryKey: ['dashboard', 'onboarding-prefs'] }))
-      .catch(() => { /* 写失败保持可见，下次进入重试 */ })
+      .catch((e: unknown) => {
+        // W-03（41 号验收）：端点未实装（404/501）→ 静默降级本地兜底记 done（不弹错、不闪重试，
+        // 后端上线后回写转正）；其余失败保持可见，下次进入重试
+        if (e instanceof ApiError && (e.httpStatus === 404 || e.httpStatus === 501)) {
+          writeLocalDone()
+          setWrittenDone(true)
+        }
+      })
       .finally(() => { writingRef.current = false })
   }, [allDone, prefsDone, prefsQ.isPending, ready, writtenDone, qc])
 
-  // 已 done（GET 读回或本会话刚写入）→ 不渲染
-  if (prefsDone || writtenDone) return null
+  // 已 done（GET 读回/本会话刚写入/W-03 本地兜底）→ 不渲染
+  if (prefsDone || writtenDone || localDone) return null
   // 偏好/判定数据未就绪 → 先不渲染（避免把加载中误判为未完成、或已 done 用户闪见卡片）
   if (!ready || prefsQ.isPending) return null
 

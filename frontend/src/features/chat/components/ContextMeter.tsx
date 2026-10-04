@@ -4,18 +4,25 @@ import { ApiError, api } from '@/api/client'
 import { useSessionStore } from '@/stores/session-store'
 
 /** 上下文窗口指示器（03 篇 §3.1 / 24 篇 §4.14 / 设计稿 p-chat L2440）：
- *  输入栏上方细条，实时反映 token 消耗占上下文窗口的比例；压缩按钮恒显（设计稿 L2440 48% 也在），
- *  徽标色调随用量：<80% accent-soft、80-95% orange-soft、>95% red-soft；
- *  压缩按钮 → POST /sessions/{id}/compact（api/01 §5.2 登记行，202 成功后以 summary_tokens
- *  重置 meter 用量，sonner 轻提示）。 */
-export function ContextMeter({ used, limit }: { used: number; limit: number }) {
+ *  输入栏上方细条，实时反映 token 消耗占上下文窗口的比例；徽标色调随用量：
+ *  <80% accent-soft、80-95% orange-soft、>95% red-soft；压缩按钮 → POST /sessions/{id}/compact
+ *  （api/01 §5.2 登记行，202 成功后以 summary_tokens 重置 meter 用量，sonner 轻提示）。
+ *  F-04（41 号验收 2026-10-05）：用量真数据来自 run.usage/compact 回写（store 归约）——
+ *  后端未回传 usage 时**整条隐藏**（mock 时代写死 62K/128K stub 已除，候选非成品/真数据）。 */
+
+/** 上下文窗口容量（平台常量，非用量数据；随模型档位调整的后端口径待 M4 下发） */
+const CONTEXT_WINDOW_TOKENS = 128_000
+
+export function ContextMeter({ used, limit }: { used: number | null; limit: number }) {
   // 压缩回写（store usageTokens）：成功后覆盖 props 用量显示（setActiveSession 时重置）
   const usageTokens = useSessionStore(s => s.usageTokens)
   const compactUsage = useSessionStore(s => s.compactUsage)
   const activeSessionId = useSessionStore(s => s.activeSessionId)
   const [compacting, setCompacting] = useState(false)
 
+  // F-04：无真用量（props null 且无压缩回写）→ 整条隐藏（含压缩钮——无用量语境下无压缩语义）
   const effUsed = usageTokens ?? used
+  if (effUsed == null) return null
   const pct = Math.min(Math.round((effUsed / limit) * 100), 100)
   const fmt = (n: number) => (n >= 1000 ? `${(n / 1000).toFixed(0)}K` : `${n}`)
   // 压缩徽标色调随用量分档（令牌 var() 引用，禁止裸色值）：正常/接近上限/必须压缩
@@ -72,7 +79,21 @@ export function ContextMeter({ used, limit }: { used: number; limit: number }) {
   )
 }
 
-/** hook：从 session-store 派生 token 用量（M4 接 SSE usage 事件后替换 mock 值） */
-export function useContextTokens(sessionId: string | null) {
-  return { used: sessionId ? 62_000 : 0, limit: 128_000 }
+/** hook：会话 token 用量真数据派生（41 F-04：mock stub `62_000` 已除）。
+ *  优先级：compact 回写 usageTokens > RUN_FINISHED usage 帧的 total_tokens/prompt_tokens
+ *  （后端下发才有）；两者皆无 → used=null（ContextMeter 整条隐藏）。 */
+export function useContextTokens(_sessionId: string | null): { used: number | null; limit: number } {
+  const usageTokens = useSessionStore(s => s.usageTokens)
+  const runs = useSessionStore(s => s.runs)
+  const runUsage = (() => {
+    for (const r of Object.values(runs)) {
+      const u = r.usage
+      if (!u || typeof u !== 'object') continue
+      const o = u as Record<string, unknown>
+      const n = Number(o.total_tokens ?? o.prompt_tokens)
+      if (Number.isFinite(n) && n > 0) return n
+    }
+    return null
+  })()
+  return { used: usageTokens ?? runUsage, limit: CONTEXT_WINDOW_TOKENS }
 }

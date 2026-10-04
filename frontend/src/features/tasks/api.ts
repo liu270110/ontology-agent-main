@@ -6,14 +6,19 @@ import { api } from '@/api/client'
 export type TaskStatus = 'queued' | 'running' | 'failed' | 'completed' | 'canceled'
 export type TaskType = 'kb_extract' | 'kb_index' | 'writeback' | 'audit_export'
 
-export const TASK_STATUS_LABEL: Record<TaskStatus, string> = {
-  queued: '排队中', running: '运行中', failed: '失败', completed: '已完成', canceled: '已取消',
+/** W-09（41 号验收）：标签/徽标映射放宽为 string 键并补 live 方言（succeeded/pending 等）——
+ *  live TaskOut.status 为 mock 契约超集，映射缺失键由消费方灰标兜底而非空渲染 */
+export const TASK_STATUS_LABEL: Record<string, string> = {
+  queued: '排队中', pending: '排队中', running: '运行中', failed: '失败',
+  completed: '已完成', succeeded: '已完成', canceled: '已取消', cancelled: '已取消',
 }
-export const TASK_STATUS_BADGE: Record<TaskStatus, string> = {
-  queued: 'b-gray', running: 'b-blue', failed: 'b-red', completed: 'b-green', canceled: 'b-gray',
+export const TASK_STATUS_BADGE: Record<string, string> = {
+  queued: 'b-gray', pending: 'b-gray', running: 'b-blue', failed: 'b-red',
+  completed: 'b-green', succeeded: 'b-green', canceled: 'b-gray', cancelled: 'b-gray',
 }
-export const TASK_TYPE_LABEL: Record<TaskType, string> = {
-  kb_extract: '抽取', kb_index: '索引', writeback: '对账', audit_export: '导出',
+/** F-07（41 号验收）：类型映射放宽为 string 键并补 live 观测值（chat），未知键消费方灰标原文 */
+export const TASK_TYPE_LABEL: Record<string, string> = {
+  kb_extract: '抽取', kb_index: '索引', writeback: '对账', audit_export: '导出', chat: '对话',
 }
 
 /** 七步流水线（画板 ix-02 ix-tsk-01 同源；抽取/索引/导出共用骨架） */

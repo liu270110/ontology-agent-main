@@ -20,6 +20,7 @@ export function MessageInput({ sessionId, onStop }: { sessionId: string; onStop:
   const [busy, setBusy] = useState(false)
   const [thinkMode, setThinkMode] = useState<ThinkMode>('标准')
   const running = useSessionStore(s => s.running)
+  const pendingReply = useSessionStore(s => s.pendingReply)
   const activeRunId = useSessionStore(s => s.activeRunId)
 
   /** 思考档位循环：标准 → 深度 → 闪电 → 标准（本地态，M4 随请求体下发） */
@@ -44,13 +45,16 @@ export function MessageInput({ sessionId, onStop }: { sessionId: string; onStop:
 
   async function send() {
     const content = text.trim()
-    if (!content || busy || running) return
+    if (!content || busy || running || pendingReply) return
     setBusy(true)
     try {
       // 契约：api/01 §5.2 —— 不带 Accept: text/event-stream → 202 {run_id, task_id}，事件走 /events 订阅
       await api.post(`/sessions/${sessionId}/messages`, { content })
+      // W-02（41 号验收）：202 成功即置乐观运行态——消息流「正在思考…」占位 + 停止钮可用，
+      // 首帧（RUN_STARTED/TEXT_MESSAGE_START）到达后由归约清零替换为真实流
       useSessionStore.setState(s => ({
         messages: [...s.messages, { id: `local-${Date.now()}`, role: 'user', content }],
+        pendingReply: true,
       }))
       setText('')
     } catch (e) {
@@ -137,7 +141,8 @@ export function MessageInput({ sessionId, onStop }: { sessionId: string; onStop:
         Claude Sonnet
         <ChevronDown size={10} aria-hidden />
       </span>
-      {running ? (
+      {/* W-02：乐观运行态（running 或 202 受理后 pendingReply）→ 停止钮可用（无 run_id 走本地终态） */}
+      {running || pendingReply ? (
         <button
           type="button"
           data-testid="chat-stop"

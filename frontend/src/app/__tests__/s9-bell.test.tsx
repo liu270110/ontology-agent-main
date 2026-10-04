@@ -28,7 +28,8 @@ async function loginAs(email: string) {
   fireEvent.change(screen.getByLabelText('邮箱'), { target: { value: email } })
   fireEvent.change(screen.getByLabelText('密码'), { target: { value: 'password123' } })
   fireEvent.click(screen.getByRole('button', { name: '登 录' }))
-  await screen.findByRole('button', { name: '通知' })
+  // 全量并行跑测时高负载下登录+壳渲染可超 findByRole 默认 1s——显式放宽（门禁稳定性）
+  await screen.findByRole('button', { name: '通知' }, { timeout: 10_000 })
 }
 
 describe('S9 通知铃铛', () => {

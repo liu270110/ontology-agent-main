@@ -120,6 +120,18 @@ export const TARGET_TYPE_TO_APPROVAL: Record<string, ApprovalType> = {
   plugin_listing: 'plugin_install',
 }
 
+/** 后端 target_type → 中文标签（41 F-06 通知铃兜底行标题用；未知 target_type 回退原文枚举值，
+ *  消费方据 key 缺失隐藏类型徽标）。normalizeReview 兜底链维持「枚举值 · 全 id」口径不变
+ *  （审批中心卡片/详情回归测试锚定），通知铃行级短化在本表基础上做。 */
+export const TARGET_TYPE_LABEL: Record<string, string> = {
+  ontology_candidate: '本体候选',
+  knowledge_instance: '知识实例',
+  memory_l2_upgrade: 'L2 记忆升级',
+  plugin_listing: '插件上架',
+  writeback_incident: '回写事件',
+  conflict: '冲突工单',
+}
+
 /** 工单归一化：后端 AdminReviewOut / mock 富形状 → 前端 Approval（信任边界归一，
  *  页面层只见三态枚举与齐全字段；缺省字段给「—」类兜底，绝不 undefined 直渲染）。 */
 export function normalizeReview(raw: ReviewTicketRaw): Approval {

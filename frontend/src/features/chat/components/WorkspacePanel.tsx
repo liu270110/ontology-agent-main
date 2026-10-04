@@ -11,6 +11,8 @@ import {
 } from 'lucide-react'
 import { Sheet } from '@/components/sheet'
 import { Tooltip } from '@/components/tooltip'
+import { ErrorState } from '@/components/states'
+import { ApiError } from '@/api/client'
 import { useSessionStore } from '@/stores/session-store'
 import {
   fmtSize,
@@ -148,14 +150,16 @@ function collectDirs(node: WsNode, acc: string[] = []): string[] {
 export function WorkspacePanel({ sessionId }: { sessionId: string }) {
   const [tab, setTab] = useState<WsTab>('tree')
   const [tree, setTree] = useState<WsTree | null>(null)
+  // F-05（41 号验收 2026-10-05）：树/资源拉取失败不再「永久加载+未捕获拒绝」——
+  // tree 失败 → ErrorState（1004=「功能建设中」优雅态）；资源失败 → 按空列表隐藏（次要面板）。
+  // 重试经 reloadTick 触发 effect 重拉（错误态 onRetry → setReloadTick）。
+  const [treeError, setTreeError] = useState<ApiError | null>(null)
+  const [reloadTick, setReloadTick] = useState(0)
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
   const [preview, setPreview] = useState<{ path: string; content: string; language: string } | null>(null)
   const [resources, setResources] = useState<WsResource[] | null>(null)
-  const [termLines, setTermLines] = useState<TermLine[]>([
-    { kind: 'cmd', text: 'ls /workspace/artifacts/' },
-    { kind: 'out', text: '排查报告草稿 v0.1.md' },
-    { kind: 'out', text: '台账数据.json' },
-  ])
+  // M-04（41 号验收）：终端假输出（ls artifacts 写死文件名）已除——初始为空，占位提示随任务执行输出
+  const [termLines, setTermLines] = useState<TermLine[]>([])
   const [cmd, setCmd] = useState('')
   const [execBusy, setExecBusy] = useState(false)
   const termEndRef = useRef<HTMLDivElement>(null)
@@ -170,12 +174,18 @@ export function WorkspacePanel({ sessionId }: { sessionId: string }) {
     let alive = true
     let timer: ReturnType<typeof setTimeout> | undefined
     const load = () => {
-      void workspaceApi.tree(sessionId).then(t => {
-        if (!alive) return
-        setTree(t)
-        // 根行不再渲染（根=静态 /workspace/ 标签），expanded 只种子可折叠的子目录
-        setExpanded(new Set((t.root.children ?? []).flatMap(c => collectDirs(c))))
-      })
+      void workspaceApi
+        .tree(sessionId)
+        .then(t => {
+          if (!alive) return
+          setTreeError(null)
+          setTree(t)
+          // 根行不再渲染（根=静态 /workspace/ 标签），expanded 只种子可折叠的子目录
+          setExpanded(new Set((t.root.children ?? []).flatMap(c => collectDirs(c))))
+        })
+        .catch((e: unknown) => {
+          if (alive) setTreeError(e instanceof ApiError ? e : new ApiError(-1, '工作区加载失败'))
+        })
     }
     if (seen.current.sid !== sessionId || seen.current.v === wsVersion) {
       seen.current = { sid: sessionId, v: wsVersion }
@@ -186,14 +196,19 @@ export function WorkspacePanel({ sessionId }: { sessionId: string }) {
         load()
       }, 300)
     }
-    void workspaceApi.resources(sessionId).then(r => {
-      if (alive) setResources(r.items)
-    })
+    void workspaceApi
+      .resources(sessionId)
+      .then(r => {
+        if (alive) setResources(r.items)
+      })
+      .catch(() => {
+        if (alive) setResources([]) // 资源列表失败按空处理（不裸拒，次要面板不阻塞主面）
+      })
     return () => {
       alive = false
       if (timer) clearTimeout(timer)
     }
-  }, [sessionId, wsVersion])
+  }, [sessionId, wsVersion, reloadTick])
 
   // terminal.output（31 篇）：按游标消费 store 缓冲追加进本地终端回放
   const storeTerm = useSessionStore(s => s.terminalLines)
@@ -283,7 +298,18 @@ export function WorkspacePanel({ sessionId }: { sessionId: string }) {
       {tab === 'tree' && (
         <div className="scroll-thin min-h-0 flex-1 overflow-y-auto px-2.5 py-2">
           <div className="mono px-1.5 pb-1 text-[11px] text-label-3">/workspace/</div>
-          {tree ? (
+          {treeError ? (
+            // F-05（41 号验收）：拉取失败走 ErrorState——1004=端点未实装 →「功能建设中」优雅态
+            //（ErrorState 按 code 特化），其余错误带重试；不再「正在读取沙箱文件树…」恒驻
+            <div className="px-1.5 py-3">
+              <ErrorState
+                code={treeError.code}
+                title="工作区加载失败"
+                message={treeError.code === 1004 ? undefined : treeError.message}
+                onRetry={() => setReloadTick(t => t + 1)}
+              />
+            </div>
+          ) : tree ? (
             tree.root.children?.map(c => (
               <TreeNode
                 key={c.path}
@@ -314,6 +340,10 @@ export function WorkspacePanel({ sessionId }: { sessionId: string }) {
             data-testid="ws-term"
             className="scroll-thin min-h-0 flex-1 overflow-y-auto rounded-xl border border-separator bg-surface-2 p-2.5 font-mono text-[11px] leading-[1.7]"
           >
+            {termLines.length === 0 && (
+              // M-04（41 号验收）：mock 时代假输出已除——空态占位，真输出随任务/命令执行追加
+              <div data-testid="ws-term-empty" className="text-label-3">暂无输出 · 随任务执行实时输出</div>
+            )}
             {termLines.map((l, i) => (
               <div key={i} className={l.kind === 'cmd' ? '' : 'text-label-2'} style={l.kind === 'cmd' ? { color: 'var(--green)' } : undefined}>
                 {l.kind === 'cmd' ? `$ ${l.text}` : l.text}

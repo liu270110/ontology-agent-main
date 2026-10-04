@@ -6,7 +6,14 @@ import { qk } from '@/lib/qk'
 import { useAuthStore } from '@/stores/auth-store'
 import { FloatingCard } from '@/components/popover'
 import { countPendingReviews, listRecentTasks, DASH_TASK_STATUS, type DashTask } from '@/features/dashboard/api'
-import { APPROVAL_TYPE_LABEL, APPROVAL_TYPE_BADGE, type Approval } from '@/features/approvals/api'
+import {
+  APPROVAL_TYPE_BADGE,
+  APPROVAL_TYPE_LABEL,
+  TARGET_TYPE_LABEL,
+  TARGET_TYPE_TO_APPROVAL,
+  type ApprovalType,
+  type ReviewTicketRaw,
+} from '@/features/approvals/api'
 
 /** 通知铃铛（30 篇 R 清单口径：通知域后端/SSE 跨会话事件端点暂缺 → 轮询聚合方案，
  *  react-query 30s 轮询复用既有端点，待后端通知端点交付后切推送）：
@@ -28,6 +35,28 @@ function taskBadgeMeta(t: DashTask): { label: string; cls: string } {
   if (t.status === 'running') return { label: '运行中', cls: 'b-orange animate-pulse' }
   const meta = DASH_TASK_STATUS[t.status ?? '']
   return meta ? { label: meta.label, cls: meta.badge } : { label: t.status ?? '未知', cls: 'b-gray' }
+}
+
+/** F-06（41 号验收 2026-10-05）：live AdminReviewOut 无富 title/type 字段（实测仅
+ *  target_type/target_id）——行级兜底模型：标题=富 title ??「中文类型 · target_id 前 8 位」，
+ *  类型=target_type 映射（未知 target_type → 无类型，徽标隐藏）。不再 undefined 直渲染空白行。 */
+interface BellApprovalRow {
+  id: string
+  type: ApprovalType | undefined
+  title: string
+}
+function toBellApprovalRow(r: ReviewTicketRaw): BellApprovalRow {
+  return {
+    id: r.id,
+    type: r.type ?? TARGET_TYPE_TO_APPROVAL[r.target_type],
+    title: r.title ?? `${TARGET_TYPE_LABEL[r.target_type] ?? r.target_type} · ${r.target_id.slice(0, 8)}`,
+  }
+}
+
+/** W-08（41 号验收）：live TaskOut 无 name → 「任务 · 短id」（与工作台 recent-tasks 同款兜底），
+ *  不再裸 UUID 直渲染 */
+function taskRowTitle(t: DashTask): string {
+  return t.name ?? `任务 · ${t.id.slice(0, 8)}`
 }
 
 export function NotificationBell() {
@@ -58,7 +87,8 @@ export function NotificationBell() {
 
   // fe3 信封收口：pendingQ=countPendingReviews 内部已改 api.list 归一（返回 {items,total} 复合形状不变）；
   // tasksQ=listRecentTasks 改 api.list 归一（{data,meta}）→ 读 .data（be2 后 .items 恒 undefined 被吞空）
-  const pendingItems = (pendingQ.data?.items ?? []) as Approval[]
+  // F-06：items 为 live AdminReviewOut 原始形状（非富 Approval）→ 经行级兜底模型映射后再渲染
+  const pendingItems = ((pendingQ.data?.items ?? []) as ReviewTicketRaw[]).map(toBellApprovalRow)
   const pendingCount = pendingQ.data?.total ?? 0
   const allTasks = tasksQ.data?.data ?? []
   const failedTasks = allTasks.filter(t => t.status === 'failed')
@@ -154,9 +184,12 @@ export function NotificationBell() {
                         onClick={() => go(`/console/approvals?id=${a.id}`)}
                         className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-xs text-label-2 hover:bg-black/5 dark:hover:bg-white/[.07]"
                       >
-                        <span className={`badge flex-none ${APPROVAL_TYPE_BADGE[a.type] ?? 'b-gray'}`}>
-                          {APPROVAL_TYPE_LABEL[a.type] ?? a.type}
-                        </span>
+                        {/* F-06：类型可映射才渲染徽标（未知 target_type 隐藏，不留 undefined 空徽标） */}
+                        {a.type && (
+                          <span className={`badge flex-none ${APPROVAL_TYPE_BADGE[a.type] ?? 'b-gray'}`}>
+                            {APPROVAL_TYPE_LABEL[a.type] ?? a.type}
+                          </span>
+                        )}
                         <span className="truncate">{a.title}</span>
                       </button>
                     </li>
@@ -188,16 +221,17 @@ export function NotificationBell() {
               <ul>
                 {topTasks.map(t => {
                   const meta = taskBadgeMeta(t)
+                  const title = taskRowTitle(t)
                   return (
                     <li key={t.id}>
                       <button
                         type="button"
                         data-testid="bell-task-row"
-                        title={t.name ?? t.id}
+                        title={title}
                         onClick={() => go(`/tasks?taskId=${t.id}`)}
                         className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-xs text-label-2 hover:bg-black/5 dark:hover:bg-white/[.07]"
                       >
-                        <span className="truncate">{t.name ?? t.id}</span>
+                        <span className="truncate">{title}</span>
                         <span className={`badge ml-auto flex-none ${meta.cls}`}>{meta.label}</span>
                       </button>
                     </li>

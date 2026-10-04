@@ -2,13 +2,22 @@ import { useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { ApiError } from '@/api/client'
+import { relativeTime } from '@/lib/reltime'
 import { ErrorState, SkeletonRows } from '@/components/states'
-import { TASK_STATUS_BADGE, TASK_STATUS_LABEL, TASK_TYPE_LABEL, getTask, listTasks, type TaskStatus } from '../api'
+import { TASK_STATUS_BADGE, TASK_STATUS_LABEL, TASK_TYPE_LABEL, getTask, listTasks, type Task, type TaskStatus } from '../api'
 import { TaskDetailDrawer } from '../components/TaskDetailDrawer'
 
 /** /tasks 任务中心（宿主 p-tasks；26 篇 §4.2）：任务表（名称/类型/状态徽标/进度条/
  *  创建时间 + 状态/类型筛选）+ IX-TSK-01 详情抽屉（行点击 / 通知深链 ?taskId=，
- *  导出闭环深链 ?job= 同参直达）。roles=全员（routes meta AUTHED）。 */
+ *  导出闭环深链 ?job= 同参直达）。roles=全员（routes meta AUTHED）。
+ *  F-07（41 号验收 2026-10-05）：live TaskOut 无 name/progress 字段、created_at 裸 ISO、
+ *  type/status 映射缺失——列级兜底收口：任务名=「类型标签 · 短id」（与工作台同款）、
+ *  进度缺失隐藏进度条、created_at 走 relativeTime、未知类型/状态灰标兜底。 */
+
+/** 任务名列兜底：live 无 name → 「类型标签 · 短id」（41 F-07，与工作台 recent-tasks 同款） */
+function taskName(t: Task): string {
+  return t.name ?? `${TASK_TYPE_LABEL[t.type] ?? '任务'} · ${t.id.slice(0, 8)}`
+}
 
 const STATUS_FILTERS: { key: 'all' | TaskStatus; label: string }[] = [
   { key: 'all', label: '全部' },
@@ -45,7 +54,7 @@ export function TasksPage() {
       all: items.length,
       running: 0, queued: 0, failed: 0, completed: 0, canceled: 0,
     }
-    for (const t of items) c[t.status] += 1
+    for (const t of items) c[t.status] = (c[t.status] ?? 0) + 1 // live 超集状态（succeeded 等）不计入 chips 也不产生 NaN
     return c
   }, [allQ.data])
 
@@ -127,20 +136,26 @@ export function TasksPage() {
                 onClick={() => setOpenId(t.id)}
               >
                 <td className="px-4 py-2.5">
-                  {t.status === 'failed' ? <b className="text-red">{t.name}</b> : <b>{t.name}</b>}
+                  {t.status === 'failed' ? <b className="text-red">{taskName(t)}</b> : <b>{taskName(t)}</b>}
                 </td>
-                <td className="px-4 py-2.5"><span className="badge b-gray">{TASK_TYPE_LABEL[t.type]}</span></td>
-                <td className="px-4 py-2.5"><span className={`badge ${TASK_STATUS_BADGE[t.status]}`}>{TASK_STATUS_LABEL[t.status]}</span></td>
+                <td className="px-4 py-2.5"><span className="badge b-gray">{TASK_TYPE_LABEL[t.type] ?? (t.type || '任务')}</span></td>
+                <td className="px-4 py-2.5"><span className={`badge ${TASK_STATUS_BADGE[t.status] ?? 'b-gray'}`}>{TASK_STATUS_LABEL[t.status] ?? (t.status || '—')}</span></td>
                 <td className="px-4 py-2.5">
-                  <span className="flex items-center gap-2">
-                    <span className="meter w-24" role="progressbar" aria-valuenow={t.progress} aria-valuemin={0} aria-valuemax={100}>
-                      <i style={{ width: `${t.progress}%` }} className={t.status === 'failed' ? 'bad' : undefined} />
+                  {/* F-07：progress 缺失（live TaskOut 无该字段）→ 隐藏进度条，只留「—」占位 */}
+                  {typeof t.progress === 'number' ? (
+                    <span className="flex items-center gap-2">
+                      <span className="meter w-24" role="progressbar" aria-valuenow={t.progress} aria-valuemin={0} aria-valuemax={100}>
+                        <i style={{ width: `${t.progress}%` }} className={t.status === 'failed' ? 'bad' : undefined} />
+                      </span>
+                      <span className="mono text-[11px] text-label-3">{t.progress}%</span>
                     </span>
-                    <span className="mono text-[11px] text-label-3">{t.progress}%</span>
-                  </span>
+                  ) : (
+                    <span className="mono text-[11px] text-label-3">—</span>
+                  )}
                 </td>
-                <td className="px-4 py-2.5 text-label-2">{t.created_at}</td>
-                <td className="px-4 py-2.5 text-label-2">{t.created_by}</td>
+                {/* F-07：创建时间走相对时间（裸 ISO 串不再直出）；发起人缺失兜底「—」 */}
+                <td className="px-4 py-2.5 text-label-2">{t.created_at ? relativeTime(t.created_at) : '—'}</td>
+                <td className="px-4 py-2.5 text-label-2">{t.created_by || '—'}</td>
               </tr>
             ))}
           </tbody>

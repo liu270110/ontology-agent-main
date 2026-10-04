@@ -1,4 +1,4 @@
-import { ApiError } from '@/api/client'
+import { API_NETWORK_CODE, API_TIMEOUT_CODE, ApiError } from '@/api/client'
 
 /** Toast 文案模板单源（36 §B1/B2；board 设计图 §B2 三态样例同源）：
  *  sonner 语义（title/description/action/duration），场景文案只在此定义，
@@ -14,10 +14,15 @@ function isNetworkError(e: unknown): boolean {
 }
 
 /** 错误 → 用户可读一句话（36 §B1：ApiError 带错误码；网络层给行动指引；
- *  禁止透出 stack/原始 JSON——33 §7）。 */
+ *  禁止透出 stack/原始 JSON——33 §7）。
+ *  W-01（41 号验收）：client 超时(-2)/网络层失败(-1)已带统一行动指引文案，原样透出
+ *  不再拼错误码尾巴（与裸 TypeError 同一口径，文案单源=client.NETWORK_UNAVAILABLE_MESSAGE）。 */
 export function describeError(e: unknown): string {
   if (isNetworkError(e)) return '网络连接不可用，请检查网络后重试'
-  if (e instanceof ApiError) return `${e.message}（错误码 ${e.code}）`
+  if (e instanceof ApiError) {
+    if (e.code === API_NETWORK_CODE || e.code === API_TIMEOUT_CODE) return e.message
+    return `${e.message}（错误码 ${e.code}）`
+  }
   if (e instanceof Error) return e.message
   return '未知错误'
 }

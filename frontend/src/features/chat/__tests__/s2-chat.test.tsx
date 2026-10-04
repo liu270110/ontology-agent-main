@@ -64,11 +64,10 @@ describe('S2 对话域深化', () => {
     await loginAndGo('/chat')
     fireEvent.click(await screen.findByText('动力电池标准对比', {}, { timeout: 10_000 }))
 
-    // 项 1：三栏完整——上下文面板四分组在位（IX-CHT-04 宿主；「规则命中」同时出现在分组题与条目标签）
+    // 项 1：三栏完整——上下文面板在位。41 F-03 修复后无 run.usage 真帧 → 空态占位
+    //（演示回退四分组已删）；真帧四分组渲染由 s2-closure ① 覆盖（断言随 41 号修复小步更新）
     expect(await screen.findByTestId('ctx-panel')).toBeInTheDocument()
-    for (const t of ['召回记忆', 'GraphRAG 路径', '规则命中', '引用文档']) {
-      expect(screen.getAllByText(t).length).toBeGreaterThan(0)
-    }
+    expect(await screen.findByTestId('ctx-panel-empty')).toBeInTheDocument()
 
     // 项 9：历史种子一对完整问答（助手回复 + 证据 chip 可点击开抽屉）
     expect(await screen.findByText(/两条标准的核心差异/)).toBeInTheDocument()

@@ -125,9 +125,11 @@ class McpAccessPolicy:
 
     双层授权（Agent13 §4 K3，对标 fastmcp F-1「list 过滤 + 调用拦截」两组独立）：``granted_scopes``
     为 call 授权集（第二段强制点，``_check_scopes`` 逐 scope 精确匹配）；``list_granted_scopes``
-    为 list 可见性授权集（第一段，外部 tool 挂载面过滤）——两组独立授出，「可见不可调」与
-    「可调不可见」皆可表达。M5 OAuth 2.1/API Key 通道落地后替换为逐调用凭据提取（供给篇
-    §3.2），本类仅承载「调用方 scopes 来源」一处变化点；PDP 判定本体（authorize 精确匹配）不变。
+    为 list 可见性授权集（第一段，外部 tool 挂载面过滤）——两组独立授出；现行挂载式过滤下
+    仅「可见不可调」可表达：未过 list 集的外部 tool 不挂载，故不可见亦不可调（「可调不可见」
+    须待查询期 tools/list 过滤收口，挂载面过滤将可见性与可达性耦合；ocr 2026-10-05 评审勘正）。
+    M5 OAuth 2.1/API Key 通道落地后替换为逐调用凭据提取（供给篇 §3.2），本类仅承载「调用方
+    scopes 来源」一处变化点；PDP 判定本体（authorize 精确匹配）不变。
     """
 
     granted_scopes: tuple[str, ...] = ()

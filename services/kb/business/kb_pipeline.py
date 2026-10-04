@@ -30,7 +30,9 @@ validating→pending_review=候选入终审队列）。
 
 编排关注点（03 §4）：
 - 幂等与断点续跑：每步完成即写 checkpoint（kb_pipeline_step 行级 done）；重跑自动跳过
-  done 步骤、failed 步骤从断点续跑；候选产物按 fact_key 业务键幂等（kb_extraction）；
+  done 步骤、failed 步骤从断点续跑（attempt 未耗尽时重新执行；已耗尽按冻结语义不再执行，
+  硬失败止血停止后续步并回写文档 failed——防「上游失败下游照跑」的假 indexed 终态，
+  软降级 embed 按契约继续）；候选产物按 fact_key 业务键幂等（kb_extraction）；
 - 重试：步内自动重试 ≤3 次（指数退避 30s 起，可注入）；业务规则失败（PipelineError）
   不重试；attempt 耗尽 → 步 failed、文档 failed（attempt 跨运行持久化，冻结语义）；
 - 并发：步级 worker 租约（lease_expires_at），租约未过期禁止双跑；
@@ -46,6 +48,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import uuid
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from functools import lru_cache
@@ -62,7 +65,13 @@ from services.kb.business.pipeline_base import (
     StepContext,
     StepRunner,
 )
-from services.kb.business.titleblock import project_titleblock
+from services.kb.business.titleblock import (
+    TextFragment,
+    project_titleblock,
+    project_titleblock_spatial,
+    serialize_fields,
+    titleblock_anchor_span,
+)
 from services.kb.data.orm import Document, DocumentChunk, KbPipelineStep
 from services.kb.retrieval.chunking import Chunk, chunk_document, estimate_tokens
 from services.kb.retrieval.embed import (
@@ -124,6 +133,7 @@ KNOWN_STEPS = frozenset(CANONICAL_SEVEN_STEPS) | frozenset(M2_LITE_STEPS)
 
 MAX_STEP_ATTEMPTS = 3  # 步内自动重试 ≤3（03 §4）
 LEASE_SECONDS = 600  # worker 租约（对齐预处理 10min 超时预算口径）
+_SOFT_DEGRADE_ERROR_PREFIX = "embedding-unavailable:"  # 软降级落账标记（checkpoint 错误前缀，读回续跑判据）
 
 # 合法迁移表：03 §4 状态机 + 两条登记边（preprocessed→indexed=M2-lite 捷径；
 # indexed→indexed=重跑补向量/重索引的幂等口径）
@@ -216,7 +226,10 @@ async def _run_preprocess(ctx: StepContext) -> None:
     更差的错）。幂等：分支①命中即不再拉对象/重解析（checkpoint done 跳过之外的第二重）。
     事务边界（03 §6.1）：MinIO 拉取与引擎抽取为长调用——读源/写回各自短事务，中间件在事务外。
     标题栏投影（v1.5 裁决卡）：对最终 content 跑九字段正则投影（business/titleblock.py，
-    纯确定性零 LLM），非空才写 meta["titleblock"]={字段: 值}（chunk 步消费为额外语义块）。
+    纯确定性零 LLM），非空才写 meta["titleblock"]={字段: 值}（chunk 步消费为额外语义块）；
+    文件通道两级文本投影零命中时以 pdfium 带坐标片段走第三级空间配对
+    （project_titleblock_spatial，阈值 Settings.kb_titleblock_max_gap_pt），命中写
+    meta["titleblock_source"]="spatial"（可追溯；内联文本通道无坐标，空间级不参与）。
     """
     async with ctx.session_factory() as session, session.begin():  # 短事务①：读内容源坐标
         doc = await _load_document(session, ctx)
@@ -252,15 +265,37 @@ async def _run_preprocess(ctx: StepContext) -> None:
             degraded = set(meta.get("degraded") or [])
             degraded.add("parser")
             meta["degraded"] = sorted(degraded)
-        _apply_titleblock(meta, meta["content"])
+        _apply_titleblock(
+            meta,
+            meta["content"],
+            runs=outcome.text_runs,
+            max_gap_pt=get_settings().kb_titleblock_max_gap_pt,
+        )
         doc.meta = meta  # JSONB 原地变更不可追踪，整体重赋值
 
 
-def _apply_titleblock(meta: dict, content: str) -> None:
-    """标题栏投影落位（两内容源分支共用的收敛点）：投影非空才写 meta["titleblock"]。"""
+def _apply_titleblock(
+    meta: dict,
+    content: str,
+    *,
+    runs: Sequence[TextFragment] = (),
+    max_gap_pt: float = 150.0,
+) -> None:
+    """标题栏投影落位（两内容源分支共用的收敛点）：文本两级投影非空即写 meta["titleblock"]；
+    零命中且有带坐标片段（pdfium 文件通道）时第三级空间配对兜底，命中加注
+    meta["titleblock_source"]="spatial"（宪法 5 全程可追溯；空片段/非 pdfium 通道不参与）。"""
     projection = project_titleblock(content)
-    if projection.fields:
-        meta["titleblock"] = projection.fields
+    fields = dict(projection.fields)
+    spatial = False
+    if not fields and runs:
+        spatial_projection = project_titleblock_spatial(runs, max_gap_pt=max_gap_pt)
+        if spatial_projection.fields:
+            fields = dict(spatial_projection.fields)
+            spatial = True
+    if fields:
+        meta["titleblock"] = fields
+        if spatial:
+            meta["titleblock_source"] = "spatial"
 
 
 def _normalize_newlines(content: str) -> str:
@@ -271,10 +306,13 @@ def _normalize_newlines(content: str) -> str:
 async def _run_chunk(ctx: StepContext) -> None:
     """语义分块（L5 knowledge.chunking）：按 (document_id, seq) upsert，步级重跑幂等。
 
-    标题栏语义块（v1.5 裁决卡）：meta["titleblock"] 非空时，对原文重跑同一确定性投影
-    （spans 不落盘，单一事实源=titleblock.py），序列化``字段: 值``行集为一条额外语义块
-    （seq=尾片 +1；meta.span 指回原文首字段区间——出处指针门禁同源；kind=titleblock），
-    检索可命中字段行（BM25 词法面）。upsert 幂等：同 seq 重跑整块覆写。
+    标题栏语义块（v1.5 裁决卡）：meta["titleblock"] 非空时，序列化``字段: 值``行集为一条
+    额外语义块（seq=尾片 +1；kind=titleblock），检索可命中字段行（BM25 词法面）——块文本
+    以 meta 落盘字段为准（空间级产物文本级重投影不可复现，LLM extract 上下文 hint 同源）。
+    meta.span 出处指针：文本级命中沿用重投影首字段区间（spans 不落盘，单一事实源
+    =titleblock.py）；空间级（titleblock_source=spatial / 重投影零命中）经
+    titleblock_anchor_span 以「值原文→标签词」回查锚点，均不中则放弃该块（出处指针门禁：
+    无锚不落块）。upsert 幂等：同 seq 重跑整块覆写。
     """
     async with ctx.session_factory() as session, session.begin():  # 短事务
         doc = await _load_document(session, ctx)
@@ -286,10 +324,12 @@ async def _run_chunk(ctx: StepContext) -> None:
             raise PipelineError("409 分块结果为空（空文档不可索引）")
         titleblock_meta = (doc.meta or {}).get("titleblock")
         if isinstance(titleblock_meta, dict) and titleblock_meta:
-            projection = project_titleblock(content)
-            block_span = projection.block_span()
-            if projection.fields and block_span is not None:
-                block = projection.block_text()
+            fields = {str(k): str(v) for k, v in titleblock_meta.items()}
+            block_span = project_titleblock(content).block_span()
+            if block_span is None:
+                block_span = titleblock_anchor_span(content, fields)
+            if fields and block_span is not None:
+                block = serialize_fields(fields)
                 pieces.append(
                     Chunk(
                         seq=len(pieces),
@@ -447,6 +487,24 @@ async def run_pipeline(
                 attempts = row.attempt  # 已消耗的尝试次数（跨运行持久化，重试 ≤3 全局计）
                 if row.status == "failed":
                     prior_error = row.error  # 尝试已耗尽的续跑保留原错误（不被空错误覆盖）
+        # 账本一致性（2026-10-05 真机 B 图根因：读回耗尽失败步曾不阻断，下游步照常新执行 →
+        # extract=failed 而 document=indexed 的假终态）：尝试已耗尽的非 done 步行按冻结语义
+        # 不再执行；**硬失败在此止血**（停止后续步，防「上游失败下游照跑」）；软降级（embed，
+        # 落账错误带固定前缀）按既有契约继续（BM25-only 照常索引，重跑仅读回剩余步）。
+        # 判据键在 attempts 而非 failed 状态（ocr 评审条目）：意图短事务提交 attempt=MAX 且
+        # status=running 后 worker 崩溃的残留行，读回同样不得放行下游（同假 indexed 洞）。
+        readback_exhausted = row is not None and row.status != "done" and attempts >= MAX_STEP_ATTEMPTS
+        if readback_exhausted and (
+            row.status == "running"
+            and row.worker_lease != worker_lease
+            and row.lease_expires_at is not None
+            and row.lease_expires_at > _utcnow()
+        ):
+            raise PipelineError(f"409 步骤 {step} 正在执行（worker 租约未过期）")
+        readback_soft = readback_exhausted and bool(row.error) and row.error.startswith(_SOFT_DEGRADE_ERROR_PREFIX)
+        readback_exhausted_hard = readback_exhausted and not readback_soft
+        if readback_exhausted_hard and prior_error is None:  # 崩溃残留行无错误文案：止血落账留痕（宪法 5）
+            prior_error = "attempt 已耗尽且行状态残留非 failed（worker 中断，读回止血落账）"
 
         done, error_msg, soft_degrade = False, prior_error, False
         executed_here = False  # 本轮是否真正执行过（区分「刚硬失败」与「先前已耗尽」）
@@ -494,7 +552,7 @@ async def run_pipeline(
                 await runners[step](ctx)
                 done, error_msg = True, None
             except EmbeddingUnavailableError as exc:  # 降级契约：软失败可续跑
-                error_msg, soft_degrade = f"embedding-unavailable: {exc}", True
+                error_msg, soft_degrade = f"{_SOFT_DEGRADE_ERROR_PREFIX} {exc}", True
             except PipelineError as exc:  # 业务规则失败不重试
                 error_msg = str(exc)
                 break
@@ -524,27 +582,31 @@ async def run_pipeline(
                 )
             ).scalar_one()
             if done:
-                _advance_document(step, doc)
+                _advance_document(step, doc)  # 成功路径：步级行随本事务回写 done（账本随成功推进）
             elif soft_degrade:
                 _mark_degraded(doc, step)  # BM25-only 继续，检索侧 degraded=true 同款口径
             elif executed_here and doc.status != "indexed":
-                doc.status = "failed"  # 本轮执行且重试耗尽（挂告警随 M3 观测接入）；
-            # executed_here=False（尝试已在先前运行耗尽的续跑读回）不翻失败——保持当前阶段，
-            # 断点续跑从失败步骤继续（M2 full：extracting/validating 等阶段状态不可被回写覆盖）
+                doc.status = "failed"  # 本轮执行且重试耗尽（挂告警随 M3 观测接入）
+            elif readback_exhausted_hard and doc.status not in ("failed", "indexed"):
+                # 读回耗尽硬失败：止血落账后把文档回写 failed（重试入口仅收 failed 态——
+                # 不回写会把文档卡在 preprocessed 等中间态、retry 409 不可再入）；
+                # indexed 不回翻（终态幂等，账本以步级行 failed 为准）
+                assert_document_transition(doc.status, "failed")
+                doc.status = "failed"
 
         report.steps.append(
             StepRecord(step=step, status="done" if done else "failed", attempt=attempts, error=error_msg)
         )
         if not done:
             report.degraded = report.degraded or soft_degrade
-            if not soft_degrade and executed_here:
-                # 本轮执行过且硬失败：中止后续步骤（checkpoint 保留，人工修复后续跑）；
-                # executed_here=False = 尝试已在先前运行耗尽，仅落账、不阻断其余步的读回
-                break
             if soft_degrade:
                 logger.warning(
                     "kb_pipeline embed degraded (BM25-only): document_id=%s error=%s", document_id, error_msg
                 )
+            elif executed_here or readback_exhausted_hard:
+                # 硬失败（本轮执行耗尽 或 读回已耗尽）：中止后续步骤（checkpoint 保留，人工
+                # 修复后续跑）；软降级耗尽不阻断——下游步照常读回/执行（既有降级契约）
+                break
 
     async with session_factory() as session:  # 终态读回
         report.document_status = (

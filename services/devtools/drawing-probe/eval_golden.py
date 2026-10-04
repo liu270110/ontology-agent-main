@@ -1,7 +1,7 @@
 """golden 评测脚本（kb v1.5 wedge 裁决卡 1/3 配套）：客户资产 golden × 平台终审候选 → 字段级 P/R/F1。
 
 用法（仓库根目录）：
-    GOLDEN_PATH=/path/to/golden.json python services/tools/drawing-probe/eval_golden.py [--base URL]
+    GOLDEN_PATH=/path/to/golden.json python services/devtools/drawing-probe/eval_golden.py [--base URL]
 
 golden JSON（本地客户资产，永不入库——路径经环境变量 GOLDEN_PATH 注入，本仓库零样例值）：
     {"documents": [{"file": "<本地文件名>", "titleblock": {"图号": "...", "材料": "..."}}]}
@@ -34,7 +34,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-ROOT = Path(__file__).resolve().parents[3]  # services/tools/drawing-probe/ → 仓库根
+ROOT = Path(__file__).resolve().parents[3]  # services/devtools/drawing-probe/ → 仓库根
 sys.path.insert(0, str(ROOT))
 
 import httpx  # noqa: E402
@@ -140,12 +140,29 @@ def mint_token() -> str:
     return encode_token(claims, settings.jwt_secret)
 
 
+def _envelope_items(body: dict[str, Any]) -> list[dict[str, Any]]:
+    """B1 信封 data 兼容（防御）：list 形态直用；``{items: [...]}`` 形态取 items；
+    其余/缺失一律空表（2026-10-05 真机诊断：两形态在网关演进中并存过，解析器勿绑死单一形态）。"""
+    data = body.get("data")
+    if isinstance(data, list):
+        return [item for item in data if isinstance(item, dict)]
+    if isinstance(data, dict):
+        items = data.get("items")
+        if isinstance(items, list):
+            return [item for item in items if isinstance(item, dict)]
+    return []
+
+
 def resolve_document_id(client: httpx.Client, base: str, filename: str) -> str | None:
-    """GET /kb/documents?q=<stem> 解析 document_id：title 精确匹配优先，包含匹配次之。"""
+    """GET /kb/documents?q=<stem> 解析 document_id：title 精确匹配优先，包含匹配次之。
+
+    诊断提示（not_found 时）：平台按租户隔离文档——令牌租户（PROBE_TENANT_ID）须与文档
+    归属租户一致；q 匹配口径为 title，title 需为上传文件名 stem。
+    """
     stem = Path(filename).stem
     response = client.get(f"{base}/kb/documents", params={"q": stem, "page_size": 50})
     response.raise_for_status()
-    items = response.json().get("data") or []
+    items = _envelope_items(response.json())
     names = [str(item.get("name") or "") for item in items]
     for item, name in zip(items, names, strict=True):
         if name == stem:
@@ -171,7 +188,7 @@ def fetch_candidates_http(client: httpx.Client, base: str) -> CandidatesFetcher:
             )
             response.raise_for_status()
             body = response.json()
-            batch = body.get("data") or []
+            batch = _envelope_items(body)  # 同一信封防御（ocr 评审条目：勿绑死单一形态）
             candidates.extend(batch)
             total = int((body.get("meta") or {}).get("total") or 0)
             if page * CANDIDATES_PAGE >= total or not batch:
@@ -181,11 +198,15 @@ def fetch_candidates_http(client: httpx.Client, base: str) -> CandidatesFetcher:
     return _fetch
 
 
+_NOT_FOUND_HINT = "注意 PROBE_TENANT_ID 租户隔离（令牌租户须与文档归属租户一致）与 title 需为文件名 stem"
+
+
 def print_report(report: dict[str, Any]) -> None:
     """明细 + 宏平均打印（值来自运行期 golden/平台响应，脚本本身零内置真实值）。"""
     for detail in report["documents"]:
         if detail["status"] == "not_found":
             print(f"[not_found] {detail['file']}（平台未解析到文档；期望字段 {detail['expected_fields']} 个）")
+            print(f"    提示：{_NOT_FOUND_HINT}")
             continue
         print(
             f"[ok] {detail['file']}: P={detail['precision']:.3f} R={detail['recall']:.3f} F1={detail['f1']:.3f}"

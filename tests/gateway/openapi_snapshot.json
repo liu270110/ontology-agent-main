@@ -1,6 +1,261 @@
 {
   "components": {
     "schemas": {
+      "AccessRequestCreateIn": {
+        "additionalProperties": false,
+        "description": "POST /permission-requests（403 页「申请权限」；route 与 reason 必填，reason ≥10 字）。\n\nrequester 字段接受但不落库——正式实现从令牌解析（api/01 §5.10 注记），extra=forbid\n下保留该键以免前端过渡载荷被 422 拒。",
+        "properties": {
+          "desired_role": {
+            "anyOf": [
+              {
+                "maxLength": 32,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Desired Role"
+          },
+          "permission": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Permission"
+          },
+          "reason": {
+            "maxLength": 2000,
+            "minLength": 1,
+            "title": "Reason",
+            "type": "string"
+          },
+          "requester": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Requester"
+          },
+          "route": {
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Route",
+            "type": "string"
+          }
+        },
+        "required": [
+          "route",
+          "reason"
+        ],
+        "title": "AccessRequestCreateIn",
+        "type": "object"
+      },
+      "AccessRequestListOut": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/AccessRequestOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_cursor": {
+            "title": "Next Cursor",
+            "type": "null"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "AccessRequestListOut",
+        "type": "object"
+      },
+      "AccessRequestOut": {
+        "additionalProperties": false,
+        "description": "POST/GET /permission-requests（api/01 §5.10 ★ 细化 DTO 逐字段；id=UUID 串，差异见头注）。",
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "desired_role": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Desired Role"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "permission": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Permission"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          },
+          "requester": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Requester",
+            "type": "object"
+          },
+          "route": {
+            "title": "Route",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "pending",
+              "approved",
+              "rejected"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "route",
+          "reason",
+          "requester",
+          "status",
+          "created_at"
+        ],
+        "title": "AccessRequestOut",
+        "type": "object"
+      },
+      "AdminGroupCreateIn": {
+        "additionalProperties": false,
+        "properties": {
+          "description": {
+            "default": "",
+            "title": "Description",
+            "type": "string"
+          },
+          "members": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 256,
+            "title": "Members",
+            "type": "array"
+          },
+          "name": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "role_template": {
+            "default": "member",
+            "title": "Role Template",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "AdminGroupCreateIn",
+        "type": "object"
+      },
+      "AdminGroupListOut": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/AdminGroupOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_cursor": {
+            "title": "Next Cursor",
+            "type": "null"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "AdminGroupListOut",
+        "type": "object"
+      },
+      "AdminGroupOut": {
+        "additionalProperties": false,
+        "description": "GET/POST /admin/groups（前端 AdminGroup 逐字段；members=展示位 name 数组）。",
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "members": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Members",
+            "type": "array"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "role_template": {
+            "title": "Role Template",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "description",
+          "role_template",
+          "members",
+          "created_at"
+        ],
+        "title": "AdminGroupOut",
+        "type": "object"
+      },
       "AdminReviewDetailOut": {
         "additionalProperties": false,
         "description": "审核工单详情（api/01 §5.8 W1 实装行 GET /admin/reviews/{ticket_id}；契约源=\nfrontend/src/features/approvals/api.ts getReview → normalizeReview）。\n\n详情=列表查询面加 id 过滤 + 全量富字段：payload（review_tickets.payload JSONB 原样透传，\n含 gate_result/approvals 审批留痕）+ chain（由 payload.approvals 派生的前端\nApprovalChainStep 视图，见路由层 _chain_from_payload；终态单无 current 步）。\n前端 normalizeReview 对 title/summary/applicant 等富字段可选兜底（缺省回退\ntarget_type/target_id 等），后端不伪造、缺省不返回。",
@@ -724,6 +979,248 @@
         "title": "AgentUpdateIn",
         "type": "object"
       },
+      "AnalyticsOverviewOut": {
+        "additionalProperties": false,
+        "description": "GET /admin/analytics/overview（39 号对账 §2.14/G-D3 批 C：api/01 无 analytics 行，\n契约源=前端 mock p-analytics 轻量版预登记；数值=实时聚合口径，见 repo.analytics_snapshot）。",
+        "properties": {
+          "attribution": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Attribution",
+            "type": "array"
+          },
+          "budget": {
+            "additionalProperties": true,
+            "title": "Budget",
+            "type": "object"
+          },
+          "policy": {
+            "additionalProperties": {
+              "type": "boolean"
+            },
+            "title": "Policy",
+            "type": "object"
+          },
+          "stats": {
+            "additionalProperties": true,
+            "title": "Stats",
+            "type": "object"
+          },
+          "window": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Window",
+            "type": "object"
+          }
+        },
+        "required": [
+          "window",
+          "stats",
+          "budget",
+          "attribution",
+          "policy"
+        ],
+        "title": "AnalyticsOverviewOut",
+        "type": "object"
+      },
+      "ApiKeyCreateIn": {
+        "additionalProperties": false,
+        "description": "POST /admin/api-keys（scopes ⊆ owner 用户 scopes——08 §2.3 红线，越界 422+3001）。",
+        "properties": {
+          "name": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "scopes": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 32,
+            "title": "Scopes",
+            "type": "array"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "ApiKeyCreateIn",
+        "type": "object"
+      },
+      "ApiKeyCreatedOut": {
+        "additionalProperties": false,
+        "description": "POST /admin/api-keys 201（**明文 key 仅本次响应返回一次**，库只存哈希与前缀）。",
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "last_used_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Used At"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "prefix": {
+            "title": "Prefix",
+            "type": "string"
+          },
+          "scopes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Scopes",
+            "type": "array"
+          },
+          "status": {
+            "enum": [
+              "active",
+              "revoked"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "prefix",
+          "scopes",
+          "status",
+          "created_at",
+          "key"
+        ],
+        "title": "ApiKeyCreatedOut",
+        "type": "object"
+      },
+      "ApiKeyListOut": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ApiKeyRowOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_cursor": {
+            "title": "Next Cursor",
+            "type": "null"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "ApiKeyListOut",
+        "type": "object"
+      },
+      "ApiKeyRevokedOut": {
+        "additionalProperties": false,
+        "description": "POST /admin/api-keys/{id}/revoke 202 信封体（mock/invites revoke 非空体口径）。",
+        "properties": {
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "status": {
+            "const": "revoked",
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "status"
+        ],
+        "title": "ApiKeyRevokedOut",
+        "type": "object"
+      },
+      "ApiKeyRowOut": {
+        "additionalProperties": false,
+        "description": "GET /admin/api-keys 列表项（前端 ApiKeyRow 逐字段；只回前缀与元数据）。",
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "last_used_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Used At"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "prefix": {
+            "title": "Prefix",
+            "type": "string"
+          },
+          "scopes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Scopes",
+            "type": "array"
+          },
+          "status": {
+            "enum": [
+              "active",
+              "revoked"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "prefix",
+          "scopes",
+          "status",
+          "created_at"
+        ],
+        "title": "ApiKeyRowOut",
+        "type": "object"
+      },
       "ApprovalDecisionIn": {
         "additionalProperties": false,
         "description": "裁决入参（api/01 §5.15）：decision/param_hash 必填，reason/create_ticket 可选。",
@@ -864,25 +1361,130 @@
         "title": "AuditEntryOut",
         "type": "object"
       },
-      "AuditPageOut": {
+      "AuditExportIn": {
         "additionalProperties": false,
-        "description": "GET /memory/audit 响应（api/01 §3.1 信封 {data, meta:{page,page_size,total}}，B1 批统一）。\n\nv1 口径（M4.6-D3）：query_memory_audit 无 count 能力，meta.total=len(data)（当前页\n行数，非全量总数）。",
+        "description": "POST /admin/audit-logs/export 请求体（IX-ADM-08 → §5.2 任务中心；全字段可选）。",
         "properties": {
-          "data": {
-            "items": {
-              "$ref": "#/components/schemas/AuditEntryOut"
-            },
-            "title": "Data",
-            "type": "array"
+          "action": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Action"
           },
-          "meta": {
-            "$ref": "#/components/schemas/PageMeta"
+          "format": {
+            "default": "csv",
+            "enum": [
+              "csv",
+              "json"
+            ],
+            "title": "Format",
+            "type": "string"
+          },
+          "operator": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Operator"
+          },
+          "range": {
+            "anyOf": [
+              {
+                "maxLength": 16,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Range"
+          }
+        },
+        "title": "AuditExportIn",
+        "type": "object"
+      },
+      "AuditExportOut": {
+        "additionalProperties": false,
+        "description": "POST /admin/audit-logs/export 202 响应（建任务受理即返）。",
+        "properties": {
+          "task_id": {
+            "format": "uuid",
+            "title": "Task Id",
+            "type": "string"
           }
         },
         "required": [
-          "meta"
+          "task_id"
         ],
-        "title": "AuditPageOut",
+        "title": "AuditExportOut",
+        "type": "object"
+      },
+      "AuditRowOut": {
+        "additionalProperties": false,
+        "description": "GET /admin/audit-logs 列表项（前端 AuditRow 逐字段；result=中文展示串读时映射）。",
+        "properties": {
+          "action": {
+            "title": "Action",
+            "type": "string"
+          },
+          "operator": {
+            "title": "Operator",
+            "type": "string"
+          },
+          "resource": {
+            "title": "Resource",
+            "type": "string"
+          },
+          "result": {
+            "title": "Result",
+            "type": "string"
+          },
+          "session_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Session Id"
+          },
+          "time": {
+            "title": "Time",
+            "type": "string"
+          },
+          "trace_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trace Id"
+          }
+        },
+        "required": [
+          "time",
+          "operator",
+          "action",
+          "resource",
+          "result"
+        ],
+        "title": "AuditRowOut",
         "type": "object"
       },
       "BatchCandidateDecisionIn": {
@@ -1502,6 +2104,50 @@
           }
         },
         "title": "ChangesetSubmitIn",
+        "type": "object"
+      },
+      "ChannelImpactOut": {
+        "additionalProperties": false,
+        "description": "GET /admin/models/{id}/impact（删除级联影响预查询，IX-ADM-06）。",
+        "properties": {
+          "agents": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Agents",
+            "type": "array"
+          },
+          "cost_30d": {
+            "title": "Cost 30D",
+            "type": "string"
+          },
+          "migrate_to": {
+            "items": {
+              "additionalProperties": {
+                "type": "string"
+              },
+              "type": "object"
+            },
+            "title": "Migrate To",
+            "type": "array"
+          },
+          "sessions_30d": {
+            "title": "Sessions 30D",
+            "type": "integer"
+          },
+          "tokens_30d": {
+            "title": "Tokens 30D",
+            "type": "string"
+          }
+        },
+        "required": [
+          "agents",
+          "sessions_30d",
+          "tokens_30d",
+          "cost_30d",
+          "migrate_to"
+        ],
+        "title": "ChannelImpactOut",
         "type": "object"
       },
       "CollectionCreateIn": {
@@ -4328,6 +4974,73 @@
         "title": "LogoutRequest",
         "type": "object"
       },
+      "MatrixChangeIn": {
+        "additionalProperties": false,
+        "properties": {
+          "granted": {
+            "title": "Granted",
+            "type": "boolean"
+          },
+          "permission": {
+            "title": "Permission",
+            "type": "string"
+          },
+          "role": {
+            "title": "Role",
+            "type": "string"
+          }
+        },
+        "required": [
+          "role",
+          "permission",
+          "granted"
+        ],
+        "title": "MatrixChangeIn",
+        "type": "object"
+      },
+      "MatrixPermissionOut": {
+        "additionalProperties": false,
+        "properties": {
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "label"
+        ],
+        "title": "MatrixPermissionOut",
+        "type": "object"
+      },
+      "MatrixRoleOut": {
+        "additionalProperties": false,
+        "properties": {
+          "affected": {
+            "title": "Affected",
+            "type": "integer"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "label",
+          "affected"
+        ],
+        "title": "MatrixRoleOut",
+        "type": "object"
+      },
       "MemberListOut": {
         "additionalProperties": false,
         "properties": {
@@ -4680,6 +5393,245 @@
           "items"
         ],
         "title": "MessagePageOut",
+        "type": "object"
+      },
+      "ModelChannelCreateIn": {
+        "additionalProperties": false,
+        "description": "POST /admin/models（body 逐字段对齐前端 createModelChannel；api_key 只用于生成掩码）。",
+        "properties": {
+          "api_key": {
+            "anyOf": [
+              {
+                "maxLength": 256,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Api Key"
+          },
+          "budget_daily": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Budget Daily"
+          },
+          "model_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Model Id",
+            "type": "string"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "priority": {
+            "default": 4,
+            "title": "Priority",
+            "type": "integer"
+          },
+          "provider": {
+            "default": "deepseek",
+            "title": "Provider",
+            "type": "string"
+          }
+        },
+        "required": [
+          "model_id"
+        ],
+        "title": "ModelChannelCreateIn",
+        "type": "object"
+      },
+      "ModelChannelListOut": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ModelChannelOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_cursor": {
+            "title": "Next Cursor",
+            "type": "null"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "ModelChannelListOut",
+        "type": "object"
+      },
+      "ModelChannelOut": {
+        "additionalProperties": false,
+        "description": "GET/POST /admin/models（前端 ModelChannel 逐字段；usage_30d=读时聚合展示串）。",
+        "properties": {
+          "api_key_masked": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Api Key Masked"
+          },
+          "budget_daily": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Budget Daily"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "models": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Models",
+            "type": "array"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "priority": {
+            "title": "Priority",
+            "type": "integer"
+          },
+          "provider": {
+            "title": "Provider",
+            "type": "string"
+          },
+          "provider_label": {
+            "title": "Provider Label",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "active",
+              "disabled"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "usage_30d": {
+            "title": "Usage 30D",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "provider",
+          "provider_label",
+          "name",
+          "models",
+          "api_key_masked",
+          "priority",
+          "budget_daily",
+          "status",
+          "usage_30d"
+        ],
+        "title": "ModelChannelOut",
+        "type": "object"
+      },
+      "ModelTestIn": {
+        "additionalProperties": false,
+        "description": "POST /admin/models/test（IX-ADM-05「成功才可保存」；body 不落库）。",
+        "properties": {
+          "api_key": {
+            "anyOf": [
+              {
+                "maxLength": 256,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Api Key"
+          },
+          "model_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Model Id",
+            "type": "string"
+          },
+          "provider": {
+            "default": "deepseek",
+            "title": "Provider",
+            "type": "string"
+          }
+        },
+        "required": [
+          "model_id"
+        ],
+        "title": "ModelTestIn",
+        "type": "object"
+      },
+      "ModelTestOut": {
+        "additionalProperties": false,
+        "properties": {
+          "latency_ms": {
+            "title": "Latency Ms",
+            "type": "integer"
+          },
+          "models": {
+            "items": {
+              "additionalProperties": {
+                "type": "string"
+              },
+              "type": "object"
+            },
+            "title": "Models",
+            "type": "array"
+          },
+          "quota": {
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "title": "Quota",
+            "type": "object"
+          }
+        },
+        "required": [
+          "latency_ms",
+          "models",
+          "quota"
+        ],
+        "title": "ModelTestOut",
         "type": "object"
       },
       "OntologyCreateIn": {
@@ -6835,6 +7787,84 @@
         "title": "ReviewQueueSummaryOut",
         "type": "object"
       },
+      "RoleMatrixOut": {
+        "additionalProperties": false,
+        "description": "GET /admin/roles/matrix（{roles, permissions, matrix}；matrix=基线∪覆写合并投影）。",
+        "properties": {
+          "matrix": {
+            "additionalProperties": {
+              "additionalProperties": {
+                "type": "boolean"
+              },
+              "type": "object"
+            },
+            "title": "Matrix",
+            "type": "object"
+          },
+          "permissions": {
+            "items": {
+              "$ref": "#/components/schemas/MatrixPermissionOut"
+            },
+            "title": "Permissions",
+            "type": "array"
+          },
+          "roles": {
+            "items": {
+              "$ref": "#/components/schemas/MatrixRoleOut"
+            },
+            "title": "Roles",
+            "type": "array"
+          }
+        },
+        "required": [
+          "roles",
+          "permissions",
+          "matrix"
+        ],
+        "title": "RoleMatrixOut",
+        "type": "object"
+      },
+      "RoleMatrixPutIn": {
+        "additionalProperties": false,
+        "properties": {
+          "changes": {
+            "items": {
+              "$ref": "#/components/schemas/MatrixChangeIn"
+            },
+            "maxItems": 100,
+            "title": "Changes",
+            "type": "array"
+          }
+        },
+        "title": "RoleMatrixPutIn",
+        "type": "object"
+      },
+      "RoleMatrixPutOut": {
+        "additionalProperties": false,
+        "description": "PUT /admin/roles/matrix 响应（{applied, matrix}；applied=受理条数）。",
+        "properties": {
+          "applied": {
+            "title": "Applied",
+            "type": "integer"
+          },
+          "matrix": {
+            "additionalProperties": {
+              "additionalProperties": {
+                "type": "boolean"
+              },
+              "type": "object"
+            },
+            "title": "Matrix",
+            "type": "object"
+          }
+        },
+        "required": [
+          "applied",
+          "matrix"
+        ],
+        "title": "RoleMatrixPutOut",
+        "type": "object"
+      },
       "RunOut": {
         "additionalProperties": false,
         "properties": {
@@ -7881,6 +8911,96 @@
         "title": "SubmitOut",
         "type": "object"
       },
+      "SysLogPageOut": {
+        "additionalProperties": false,
+        "description": "GET /admin/system-logs 响应（{items,total}；total=全集分级计数，不随过滤抖动）。",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/SysLogRowOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "total": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Total",
+            "type": "object"
+          }
+        },
+        "required": [
+          "items",
+          "total"
+        ],
+        "title": "SysLogPageOut",
+        "type": "object"
+      },
+      "SysLogRowOut": {
+        "additionalProperties": false,
+        "description": "GET /admin/system-logs 列表项（前端 SysLogRow 逐字段；数据源 audit_logs+llm_calls）。",
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "level": {
+            "enum": [
+              "error",
+              "warn",
+              "info",
+              "debug"
+            ],
+            "title": "Level",
+            "type": "string"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "service": {
+            "title": "Service",
+            "type": "string"
+          },
+          "span": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Span"
+          },
+          "trace_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trace Id"
+          },
+          "ts": {
+            "title": "Ts",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "ts",
+          "level",
+          "service",
+          "message"
+        ],
+        "title": "SysLogRowOut",
+        "type": "object"
+      },
       "TaskDetailOut": {
         "additionalProperties": false,
         "properties": {
@@ -8216,6 +9336,82 @@
         "title": "TaskRetryOut",
         "type": "object"
       },
+      "TenantCreateIn": {
+        "additionalProperties": false,
+        "description": "POST /admin/tenants（mock 逐字段；tier=治理三档 solo/team/enterprise，存租户 settings）。",
+        "properties": {
+          "name": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "namespace": {
+            "maxLength": 64,
+            "minLength": 1,
+            "pattern": "^[a-z0-9][a-z0-9-]*$",
+            "title": "Namespace",
+            "type": "string"
+          },
+          "tier": {
+            "default": "team",
+            "enum": [
+              "solo",
+              "team",
+              "enterprise"
+            ],
+            "title": "Tier",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "namespace"
+        ],
+        "title": "TenantCreateIn",
+        "type": "object"
+      },
+      "TenantCreatedOut": {
+        "additionalProperties": false,
+        "description": "POST /admin/tenants 201（initial_password 一次性：仅本次响应返回，库只存哈希）。",
+        "properties": {
+          "admin_account": {
+            "title": "Admin Account",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "initial_password": {
+            "title": "Initial Password",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "namespace": {
+            "title": "Namespace",
+            "type": "string"
+          },
+          "tier": {
+            "title": "Tier",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "namespace",
+          "tier",
+          "admin_account",
+          "initial_password"
+        ],
+        "title": "TenantCreatedOut",
+        "type": "object"
+      },
       "ToggleOut": {
         "properties": {
           "tools": {
@@ -8509,6 +9705,131 @@
         "title": "ToolStatus",
         "type": "string"
       },
+      "TraceCostOut": {
+        "additionalProperties": false,
+        "properties": {
+          "cost_yuan": {
+            "title": "Cost Yuan",
+            "type": "number"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "tokens_in": {
+            "title": "Tokens In",
+            "type": "integer"
+          },
+          "tokens_out": {
+            "title": "Tokens Out",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "tokens_in",
+          "tokens_out",
+          "cost_yuan"
+        ],
+        "title": "TraceCostOut",
+        "type": "object"
+      },
+      "TraceDetailOut": {
+        "additionalProperties": false,
+        "description": "GET /admin/audit-logs/{trace_id}（api/01 §5.8 ★ trace 全链路展开；\n步骤=audit_logs+llm_calls 同 trace_id 行按时间序投影；writeback 联动 M1 恒缺省）。",
+        "properties": {
+          "cost": {
+            "$ref": "#/components/schemas/TraceCostOut"
+          },
+          "session_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Session Id"
+          },
+          "started_at": {
+            "title": "Started At",
+            "type": "string"
+          },
+          "steps": {
+            "items": {
+              "$ref": "#/components/schemas/TraceStepOut"
+            },
+            "title": "Steps",
+            "type": "array"
+          },
+          "total_ms": {
+            "title": "Total Ms",
+            "type": "integer"
+          },
+          "trace_id": {
+            "title": "Trace Id",
+            "type": "string"
+          },
+          "writeback": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Writeback"
+          }
+        },
+        "required": [
+          "trace_id",
+          "started_at",
+          "total_ms",
+          "steps",
+          "cost"
+        ],
+        "title": "TraceDetailOut",
+        "type": "object"
+      },
+      "TraceStepOut": {
+        "additionalProperties": false,
+        "properties": {
+          "detail": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Detail"
+          },
+          "ms": {
+            "title": "Ms",
+            "type": "integer"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "ms"
+        ],
+        "title": "TraceStepOut",
+        "type": "object"
+      },
       "ValidationError": {
         "properties": {
           "ctx": {
@@ -8799,6 +10120,33 @@
         "title": "WritebackLedgerPageOut",
         "type": "object"
       },
+      "services__iam__api__schemas__admin__AuditPageOut": {
+        "additionalProperties": false,
+        "description": "GET /admin/audit-logs 响应（mock 形态①裸分页体 {items,total,next_cursor}；\ntotal=全集计数（不含过滤，mock「seg 徽标不随过滤抖动」同口径）。",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/AuditRowOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_cursor": {
+            "title": "Next Cursor",
+            "type": "null"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total"
+        ],
+        "title": "AuditPageOut",
+        "type": "object"
+      },
       "services__kb__api__schemas__kb__BatchDecisionIn": {
         "additionalProperties": false,
         "description": "批量终审决策请求体（api/01 §5.4 ★ batch-decision；上限 200 条/批在端点侧断言 → 3001）。",
@@ -8816,6 +10164,27 @@
           "decisions"
         ],
         "title": "BatchDecisionIn",
+        "type": "object"
+      },
+      "services__memory__api__schemas__memory__AuditPageOut": {
+        "additionalProperties": false,
+        "description": "GET /memory/audit 响应（api/01 §3.1 信封 {data, meta:{page,page_size,total}}，B1 批统一）。\n\nv1 口径（M4.6-D3）：query_memory_audit 无 count 能力，meta.total=len(data)（当前页\n行数，非全量总数）。",
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/AuditEntryOut"
+            },
+            "title": "Data",
+            "type": "array"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/PageMeta"
+          }
+        },
+        "required": [
+          "meta"
+        ],
+        "title": "AuditPageOut",
         "type": "object"
       },
       "services__review__api__schemas__admin__BatchDecisionIn": {
@@ -8862,6 +10231,280 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/api/v1/admin/analytics/overview": {
+      "get": {
+        "operationId": "get_analytics_overview_api_v1_admin_analytics_overview_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnalyticsOverviewOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "数据分析聚合（p-analytics 轻量版；api/01 未登记行，契约源=前端 mock 预登记 39 号对账 G-D3）",
+        "tags": [
+          "iam"
+        ]
+      }
+    },
+    "/api/v1/admin/api-keys": {
+      "get": {
+        "operationId": "list_api_keys_api_v1_admin_api_keys_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiKeyListOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Key 列表（只回前缀与元数据，不回明文与哈希）",
+        "tags": [
+          "iam"
+        ]
+      },
+      "post": {
+        "operationId": "create_api_key_api_v1_admin_api_keys_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ApiKeyCreateIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiKeyCreatedOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "签发 API Key（明文仅本次响应返回一次；scopes ⊆ owner 用户 scopes——08 §2.0/§2.3）",
+        "tags": [
+          "iam"
+        ]
+      }
+    },
+    "/api/v1/admin/api-keys/{key_id}/revoke": {
+      "post": {
+        "operationId": "revoke_api_key_api_v1_admin_api_keys__key_id__revoke_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "key_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Key Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiKeyRevokedOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "吊销 API Key（→revoked 终态立即失效；重复吊销幂等同响应）",
+        "tags": [
+          "iam"
+        ]
+      }
+    },
+    "/api/v1/admin/audit-logs": {
+      "get": {
+        "operationId": "list_audit_logs_api_v1_admin_audit_logs_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "operator",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 128,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Operator"
+            }
+          },
+          {
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 128,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Q"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/services__iam__api__schemas__admin__AuditPageOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "审计日志查询（operator/q 过滤；total=全集计数）",
+        "tags": [
+          "iam"
+        ]
+      }
+    },
+    "/api/v1/admin/audit-logs/export": {
+      "post": {
+        "operationId": "export_audit_logs_api_v1_admin_audit_logs_export_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AuditExportIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuditExportOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "审计导出建任务（IX-ADM-08 → §5.2 任务中心；202 受理即返，CSV/JSONL 保留 7 天）",
+        "tags": [
+          "iam"
+        ]
+      }
+    },
+    "/api/v1/admin/audit-logs/{trace_id}": {
+      "get": {
+        "operationId": "get_trace_api_v1_admin_audit_logs__trace_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "trace_id",
+            "required": true,
+            "schema": {
+              "title": "Trace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TraceDetailOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "单 trace 全链审计详情（api/01 §5.8 ★）",
+        "tags": [
+          "iam"
+        ]
+      }
+    },
     "/api/v1/admin/estop": {
       "delete": {
         "operationId": "deactivate_estop_api_v1_admin_estop_delete",
@@ -8935,6 +10578,246 @@
         "summary": "紧急停止激活（覆盖写、幂等；闸门语义=拒新工作，在途自然收敛）",
         "tags": [
           "control"
+        ]
+      }
+    },
+    "/api/v1/admin/groups": {
+      "get": {
+        "operationId": "list_groups_api_v1_admin_groups_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminGroupListOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "用户组列表（§5.10 预登记；M1 全量游标留空）",
+        "tags": [
+          "iam"
+        ]
+      },
+      "post": {
+        "operationId": "create_group_api_v1_admin_groups_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdminGroupCreateIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminGroupOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "建组（§5.10 预登记；role_template=角色码）",
+        "tags": [
+          "iam"
+        ]
+      }
+    },
+    "/api/v1/admin/models": {
+      "get": {
+        "operationId": "list_models_api_v1_admin_models_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelChannelListOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "模型渠道列表（usage_30d 读时聚合；§5.8 ★）",
+        "tags": [
+          "iam"
+        ]
+      },
+      "post": {
+        "operationId": "create_model_channel_api_v1_admin_models_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ModelChannelCreateIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelChannelOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "新增模型渠道（密钥只存掩码，08 §2.0）",
+        "tags": [
+          "iam"
+        ]
+      }
+    },
+    "/api/v1/admin/models/test": {
+      "post": {
+        "operationId": "test_model_channel_api_v1_admin_models_test_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ModelTestIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelTestOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "渠道连通测试（IX-ADM-05；body 不落库）",
+        "tags": [
+          "iam"
+        ]
+      }
+    },
+    "/api/v1/admin/models/{channel_id}": {
+      "delete": {
+        "operationId": "delete_model_channel_api_v1_admin_models__channel_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "channel_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Channel Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "删除渠道（api/01 §5.8 204 口径；有运行中引用时 409）",
+        "tags": [
+          "iam"
+        ]
+      }
+    },
+    "/api/v1/admin/models/{channel_id}/impact": {
+      "get": {
+        "operationId": "get_model_impact_api_v1_admin_models__channel_id__impact_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "channel_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Channel Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChannelImpactOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "删除级联影响预查询（IX-ADM-06）",
+        "tags": [
+          "iam"
         ]
       }
     },
@@ -9176,6 +11059,202 @@
         "summary": "审批裁决（三档审批链；approved 不等于生效，published 由业务联动方显式推进）",
         "tags": [
           "admin"
+        ]
+      }
+    },
+    "/api/v1/admin/roles/matrix": {
+      "get": {
+        "operationId": "get_role_matrix_api_v1_admin_roles_matrix_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RoleMatrixOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "角色-权限矩阵读（基线 ∪ 覆写合并；08 §2.2 管理面）",
+        "tags": [
+          "iam"
+        ]
+      },
+      "put": {
+        "operationId": "put_role_matrix_api_v1_admin_roles_matrix_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RoleMatrixPutIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RoleMatrixPutOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "角色-权限矩阵写（覆写 upsert；未知角色/权限点 422）",
+        "tags": [
+          "iam"
+        ]
+      }
+    },
+    "/api/v1/admin/system-logs": {
+      "get": {
+        "operationId": "list_system_logs_api_v1_admin_system_logs_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "level",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "pattern": "^(error|warn|info|debug|all)$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Level"
+            }
+          },
+          {
+            "in": "query",
+            "name": "service",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 32,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Service"
+            }
+          },
+          {
+            "in": "query",
+            "name": "range",
+            "required": false,
+            "schema": {
+              "default": "1h",
+              "pattern": "^(1h|24h|7d)$",
+              "title": "Range",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 128,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Q"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SysLogPageOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "服务级运行日志（audit_logs+llm_calls 双源；level/service/range/q 四维过滤，§5.8 ☆）",
+        "tags": [
+          "iam"
+        ]
+      }
+    },
+    "/api/v1/admin/tenants": {
+      "post": {
+        "operationId": "create_tenant_api_v1_admin_tenants_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TenantCreateIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TenantCreatedOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "创建租户（管理员初始密码一次性返回）",
+        "tags": [
+          "iam"
         ]
       }
     },
@@ -11896,7 +13975,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/AuditPageOut"
+                  "$ref": "#/components/schemas/services__memory__api__schemas__memory__AuditPageOut"
                 }
               }
             },
@@ -14230,6 +16309,95 @@
         "summary": "ORSI 原子能力详情（读公开免 scope；跨租户一律 404）",
         "tags": [
           "orsi"
+        ]
+      }
+    },
+    "/api/v1/permission-requests": {
+      "get": {
+        "operationId": "list_permission_requests_api_v1_permission_requests_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "role",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "pattern": "^(mine|approvable)$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Role"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccessRequestListOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "申请列表（?role=mine 本人免 review:read；approvable=pending 队列，其余需 review:read）",
+        "tags": [
+          "iam"
+        ]
+      },
+      "post": {
+        "operationId": "create_permission_request_api_v1_permission_requests_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AccessRequestCreateIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccessRequestOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "提交权限申请（403 页申请闭环；重复 pending 409；第六类 permission_request 工单联动）",
+        "tags": [
+          "iam"
         ]
       }
     },

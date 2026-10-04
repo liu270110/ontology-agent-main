@@ -66,6 +66,8 @@ from services.gateway.middlewares import (
     TenantContextMiddleware,
 )
 from services.gateway.sse.redis_hub import build_sse_hub
+from services.iam.api.admin import permission_router as permission_requests_router  # 权限申请（api/01 §5.10 预登记）
+from services.iam.api.admin import router as admin_domain_router  # admin 域 9 组端点（api/01 §5.8/§5.10）
 from services.iam.api.auth import router as auth_router
 from services.iam.api.invites import router as invites_router  # 邀请链接五端点（架构设计/32，api/01 §5.8）
 from services.iam.api.users import router as admin_users_router  # 用户管理 CRUD 四端点（api/01 §5.8，B8-WA 追认实装）
@@ -491,6 +493,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(auth_router, prefix=settings.api_prefix)
     app.include_router(invites_router, prefix=settings.api_prefix)  # 邀请链接五端点（api/01 §5.8）
     app.include_router(admin_users_router, prefix=settings.api_prefix)  # 用户管理 CRUD 四端点（api/01 §5.8，B8-WA）
+    app.include_router(
+        admin_domain_router, prefix=settings.api_prefix
+    )  # admin 域 9 组端点（api/01 §5.8/§5.10，2026-10-05）
+    app.include_router(permission_requests_router, prefix=settings.api_prefix)  # 权限申请两行（api/01 §5.10 预登记）
     app.include_router(agents_router, prefix=settings.api_prefix)  # M3.1：agents CRUD（api/01 §5.1）
     app.include_router(sessions_router, prefix=settings.api_prefix)
     app.include_router(run_control_router, prefix=settings.api_prefix)  # M4.5-A：inbox 提交 + admin estop（§1.4）

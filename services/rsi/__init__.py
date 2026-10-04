@@ -15,6 +15,13 @@ B10 G1 批（2026-09-29，09 §13.3 G1）追加：起草引擎 drafter.py（三�
 工具→L2 市场检索→L3 LLM 起草过确定性校验；产物只写 envelope["draft_artifact"] 不迁状态）。
 **drafter.py 因依赖 ontology.core.tbox（种子装载）与 platform.ports（模型端口）同不进包根
 命名空间**——直 ``from services.rsi.drafter import …``。
+
+M4.6-S3 批（2026-10-05，docs/Agent/14 §3/§4）追加：ORSI 原子能力注册表（rsi 阶段 A 补件，
+不另开模块）——domain/orsi.py 聚合与红线（零进化副作用 + promoted 恒不可迁，挂接点注明）、
+business/orsi_registry.py 注册面（face 枚举校验+指纹计算）、api/capabilities.py 三端点
+（GET/POST /api/v1/orsi/capabilities、GET /{id}；读公开/写 rsi:write）、data 层
+orsi_capabilities（**data 实现不进包根命名空间**，同 sinks/drafter 口径——直
+``from services.rsi.data.repo_impl.orsi_repo import …``）。
 """
 
 from __future__ import annotations
@@ -27,6 +34,24 @@ from services.rsi.audit import (
     LoggingAuditTrail,
     RsiAuditRecord,
 )
+from services.rsi.business.orsi_registry import (
+    ACTION_ORSI_CAPABILITY_REGISTERED,
+    OrsiCapabilityService,
+    parse_face,
+)
+from services.rsi.domain.orsi import (
+    FINGERPRINT_VERSION,
+    GapFaceTrack,
+    OrsiCapability,
+    OrsiCapabilityNotFound,
+    OrsiCapabilityStatus,
+    OrsiDuplicateFingerprint,
+    OrsiPromotionBlocked,
+    SourceChannel,
+    capability_fingerprint,
+    normalize_name,
+)
+from services.rsi.domain.repo.orsi import OrsiCapabilityFilter, OrsiCapabilityRepository
 from services.rsi.gap import (
     GAP_FINGERPRINT_VERSION,
     GapClusterSummary,
@@ -61,8 +86,10 @@ from services.rsi.whitelist import (
 __all__ = [
     "APPLY_ENABLED_STAGE",
     "ACTION_APPLY_DENIED",
+    "ACTION_ORSI_CAPABILITY_REGISTERED",
     "ACTION_WHITELIST_VIOLATION",
     "ENVELOPE_REQUIRED_KEYS",
+    "FINGERPRINT_VERSION",
     "FORBIDDEN_TARGET_MARKERS",
     "GAP_FINGERPRINT_VERSION",
     "AuditTrail",
@@ -75,11 +102,20 @@ __all__ = [
     "GapKind",
     "GapProposalRecord",
     "GapStore",
+    "GapFaceTrack",
     "ImprovementType",
     "InMemoryAuditTrail",
     "InMemoryGapStore",
     "JsonlGapStore",
     "LoggingAuditTrail",
+    "OrsiCapability",
+    "OrsiCapabilityFilter",
+    "OrsiCapabilityNotFound",
+    "OrsiCapabilityRepository",
+    "OrsiCapabilityService",
+    "OrsiCapabilityStatus",
+    "OrsiDuplicateFingerprint",
+    "OrsiPromotionBlocked",
     "REGISTRY",
     "Proposal",
     "ProposalError",
@@ -87,12 +123,16 @@ __all__ = [
     "RsiApplyForbiddenError",
     "RsiAuditRecord",
     "RsiService",
+    "SourceChannel",
     "SurfaceMeta",
     "TriggerEvent",
     "TriggerRegistry",
     "TriggerTrack",
     "WhitelistViolation",
+    "capability_fingerprint",
     "evaluate_chain",
+    "normalize_name",
+    "parse_face",
     "scenario_fingerprint",
     "surface_of",
     "validate_improvement",

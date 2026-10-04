@@ -51,3 +51,26 @@ M5+ 启动（权威=architecture/09）。
 - 运行入口 `services/devtools/orsi/run_g1.py`（`--demo` 合成两簇演示三级命中/降级 / `--live` OA_
   配置骨架；Markdown 报告含逐级尝试留痕；首跑实录=docs/rsi/G1-首次运行-2026-09-29.md，
   本地文档；store 口径：G0=.orsi-g0、G1=.orsi-g1，同一 GapStore JSONL 格式）。
+
+## ORSI 原子能力注册表（2026-10-05 M4.6-S3 批交付，权威=docs/Agent/14 §3/§4 + architecture/09 §13）
+
+- 领域聚合 `domain/orsi.py`（纯域）：`OrsiCapability`（face ∈ 八大进化面枚举=复用
+  `surfaces.EvolutionSurface`，出处小节=09 §13.2「进化面矩阵（八大组件）」；缺口轨分级
+  normal/shortgap/critical；来源通道 L0~L3 纯元数据；nominal/candidate/promoted）+
+  `capability_fingerprint`（语义标注 canonical 序列化 sha256，口径 v1 规则=函数 docstring，
+  输入四元组全为落库列可复算）；
+- **红线（Agent14 §4 红线继承）**：①注册表任何写操作零进化副作用（不触
+  proposal/gates/apply 路径，tests/rsi/test_orsi_registry.py 行为断言+源断言）；
+  ②status→promoted 仅当 review 工单引用存在——v1 无工单挂接面=恒不可迁
+  （`OrsiCapability.promote` 恒拒，挂接点=M5+ review_workflow target_type=orsi_capability）；
+- 业务面 `business/orsi_registry.py`：注册（face 枚举校验+指纹计算）/列表
+  （face/track/status 过滤）/详情；注册动作落审计（`orsi.capability.registered`）；
+- 端点 `api/capabilities.py`（网关挂载 `/api/v1/orsi/capabilities` 三行）：
+  GET 列表 / POST 注册（201/409 同指纹重复）/ GET 详情（404）——**读公开**免 scope
+  （JWT 必带取租户上下文）、**写 `rsi:write`**（scope 种子随迁移 e3b7d9f1a5c2 并入
+  admin/super_admin，先例 c9e3a7f1b5d2）；信封 `{data,meta}`（PageMeta/EmptyMeta）；
+- 数据面 `data/orm.py` + `data/repo_impl/orsi_repo.py`（**不进包根命名空间**，同
+  sinks/drafter 口径）：`orsi_capabilities` 表（迁移 d1a5c7e9b3f1，down=b835a095ffe4
+  基线 head，合入时主会话按合入序调链；(tenant_id, face, fingerprint) 唯一=语义同一性；
+  审计列+软删列）；
+- 快照纪律：本批端点**不刷** tests/gateway/openapi_snapshot.json（主会话合入后统一重生成）。

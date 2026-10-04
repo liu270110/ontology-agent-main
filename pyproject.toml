@@ -85,6 +85,7 @@ ignore_imports = [
     "services.platform.db.registry -> services.writeback.data.orm",
     "services.platform.db.registry -> services.plugin.data.orm",
     "services.platform.db.registry -> services.tools.data.orm",  # 工具集市登记表注册（docs/Agent/14 §5，S1 批）
+    "services.platform.db.registry -> services.rsi.data.orm",  # M4.6-S3：orsi_capabilities 注册（docs/Agent/14 §4）
     "services.platform.db.uow -> services.writeback.data.orm",
 ]
 

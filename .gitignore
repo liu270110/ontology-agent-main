@@ -65,3 +65,6 @@ data/
 
 # 旧 tools/ 路径本地残留（已迁 services/devtools/）：训练运行产物不入库
 tools/onto-train/runs/
+
+# S2 技能集市模块源码层（services/skills/data 为 Python data 层，非客户样图数据目录）
+!services/skills/data/

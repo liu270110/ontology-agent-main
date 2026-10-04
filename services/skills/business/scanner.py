@@ -11,6 +11,11 @@
 目录**跳过不中断**（扫描器是 seed 供给面，单资产脏不挡批）；version 缺省 "1.0.0"
 （变体 A 无版本行）。body_bytes=SKILL.md 文件字节数（st_size）；source_uri=资产相对
 路径（资产根起，POSIX 分隔符——14 §3「资产相对路径或外部 uri」的 repo 侧形态）。
+
+required-secrets（K5 门 1 声明，方案依据=docs/Agent/13 §10；上游=deer-flow frontmatter
+声明门缩减版）：单行逗号分隔标量同名键（``required-secrets: GITHUB_TOKEN, DEEPSEEK_API_KEY``），
+parse_required_secrets 逐项剥空格、去重保序、非法 env 名丢弃并 warning（deer-flow parser
+同款宽容口径：声明面坏项不挡批），空/缺省=空集；产出投影 ScannedAsset.required_secrets。
 """
 
 from __future__ import annotations
@@ -21,6 +26,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from services.platform.config import Settings
+from services.skills.domain.model.skill import SECRET_NAME_RE
 
 logger = logging.getLogger(__name__)
 
@@ -39,6 +45,7 @@ class ScannedAsset:
     version: str
     source_uri: str
     body_bytes: int
+    required_secrets: tuple[str, ...] = ()  # K5 门 1：frontmatter 声明的凭证名（缺省空集）
 
 
 def default_assets_root() -> Path:
@@ -70,6 +77,28 @@ def parse_frontmatter(text: str) -> dict[str, str]:
     return fields
 
 
+def parse_required_secrets(raw: str | None) -> tuple[str, ...]:
+    """required-secrets 单行逗号分隔标量 → 凭证名元组（K5 门 1；宽容口径见模块 docstring）。
+
+    空项跳过、逐项剥空白、去重保序；不匹配 env 名形状（SECRET_NAME_RE）的项丢弃并
+    warning——声明面坏项不挡批（seed 供给面 scanner 同款），fail-closed 校验留给
+    聚合入参面（SkillEntry field_validator）。
+    """
+    if not raw:
+        return ()
+    names: list[str] = []
+    for part in raw.split(","):
+        name = part.strip()
+        if not name:
+            continue
+        if SECRET_NAME_RE.fullmatch(name) is None:
+            logger.warning("skills 声明 required-secrets 丢弃非法凭证名: %r", name)
+            continue
+        if name not in names:
+            names.append(name)
+    return tuple(names)
+
+
 def scan_repo_assets(root: Path | str | None = None) -> list[ScannedAsset]:
     """遍历资产根下 ``<slug>/SKILL.md``（仅一跳子目录，根散文件不吃），产出扫描清单。
 
@@ -99,6 +128,7 @@ def scan_repo_assets(root: Path | str | None = None) -> list[ScannedAsset]:
                 # source_uri=资产根起相对路径（POSIX 分隔符，跨端稳定）
                 source_uri=skill_md.resolve().relative_to(root.resolve()).as_posix(),
                 body_bytes=skill_md.stat().st_size,
+                required_secrets=parse_required_secrets(fields.get("required-secrets")),
             )
         )
     return assets

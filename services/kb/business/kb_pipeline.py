@@ -9,7 +9,9 @@
 ===============  ==============================================================
 七步（权威）      M2.5 落地
 ===============  ==============================================================
-preprocess       可运行（含 env_setup 环境配置，03 §4「并入预处理」）
+preprocess       可运行（含 env_setup 环境配置，03 §4「并入预处理」；v1.5 内容源三分支：
+                 meta.content 内联 / minio_key 拉对象按 OA_KB_PARSER 选引擎抽取
+                 （business/parsers.py）→ 写 meta.content + drawing_ir 雏形）
 env_setup        并入 preprocess
 extract          可运行（M2.5）：LLM 受约束抽取（ModelPort.complete_structured，
                  kb_extraction.run_extract）；无模型以 5002 失败（可重跑），不做 mock
@@ -46,12 +48,14 @@ import logging
 import uuid
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
+from functools import lru_cache
 
 from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from services.kb.business.kb_extraction import run_align, run_extract, run_validate
+from services.kb.business.parsers import extract_pdf
 from services.kb.business.pipeline_base import (
     BackoffFn,
     PipelineError,
@@ -66,10 +70,20 @@ from services.kb.retrieval.embed import (
     fetch_chunks_missing_embedding,
     set_chunk_embeddings,
 )
+from services.platform.config import get_settings
+from services.platform.db.clients.minio_client import MinioObjectStore
 from services.platform.ports.model_port import ModelPort
 from services.platform.ports.review_port import CandidateReviewPort
 
 logger = logging.getLogger(__name__)
+
+
+@lru_cache(maxsize=1)
+def _object_store() -> MinioObjectStore:
+    """流水线侧对象存储装配（无 Request 上下文：读平台唯一配置入口；进程内复用；
+    测试经 monkeypatch 本函数注入 fake，同 step_runners 注入缝口径）。"""
+    return MinioObjectStore.from_settings(get_settings())
+
 
 # ---------------------------------------------------------------- 状态机（03 §4 八态）
 
@@ -187,15 +201,57 @@ async def _load_document(session: AsyncSession, ctx: StepContext) -> Document:
 
 
 async def _run_preprocess(ctx: StepContext) -> None:
-    """文档预处理（含环境配置，03 §4）：M2 JSON 直传内容规整；MinIO 拉取随 M3。"""
-    async with ctx.session_factory() as session, session.begin():  # 短事务
+    """文档预处理（含环境配置，03 §4）：内容源三分支（v1.5 内容源抽象）。
+
+    ① meta["content"] 内联文本（M2 JSON 直传）——现行为不变（仅换行规整）；
+    ② 无内联但 documents.minio_key 存在（v1.5 文件通道）——拉 MinIO 对象，按
+       OA_KB_PARSER（Settings.kb_parser）选引擎抽取文本（business/parsers.py）：
+       抽取文本写 meta["content"]（chunk/embed/extract 链零改动），引擎元信息写
+       meta["drawing_ir"] 雏形，实际引擎写 meta["parser"]（可追溯）；可选引擎缺库
+       降级 pdfium 时 meta["parser_requested"] 记请求值、meta["degraded"] 追加
+       "parser"（检索降级契约同源口径）；
+    ③ 两者皆无 → 409（无可用内容源）。
+    抽取无文本层（扫描件）→ 409 显式失败（OCR 通道随 v2；不静默产空内容让 chunk 步报
+    更差的错）。幂等：分支①命中即不再拉对象/重解析（checkpoint done 跳过之外的第二重）。
+    事务边界（03 §6.1）：MinIO 拉取与引擎抽取为长调用——读源/写回各自短事务，中间件在事务外。
+    """
+    async with ctx.session_factory() as session, session.begin():  # 短事务①：读内容源坐标
         doc = await _load_document(session, ctx)
         meta = dict(doc.meta or {})
         content = meta.get("content")
-        if not isinstance(content, str) or not content.strip():
-            raise PipelineError("409 文档无内联内容（M2 JSON 直传契约；MinIO 拉取随 M3）")
-        meta["content"] = content.replace("\r\n", "\n").replace("\r", "\n")
+        inline = isinstance(content, str) and content.strip()
+        source_key = None if inline else (doc.minio_key or "").strip()
+        if not inline and not source_key:
+            raise PipelineError("409 文档无内联内容且无 minio_key（无可用内容源：JSON 直传或文件通道二者其一）")
+
+    if inline:  # 分支①：内联文本，现行为不变（仅换行规整）
+        normalized = _normalize_newlines(str(content))
+        async with ctx.session_factory() as session, session.begin():  # 短事务②：写回
+            doc = await _load_document(session, ctx)
+            doc.meta = {**(dict(doc.meta or {})), "content": normalized}
+        return
+
+    data = await _object_store().get_bytes(source_key)  # 网络 I/O（03 §6.1：事务外）
+    outcome = extract_pdf(data, engine=get_settings().kb_parser)  # CPU 抽取（事务外）
+    if not outcome.text.strip():
+        raise PipelineError("409 解析未获得文本层（疑似扫描件/纯图幅 PDF；OCR 通道随 v2）")
+    async with ctx.session_factory() as session, session.begin():  # 短事务③：解析产物写回
+        doc = await _load_document(session, ctx)
+        meta = dict(doc.meta or {})
+        meta["content"] = _normalize_newlines(outcome.text)
+        meta["drawing_ir"] = outcome.drawing_ir
+        meta["parser"] = outcome.engine
+        if outcome.degraded_from is not None:
+            meta["parser_requested"] = outcome.degraded_from
+            degraded = set(meta.get("degraded") or [])
+            degraded.add("parser")
+            meta["degraded"] = sorted(degraded)
         doc.meta = meta  # JSONB 原地变更不可追踪，整体重赋值
+
+
+def _normalize_newlines(content: str) -> str:
+    """既有换行规整（M2 口径原样抽出复用）：CRLF/CR → LF。"""
+    return content.replace("\r\n", "\n").replace("\r", "\n")
 
 
 async def _run_chunk(ctx: StepContext) -> None:

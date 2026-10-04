@@ -110,6 +110,14 @@ class TaskRepository(Protocol):
         """
         ...
 
+    async def list_subruns(self, run_id: UUID) -> list[Run] | None:
+        """run 的全部后代子 Run 快照（40 篇 R3：GET /runs/{run_id}/subruns 取数口）。
+
+        返回扁平列表（树由前端按 parent_run_id 派生，40 篇 §2.4 共识 2），按 depth、
+        started_at 排序；None=run 不存在或跨租户（404 判定归路由层）；空列表=无子 Run。
+        """
+        ...
+
     async def find_active_run(self, task_id: UUID) -> Run | None: ...
 
     async def find_running_by_session(self, session_id: UUID) -> Task | None:

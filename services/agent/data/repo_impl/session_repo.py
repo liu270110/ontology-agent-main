@@ -508,6 +508,50 @@ class PgTaskRepository:
         await self._db.flush()
         return True
 
+    async def list_subruns(self, run_id: uuid.UUID) -> list[Run] | None:
+        """run 的全部后代子 Run 快照（40 篇 R3，2026-10-04）：GET /runs/{run_id}/subruns 取数口。
+
+        - 锚 run 行按租户取（跨租户/不存在 → None，404 判定归路由层，update_subrun_status 同口径）；
+        - 后代=同 task 全部子 Run 行（parent_run_id 非空）中 ancestor 链可达 run_id 者——
+          逐行沿 parent_run_id 上溯（子 Run 数量小，O(n×depth)）；他根（重试重建的新根）
+          链不可达即排除，不混入其他执行尝试；
+        - 返回扁平列表（树由前端按 parent_run_id 派生，40 篇 §2.4 共识 2），按 depth、
+          started_at 排序（id 兜底同键确定性）；空列表=无子 Run（合法快照）。
+        """
+        anchor = await self._db.get(RunORM, run_id)
+        if anchor is None or anchor.tenant_id != self._tenant_id:
+            return None
+        stmt = (
+            select(RunORM)
+            .where(
+                RunORM.task_id == anchor.task_id,
+                RunORM.tenant_id == self._tenant_id,
+                RunORM.parent_run_id.is_not(None),  # 子 Run 行（R1：根 Run 不入子树）
+            )
+            .order_by(RunORM.depth, RunORM.started_at, RunORM.id)
+        )
+        rows = (await self._db.execute(stmt)).scalars().all()
+        sub_by_id = {row.id: row for row in rows}
+        descendants = [
+            row
+            for row in rows
+            if self._reachable(row.parent_run_id, run_id, sub_by_id)  # 保序过滤（SQL 排序不动）
+        ]
+        return [_run_to_domain(r) for r in descendants]
+
+    @staticmethod
+    def _reachable(
+        start: uuid.UUID, target: uuid.UUID, sub_by_id: dict[uuid.UUID, RunORM]
+    ) -> bool:
+        """ancestor 链上溯判定：start 经 parent_run_id 逐级可达 target（target 命中即真）。"""
+        cursor: uuid.UUID | None = start
+        while cursor is not None:
+            if cursor == target:
+                return True
+            parent = sub_by_id.get(cursor)  # 父不在子行集合=父为根 Run 且非目标 → 链断
+            cursor = parent.parent_run_id if parent is not None else None
+        return False
+
     async def list_events(
         self, task_id: uuid.UUID, *, after_seq: int | None = None, limit: int = 100
     ) -> list[TaskEvent]:

@@ -26,11 +26,17 @@ async function loginAndGo(path: string) {
 }
 
 describe('S7 群聊域', () => {
-  it('① IX-GRP-01 建群双栏：选 3 名成员 + 角色 → POST /sessions type=group 载荷断言', async () => {
-    const created: { type?: string; title?: string; routing?: string; members?: { slot_id: string; routing_role: string }[] }[] = []
+  it('① IX-GRP-01 建群双栏：选 3 名成员 + 角色 → POST /sessions type=group X15 载荷断言', async () => {
+    const created: {
+      type?: string; title?: string; routing?: string; agent_id?: string
+      members?: { agent_id: string; display_name: string; routing_role: string }[]
+    }[] = []
     server.use(
       http.post('*/api/v1/sessions', async ({ request }) => {
-        const body = (await request.json()) as { type: string; title: string; routing: string; members: { slot_id: string; routing_role: string }[] }
+        const body = (await request.json()) as {
+          type: string; title: string; routing: string; agent_id?: string
+          members: { agent_id: string; display_name: string; routing_role: string }[]
+        }
         if (body.type !== 'group') return undefined
         created.push(body)
         return HttpResponse.json({
@@ -61,18 +67,20 @@ describe('S7 群聊域', () => {
     fireEvent.change(screen.getByTestId('grp-role-slot:agent-report'), { target: { value: 'observer' } })
     expect(screen.getByTestId('grp-picked-slot:agent-equipment')).toBeInTheDocument()
 
-    // 提交 → POST 载荷断言 + 跳转新群
+    // 提交 → POST 载荷断言（X15 GroupMemberIn 逐字段：agent_id/display_name/routing_role；
+    // 顶层 agent_id=协调者属主回填）+ 跳转新群
     fireEvent.click(screen.getByTestId('grp-picker-submit'))
     await waitFor(() => expect(created).toHaveLength(1))
     expect(created[0]).toMatchObject({
       type: 'group',
       title: '检修指挥群',
       routing: 'mention',
+      agent_id: 'slot:agent-dispatch',
     })
     expect(created[0].members).toEqual([
-      { slot_id: 'slot:agent-dispatch', routing_role: 'coordinator' },
-      { slot_id: 'slot:agent-equipment', routing_role: 'speaker' },
-      { slot_id: 'slot:agent-report', routing_role: 'observer' },
+      { agent_id: 'slot:agent-dispatch', display_name: '调度 Agent', routing_role: 'coordinator' },
+      { agent_id: 'slot:agent-equipment', display_name: '设备 Agent', routing_role: 'speaker' },
+      { agent_id: 'slot:agent-report', display_name: '报告 Agent', routing_role: 'observer' },
     ])
     await waitFor(() => expect(window.location.pathname).toBe('/chat/group/g-7788'), { timeout: 8000 })
   }, 25_000)

@@ -42,6 +42,9 @@ export function useDashboardQueries() {
     docsQ,
     sessions,
     tasks,
+    /** W-04（41 号验收）：最近任务计数口径=meta.total（listRecentTasks 已归一 {data,meta}），
+     *  不再用截断后 tasks.length——live 全量 20 时「共 N 个」不再误报 3 */
+    tasksTotal: tasksQ.data?.meta?.total,
     pendingTotal,
     runningTasks,
     subLine,

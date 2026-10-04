@@ -43,6 +43,7 @@ export function DashboardPage() {
     docsQ,
     sessions,
     tasks,
+    tasksTotal,
     pendingTotal,
     runningTasks,
     subLine,
@@ -149,6 +150,7 @@ export function DashboardPage() {
         />
         <RecentTasks
           tasks={tasks}
+          total={tasksTotal}
           isPending={tasksQ.isPending}
           isError={tasksQ.isError}
           error={tasksQ.error}

@@ -123,11 +123,13 @@ describe('W3 会话删除/停止生成加固', () => {
     fireEvent.click(await screen.findByText('动力电池标准对比', {}, { timeout: 10_000 }))
     await waitFor(() => expect(useSessionStore.getState().lastSeq).toBe(200))
 
-    // 发消息 → RUN_STARTED 帧 → 运行中（停止按钮出现）
+    // 发消息 → RUN_STARTED 帧 → 运行中（停止按钮出现）。
+    // 41 W-02 修复后：202 受理即先出停止钮（乐观运行态，run_id 尚空）——此处等真实
+    // RUN_STARTED 到达再点击，保证 cancel 携带 run_id 走 500 兜底路径（断言随修复小步更新）
     fireEvent.change(screen.getByTestId('chat-input'), { target: { value: '对比两条标准的循环寿命要求' } })
     fireEvent.keyDown(screen.getByTestId('chat-input'), { key: 'Enter' })
     const stop = await screen.findByTestId('chat-stop', {}, { timeout: 10_000 })
-    expect(useSessionStore.getState().running).toBe(true)
+    await waitFor(() => expect(useSessionStore.getState().running).toBe(true), { timeout: 10_000 })
 
     // 点停止 → cancel 500 → 本地立即终止（不等网络）+ 兜底 toast
     fireEvent.click(stop)

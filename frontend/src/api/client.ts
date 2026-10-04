@@ -3,7 +3,8 @@ if (typeof window !== 'undefined') { (window as unknown as Record<string, unknow
 /** 类型化 API client（16 篇 §2.3）。
  *  响应信封 {code,message,data}（api/01 §3.1）；code≠0 抛 ApiError；
  *  429 读 Retry-After（05 篇 §2）；401 → 单飞（single-flight）静默刷新后重放原请求，
- *  刷新失败清会话回 /login?next=（16 篇 §5.2 ④）。
+ *  刷新失败清会话回 /login?next=（16 篇 §5.2 ④）；全部 JSON 请求默认 15s 超时，
+ *  超时/网络错误统一降级（W-01，41 号验收 2026-10-05，见 fetchWithTimeout）。
  *  注：openapi-typescript 产物（src/api/generated/schema.d.ts）待后端 /meta/openapi
  *  可用后经 `npm run gen:api` 生成，此前请求类型以手写 DTO 过渡（已挂 TODO）。 */
 
@@ -104,6 +105,67 @@ export function normalizeList<T>(payload: unknown): NormalizedList<T> {
 /** 走 401 刷新重放的路径白名单：认证端点自身不再触发刷新（防递归）。 */
 const AUTH_PATHS = ['/auth/login', '/auth/refresh', '/auth/logout']
 
+/** ---- W-01（41 号验收 2026-10-05）：请求超时 + 网络错误统一降级 ----
+ *  JSON 请求默认 15s 超时（AbortController 原生实现）；SSE 走 EventSource/流式读不经此处，不适用。
+ *  超时/网络层失败统一抛 ApiError（文案=行动指引），杜绝网关半故障时全站永久骨架。 */
+export const DEFAULT_TIMEOUT_MS = 15_000
+/** 超时错误码（-2）：与网关业务错误码（正数）可观测区分 */
+export const API_TIMEOUT_CODE = -2
+/** 网络层失败错误码（-1）：fetch reject（断网/DNS/连接拒绝 =TypeError） */
+export const API_NETWORK_CODE = -1
+/** 超时/网络错误统一文案（W-01 裁决口径，全站唯一事实源） */
+export const NETWORK_UNAVAILABLE_MESSAGE = '网络连接不可用，请检查后端服务'
+
+/** 运行时 AbortSignal 兼容探测（一次性）：浏览器原生组合恒通过；测试环境的
+ *  jsdom realm 信号 × undici fetch 会拒绝跨 realm AbortSignal 实例——探测失败则
+ *  不向 fetch 传 signal，超时退化为纯竞速拒绝（用户可见语义不变）。 */
+let signalAccepted: boolean | null = null
+async function fetchAcceptsSignal(): Promise<boolean> {
+  if (signalAccepted != null) return signalAccepted
+  try {
+    const probe = new AbortController()
+    await fetch('data:text/plain,ok', { signal: probe.signal })
+    signalAccepted = true
+  } catch (e) {
+    signalAccepted = !(e instanceof TypeError && /signal/i.test(String((e as Error).message ?? '')))
+  }
+  return signalAccepted
+}
+
+/** 带超时的 fetch（api 层唯一网络入口）：超时 → ApiError(-2)；网络层失败 → ApiError(-1)，
+ *  两者 message 统一为 NETWORK_UNAVAILABLE_MESSAGE（W-01）。 */
+async function fetchWithTimeout(path: string, init?: RequestInit): Promise<Response> {
+  const useSignal = await fetchAcceptsSignal()
+  const controller = useSignal ? new AbortController() : null
+  let timedOut = false
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => {
+      timedOut = true
+      controller?.abort() // 原生 signal 可用时真中断连接；不可用（跨 realm 探测失败）仅竞速拒绝
+      reject(new ApiError(API_TIMEOUT_CODE, NETWORK_UNAVAILABLE_MESSAGE))
+    }, DEFAULT_TIMEOUT_MS)
+  })
+  const external = init?.signal
+  if (controller && external) {
+    if (external.aborted) controller.abort()
+    else external.addEventListener('abort', () => controller.abort(), { once: true })
+  }
+  try {
+    const op = fetch(`${BASE}${path}`, controller ? { ...init, signal: controller.signal } : init)
+    op.catch(() => {}) // 超时/中止赢得竞速后，落败分支的拒绝不得升级为 unhandled rejection（41 F-05 同源教训）
+    return await Promise.race([op, timeout])
+  } catch (e) {
+    if (timedOut || (e instanceof ApiError && e.code === API_TIMEOUT_CODE)) {
+      throw new ApiError(API_TIMEOUT_CODE, NETWORK_UNAVAILABLE_MESSAGE)
+    }
+    if (e instanceof TypeError) throw new ApiError(API_NETWORK_CODE, NETWORK_UNAVAILABLE_MESSAGE)
+    throw e
+  } finally {
+    if (timer) clearTimeout(timer)
+  }
+}
+
 // ---- client ↔ auth-store 单向接线（token 注入 / 刷新回写 / 会话失效），避免循环依赖 ----
 interface AuthHooks {
   getAccessToken: () => string | null
@@ -148,7 +210,7 @@ function refreshSingleFlight(): Promise<boolean> {
 
 /** 不带 Authorization、不走 401 拦截的裸请求（login/refresh 用）。 */
 async function rawJsonRequest<T>(path: string, init: RequestInit): Promise<T> {
-  const res = await fetch(`${BASE}${path}`, {
+  const res = await fetchWithTimeout(path, {
     ...init,
     headers: { 'Content-Type': 'application/json', ...init.headers },
   })
@@ -178,7 +240,7 @@ async function apiFetchEnvelope<T>(path: string, init?: RequestInit): Promise<T>
 
   async function doFetch(): Promise<Response> {
     const token = authHooks.getAccessToken()
-    return fetch(`${BASE}${path}`, {
+    return fetchWithTimeout(path, {
       ...init,
       headers: {
         'Content-Type': 'application/json',
@@ -224,7 +286,7 @@ async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
 
 /** 204/空体安全解析（logout 等）。 */
 async function apiFetchVoid(path: string, init?: RequestInit): Promise<void> {
-  const res = await fetch(`${BASE}${path}`, {
+  const res = await fetchWithTimeout(path, {
     ...init,
     headers: {
       'Content-Type': 'application/json',

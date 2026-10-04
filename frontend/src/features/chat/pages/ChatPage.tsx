@@ -6,7 +6,7 @@ import { toast } from 'sonner'
 import { SessionList } from '../components/SessionList'
 import { ChatStream } from '../components/ChatStream'
 import { MessageInput } from '../components/MessageInput'
-import { ContextMeter } from '../components/ContextMeter'
+import { ContextMeter, useContextTokens } from '../components/ContextMeter'
 import { ContextCollapseButton, ContextPanel, ContextPanelRail } from '../components/ContextPanel'
 import { WorkspacePanel } from '../components/WorkspacePanel'
 import { EvidenceSheet, type EvidenceFocus } from '../components/EvidenceSheet'
@@ -169,6 +169,8 @@ export function ChatPage() {
   // 宪法「语义色只用令牌」：dot 用令牌变体（running 附 pulse）；徽标底色用 CONN_BADGE 映射
   const statusBadge = running ? 'b-green' : CONN_BADGE[connection] ?? 'b-gray'
   const statusDot = running ? 'd-green animate-pulse' : connection === 'open' ? 'd-green' : connection === 'offline' ? 'd-red' : 'd-orange'
+  // F-04（41 号验收）：计量条只吃真用量（run.usage/compact 回写），后端未回传 → 整条隐藏
+  const { used: ctxUsed, limit: ctxLimit } = useContextTokens(sessionId)
 
   return (
     <div className="flex h-full min-h-0">
@@ -231,7 +233,7 @@ export function ChatPage() {
               onBaselineContinue={continueBaseline}
               baselineTick={baselineTick}
             />
-            <ContextMeter used={62_000} limit={128_000} />
+            <ContextMeter used={ctxUsed} limit={ctxLimit} />
             <MessageInput sessionId={sessionId} onStop={handleStop} />
           </>
         ) : (

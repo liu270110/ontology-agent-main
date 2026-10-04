@@ -301,6 +301,10 @@ interface SessionState {
   running: boolean
   /** 当前运行 id（停止生成 IX-CHT-06：POST /sessions/{id}/cancel 需携带） */
   activeRunId: string | null
+  /** W-02（41 号验收）：202 受理后的乐观运行态——POST 成功即置 true，任一运行生命周期帧
+   *  （RUN_STARTED/TEXT_MESSAGE_START/RUN_FINISHED/RUN_ERROR）到达或停止/切会话即清。
+   *  live 后端首帧未达窗口内，消息流以「正在思考…」占位、停止钮可用（首帧到达后替换）。 */
+  pendingReply: boolean
 
   /** 会话级 workspace 事件环形缓冲（最近 20 条，31 篇 workspace.file.*） */
   workspaceEvents: WorkspaceEventItem[]
@@ -366,6 +370,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   evidence: null,
   running: false,
   activeRunId: null,
+  pendingReply: false,
   workspaceEvents: [],
   workspaceVersion: 0,
   terminalLines: [],
@@ -385,7 +390,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
 
   setActiveSession: id =>
     set({
-      activeSessionId: id, messages: [], toolCalls: {}, runs: {}, lastSeq: 0, evidence: null, running: false, activeRunId: null,
+      activeSessionId: id, messages: [], toolCalls: {}, runs: {}, lastSeq: 0, evidence: null, running: false, activeRunId: null, pendingReply: false,
       workspaceEvents: [], workspaceVersion: 0, terminalLines: [], draftInserts: [], usageGroups: null, usageTokens: null,
       plan: null, subruns: {}, workflowRuns: {}, thinking: {}, approvalPends: {}, inboxSplices: [],
       snapshot: undefined, lastRouting: undefined, controlState: null, activeTaskType: undefined,
@@ -435,6 +440,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     set(s => ({
       running: false,
       activeRunId: null,
+      pendingReply: false,
       messages: s.messages.map((m, i) =>
         m.role === 'assistant' && i === s.messages.length - 1 ? { ...m, finishReason: 'stopped' } : m,
       ),
@@ -524,10 +530,11 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     switch (evt.name) {
       case 'RUN_STARTED': {
         const rid = String(d.run_id ?? '')
-        // 42 篇批次 1 增补：task_type 归约（api/02 §3：chat|workflow_run|…，缺省=chat 向后兼容）
+        // 42 篇批次 1 task_type 归约 + W-02 乐观占位让位（真运行帧已到）
         set(s => ({
           running: true, activeRunId: rid, runs: { ...s.runs, [rid]: { status: 'running' } }, evidence: null,
           activeTaskType: optStr(d.task_type) ?? 'chat',
+          pendingReply: false,
         }))
         break
       }
@@ -535,8 +542,8 @@ export const useSessionStore = create<SessionState>((set, get) => ({
         // F7 防双行：历史补齐已并入同 id 完成态消息时，重放的 START 不再追加（保「恰 1 次」）
         set(s =>
           s.messages.some(m => m.id === String(d.message_id ?? ''))
-            ? {}
-            : { messages: [...s.messages, { id: String(d.message_id ?? ''), role: 'assistant', content: '' }] },
+            ? { pendingReply: false }
+            : { messages: [...s.messages, { id: String(d.message_id ?? ''), role: 'assistant', content: '' }], pendingReply: false },
         )
         break
       case 'TEXT_MESSAGE_CONTENT':
@@ -610,6 +617,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
           return {
             runs, running: stillRunning, activeRunId: stillRunning ? s.activeRunId : null,
             approvalPends: settleApproval(s.approvalPends, rid),
+            pendingReply: false,
           }
         })
         break
@@ -622,6 +630,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
           return {
             runs, running: stillRunning, activeRunId: stillRunning ? s.activeRunId : null,
             approvalPends: settleApproval(s.approvalPends, rid),
+            pendingReply: false,
           }
         })
         break

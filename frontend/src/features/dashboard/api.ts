@@ -87,9 +87,9 @@ export const DASH_TASK_STATUS: Record<string, { label: string; badge: string }> 
   canceled: { label: '已取消', badge: 'b-gray' },
 }
 
-/** 任务类型标签（与 features/tasks 域同源，工作台域内自持不互引） */
+/** 任务类型标签（与 features/tasks 域同源，工作台域内自持不互引；chat=41 F-07 live 观测值补录） */
 export const DASH_TASK_TYPE: Record<string, string> = {
-  kb_extract: '抽取', kb_index: '索引', writeback: '对账', audit_export: '导出',
+  kb_extract: '抽取', kb_index: '索引', writeback: '对账', audit_export: '导出', chat: '对话',
 }
 
 /** 运行中任务行的当前阶段文字（37 号对账 D-2：type 映射，行级化呈现流水线语义；

@@ -92,7 +92,7 @@ export function PlaygroundPage() {
 
   const previewDoc = useMemo(() => docs.find(d => d.id === previewDocId) ?? null, [docs, previewDocId])
 
-  const hitNodeIds = useMemo(() => (result ? result.graph.nodes.filter(n => n.hit).map(n => n.id) : []), [result])
+  const hitNodeIds = useMemo(() => (result?.graph?.nodes ? result.graph.nodes.filter(n => n.hit).map(n => n.id) : []), [result])
   const highlightIds = hoverHit != null && hitNodeIds[hoverHit] ? [hitNodeIds[hoverHit]] : undefined
 
   return (
@@ -243,10 +243,14 @@ export function PlaygroundPage() {
       <div className="card mt-3 overflow-hidden !p-0">
         <div className="card-h !mb-0 px-4 pt-4">
           <h3>证据链图谱</h3>
-          <span className="badge b-gray ml-auto">hover 双向高亮 · {result ? `${result.graph.nodes.length} 实体 / ${result.graph.edges.length} 关系` : '检索后展示'}</span>
+          <span className="badge b-gray ml-auto">hover 双向高亮 · {result ? (result.graph ? `${result.graph.nodes.length} 实体 / ${result.graph.edges.length} 关系` : '该模式无图谱数据') : '检索后展示'}</span>
         </div>
         {result ? (
-          <EvidenceGraph graph={result.graph} highlightIds={highlightIds} />
+          result.graph ? (
+            <EvidenceGraph graph={result.graph} highlightIds={highlightIds} />
+          ) : (
+            <div className="flex h-[260px] items-center justify-center text-xs text-label-3">当前模式不返回图谱数据（引用与证据见上方结果卡）。</div>
+          )
         ) : (
           <div className="flex h-[260px] items-center justify-center text-xs text-label-3">执行检索后展示证据链（实体节点 + 关系边）。</div>
         )}

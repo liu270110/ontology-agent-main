@@ -61,7 +61,7 @@ export function ProjectListPage() {
             </div>
             <p className="mt-2 line-clamp-2 min-h-8 text-[11px] leading-4 text-label-2">{p.description}</p>
             <div className="mt-2 flex items-center gap-2 text-[11px] text-label-3">
-              <span className="badge b-green">v{p.head_version.replace(/^v/, '')} 已发布</span>
+              {p.head_version && <span className="badge b-green">v{p.head_version.replace(/^v/, '')} 已发布</span>}
               {p.draft_version && <span className="badge b-orange">草稿 {p.draft_version}</span>}
               <span>
                 {p.class_count} 类 · {p.entity_count} 实例

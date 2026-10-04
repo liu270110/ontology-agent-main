@@ -18,13 +18,18 @@
 
 from __future__ import annotations
 
+import re
 import uuid
 from datetime import UTC, datetime
 from enum import StrEnum
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from services.platform.kernel import DomainError
+
+# 凭证名形状（K5 门 1，docs/Agent/13 §10）：env 变量名语法（POSIX：[A-Za-z_][A-Za-z0-9_]*）。
+# 权威定义在 domain（business 扫描器复用；业务→域单向依赖）。
+SECRET_NAME_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
 
 
 class SkillStatus(StrEnum):
@@ -73,6 +78,13 @@ class SkillEntry(BaseModel):
     status: SkillStatus = SkillStatus.LISTED
     body_bytes: int = Field(default=0, ge=0)  # BIGINT 口径（14 §5 版本列同族；SKILL.md 字节数）
     origin: SkillOrigin = SkillOrigin.EXTERNAL
+    # K5 门 1 声明（docs/Agent/13 §10）：frontmatter required-secrets 凭证名集（缺省空集）。
+    # 存储投影=单行逗号分隔（data/orm.py）；聚合面严格——非法名 ValidationError（声明面宽容
+    # 在扫描器丢弃，聚合是最后一道形状门）。
+    required_secrets: tuple[str, ...] = Field(default=())
+    # K5 门 2 校验快照（登记时点）：声明但未登记的凭证名（非空 ⇔ unprovisioned 标记；
+    # 不阻断 listed——完全阻断留治理档裁决，13 §10）。
+    missing_secrets: tuple[str, ...] = Field(default=())
     # 审计列（14 §5「审计列」；PG TimestampMixin 对应 created_at/updated_at 回读值）
     created_by: uuid.UUID | None = None
     updated_by: uuid.UUID | None = None
@@ -84,6 +96,15 @@ class SkillEntry(BaseModel):
 
     def __hash__(self) -> int:
         return hash(self.id)
+
+    @field_validator("required_secrets", "missing_secrets", mode="after")
+    @classmethod
+    def _normalize_secret_names(cls, value: tuple[str, ...]) -> tuple[str, ...]:
+        """凭证名集规范：去重保序；非法 env 名形状拒绝（聚合入参面 fail-closed）。"""
+        for name in value:
+            if SECRET_NAME_RE.fullmatch(name) is None:
+                raise ValueError(f"凭证名不匹配 env 名形状: {name!r}（K5 门 1，SECRET_NAME_RE）")
+        return tuple(dict.fromkeys(value))
 
     # ---- 状态机（非法迁移一律 DomainError，负向测试锚点）----
 

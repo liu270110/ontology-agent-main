@@ -15,6 +15,16 @@ from services.skills.data.orm import SkillAssetORM
 from services.skills.domain.model.skill import SkillEntry, SkillOrigin, SkillStatus
 
 
+def _split_secrets(raw: str) -> tuple[str, ...]:
+    """单行逗号分隔存储 → 凭证名元组（K5 门 1/2；去空项+去重保序）。"""
+    return tuple(dict.fromkeys(p for p in raw.split(",") if p))
+
+
+def _join_secrets(names: tuple[str, ...]) -> str:
+    """凭证名元组 → 单行逗号分隔存储（env 名不含逗号，无损）。"""
+    return ",".join(names)
+
+
 def _to_domain(row: SkillAssetORM) -> SkillEntry:
     return SkillEntry(
         id=row.id,
@@ -26,6 +36,8 @@ def _to_domain(row: SkillAssetORM) -> SkillEntry:
         status=SkillStatus(row.status),
         body_bytes=row.body_bytes,
         origin=SkillOrigin(row.origin),
+        required_secrets=_split_secrets(row.required_secrets),
+        missing_secrets=_split_secrets(row.missing_secrets),
         created_by=row.created_by,
         updated_by=row.updated_by,
         created_at=row.created_at,
@@ -70,6 +82,8 @@ class PgSkillRepository:
                 status=entry.status.value,
                 body_bytes=entry.body_bytes,
                 origin=entry.origin.value,
+                required_secrets=_join_secrets(entry.required_secrets),
+                missing_secrets=_join_secrets(entry.missing_secrets),
                 created_by=entry.created_by,
                 updated_by=entry.updated_by,
             )

@@ -27,6 +27,10 @@ class SkillAssetORM(Base, PkMixin, TenantMixin, TimestampMixin):
     status: Mapped[str] = mapped_column(String(16), default="listed", nullable=False)  # 市场件五态（14 §2）
     body_bytes: Mapped[int] = mapped_column(BigInteger, default=0, nullable=False)  # SKILL.md 字节数
     origin: Mapped[str] = mapped_column(String(16), default="external", nullable=False)  # repo/external
+    # K5 门 1/2（docs/Agent/13 §10）：声明名集 + 登记时点缺失快照，单行逗号分隔存储
+    # （env 名不含逗号，无损）；空串=空集；missing_secrets 非空 ⇔ unprovisioned（不阻断 listed）。
+    required_secrets: Mapped[str] = mapped_column(String(1024), default="", nullable=False)
+    missing_secrets: Mapped[str] = mapped_column(String(1024), default="", nullable=False)
     created_by: Mapped[uuid.UUID | None] = mapped_column(nullable=True)  # 审计列（登记人；扫描入库=系统批）
     updated_by: Mapped[uuid.UUID | None] = mapped_column(nullable=True)  # 审计列（最近生命周期操作人）
 

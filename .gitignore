@@ -56,3 +56,6 @@ _patch_*.py
 .orsi-g0/
 .orsi-g1/
 .scratch-g1/
+
+# 客户样图目录（含图纸 PDF），永不入库
+data/

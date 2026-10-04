@@ -30,7 +30,9 @@ validating→pending_review=候选入终审队列）。
 
 编排关注点（03 §4）：
 - 幂等与断点续跑：每步完成即写 checkpoint（kb_pipeline_step 行级 done）；重跑自动跳过
-  done 步骤、failed 步骤从断点续跑；候选产物按 fact_key 业务键幂等（kb_extraction）；
+  done 步骤、failed 步骤从断点续跑（attempt 未耗尽时重新执行；已耗尽按冻结语义不再执行，
+  硬失败止血停止后续步并回写文档 failed——防「上游失败下游照跑」的假 indexed 终态，
+  软降级 embed 按契约继续）；候选产物按 fact_key 业务键幂等（kb_extraction）；
 - 重试：步内自动重试 ≤3 次（指数退避 30s 起，可注入）；业务规则失败（PipelineError）
   不重试；attempt 耗尽 → 步 failed、文档 failed（attempt 跨运行持久化，冻结语义）；
 - 并发：步级 worker 租约（lease_expires_at），租约未过期禁止双跑；
@@ -131,6 +133,7 @@ KNOWN_STEPS = frozenset(CANONICAL_SEVEN_STEPS) | frozenset(M2_LITE_STEPS)
 
 MAX_STEP_ATTEMPTS = 3  # 步内自动重试 ≤3（03 §4）
 LEASE_SECONDS = 600  # worker 租约（对齐预处理 10min 超时预算口径）
+_SOFT_DEGRADE_ERROR_PREFIX = "embedding-unavailable:"  # 软降级落账标记（checkpoint 错误前缀，读回续跑判据）
 
 # 合法迁移表：03 §4 状态机 + 两条登记边（preprocessed→indexed=M2-lite 捷径；
 # indexed→indexed=重跑补向量/重索引的幂等口径）
@@ -484,6 +487,24 @@ async def run_pipeline(
                 attempts = row.attempt  # 已消耗的尝试次数（跨运行持久化，重试 ≤3 全局计）
                 if row.status == "failed":
                     prior_error = row.error  # 尝试已耗尽的续跑保留原错误（不被空错误覆盖）
+        # 账本一致性（2026-10-05 真机 B 图根因：读回耗尽失败步曾不阻断，下游步照常新执行 →
+        # extract=failed 而 document=indexed 的假终态）：尝试已耗尽的非 done 步行按冻结语义
+        # 不再执行；**硬失败在此止血**（停止后续步，防「上游失败下游照跑」）；软降级（embed，
+        # 落账错误带固定前缀）按既有契约继续（BM25-only 照常索引，重跑仅读回剩余步）。
+        # 判据键在 attempts 而非 failed 状态（ocr 评审条目）：意图短事务提交 attempt=MAX 且
+        # status=running 后 worker 崩溃的残留行，读回同样不得放行下游（同假 indexed 洞）。
+        readback_exhausted = row is not None and row.status != "done" and attempts >= MAX_STEP_ATTEMPTS
+        if readback_exhausted and (
+            row.status == "running"
+            and row.worker_lease != worker_lease
+            and row.lease_expires_at is not None
+            and row.lease_expires_at > _utcnow()
+        ):
+            raise PipelineError(f"409 步骤 {step} 正在执行（worker 租约未过期）")
+        readback_soft = readback_exhausted and bool(row.error) and row.error.startswith(_SOFT_DEGRADE_ERROR_PREFIX)
+        readback_exhausted_hard = readback_exhausted and not readback_soft
+        if readback_exhausted_hard and prior_error is None:  # 崩溃残留行无错误文案：止血落账留痕（宪法 5）
+            prior_error = "attempt 已耗尽且行状态残留非 failed（worker 中断，读回止血落账）"
 
         done, error_msg, soft_degrade = False, prior_error, False
         executed_here = False  # 本轮是否真正执行过（区分「刚硬失败」与「先前已耗尽」）
@@ -531,7 +552,7 @@ async def run_pipeline(
                 await runners[step](ctx)
                 done, error_msg = True, None
             except EmbeddingUnavailableError as exc:  # 降级契约：软失败可续跑
-                error_msg, soft_degrade = f"embedding-unavailable: {exc}", True
+                error_msg, soft_degrade = f"{_SOFT_DEGRADE_ERROR_PREFIX} {exc}", True
             except PipelineError as exc:  # 业务规则失败不重试
                 error_msg = str(exc)
                 break
@@ -561,27 +582,31 @@ async def run_pipeline(
                 )
             ).scalar_one()
             if done:
-                _advance_document(step, doc)
+                _advance_document(step, doc)  # 成功路径：步级行随本事务回写 done（账本随成功推进）
             elif soft_degrade:
                 _mark_degraded(doc, step)  # BM25-only 继续，检索侧 degraded=true 同款口径
             elif executed_here and doc.status != "indexed":
-                doc.status = "failed"  # 本轮执行且重试耗尽（挂告警随 M3 观测接入）；
-            # executed_here=False（尝试已在先前运行耗尽的续跑读回）不翻失败——保持当前阶段，
-            # 断点续跑从失败步骤继续（M2 full：extracting/validating 等阶段状态不可被回写覆盖）
+                doc.status = "failed"  # 本轮执行且重试耗尽（挂告警随 M3 观测接入）
+            elif readback_exhausted_hard and doc.status not in ("failed", "indexed"):
+                # 读回耗尽硬失败：止血落账后把文档回写 failed（重试入口仅收 failed 态——
+                # 不回写会把文档卡在 preprocessed 等中间态、retry 409 不可再入）；
+                # indexed 不回翻（终态幂等，账本以步级行 failed 为准）
+                assert_document_transition(doc.status, "failed")
+                doc.status = "failed"
 
         report.steps.append(
             StepRecord(step=step, status="done" if done else "failed", attempt=attempts, error=error_msg)
         )
         if not done:
             report.degraded = report.degraded or soft_degrade
-            if not soft_degrade and executed_here:
-                # 本轮执行过且硬失败：中止后续步骤（checkpoint 保留，人工修复后续跑）；
-                # executed_here=False = 尝试已在先前运行耗尽，仅落账、不阻断其余步的读回
-                break
             if soft_degrade:
                 logger.warning(
                     "kb_pipeline embed degraded (BM25-only): document_id=%s error=%s", document_id, error_msg
                 )
+            elif executed_here or readback_exhausted_hard:
+                # 硬失败（本轮执行耗尽 或 读回已耗尽）：中止后续步骤（checkpoint 保留，人工
+                # 修复后续跑）；软降级耗尽不阻断——下游步照常读回/执行（既有降级契约）
+                break
 
     async with session_factory() as session:  # 终态读回
         report.document_status = (

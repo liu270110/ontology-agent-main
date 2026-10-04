@@ -88,7 +88,9 @@ export function TaskDetailDrawer({ task, onClose, onChanged }: {
                 <li key={e.seq} className="tl-item">
                   <span className="tl-dot" style={{ background: LEVEL_DOT[e.level ?? 'info'] }} />
                   <div className="tl-c !py-2">
-                    <span className="mono badge b-gray">seq {String(e.seq).padStart(3, '0')}</span>{' '}
+                    {e.seq != null && (
+                      <span className="mono badge b-gray">seq {String(e.seq).padStart(3, '0')}</span>
+                    )}{' '}
                     <span className="text-xs">{e.label}</span>
                     <div className="tl-meta">
                       <span>{e.at}</span>

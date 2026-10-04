@@ -78,8 +78,14 @@ class TaskRepository(Protocol):
 
     async def save(self, task: Task) -> None: ...
 
-    async def append_event(self, task_id: UUID, event: TaskEvent) -> int:
-        """只追加事件，返回仓储分配的递增 seq（04 §2：先落库后推送）。"""
+    async def append_event(self, task_id: UUID, event: TaskEvent, *, replay_root: bool = False) -> int:
+        """只追加事件，返回仓储分配的递增 seq（04 §2：先落库后推送）。
+
+        40 篇 R11（2026-10-04）：实现须 per-task 串行化（同任务并发追加不撞
+        uk_task_events_task_id_seq、seq 零丢失）。``replay_root=True`` 标记执行结构事件
+        （回放根，40 篇 §3.1）：追加失败须重试且重试耗尽后上抛——回放根不可吞；
+        默认 False 保持既有调用方行为不变。
+        """
         ...
 
     async def create_subrun(self, run: Run) -> None:

@@ -11,11 +11,14 @@
 
 from __future__ import annotations
 
+import asyncio
+import logging
 import uuid
 from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy import delete, func, select, update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from services.agent.data.orm import Message as MessageORM
@@ -38,6 +41,13 @@ from services.agent.domain.model.task import Run, RunStatus, Task, TaskEvent, Ta
 # 活跃 Run 状态集：与 PG 部分唯一索引 uk_runs_one_active WHERE 子句同口径（database/01 §3.2）
 _ACTIVE_RUN_STATES = ("queued", "running", "waiting_tool")
 _TERMINAL_RUN_STATES = ("completed", "failed", "timeout", "cancelled")
+
+# 40 篇 R11：replay_root 追加的重试参数（回放根不可吞——冲突后重读 max(seq) 重插，
+# 耗尽仍失败上抛交调用方；有锁串行化下冲突属防御性兜底，退避取小值不拖事务）
+_APPEND_RETRIES = 3
+_APPEND_RETRY_DELAY_S = 0.05
+
+logger = logging.getLogger(__name__)
 
 
 def _now() -> datetime:
@@ -377,7 +387,49 @@ class PgTaskRepository:
             await self._save_run(run)
         await self._db.flush()
 
-    async def append_event(self, task_id: uuid.UUID, event: TaskEvent) -> int:
+    async def append_event(self, task_id: uuid.UUID, event: TaskEvent, *, replay_root: bool = False) -> int:
+        """只追加事件，返回仓储分配的递增 seq（04 §2：先落库后推送）。
+
+        40 篇 R11 写序串行化：先对任务行 SELECT FOR UPDATE（per-task 锁，与
+        ``tx.tasks.get`` 同锁口径、锁序恒为任务行）再 ``max(seq)+1``——并行子 Run 并发
+        追加不再撞 uk_task_events_task_id_seq。``replay_root=True``（执行结构事件，回放
+        根，40 篇 §3.1）：追加经 SAVEPOINT 重试（_APPEND_RETRIES 次），耗尽仍失败**上抛**
+        ——回放根不可吞；默认 False 保持既有调用方行为不变（一次尝试，失败随事务上抛）。
+        """
+        await self._lock_task_row(task_id)
+        attempts = _APPEND_RETRIES if replay_root else 1
+        for attempt in range(1, attempts + 1):
+            try:
+                if replay_root:
+                    # SAVEPOINT：冲突只回滚插入点，本事务其余写入（payload 锚等）不受牵连
+                    async with self._db.begin_nested():
+                        seq, created_at = await self._insert_event(task_id, event)
+                else:
+                    seq, created_at = await self._insert_event(task_id, event)
+                break
+            except IntegrityError:
+                if attempt == attempts:
+                    raise
+                logger.warning(
+                    "task_events 追加冲突（task=%s event=%s 第 %d/%d 次重试）",
+                    task_id,
+                    event.event_type,
+                    attempt,
+                    attempts - 1,
+                )
+                await asyncio.sleep(_APPEND_RETRY_DELAY_S)
+        event.seq = seq
+        event.created_at = created_at
+        return seq
+
+    async def _lock_task_row(self, task_id: uuid.UUID) -> None:
+        """任务行 FOR UPDATE（40 篇 R11 per-task 串行化锁点）：行缺失则无锁（与旧径同形）。"""
+        await self._db.execute(
+            select(TaskORM.id).where(TaskORM.id == task_id, TaskORM.tenant_id == self._tenant_id).with_for_update()
+        )
+
+    async def _insert_event(self, task_id: uuid.UUID, event: TaskEvent) -> tuple[int, datetime]:
+        """max(seq)+1 分配 + 插入（调用方须已持任务行锁或自担并发）；返回 (seq, created_at)。"""
         current = (
             await self._db.execute(
                 select(func.max(TaskEventORM.seq)).where(
@@ -397,10 +449,8 @@ class PgTaskRepository:
                 created_at=now,
             )
         )
-        event.seq = seq
-        event.created_at = now
         await self._db.flush()
-        return seq
+        return seq, now
 
     async def create_subrun(self, run: Run) -> None:
         """子 Run 独立写入口（40 篇 R1）：轻量 INSERT，不经聚合 save——

@@ -15,12 +15,26 @@ H-2 上下文工程批（2026-09-29，研究 07 §6.3 三断点预算表 + §3 �
 - 预算与阈值改由 Settings 注入（context_budget_tokens / context_compaction_threshold，
   原 GROUNDING_BUDGET_TOKENS 常量收编，边界契约 D2/F-4 同款纪律：内核不藏数值策略，
   构造参数显式注入优先，未注入运行期读配置层）。
+
+M4.5-B 前缀稳定断言（2026-10-04，docs/Agent/12 §2 批次 B，研究 07 §3 规律 2 KV-cache）：
+
+- **前缀指纹**：组装产出的冻结前缀（tier < TIER_VOLATILE，即 H-2 三缓存断点区：
+  宪法/persona、TBox 摘要/模板/工具 schema、任务态+证据）做 canonical 序列化
+  （块名+内容确定性拼接）→ sha256。首次组装落 ``kernel.prefix_fingerprint``
+  （hash/blocks/tokens）；此后每次重组（多步 Run 的每步组装）重算断言——不变=静默，
+  变化=``kernel.prefix_drift_warn``（前后 hash + drifted_block 猜测），不中断不改变
+  行为（纯验收属性：同 Run 内前缀逐位稳定=KV-cache 命中的前置条件）。
+- **token 锚定估算**：组装 tokens 求和经 ``tracker.add_estimated`` 记估算账（锚定与
+  预算口径见 kernel/budget.py）。
 """
 
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import logging
+from collections.abc import Iterable
+from dataclasses import dataclass
 
 from services.agent.business.kernel.compaction import (
     COMPACTION_TIMEOUT_S,
@@ -44,6 +58,60 @@ _PROVIDER_TIMEOUT_S = 3.0
 def _estimated_tokens(blocks: list[ContextBlock]) -> int:
     """估算 tokens（零/负自报按 0 计；纯函数，确定性）。"""
     return sum(max(b.tokens, 0) for b in blocks)
+
+
+# ── M4.5-B 前缀指纹（纯函数工具区；hashlib 内置零新依赖）─────────────────────
+_BLOCK_SEP = "\x1e"  # canonical 序列化块间分隔（record separator）
+_FIELD_SEP = "\x1f"  # canonical 序列化块内名/内容分隔（unit separator）
+
+
+@dataclass(frozen=True)
+class PrefixFingerprint:
+    """冻结前缀指纹（值对象）：canonical sha256 + 断点名清单 + token 估算 + 逐块哈希。
+
+    block_hashes 按组装序保留逐块 sha256——重组断言失败时定位漂移块（drifted_block
+    猜测依据），不参与指纹本体（指纹只看冻结区整体字节）。
+    """
+
+    hash: str
+    blocks: tuple[str, ...]  # 冻结区断点名（ContextBlock.source，组装序）
+    tokens: int  # 冻结区 token 估算（_estimated_tokens 口径）
+    block_hashes: tuple[tuple[str, str], ...]  # (source, sha256) 逐块，组装序
+
+
+def compute_prefix_fingerprint(blocks: Iterable[ContextBlock]) -> PrefixFingerprint:
+    """冻结前缀指纹（纯函数，同输入同 hash；确定性=漂移断言重放等价的前提）。
+
+    冻结区划分复用 H-2 tier 断点（不重新发明）：tier < TIER_VOLATILE（0 宪法/persona、
+    1 稳定知识、2 任务态+证据）——与压缩「稳定前缀不可压缩」同一口径；易变尾
+    （tier=3，对话尾）不参与。canonical 序列化=逐块「块名+内容」按 _FIELD_SEP 拼接、
+    块间 _BLOCK_SEP 连接后 sha256；块序=入参序（组装器 tier 稳定排序已保证确定性）。
+    """
+    frozen = [b for b in blocks if b.tier < TIER_VOLATILE]
+    units = [f"{b.source}{_FIELD_SEP}{b.content}" for b in frozen]
+    digest = hashlib.sha256(_BLOCK_SEP.join(units).encode("utf-8")).hexdigest()
+    return PrefixFingerprint(
+        hash=digest,
+        blocks=tuple(b.source for b in frozen),
+        tokens=_estimated_tokens(frozen),
+        block_hashes=tuple(
+            (b.source, hashlib.sha256(unit.encode("utf-8")).hexdigest()) for b, unit in zip(frozen, units, strict=True)
+        ),
+    )
+
+
+def drifted_block_guesses(before: tuple[tuple[str, str], ...], after: tuple[tuple[str, str], ...]) -> list[str]:
+    """漂移块猜测（纯函数）：逐块哈希比对——内容变/增/删的断点名名单（保序去重）。"""
+    before_map = dict(before)
+    after_map = dict(after)
+    guesses: list[str] = []
+    for source, digest in after:
+        if before_map.get(source) != digest and source not in guesses:
+            guesses.append(source)
+    for source in before_map:
+        if source not in after_map and source not in guesses:
+            guesses.append(source)  # 消失的冻结块同样计入漂移
+    return guesses
 
 
 class ContextAssemblyStage:
@@ -84,6 +152,7 @@ class ContextAssemblyStage:
         )
         kept = self._assemble(blocks, budget_tokens=budget)
         kept, compaction = await self._compact_if_needed(rc, kept, budget_tokens=budget)
+        rc.tracker.add_estimated(_estimated_tokens(kept))  # M4.5-B 锚定估算入账（真实回执缺位时预算检查口径）
         self._emit(
             rc.ledger,
             ctx,
@@ -100,7 +169,46 @@ class ContextAssemblyStage:
         )
         if compaction is not None:
             self._emit(rc.ledger, ctx, task.run_id, "kernel.context_compacted", compaction)
+        self._assert_prefix_stable(rc, kept)  # M4.5-B：冻结前缀指纹/漂移断言（纯验收属性）
         return tuple(kept)
+
+    # ── M4.5-B 前缀稳定断言（纯验收属性：不中断、不改变组装结果，漂移只留警告事件）──
+    def _assert_prefix_stable(self, rc: RunContext, kept: list[ContextBlock]) -> None:
+        """同 Run 冻结前缀逐位稳定断言（KV-cache 命中前置条件，07 §3 规律 2）。
+
+        首次组装落 ``kernel.prefix_fingerprint``（hash/blocks/tokens）并立基线；此后每次
+        重组（多步 Run 的每步组装）重算比对——不变=静默，变化=``kernel.prefix_drift_warn``
+        （前后 hash + drifted_block 猜测），断言后基线前移（同一漂移只警告一次）。断言
+        状态挂 RunContext（每 Run 独立，跨 Run 不串），失败不抛错不改变行为。
+        """
+        fingerprint = compute_prefix_fingerprint(kept)
+        if rc.prefix_fingerprint is None:
+            rc.prefix_fingerprint = fingerprint.hash
+            rc.prefix_block_hashes = fingerprint.block_hashes
+            self._emit(
+                rc.ledger,
+                rc.ctx,
+                rc.task.run_id,
+                "kernel.prefix_fingerprint",
+                {"hash": fingerprint.hash, "blocks": list(fingerprint.blocks), "tokens": fingerprint.tokens},
+            )
+            return
+        if fingerprint.hash == rc.prefix_fingerprint:
+            return  # 不变=静默（前缀逐位稳定=KV-cache 命中的验收口径）
+        drifted = drifted_block_guesses(rc.prefix_block_hashes, fingerprint.block_hashes)
+        self._emit(
+            rc.ledger,
+            rc.ctx,
+            rc.task.run_id,
+            "kernel.prefix_drift_warn",
+            {
+                "hash_before": rc.prefix_fingerprint,
+                "hash_after": fingerprint.hash,
+                "drifted_block": drifted,
+            },
+        )
+        rc.prefix_fingerprint = fingerprint.hash
+        rc.prefix_block_hashes = fingerprint.block_hashes
 
     # ── 配置层解析（D2/F-4：显式注入优先，未注入读 Settings）────────────────
     def _resolve_budget(self) -> int:

@@ -38,3 +38,7 @@ class RunContext:
         self.approvals = approvals
         self.states: dict[int, StepState] = {}
         self.results: dict[int, StepResult] = {}
+        # M4.5-B 前缀稳定断言状态（每 Run 独立，grounding 组装器读写）：首组装冻结前缀
+        # 基线（canonical sha256）与逐块哈希（漂移定位）；None/空=尚未组装（12 §2 批次 B）。
+        self.prefix_fingerprint: str | None = None
+        self.prefix_block_hashes: tuple[tuple[str, str], ...] = ()

@@ -34,10 +34,12 @@ from tests.agent.conftest import (
     make_tool_dispatcher,
 )
 
-# 单步成功运行的锚点事件名序列（grounding 两条 + planning + gate + observation + settlement）
+# 单步成功运行的锚点事件名序列（grounding 三条 + planning + gate + observation + settlement；
+# M4.5-B 增 kernel.prefix_fingerprint：前缀指纹随组装落账/广播，additive 锚点事件）
 _ANCHOR_SEQUENCE = [
     "kernel.grounded",
     "kernel.context_assembled",
+    "kernel.prefix_fingerprint",
     "kernel.planned",
     "kernel.gated",
     "kernel.step_validated",
@@ -107,9 +109,7 @@ async def test_同一hook重复注册幂等_每事件至多通知一次():
 async def test_pre_tool_call阻断_工具不执行_步走失败分支():
     # Arrange
     tool = FakeTool()
-    dispatcher = make_tool_dispatcher(
-        tool, register_planning_strategy=(FakePlanner(make_candidate((make_step(),))),)
-    )
+    dispatcher = make_tool_dispatcher(tool, register_planning_strategy=(FakePlanner(make_candidate((make_step(),))),))
     dispatcher.register_hook(HookName.PRE_TOOL_CALL, lambda call, ctx: Block(reason="策略禁止：非工作时段执行该行动"))
     kernel = AgentKernel(dispatcher)
     # Act
@@ -129,9 +129,7 @@ async def test_pre_tool_call阻断_工具不执行_步走失败分支():
 async def test_pre_tool_call阻断_合成结构化拒绝带hook_refusal标记():
     # Arrange（执行阶段级：直接断言落入库的 StepResult/ToolResult 形态）
     tool = FakeTool()
-    dispatcher = make_tool_dispatcher(
-        tool, register_planning_strategy=(FakePlanner(make_candidate((make_step(),))),)
-    )
+    dispatcher = make_tool_dispatcher(tool, register_planning_strategy=(FakePlanner(make_candidate((make_step(),))),))
     dispatcher.register_hook(
         HookName.PRE_TOOL_CALL,
         lambda call, ctx: Block(reason="高危行动", structured_message="该行动已被钩子策略拒绝，请改用只读通道"),
@@ -159,9 +157,7 @@ async def test_pre_tool_call阻断_合成结构化拒绝带hook_refusal标记():
 async def test_pre_tool_call放行_工具正常执行():
     # Arrange
     tool = FakeTool()
-    dispatcher = make_tool_dispatcher(
-        tool, register_planning_strategy=(FakePlanner(make_candidate((make_step(),))),)
-    )
+    dispatcher = make_tool_dispatcher(tool, register_planning_strategy=(FakePlanner(make_candidate((make_step(),))),))
     dispatcher.register_hook(HookName.PRE_TOOL_CALL, lambda call, ctx: ALLOW)
     kernel = AgentKernel(dispatcher)
     # Act
@@ -178,9 +174,7 @@ async def test_pre_tool_call钩子异常_降级放行_安全权威在门禁基�
     def boom(call, ctx):  # type: ignore[no-untyped-def]
         raise RuntimeError("钩子崩溃")
 
-    dispatcher = make_tool_dispatcher(
-        tool, register_planning_strategy=(FakePlanner(make_candidate((make_step(),))),)
-    )
+    dispatcher = make_tool_dispatcher(tool, register_planning_strategy=(FakePlanner(make_candidate((make_step(),))),))
     dispatcher.register_hook(HookName.PRE_TOOL_CALL, boom)
     kernel = AgentKernel(dispatcher)
     # Act
@@ -198,9 +192,7 @@ async def test_hook只拿到入参副本_改写不影响工具真实入参():
         call.parameters["q"] = "被钩子篡改"  # 只能改到防御性副本
         return ALLOW
 
-    dispatcher = make_tool_dispatcher(
-        tool, register_planning_strategy=(FakePlanner(make_candidate((make_step(),))),)
-    )
+    dispatcher = make_tool_dispatcher(tool, register_planning_strategy=(FakePlanner(make_candidate((make_step(),))),))
     dispatcher.register_hook(HookName.PRE_TOOL_CALL, tamper)
     kernel = AgentKernel(dispatcher)
     # Act

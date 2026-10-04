@@ -54,6 +54,11 @@ _LLM_AUDIT_MAX_BATCH = 100
 _LLM_AUDIT_FLUSH_INTERVAL_S = 1.0
 _LLM_BUDGET_WINDOW_TOKENS = 500_000
 _LLM_BUDGET_WINDOW_S = 3600
+# 与 services/gateway/app.py 的 _LLM_KEY_PLACEHOLDER 同值复制（"EMPTY"）：本地渠道（vLLM 等
+# OpenAI 兼容服务端）无密钥可用，客户端构造期拒绝 None/空串，服务端接受任意非空 Bearer。
+# 不直接 import gateway 组合根——独立进程拖入整个 FastAPI 应用面不值；随 config 收口批次
+# 统一进 Settings 后两处自然共享（本文件常量块头部同一口径）。
+_LLM_KEY_PLACEHOLDER = "EMPTY"
 
 
 def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -95,10 +100,12 @@ def _load_skills(path: str | None) -> list[dict[str, Any]]:
 def _build_model_port(s: Any) -> Any:
     """模型端口装配（与 gateway 组合根同款：OpenAI 兼容直驱 + 审计/预算包裹；14 篇 §9）。
 
-    无 llm 配置 → None（builtin 不注册，委托对话以 5002 LLM_UNAVAILABLE 落 failed 终态，
-    受理/查询/取消面不受影响）。
+    无 llm_base_url → None（builtin 不注册，委托对话以 5002 LLM_UNAVAILABLE 落 failed 终态，
+    受理/查询/取消面不受影响）；llm_api_key 留空（None/空串）不阻塞装配——本地渠道无密钥
+    可用，与 gateway 修法对齐（docs/Agent/09 §2.1 遗留项②：本文件旧实现要求 base_url 与
+    api_key 同时非空才装配，本地 vLLM 渠道委托对话恒 5002）。
     """
-    if not (s.llm_base_url and s.llm_api_key):
+    if not s.llm_base_url:
         return None
     from services.platform.deps import get_redis, get_session_factory
     from services.platform.llm.audit import LlmCallAuditBuffer
@@ -107,7 +114,10 @@ def _build_model_port(s: Any) -> Any:
     from services.platform.llm.gateway import OpenAICompatibleModelPort
 
     inner = OpenAICompatibleModelPort(
-        base_url=s.llm_base_url, api_key=s.llm_api_key, model=s.llm_model, timeout_s=_LLM_TIMEOUT_S
+        base_url=s.llm_base_url,
+        api_key=s.llm_api_key or _LLM_KEY_PLACEHOLDER,
+        model=s.llm_model,
+        timeout_s=_LLM_TIMEOUT_S,
     )
     audit = LlmCallAuditBuffer(
         get_session_factory(s), max_batch=_LLM_AUDIT_MAX_BATCH, flush_interval_s=_LLM_AUDIT_FLUSH_INTERVAL_S

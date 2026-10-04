@@ -59,6 +59,9 @@ class ErrorCode(IntEnum):
     # 既有族无「工具被中断」码——4101 是用户取消清单口径，5003 是工具超时口径，均不复用；
     # 依据 docs/Agent/10 §4.1 ②，02 §7 表格回填随文档批）
     TOOL_CALL_INTERRUPTED = 5007
+    # 2026-10-05 K1 批登记（内核循环检测两段式：同签名连续重复达阈值硬终止，A-1 上游
+    # gemini-cli；依据 docs/Agent/13 §2 K1-a；02 §7 表格回填随文档批）
+    EXEC_LOOP_DETECTED = 5008
     INTERNAL_ERROR = 5999
 
 

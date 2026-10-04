@@ -31,6 +31,11 @@ from services.agent.business.kernel.gate_baseline import BaselineGate, canonical
 from services.agent.business.kernel.grounding import ContextAssemblyStage
 from services.agent.business.kernel.inbox import InboxItem, KernelInbox
 from services.agent.business.kernel.ledger import KernelLedger, LedgerSink
+from services.agent.business.kernel.loop_guard import (
+    DEFAULT_LOOP_ABORT_THRESHOLD,
+    LoopGuard,
+    register_step,
+)
 from services.agent.business.kernel.plan import KERNEL_PLAN_UPDATED, PlanProjection, plan_updated_data
 from services.agent.business.kernel.run_context import RunContext
 from services.agent.business.kernel.spill import SpillStore
@@ -84,11 +89,17 @@ class AgentKernel:
         tool_timeout_s: float | None = None,
         spill_store: SpillStore | None = None,
         tool_parallelism: int | None = None,
+        loop_abort_threshold: int | None = None,
     ) -> None:
         self._dispatcher = dispatcher
         self._baseline = BaselineGate()
-        self._evaluator = CriterionEvaluator()
+        # E-4 K1-c：判据投影端口经分发器注入（内核禁直连 pyshacl，A3 依赖倒置）
+        self._evaluator = CriterionEvaluator(projection=dispatcher.criterion_projection)
         self._clock = clock
+        # A-1 循环检测两段式（docs/Agent/13 §2 K1-a）：阈值显式注入优先，缺省=常量 2
+        self._loop_abort_threshold = (
+            loop_abort_threshold if loop_abort_threshold is not None else DEFAULT_LOOP_ABORT_THRESHOLD
+        )
         # B-① 并行段并发度：显式注入优先，缺省读 Settings（T6 唯一事实源；=1 退化为串行）
         self._tool_parallelism = (
             tool_parallelism if tool_parallelism is not None else get_settings().kernel_tool_parallelism
@@ -173,6 +184,7 @@ class AgentKernel:
         if not ctx.trace_id:
             raise KernelContractError("TenantContext.trace_id 为空，拒绝运行（C2 可追溯底线）")
         rc = RunContext(task, ctx, budget, clock=self._clock, approvals=approvals, ledger_sink=ledger_sink)
+        loop_guard = LoopGuard(abort_threshold=self._loop_abort_threshold)  # A-1：每 Run 独立记账（状态不跨 Run）
         self._last_ledger = rc.ledger
 
         def emit_budget_anchor(payload: dict[str, Any]) -> None:
@@ -233,6 +245,10 @@ class AgentKernel:
                     if len(group) == 1:  # 单步段=完全现状串行路径（B-① 零行为差异面）
                         step = group[0]
                         rc.tracker.check()  # A4 检查点：步前预算断言（超限优雅终止）
+                        # A-1 循环记账（docs/Agent/13 §2 K1-a）：步前逐步记账——同签名连续
+                        # 重复第 1 次注入 kernel.loop_nudge 软警告，达阈值抛 LoopDetectedError
+                        #（KernelError 家族 → run() 结构化终止，账本可追溯）
+                        register_step(rc, loop_guard, step, emit=self._emit)
                         state = rc.states[step.seq]
                         await self._stage_gate(rc, candidate, step)
                         if state.status is StepStatus.GATED:
@@ -250,7 +266,10 @@ class AgentKernel:
                         planned = len(group)
                         # 段截断至剩余步预算：尾部步不执行=与串行逐步检查点语义等价（预算耗尽后串行同样不执行它们）
                         group = group if remaining is None else group[:remaining]
-                        await self._tool_dispatch.run_group(rc, candidate, group, parallelism=self._tool_parallelism)
+                        # A-1：并行段路径同步记账（run_group 段内按声明序门禁前逐步记账）
+                        await self._tool_dispatch.run_group(
+                            rc, candidate, group, parallelism=self._tool_parallelism, loop_guard=loop_guard
+                        )
                         if len(group) < planned:  # 尾部步被截断=计划仍有未执行步：补段边界检查点（步数已耗尽必抛）
                             rc.tracker.check()
                 return await self._stage_settlement(rc, candidate)
@@ -610,13 +629,22 @@ class AgentKernel:
     async def _stage_settlement(self, rc: RunContext, candidate: PlanCandidate) -> RunOutcome:
         ledger, ctx, task = rc.ledger, rc.ctx, rc.task
         ledger.assert_no_open_calls()  # C1 不变式：未闭合 tool_call 禁进终态
-        criteria = self._evaluator.evaluate(candidate.success_criteria, ledger)
+        # E-4 K1-c（docs/Agent/13 §2）：判据全路径求值——回执优先（M3 口径不变），回执缺失
+        # 且判据声明投影求值面时经 CriterionProjection 端口补充分支（无端口/无声明=纯回执，行为不变）
+        criteria = await self._evaluator.evaluate_with_projection(candidate.success_criteria, ledger, ctx)
         states_in_run = list(rc.states.values())
         any_failed = any(s.status is StepStatus.FAILED or s.status is StepStatus.CANCELLED for s in states_in_run)
         blocked_by_trust = any(c.blocked_by_trust for c in criteria)
-        if any_failed:
+        # E-4 K1-c：投影可求值且未满足（satisfied=False 且非 blocked）=确定性负结论——
+        # 不可判完成（终止只认判据求值，A4）；纯回执口径下该形态不存在（零行为变化面）
+        unsatisfied_evaluable = any(c.satisfied is False and not c.blocked_by_trust for c in criteria)
+        if any_failed or unsatisfied_evaluable:
             status, reason_code = RunStatus.FAILED, int(ErrorCode.PARAM_INVALID)
-            reason = "存在未通过步（门禁/审批/执行/后验失败）"
+            reason = (
+                "存在未通过步（门禁/审批/执行/后验失败）"
+                if any_failed
+                else "存在可求值判据未满足（B2 投影求值不通过，agent 自述不采信）"
+            )
         elif blocked_by_trust:
             status, reason_code = RunStatus.WAITING_TOOL, None
             reason = "判据暂不可求值：等待外部回执（B2，agent 自述不采信；重连续跑锚点）"

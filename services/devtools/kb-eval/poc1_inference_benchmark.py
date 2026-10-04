@@ -610,7 +610,10 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
     parser.add_argument("--quick", action="store_true", help="仅 1k 档")
     parser.add_argument("--smoke", action="store_true", help="2k 三元组 x1 轮冒烟自检（不入报告）")
     parser.add_argument(
-        "--output", type=Path, default=None, help="JSON 结果输出路径（默认 services/devtools/kb-eval/poc1_results.json）"
+        "--output",
+        type=Path,
+        default=None,
+        help="JSON 结果输出路径（默认 services/devtools/kb-eval/poc1_results.json）",
     )
     return parser.parse_args(argv)
 

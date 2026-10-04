@@ -73,6 +73,12 @@ class Settings(BaseSettings):
     workspace_root: str | None = None
     web_egress_allowlist: str = ""  # 逗号分隔域名；空=web 工具全拒
 
+    # 能力通道竖线①（2026-10-05 批，机制审计 dwfrun-a1582cc6 + docs/Agent/02 四通道 L0）：
+    # MCP registry → 内核工具绑定桥开关（统一配置层纪律，禁直读 env）。默认开启=投影平台
+    # 内置 9 工具；外部 server 工具经既有 --targets/refresh 机制仍只在独立进程装配
+    # （services/mcp/__main__.py，gateway 未装 ExternalMcpManager）。
+    mcp_bridge_enabled: bool = True
+
     # 网关运行
     api_prefix: str = "/api/v1"
     sse_heartbeat_seconds: int = 15  # 建议值，压测后冻结（02 §5）

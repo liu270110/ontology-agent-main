@@ -138,7 +138,9 @@ def _free_port() -> int:
 
 async def _spawn_server(port: int, tenant_id: uuid.UUID) -> tuple[subprocess.Popen, Path]:
     """起独立进程（共享工厂装配）；返回 (进程, 日志文件)——提前退出由调用方带出日志。"""
-    log_file = Path(tempfile.gettempdir()) / f"mcp-e2e-{port}.log"
+    # 文件名掺 pid+uuid4 短缀：并行 pytest 撞同空闲端口（_free_port 的 bind(0)→close→子进程
+    # 绑定存在 TOCTOU 窗口）时不再以同名日志文件互锁（WinError 32 族根除）。
+    log_file = Path(tempfile.gettempdir()) / f"mcp-e2e-{port}-{os.getpid()}-{uuid.uuid4().hex[:6]}.log"
     handle = log_file.open("w", encoding="utf-8")
     proc = subprocess.Popen(  # noqa: S603 ——测试受控参数，非 shell
         [
@@ -244,4 +246,7 @@ async def test_独立进程e2e_工具清单_检索引用_回写受理幂等_越�
             except subprocess.TimeoutExpired:
                 proc.kill()
                 proc.wait(timeout=30)
-        log_file.unlink(missing_ok=True)
+        try:
+            log_file.unlink(missing_ok=True)
+        except (FileNotFoundError, PermissionError):
+            pass  # Windows 句柄时序（stderr 重定向副本未及时释放）固有，不遮蔽用例断言

@@ -53,7 +53,8 @@ async function exportMarkdown(s: SessionItem) {
   URL.revokeObjectURL(url)
 }
 
-export function SessionList({ onPicked }: { onPicked?: (id: string) => void }) {
+/** onPicked 允许 null（W3）：删除当前选中会话后回 /chat 空态（宿主 picked 复位） */
+export function SessionList({ onPicked }: { onPicked?: (id: string | null) => void }) {
   const active = useSessionStore(s => s.activeSessionId)
   const setActive = useSessionStore(s => s.setActiveSession)
   const searchRef = useRef<HTMLInputElement>(null)
@@ -110,11 +111,20 @@ export function SessionList({ onPicked }: { onPicked?: (id: string) => void }) {
         if (!(e instanceof ApiError && e.httpStatus === 204)) throw e
       }
     },
-    onSuccess: () => {
+    onSuccess: (_data, id) => {
       setMenuId(null)
       setConfirmId(null)
+      // W3 收口：删除的是当前选中会话 → 会话态全量复位（setActiveSession(null) 内建清空
+      // messages/runs/usageGroups/workspaceEvents/terminalLines/draftInserts 等缓冲）+
+      // picked=null → 宿主回 /chat 空态 hero；删除非当前会话不动选中态
+      if (useSessionStore.getState().activeSessionId === id) {
+        setActive(null)
+        onPicked?.(null)
+      }
       invalidate()
     },
+    // 36 §B1 消灭静默失败：删除失败（网络错/404 已被他人删除）toast 反馈，确认视图保留可重试
+    onError: e => toast.error(`删除会话失败：${describeError(e)}`),
   })
 
   // F5：live POST /sessions 新会话 title=null（首条消息后服务端才定题）——展示与过滤统一兜底

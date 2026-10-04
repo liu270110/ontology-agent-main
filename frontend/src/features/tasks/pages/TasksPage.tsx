@@ -173,7 +173,10 @@ export function TasksPage() {
         <TaskDetailDrawer
           task={task}
           onClose={closeDrawer}
-          onChanged={() => void qc.invalidateQueries({ queryKey: ['tasks', 'list'] })}
+          // W3 加固：失效整个 tasks 命名空间（重试/取消后）——列表 + 深链详情
+          // （['tasks','detail',id]）+ logs 一并刷新；原仅失效 ['tasks','list']，
+          // 深链打开的详情抽屉重试后状态徽标不刷新
+          onChanged={() => void qc.invalidateQueries({ queryKey: ['tasks'] })}
         />
       )}
     </div>

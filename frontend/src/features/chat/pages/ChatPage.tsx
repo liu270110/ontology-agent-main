@@ -32,6 +32,12 @@ const CONN_BADGE: Record<string, string> = {
   connecting: 'b-gray',
 }
 
+/** W3 加固：cancel 请求失败兜底文案（就地定义——lib/toast-templates 非本切片白名单，后续统一迁入单源） */
+const LOCAL_STOPPED = {
+  title: '已本地停止',
+  description: '停止请求未送达服务端，本端已终止渲染；重新进入会话以服务端状态为准',
+} as const
+
 /** 对话页（画框03 / 16 篇 §5.2 增量批次）：三栏=会话列表｜消息流｜上下文面板（可折叠）。
  *  数据流（16 篇 §3.2）：选会话 → GET messages 拉历史基线 → 开 SSE → 事件经 session-store.apply 归约；
  *  seq 跳号 → 重拉历史校正（MESSAGES_SNAPSHOT 兜底随 M4 批）。
@@ -143,11 +149,20 @@ export function ChatPage() {
   })
 
   /** IX-CHT-06 停止生成：轻确认（无弹窗单击即停）——取消端点 + 本地终态，已生成部分保留。
-   *  36 §B1：补 toast 反馈闭环（已停止生成 · 已生成的部分已保留）。 */
+   *  36 §B1：补 toast 反馈闭环（已停止生成 · 已生成的部分已保留）。
+   *  W3 加固：本地终态恒同步先执行（停止按钮不因网络等待卡住）；cancel 请求失败
+   *  （网络错/后端 404、500）→ 仍保持本地终止 + toast「已本地停止」（服务端 run 可能
+   *  仍在跑，重进会话以服务端状态为准），请求成功才报「已停止生成」。 */
   function handleStop(runId: string | null) {
-    if (runId) void api.post(`/sessions/${sessionId}/cancel`, { run_id: runId }).catch(() => {})
     useSessionStore.getState().stopRun()
-    toast.success(STOP_GENERATED.title, { description: STOP_GENERATED.description })
+    if (!runId) {
+      toast.success(STOP_GENERATED.title, { description: STOP_GENERATED.description })
+      return
+    }
+    void api
+      .post(`/sessions/${sessionId}/cancel`, { run_id: runId })
+      .then(() => toast.success(STOP_GENERATED.title, { description: STOP_GENERATED.description }))
+      .catch(() => toast.warning(LOCAL_STOPPED.title, { description: LOCAL_STOPPED.description }))
   }
 
   const statusText = running ? '运行中' : CONNECTION_TEXT[connection] ?? connection

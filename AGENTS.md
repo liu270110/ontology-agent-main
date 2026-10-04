@@ -33,10 +33,10 @@
 
 ## 技能（按任务加载，SKILL.md）
 
-- 写前端代码前 → `skills/frontend-dev-standards/`
-- 做界面/组件/样式 → `skills/frontend-ui-apple/`（与 React+Apple 设计系统同源，可直接用）
-- 测试与视觉验收 → `skills/frontend-testing/`
-- 提交/PR 前代码评审 → `skills/code-review-ocr/`（OpenCodeReview `ocr` CLI，AI 行级评审，LLM 已配 deepseek）
+- 写前端代码前 → `services/skills/frontend-dev-standards/`
+- 做界面/组件/样式 → `services/skills/frontend-ui-apple/`（与 React+Apple 设计系统同源，可直接用）
+- 测试与视觉验收 → `services/skills/frontend-testing/`
+- 提交/PR 前代码评审 → `services/skills/code-review-ocr/`（OpenCodeReview `ocr` CLI，AI 行级评审，LLM 已配 deepseek）
 
 ## 工程约定
 
@@ -50,4 +50,4 @@
 
 - 首次代码提交前统一改名：`services/ → services/`、`docs/Agent/ → docs/Agent/`、`docs/memory/ → docs/memory/`、`docs/OntRAG/ → docs/OntRAG/`（零代码引用，零成本窗口）；
 - 本机 → Gitee HTTPS 推 >1MB 单文件会被重置，大文件拆分提交；
-- 本平台开发流程自身吃狗粮：`skills/` 即平台 Skills 服务的第一批资产，格式（agentskills.io）即为平台技能格式。
+- 本平台开发流程自身吃狗粮：`services/skills/` 即平台 Skills 服务的第一批资产，格式（agentskills.io）即为平台技能格式。

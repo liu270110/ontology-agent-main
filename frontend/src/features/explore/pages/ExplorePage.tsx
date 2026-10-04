@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { ChevronLeft, CircleAlert, Link2, Loader2, Maximize2, Search, Settings2, ZoomIn, ZoomOut } from 'lucide-react'
+import { ChevronLeft, CircleAlert, Info, Link2, Loader2, Maximize2, Search, Settings2, ZoomIn, ZoomOut } from 'lucide-react'
 import { GraphCanvas, type GraphCanvasApi, type GraphEdgeBiz, type GraphNodeBiz } from '@/components/graph/GraphCanvas'
+import { GraphContextMenu } from '@/components/graph/GraphContextMenu'
 import { ApiError } from '@/api/client'
 import { ErrorState } from '@/components/states'
 import {
@@ -46,6 +47,8 @@ export function ExplorePage() {
   const onReady = useCallback((api: GraphCanvasApi) => {
     canvasApi.current = api
   }, [])
+  // 画布节点右键菜单（41 篇 V1）：以此为中心展开 / 打开详情（复用双击与单击既有逻辑）
+  const [ctx, setCtx] = useState<{ nodeId: string; pos: { x: number; y: number } } | null>(null)
 
   // 初始图谱：kbId 维度默认中心实体（部件A）+ 邻域
   const searchQ = useQuery({
@@ -91,6 +94,16 @@ export function ExplorePage() {
     return map
   }, [nb.data, searchQ.data])
 
+  // 搜索命中集（41 篇 V3 hit 弱化传导）：q 非空时联想结果即命中 → 节点 hit 标记 +
+  // dimUnhighlight 命中弱化（命中集外降透明度）；q 清空即整体还原
+  const hitIds = useMemo(
+    () =>
+      q.trim() && searchQ.data
+        ? new Set((searchQ.data.items ?? []).map(e => e.id))
+        : new Set<string>(),
+    [q, searchQ.data],
+  )
+
   const nodes = useMemo<GraphNodeBiz[]>(
     () =>
       (nb.data?.nodes ?? []).map(e => ({
@@ -101,8 +114,9 @@ export function ExplorePage() {
         category: e.category,
         badge: e.kind_label.split('·')[0]?.trim(),
         iri: e.iri,
+        hit: hitIds.has(e.id),
       })),
-    [nb.data],
+    [nb.data, hitIds],
   )
   const edges = useMemo<GraphEdgeBiz[]>(
     () => (nb.data?.edges ?? []).map(e => ({ source: e.source, target: e.target, label: e.label })),
@@ -236,8 +250,12 @@ export function ExplorePage() {
           pulseIds={highlightIds}
           focusId={highlightIds[0] ?? null}
           fitKey={`${centerId}-${relations.join(',')}-${depth}`}
+          showMiniMap
+          boxSelection
+          dimUnhighlight={hitIds.size > 0}
           onNodeClick={onNodeClick}
           onNodeDoubleClick={onNodeDoubleClick}
+          onNodeContextMenu={(nodeId, pos) => setCtx({ nodeId, pos })}
           onReady={onReady}
           testId="explore-canvas"
         />
@@ -328,6 +346,31 @@ export function ExplorePage() {
           </button>
         )}
       </div>
+
+      {/* 画布节点右键菜单（41 篇 V1）：展开中心复用 onNodeDoubleClick（setCenterId 重拉邻域）、
+          打开详情复用 onNodeClick（实体抽屉）；菜单激活后 GraphContextMenu 自关 */}
+      <GraphContextMenu
+        pos={ctx?.pos ?? null}
+        items={
+          ctx
+            ? [
+                {
+                  key: 'expand',
+                  label: '以此为中心展开',
+                  icon: <Maximize2 size={14} aria-hidden />,
+                  onSelect: () => onNodeDoubleClick(ctx.nodeId),
+                },
+                {
+                  key: 'detail',
+                  label: '打开详情',
+                  icon: <Info size={14} aria-hidden />,
+                  onSelect: () => onNodeClick(ctx.nodeId),
+                },
+              ]
+            : []
+        }
+        onClose={() => setCtx(null)}
+      />
 
       {/* IX-EX-01 实体抽屉 */}
       <EntityDrawer

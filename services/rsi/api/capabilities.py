@@ -38,6 +38,7 @@ from services.rsi.api.schemas.capabilities import (
 from services.rsi.business.orsi_registry import OrsiCapabilityService
 from services.rsi.data.repo_impl.orsi_repo import PgOrsiCapabilityRepository
 from services.rsi.domain.orsi import (
+    OrsiCapabilityError,
     OrsiCapabilityNotFound,
     OrsiDuplicateFingerprint,
 )
@@ -58,7 +59,7 @@ def _service(request: Request, db: AsyncSession, principal: Principal) -> OrsiCa
     )
 
 
-def _not_found(exc: OrsiCapabilityNotFound) -> GatewayError:
+def _not_found() -> GatewayError:
     return GatewayError(404, "能力不存在", status_code=404, detail=None)
 
 
@@ -123,7 +124,8 @@ async def register_orsi_capability(
         )
     except OrsiDuplicateFingerprint as exc:
         raise GatewayError(3003, str(exc), status_code=409, detail={"hint": "同租户同面同指纹能力已注册"}) from exc
-    except ValueError as exc:  # 防御面：Literal 已挡 422，直调业务层的非法值兜底 3001
+    # 防御面：Literal 已挡 422，直调业务层的领域构造期校验异常（ValueError/OrsiCapabilityError）兜底 3001
+    except (ValueError, OrsiCapabilityError) as exc:
         raise GatewayError(3001, str(exc), status_code=400, detail=None) from exc
     return OrsiCapabilityItemOut(data=OrsiCapabilityOut.from_domain(capability), meta={})
 
@@ -140,5 +142,5 @@ async def get_orsi_capability(
     try:
         capability = await service.get_capability(capability_id)
     except OrsiCapabilityNotFound as exc:
-        raise _not_found(exc) from exc
+        raise _not_found() from exc
     return OrsiCapabilityItemOut(data=OrsiCapabilityOut.from_domain(capability), meta={})

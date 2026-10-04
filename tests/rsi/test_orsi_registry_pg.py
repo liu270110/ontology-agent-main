@@ -54,11 +54,11 @@ async def pg_repo() -> AsyncIterator[
     """
     probe = create_async_engine(Settings().pg_dsn, pool_pre_ping=True)
     try:
-        async with probe.connect():
-            pass
+        async with probe.connect() as conn:
+            await conn.execute(sa.text("SELECT 1 FROM orsi_capabilities LIMIT 1"))
     except (OSError, SQLAlchemyError):
         await probe.dispose()
-        pytest.skip("本地 PG 不可达，跳过 orsi 注册表真库用例")
+        pytest.skip("本地 PG 不可达或 orsi_capabilities 未迁移（e3b7d9f1a5c2），跳过 orsi 真库用例")
     await probe.dispose()
     engine = create_async_engine(Settings().pg_dsn)
     factory = async_sessionmaker(engine, expire_on_commit=False)
@@ -147,14 +147,15 @@ async def test_软删与状态过滤真库生效(
 
 async def test_种子词表_rsi_write已配入admin与super_admin() -> None:
     """只读校验：scope 种子迁移（e3b7d9f1a5c2）生效（写面 rsi:write 非悬空 scope）。"""
-    # Arrange：PG 可达性探测（无仓储依赖，轻量连接）
+    # Arrange：PG 可达性 + S3 链迁移在位探测（无仓储依赖，轻量连接；同 pg_repo 夹具口径
+    # ——钉死修订类用例会把共享库拨到链下，种子断言在未迁移态无意义即跳过）
     engine = create_async_engine(Settings().pg_dsn, pool_pre_ping=True)
     try:
-        async with engine.connect():
-            pass
+        async with engine.connect() as conn:
+            await conn.execute(text("SELECT 1 FROM orsi_capabilities LIMIT 1"))
     except (OSError, SQLAlchemyError):
         await engine.dispose()
-        pytest.skip("本地 PG 不可达，跳过种子词表用例")
+        pytest.skip("本地 PG 不可达或 orsi_capabilities 未迁移（e3b7d9f1a5c2），跳过种子词表用例")
     # Act：读两角色 scopes
     async with engine.connect() as conn:
         rows = (await conn.execute(text("SELECT code, scopes FROM roles WHERE code IN ('admin','super_admin')"))).all()

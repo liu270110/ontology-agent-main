@@ -5,14 +5,19 @@
 
 from __future__ import annotations
 
+import logging
 import uuid
 from dataclasses import dataclass
 from typing import Literal
+
+from pydantic import ValidationError
 
 from services.platform.kernel import DomainError
 from services.skills.business.scanner import ScannedAsset
 from services.skills.domain.model.skill import SkillEntry, SkillOrigin, SkillStatus
 from services.skills.domain.repo.skill_repo import SkillRepository
+
+logger = logging.getLogger(__name__)
 
 LifecycleAction = Literal["delist", "restore", "revoke"]  # 14 §2：下架/恢复/废弃
 
@@ -73,14 +78,18 @@ class SkillMarketService:
         assets: list[ScannedAsset],
         actor_id: uuid.UUID | None = None,
     ) -> ScanIngestResult:
-        """扫描清单 upsert：name+version 已在则跳过（14 §6 S2 幂等二扫零新增）。"""
+        """扫描清单 upsert：name+version 已在则跳过（14 §6 S2 幂等二扫零新增）。
+
+        单资产越界（聚合 DTO 校验 ValidationError，如 name/source_uri 超长）→ warning
+        跳过计数入 skipped——扫描器是 seed 供给面，单资产脏不挡批（scanner 同口径）。
+        """
         created, skipped = 0, 0
         for asset in assets:
             if await self._repo.find_by_name_version(tenant_id, asset.name, asset.version) is not None:
                 skipped += 1
                 continue
-            await self._repo.add(
-                SkillEntry(
+            try:
+                entry = SkillEntry(
                     tenant_id=tenant_id,
                     name=asset.name,
                     description=asset.description,
@@ -92,7 +101,11 @@ class SkillMarketService:
                     created_by=actor_id,
                     updated_by=actor_id,
                 )
-            )
+            except ValidationError as exc:
+                logger.warning("skills 扫描入库跳过越界资产 %s@%s: %s", asset.name, asset.version, exc)
+                skipped += 1
+                continue
+            await self._repo.add(entry)
             created += 1
         return ScanIngestResult(created=created, skipped=skipped)
 

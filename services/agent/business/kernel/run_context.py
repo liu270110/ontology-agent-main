@@ -10,7 +10,7 @@ from services.agent.business.kernel.budget import Budget, BudgetTracker
 from services.agent.business.kernel.cancellation import CancellationCoordinator
 from services.agent.business.kernel.ledger import KernelLedger, LedgerSink
 from services.agent.domain.model.kernel_actions import ApprovalTicket, StepResult
-from services.agent.domain.model.kernel_context import TaskRef, TenantContext
+from services.agent.domain.model.kernel_context import ContextBlock, TaskRef, TenantContext
 from services.agent.domain.model.step_state import StepState
 
 # 审计事件发射口签名（AgentKernel._emit，C2）：各阶段共用，账本统一校验归属
@@ -42,3 +42,7 @@ class RunContext:
         # 基线（canonical sha256）与逐块哈希（漂移定位）；None/空=尚未组装（12 §2 批次 B）。
         self.prefix_fingerprint: str | None = None
         self.prefix_block_hashes: tuple[tuple[str, str], ...] = ()
+        # M4.5-A：运行中输入面的组装面（docs/Agent/12 §1.1）——grounding 产出后由 loop 回填；
+        # 段边界 drain 的 steer/inject 文本包装为 ContextBlock（source="user_steer"，B3 标界
+        # agent_attested，tier=3 易变尾）追加于此，供后续组装消费方就近读取。
+        self.context_blocks: tuple[ContextBlock, ...] = ()

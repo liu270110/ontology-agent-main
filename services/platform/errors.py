@@ -38,6 +38,13 @@ class ErrorCode(IntEnum):
     SESSION_CLOSED = 4101
     TASK_ALREADY_RUNNING = 4102
     TOOL_BUSY = 4103  # 2026-09-26 缺口核查修复补登记（41xx session 段）
+    # 2026-10-04 M4.5-A 批登记（docs/Agent/12-M4.5运行中输入面与模型韧性设计（主仓本地）§1.2/
+    # §1.4；02 §7 表格回填随文档批）：4104=紧急停止激活拒新工作（worker submit 前与内核步
+    # 边界闸门共用）；4105=目标 Run 不在本进程运行注册表（inbox 端点归属/可达性口径）。
+    ESTOP_ACTIVE = 4104
+    RUN_NOT_LOCAL = 4105
+    # 42xx 段（与 4201 VERSION_IMMUTABLE 同段）：inbox 每 Run 容量上限拒绝（§1.1）
+    INBOX_CAPACITY = 4203
     VERSION_IMMUTABLE = 4201
     SSE_REPLAY_EXPIRED = 4301
     OBJECT_ALREADY_IN_REVIEW = 4701

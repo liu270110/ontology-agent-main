@@ -20,7 +20,7 @@
 
 - **每个目录必须有 `README.md`**：文档目录 README = 索引；**代码目录 README = 模块 spec 六段式**（职责边界/目录结构/核心机制/接口契约/数据模型/开发指南与验收标准）。
 - 架构变更先改 `docs/architecture/01` 锚点；契约变更先改对应权威篇（端点登记册=docs/api/01）。
-- 分支（2026-09-27 起 worktree 工作流，hooks 强制）：主工作区=develop 集成区禁直提；`sh services/tools/git/wt new <域>-<简述>` 开功能分支，`wt finish` 串行合入；详见 [docs/standards/02](docs/standards/02-git多Agent协作与Worktree规范.md)；commit 中文 conventional。
+- 分支（2026-09-27 起 worktree 工作流，hooks 强制）：主工作区=develop 集成区禁直提；`sh services/devtools/git/wt new <域>-<简述>` 开功能分支，`wt finish` 串行合入；详见 [docs/standards/02](docs/standards/02-git多Agent协作与Worktree规范.md)；commit 中文 conventional。
 
 ## 快速开始
 

@@ -2,7 +2,7 @@
 
 > 版本 0.3 | 日期 2026-09-28 | 上游：[阶段验收审核 §4 批次 B-③](../../docs/architecture/评审-2026-09-28-M0-M3阶段验收审核.md)、[OntRAG §2/§10](../../docs/OntRAG/知识库GraphRAG设计.md)、种子本体 [../power_seed.ttl](../power_seed.ttl)
 >
-> **角色定位（2026-09-28 双源裁决，用户按设计目的裁定）**：本目录 = **抽取流水线冒烟样例 + 种子类锚点对账资产**（manifest 的 seed_class_anchors 为独有价值）。**检索评估基准（OntRAG §10 分层回归集）= [`seeds/golden/`](../golden/)**（30 条检索金标 + 582 金标三元组 + 18 篇语料，已接线 `retrieval_eval` / `services/tools/kb-eval`）——两套分工互不替代；`qa/golden-qa.jsonl` 保留为样例配套问答，**不作为检索调参回归基准使用**。
+> **角色定位（2026-09-28 双源裁决，用户按设计目的裁定）**：本目录 = **抽取流水线冒烟样例 + 种子类锚点对账资产**（manifest 的 seed_class_anchors 为独有价值）。**检索评估基准（OntRAG §10 分层回归集）= [`seeds/golden/`](../golden/)**（30 条检索金标 + 582 金标三元组 + 18 篇语料，已接线 `retrieval_eval` / `services/devtools/kb-eval`）——两套分工互不替代；`qa/golden-qa.jsonl` 保留为样例配套问答，**不作为检索调参回归基准使用**。
 
 ## 1. 内容清单
 
@@ -25,7 +25,7 @@
 ## 3. 消费方式
 
 1. **抽取验收（主用途）**：三份文档经 kb 上传 → 七步流水线 → 候选实例 → 终审，候选类的锚点对账用 manifest；
-2. **检索评估 → 走 [`seeds/golden/`](../golden/)**（裁决后唯一基准；工具 `services/tools/kb-eval/`、加载器 `retrieval_eval.py`）；
+2. **检索评估 → 走 [`seeds/golden/`](../golden/)**（裁决后唯一基准；工具 `services/devtools/kb-eval/`、加载器 `retrieval_eval.py`）；
 3. **测试素材**：`tests/kb` 的内联样例文本可逐步切换为本目录制品（消除测试数据与验收数据双源）。
 
 ## 4. 边界与声明

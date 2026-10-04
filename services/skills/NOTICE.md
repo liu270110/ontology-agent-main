@@ -47,6 +47,6 @@ Copyright (c) 2025 Nous Research
 
 ## 门禁记录（2026-10-04）
 
-- `python -m ruff check services/skills services/tools/hermes` → All checks passed
+- `python -m ruff check services/skills services/devtools/hermes` → All checks passed
 - 收编 py 全部 `py_compile` → 40 文件 0 失败（含 skills scripts/tests 与 tools）
 - 12 个 SKILL.md：frontmatter PyYAML 可解析、name 与目录一致、description 非空、SKILL.md 内相对引用文件全部存在

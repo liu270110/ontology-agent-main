@@ -14,7 +14,7 @@
 ## 工具链
 
 - 加载器：`services/kb/business/retrieval_eval.py`（DEFAULT_GOLDEN_PATH 指向本目录检索金标）；
-- 评估/PoC 脚本：[`services/tools/kb-eval/`](../../tools/kb-eval/)（PoC1 已冻结结果；PoC2 方法冻结、校准表待推理渠道达标后断点续跑回填；PoC3 索引成本）；
+- 评估/PoC 脚本：[`services/devtools/kb-eval/`](../../devtools/kb-eval/)（PoC1 已冻结结果；PoC2 方法冻结、校准表待推理渠道达标后断点续跑回填；PoC3 索引成本）；
 - 报告：[docs/OntRAG/poc/](../../docs/OntRAG/poc/) 三份。
 
 ## 分工边界（双源裁决）

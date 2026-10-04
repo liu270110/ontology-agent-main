@@ -185,6 +185,11 @@ class Settings(BaseSettings):
     # 可选，缺库同降级路径）。
     kb_parser: str = Field(default="pdfium", pattern="^(pdfium|docling|plumber)$")
 
+    # kb 标题栏空间模式（v1.5 裁决卡配套，2026-10-05 真机 F1=0 根因对策）：文本流两级投影
+    # 零命中时的第三级坐标配对——标签片段**右邻/下邻**最近值片段的最大间距（PDF pt；
+    # 同行 y 重叠优先右邻、否则下邻；titleblock.project_titleblock_spatial）。
+    kb_titleblock_max_gap_pt: float = Field(default=150.0, gt=0)
+
     # kb nightly 例程（OntRAG §8.4 v1 收缩范围，KB-G1b）：预算三项的 v1 合并简化 + 调度互斥参数。
     # max_items_per_run = 单次运行硬上限（补嵌 chunk 数与归档动作数同源预算；超限顺延次夜记 stats.deferred）；
     # token_budget = 记录用（v1 不硬停：随 kb_maintenance_runs.stats 落账供成本对账，§8.4 纪律 1 的记账面）。

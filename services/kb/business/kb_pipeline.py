@@ -46,6 +46,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import uuid
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from functools import lru_cache
@@ -62,7 +63,13 @@ from services.kb.business.pipeline_base import (
     StepContext,
     StepRunner,
 )
-from services.kb.business.titleblock import project_titleblock
+from services.kb.business.titleblock import (
+    TextFragment,
+    project_titleblock,
+    project_titleblock_spatial,
+    serialize_fields,
+    titleblock_anchor_span,
+)
 from services.kb.data.orm import Document, DocumentChunk, KbPipelineStep
 from services.kb.retrieval.chunking import Chunk, chunk_document, estimate_tokens
 from services.kb.retrieval.embed import (
@@ -216,7 +223,10 @@ async def _run_preprocess(ctx: StepContext) -> None:
     更差的错）。幂等：分支①命中即不再拉对象/重解析（checkpoint done 跳过之外的第二重）。
     事务边界（03 §6.1）：MinIO 拉取与引擎抽取为长调用——读源/写回各自短事务，中间件在事务外。
     标题栏投影（v1.5 裁决卡）：对最终 content 跑九字段正则投影（business/titleblock.py，
-    纯确定性零 LLM），非空才写 meta["titleblock"]={字段: 值}（chunk 步消费为额外语义块）。
+    纯确定性零 LLM），非空才写 meta["titleblock"]={字段: 值}（chunk 步消费为额外语义块）；
+    文件通道两级文本投影零命中时以 pdfium 带坐标片段走第三级空间配对
+    （project_titleblock_spatial，阈值 Settings.kb_titleblock_max_gap_pt），命中写
+    meta["titleblock_source"]="spatial"（可追溯；内联文本通道无坐标，空间级不参与）。
     """
     async with ctx.session_factory() as session, session.begin():  # 短事务①：读内容源坐标
         doc = await _load_document(session, ctx)
@@ -252,15 +262,37 @@ async def _run_preprocess(ctx: StepContext) -> None:
             degraded = set(meta.get("degraded") or [])
             degraded.add("parser")
             meta["degraded"] = sorted(degraded)
-        _apply_titleblock(meta, meta["content"])
+        _apply_titleblock(
+            meta,
+            meta["content"],
+            runs=outcome.text_runs,
+            max_gap_pt=get_settings().kb_titleblock_max_gap_pt,
+        )
         doc.meta = meta  # JSONB 原地变更不可追踪，整体重赋值
 
 
-def _apply_titleblock(meta: dict, content: str) -> None:
-    """标题栏投影落位（两内容源分支共用的收敛点）：投影非空才写 meta["titleblock"]。"""
+def _apply_titleblock(
+    meta: dict,
+    content: str,
+    *,
+    runs: Sequence[TextFragment] = (),
+    max_gap_pt: float = 150.0,
+) -> None:
+    """标题栏投影落位（两内容源分支共用的收敛点）：文本两级投影非空即写 meta["titleblock"]；
+    零命中且有带坐标片段（pdfium 文件通道）时第三级空间配对兜底，命中加注
+    meta["titleblock_source"]="spatial"（宪法 5 全程可追溯；空片段/非 pdfium 通道不参与）。"""
     projection = project_titleblock(content)
-    if projection.fields:
-        meta["titleblock"] = projection.fields
+    fields = dict(projection.fields)
+    spatial = False
+    if not fields and runs:
+        spatial_projection = project_titleblock_spatial(runs, max_gap_pt=max_gap_pt)
+        if spatial_projection.fields:
+            fields = dict(spatial_projection.fields)
+            spatial = True
+    if fields:
+        meta["titleblock"] = fields
+        if spatial:
+            meta["titleblock_source"] = "spatial"
 
 
 def _normalize_newlines(content: str) -> str:
@@ -271,10 +303,13 @@ def _normalize_newlines(content: str) -> str:
 async def _run_chunk(ctx: StepContext) -> None:
     """语义分块（L5 knowledge.chunking）：按 (document_id, seq) upsert，步级重跑幂等。
 
-    标题栏语义块（v1.5 裁决卡）：meta["titleblock"] 非空时，对原文重跑同一确定性投影
-    （spans 不落盘，单一事实源=titleblock.py），序列化``字段: 值``行集为一条额外语义块
-    （seq=尾片 +1；meta.span 指回原文首字段区间——出处指针门禁同源；kind=titleblock），
-    检索可命中字段行（BM25 词法面）。upsert 幂等：同 seq 重跑整块覆写。
+    标题栏语义块（v1.5 裁决卡）：meta["titleblock"] 非空时，序列化``字段: 值``行集为一条
+    额外语义块（seq=尾片 +1；kind=titleblock），检索可命中字段行（BM25 词法面）——块文本
+    以 meta 落盘字段为准（空间级产物文本级重投影不可复现，LLM extract 上下文 hint 同源）。
+    meta.span 出处指针：文本级命中沿用重投影首字段区间（spans 不落盘，单一事实源
+    =titleblock.py）；空间级（titleblock_source=spatial / 重投影零命中）经
+    titleblock_anchor_span 以「值原文→标签词」回查锚点，均不中则放弃该块（出处指针门禁：
+    无锚不落块）。upsert 幂等：同 seq 重跑整块覆写。
     """
     async with ctx.session_factory() as session, session.begin():  # 短事务
         doc = await _load_document(session, ctx)
@@ -286,10 +321,12 @@ async def _run_chunk(ctx: StepContext) -> None:
             raise PipelineError("409 分块结果为空（空文档不可索引）")
         titleblock_meta = (doc.meta or {}).get("titleblock")
         if isinstance(titleblock_meta, dict) and titleblock_meta:
-            projection = project_titleblock(content)
-            block_span = projection.block_span()
-            if projection.fields and block_span is not None:
-                block = projection.block_text()
+            fields = {str(k): str(v) for k, v in titleblock_meta.items()}
+            block_span = project_titleblock(content).block_span()
+            if block_span is None:
+                block_span = titleblock_anchor_span(content, fields)
+            if fields and block_span is not None:
+                block = serialize_fields(fields)
                 pieces.append(
                     Chunk(
                         seq=len(pieces),

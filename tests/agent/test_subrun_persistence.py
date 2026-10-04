@@ -162,6 +162,9 @@ async def test_子run独立写入口_roundtrip(pg_env) -> None:
             await tx.tasks.create_subrun(sub)
     async with uow.for_tenant(tenant_id) as tx:
         assert await tx.tasks.update_subrun_status(uuid.uuid4(), RunStatus.COMPLETED) is False
+    async with uow.for_tenant(tenant_id) as tx:
+        # 根 Run 结构化拒绝（ocr 整改：聚合隔离在写边界收口，根行状态只走聚合 save）
+        assert await tx.tasks.update_subrun_status(root.id, RunStatus.COMPLETED) is False
     async with uow.for_tenant(uuid.uuid4()) as tx:
         assert await tx.tasks.update_subrun_status(sub.id, RunStatus.COMPLETED) is False
 

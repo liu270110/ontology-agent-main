@@ -10,10 +10,16 @@
 
 from __future__ import annotations
 
+import asyncio
+import sys
 import uuid
 
 import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import create_async_engine
+
+if sys.platform == "win32":  # psycopg 异步要求 Selector 循环；须在任意事件循环创建前固定策略
+    # （probe_pg 运行于 pytest-asyncio 已建循环上，协程内 set_event_loop_policy 无法切换当前循环）
+    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
 
 def _admin_dsn(dsn: str) -> str:
@@ -23,18 +29,13 @@ def _admin_dsn(dsn: str) -> str:
 
 async def probe_pg(dsn: str) -> bool:
     """本机 PG 可达探测（不可达返回 False，由用例自行 skip——gateway conftest 同口径）。"""
-    import asyncio
-    import sys
-
-    if sys.platform == "win32":  # psycopg 异步要求 Selector 循环（导入期固定策略）
-        asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
     from sqlalchemy.exc import SQLAlchemyError
 
     engine = create_async_engine(dsn, pool_pre_ping=True)
     try:
         async with engine.connect():
             return True
-    except (OSError, SQLAlchemyError):
+    except (OSError, SQLAlchemyError, NotImplementedError):  # NotImplementedError=驱动撞上不兼容循环
         return False
     finally:
         await engine.dispose()

@@ -493,10 +493,14 @@ class PgTaskRepository:
         """子 Run 定向状态更新（40 篇 R1）：只 UPDATE 目标行——
 
         并行子 Run 行级隔离（同表不同行），互不覆写；终态自动兜底回填 ended_at
-        （与聚合 _save_run 同口径）。返回 False=行不存在或跨租户（防御，403/404 归调用方）。
+        （与聚合 _save_run 同口径）。根 Run 结构化拒绝（与 create_subrun 同口径——根
+        行状态只走聚合 save，绕行会失配 task.active_run_id/task.status 并越过
+        PENDING/活跃互斥断言）。返回 False=行不存在/跨租户/根 Run（防御，403/404 归调用方）。
         """
         row = await self._db.get(RunORM, run_id)
         if row is None or row.tenant_id != self._tenant_id:
+            return False
+        if row.parent_run_id is None:  # 根 Run 须走聚合 save（R1 聚合隔离在写边界收口）
             return False
         row.status = status.value
         if usage is not None:

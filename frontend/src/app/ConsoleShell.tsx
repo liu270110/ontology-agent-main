@@ -36,15 +36,15 @@ const CONSOLE_NAV: Array<{ group: ConsoleGroup; items: ConsoleNavItem[] }> = [
     group: '治理',
     items: [
       { title: '审批中心', to: '/console/approvals', icon: ShieldCheck, desc: '候选产物人工终审与批量审批队列', roles: ['admin', 'curator', 'super_admin'] },
-      { title: '系统管理', to: '/console/admin', icon: Settings, desc: '用户 / 用户组 / 角色 / 模型渠道', roles: ['admin', 'super_admin'], permission: 'user:manage' },
+      { title: '系统管理', to: '/console/admin', icon: Settings, desc: '用户 / 用户组 / 角色 / 模型渠道', roles: ['admin', 'super_admin'], permission: 'user:read' },
     ],
   },
   {
     group: '观测',
     items: [
-      { title: '审计日志', to: '/console/admin?tab=audit', icon: ScrollText, desc: '全链路审计 trace 与操作台账', roles: ['admin', 'super_admin'], permission: 'user:manage' },
+      { title: '审计日志', to: '/console/admin?tab=audit', icon: ScrollText, desc: '全链路审计 trace 与操作台账', roles: ['admin', 'super_admin'], permission: 'user:read' },
       // p-analytics 数据分析轻量版（39 号对账 G-D3/§2.14：观测组从 1 项变 2 项，深链同审计日志模式）
-      { title: '数据分析', to: '/console/admin?tab=analytics', icon: BarChart3, desc: '用量 · 成本 · 归因与预算水位（FR-SYS-04/05/07）', roles: ['admin', 'super_admin'], permission: 'user:manage' },
+      { title: '数据分析', to: '/console/admin?tab=analytics', icon: BarChart3, desc: '用量 · 成本 · 归因与预算水位（FR-SYS-04/05/07）', roles: ['admin', 'super_admin'], permission: 'user:read' },
     ],
   },
 ]

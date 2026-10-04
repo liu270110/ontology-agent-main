@@ -7527,7 +7527,7 @@
       },
       "SkillOut": {
         "additionalProperties": false,
-        "description": "技能登记项投影（详情元数据口径：body 只回长度不回正文，14 §3）。",
+        "description": "技能登记项投影（详情元数据口径：body 只回长度不回正文，14 §3）。\n\nrequired_secrets/missing_secrets/unprovisioned=K5 门 1/2 透出（docs/Agent/13 §10）：\n声明名集 + 登记时点缺失快照；unprovisioned=缺失快照非空（不阻断 listed，消费方可感知）。",
         "properties": {
           "body_bytes": {
             "title": "Body Bytes",
@@ -7554,6 +7554,13 @@
             "title": "Id",
             "type": "string"
           },
+          "missing_secrets": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Missing Secrets",
+            "type": "array"
+          },
           "name": {
             "title": "Name",
             "type": "string"
@@ -7562,6 +7569,13 @@
             "title": "Origin",
             "type": "string"
           },
+          "required_secrets": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Required Secrets",
+            "type": "array"
+          },
           "source_uri": {
             "title": "Source Uri",
             "type": "string"
@@ -7569,6 +7583,11 @@
           "status": {
             "title": "Status",
             "type": "string"
+          },
+          "unprovisioned": {
+            "default": false,
+            "title": "Unprovisioned",
+            "type": "boolean"
           },
           "updated_at": {
             "anyOf": [

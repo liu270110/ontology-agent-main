@@ -1,6 +1,6 @@
 """golden 评测脚本单测（v1.5 wedge；假 golden + 假候选桩，零 HTTP 零真实图号）。
 
-脚本本体 tools/drawing-probe/eval_golden.py（tools 非包，经 importlib 按路径加载）。
+脚本本体 services/tools/drawing-probe/eval_golden.py（services/tools 目录非包，经 importlib 按路径加载）。
 不要求本批跑出真实 F1 数值（golden 由验收人另出，路径经 GOLDEN_PATH 注入）——本文件
 只锁评测口径：字段级命中判定 / P/R/F1 计算 / 宏平均与 not_found 排除 / golden 骨架校验。
 """
@@ -15,13 +15,13 @@ from pathlib import Path
 import pytest
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
-_MODULE_PATH = _REPO_ROOT / "tools" / "drawing-probe" / "eval_golden.py"
+_MODULE_PATH = _REPO_ROOT / "services" / "tools" / "drawing-probe" / "eval_golden.py"
 
 _spec = importlib.util.spec_from_file_location("eval_golden_under_test", _MODULE_PATH)
 assert _spec is not None and _spec.loader is not None
 eval_golden = importlib.util.module_from_spec(_spec)
 sys.modules.setdefault("eval_golden_under_test", eval_golden)
-_spec.loader.exec_module(eval_golden)  # 模块自举 sys.path（parents[2]=仓库根），services.* 可导入
+_spec.loader.exec_module(eval_golden)  # 模块自举 sys.path（脚本内 parents[3]=仓库根），services.* 可导入
 
 
 # ---------------------------------------------------------------- field_hit（字段级命中口径）

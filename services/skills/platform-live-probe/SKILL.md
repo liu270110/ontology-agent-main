@@ -1,6 +1,6 @@
 ---
 name: platform-live-probe
-description: 平台 HTTP 面实测复跑技能。验收/回归 ontology-agent 后端(kb 摄取链、七步流水线、检索)时使用——按环境口径起后端、跑探针、按 E1/E2/E4 判读、PG 直查落库状态。配套工具 tools/drawing-probe/。
+description: 平台 HTTP 面实测复跑技能。验收/回归 ontology-agent 后端(kb 摄取链、七步流水线、检索)时使用——按环境口径起后端、跑探针、按 E1/E2/E4 判读、PG 直查落库状态。配套工具 services/tools/drawing-probe/。
 ---
 
 # platform-live-probe:平台实测复跑
@@ -13,7 +13,7 @@ description: 平台 HTTP 面实测复跑技能。验收/回归 ontology-agent �
 
    ```
    PROBE_PORT=8365 OA_EMBED_PROTOCOL=tei OA_OLLAMA_BASE_URL=http://127.0.0.1:18002 \
-     .venv/Scripts/python.exe tools/drawing-probe/run_backend.py
+     .venv/Scripts/python.exe services/tools/drawing-probe/run_backend.py
    ```
 
    - 本地 vLLM 渠道**不需要** OA_LLM_API_KEY(组合根空 key 装配+EMPTY 占位,2026-10-04 已修);
@@ -26,7 +26,7 @@ description: 平台 HTTP 面实测复跑技能。验收/回归 ontology-agent �
    PROBE_BASE=http://127.0.0.1:8365/api/v1 \
    PROBE_PDF_A="<本地样图A>" PROBE_PDF_B="<本地样图B>" \
    PROBE_TENANT_ID="<既有开发租户,LLM 抽取落库需要>" \
-     .venv/Scripts/python.exe tools/drawing-probe/live_probe.py
+     .venv/Scripts/python.exe services/tools/drawing-probe/live_probe.py
    ```
 
 3. **判读**(期望值,任何偏离=待解释):

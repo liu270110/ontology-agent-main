@@ -83,12 +83,16 @@ def build_tools_segment(definitions: Mapping[str, Any], available: set[str]) -> 
 
 
 def _build_system_prompt(turn: ChatTurn) -> str:
-    """系统提示：角色约定 + 已标界上下文（B3 标界头在组装器落，此处原样携带）。"""
-    return (
+    """系统提示：角色约定 + 技能目录段（竖线② L1，进程级稳定前缀）+ 已标界上下文（B3 标界
+    头在组装器落，此处原样携带；目录段置于 context_text 之前保 KV-cache 前缀稳定）。"""
+    parts = [
         "你是 ontology-agent 平台对话助手：仅依据给定的记忆与知识证据回答，"
-        "证据不足时明确说明；引用事实时保持与证据原文一致。\n"
-        f"{turn.context_text}"
-    )
+        "证据不足时明确说明；引用事实时保持与证据原文一致。"
+    ]
+    if turn.skills_catalog:
+        parts.append(turn.skills_catalog)
+    parts.append(turn.context_text)
+    return "\n".join(parts)
 
 
 def _build_user_prompt(turn: ChatTurn) -> str:

@@ -27,17 +27,19 @@ _CONNECT_TIMEOUT_S = 10.0
 
 
 def _build_system_block(turn: ChatTurn) -> list[dict[str, Any]]:
-    """system 块（带 cache_control）：长前缀命中缓存——锚点 §3.3 直连通道的存在理由。"""
-    return [
-        {
-            "type": "text",
-            "text": (
-                "你是 ontology-agent 平台对话助手：仅依据给定的记忆与知识证据回答，"
-                "证据不足时明确说明。\n" + turn.context_text
-            ),
-            "cache_control": {"type": "ephemeral"},
-        }
-    ]
+    """system 块（带 cache_control）：长前缀命中缓存——锚点 §3.3 直连通道的存在理由。
+
+    技能目录段（竖线② L1）为进程级稳定前缀，置于 context_text 之前——轮间易变尾只在
+    证据段，cache_control 前缀命中不受影响。
+    """
+    text = (
+        "你是 ontology-agent 平台对话助手：仅依据给定的记忆与知识证据回答，"
+        "证据不足时明确说明。"
+    )
+    if turn.skills_catalog:
+        text = f"{text}\n{turn.skills_catalog}"
+    text = f"{text}\n{turn.context_text}"
+    return [{"type": "text", "text": text, "cache_control": {"type": "ephemeral"}}]
 
 
 def _build_messages(turn: ChatTurn) -> list[dict[str, Any]]:

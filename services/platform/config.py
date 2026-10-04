@@ -79,6 +79,15 @@ class Settings(BaseSettings):
     # （services/mcp/__main__.py，gateway 未装 ExternalMcpManager）。
     mcp_bridge_enabled: bool = True
 
+    # 能力通道竖线②（2026-10-05 批，docs/Skills §3.3/§3.4 + 「渐进式加载」节 + docs/Agent/02
+    # L1 通道）：SKILL.md 技能目录装载注入。**M3 Profile/skills ref 未实装前的最小竖线——
+    # 锚点=config 而非 Profile**（Agent config 白名单仅 model/temperature/tool_whitelist/
+    # num_ctx；skills ref 仅存在于 L2 能力包 server.json 设计稿），Profile 落地后装载面按
+    # ref 收口。目录路径相对仓库根（cwd 口径同 .env）；None=关闭目录注入。
+    skills_catalog_dir: str | None = "services/skills"
+    skills_catalog_include: str = ""  # 逗号分隔技能名白名单；空=全部装载
+    skills_catalog_exclude: str = ""  # 逗号分隔技能名排除项；优先级高于白名单
+
     # 网关运行
     api_prefix: str = "/api/v1"
     sse_heartbeat_seconds: int = 15  # 建议值，压测后冻结（02 §5）

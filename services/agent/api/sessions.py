@@ -343,6 +343,34 @@ def _build_mcp_tool_bindings(state: Any) -> tuple:
     return build_mcp_tool_bindings(registry)
 
 
+def _build_skills_catalog_segment(settings: Any) -> str:
+    """能力通道竖线②（2026-10-05 批）：SKILL.md 目录式装载（L1 纯提示层）组装点。
+
+    方案依据：docs/Skills §3.3（frontmatter name/description 必填）+ §3.4 四通道（L1=程序性
+    知识、纯提示层）+「渐进式加载」节（元数据层常驻进系统提示、正文不整篇注入）+ docs/
+    Agent/02 四通道权威；机制审计底稿 dwfrun-a1582cc6。**锚点快照（M3 Profile 落地前最小
+    竖线）**：Profile/skills ref 未实装（Agent config 白名单仅 model/temperature/
+    tool_whitelist/num_ctx），装载来源锚点=config（skills_catalog_dir/include/exclude）而非
+    Profile，Profile 落地后按 ref 收口。目录进程内一次装载（编排器单例缓存），坏文件跳过
+    留痕不阻塞；任一异常降级空串（fail-soft 同 memory/worker 装配先例），会话不带目录继续。
+    """
+    root = getattr(settings, "skills_catalog_dir", None)
+    if not root:
+        return ""
+    include = tuple(s.strip() for s in getattr(settings, "skills_catalog_include", "").split(",") if s.strip())
+    exclude = tuple(s.strip() for s in getattr(settings, "skills_catalog_exclude", "").split(",") if s.strip())
+    try:
+        from services.agent.business.prompts.skills_catalog import load_skill_catalog, render_skill_catalog_segment
+
+        entries = load_skill_catalog(root, include=include, exclude=exclude)
+        if not entries:
+            return ""
+        return render_skill_catalog_segment(entries)
+    except Exception:  # noqa: BLE001 ——装载/渲染任一失败均不阻塞会话启动（fail-soft，留痕）
+        logger.exception("skills catalog 装配失败（以无技能目录继续）: root=%s", root)
+        return ""
+
+
 def get_or_build_chat_orchestrator(state: Any) -> Any:
     """取/建对话编排器（模块级组合模式，同 kb.py get_model_port 先例；app.state 单例缓存）。
 
@@ -378,6 +406,7 @@ def get_or_build_chat_orchestrator(state: Any) -> Any:
         run_registry=get_or_build_run_registry(state),  # M4.5-A：运行中输入面注册表
         estop_probe_factory=estop_store.probe,  # M4.5-A：estop 步边界闸门探针工厂
         extra_tool_bindings=_build_mcp_tool_bindings(state),  # 竖线①：MCP registry→内核绑定桥
+        skills_catalog=_build_skills_catalog_segment(settings),  # 竖线②：SKILL.md 目录式注入（L1）
     )
     state.chat_orchestrator = orchestrator
     return orchestrator

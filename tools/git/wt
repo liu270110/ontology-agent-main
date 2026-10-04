@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+# 舰队 worktree 工具链（已入库防删：2026-10-04 两次被误删后收编 git 跟踪）
+# 用法：wt new <domain>-<desc>  |  wt finish [--push]（须在 feature worktree 内执行）
+set -euo pipefail
+MAIN="E:/learn-agnet-project/ontology-agent-mian"
+cmd="${1:-}"; shift || true
+case "$cmd" in
+  new)
+    name="${1:?用法: wt new <domain>-<desc>}"
+    wt="E:/learn-agnet-project/wt-$name"
+    cd "$MAIN"
+    git worktree add -b "feature/$name" "$wt" develop 2>&1 | tail -2
+    mkdir -p "$wt/tools/git" && cp "$MAIN/tools/git/wt" "$wt/tools/git/wt"
+    echo "✓ worktree: $wt（分支 feature/$name，基线 develop）"
+    ;;
+  finish)
+    branch="$(git rev-parse --abbrev-ref HEAD)"
+    case "$branch" in feature/*) ;; *) echo "✗ 须在 feature/* 分支上执行（当前: $branch）"; exit 1;; esac
+    git rebase develop 2>&1 | tail -1
+    cd "$MAIN"
+    git merge --no-ff "feature/$branch" -m "chore: merge $branch into develop" 2>&1 | tail -2
+    git branch -d "$branch" 2>&1 | tail -1
+    echo "✓ 已合入 develop（--no-ff）"
+    ;;
+  *) echo "用法: wt new <name> | wt finish"; exit 1;;
+esac

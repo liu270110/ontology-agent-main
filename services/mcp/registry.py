@@ -6,10 +6,12 @@
   内部包装为满足 CapabilityProvider 协议的 FunctionCapabilityProvider；
 - 外部能力注册：``register_external(server, descriptors, invoker)``——外部 tool 全名强制
   ``{server}.{local}`` 前缀隔离（防冒充平台 tool）：server 名禁用平台保留命名空间段，
-  且注册前逐条校验全名不与平台 tool / 保留段冲突（MCP 篇 §4「外部工具默认不可信」的
-  命名空间面向；可见性授权/审核态随 mcp_servers 表 M5 收口）；
-- 路由与清单：``get(tool_name)`` → (provider, descriptor)；``list_tools()`` → 全量清单
-  （按租户可见性过滤随 mcp_tools 表登记，M5；当前返回注册全集，调用方自行过滤）。
+  且注册前逐条校验全名不与平台 tool / 保留段冲突；required_scopes 为空一律拒绝注册
+  （Agent13 §4 K3-2：call 段强制点必须有非空最小集，堵空元组绕过 _check_scopes 的洞；
+  可见性授权/审核态随 mcp_servers 表 M5 收口）；
+- 路由与清单：``get(tool_name)`` → (provider, descriptor)；``list_tools(granted_scopes=...)``
+  → 可见性过滤清单（Agent13 §4 K3-1 双层授权第一段：required_scopes 全量被调用方授权集
+  包含才可见；None=不过滤保持旧行为；租户过滤位随 mcp_tools 表登记收口，M5）。
 """
 
 from __future__ import annotations
@@ -156,8 +158,10 @@ class CapabilityRegistry:
     ) -> list[str]:
         """注册外部 server 的 tool 清单：全名强制 {server}.{local} 前缀，防冒充平台 tool。
 
-        拒绝三态（红线用例）：server 名占用平台保留段；外部 tool 全名与平台 tool 撞名；
-        外部 tool 全名落入保留段前缀（如 server="foo" 注册全名 "knowledge.search"）。
+        拒绝四态（红线用例）：server 名占用平台保留段；外部 tool 全名与平台 tool 撞名；
+        外部 tool 全名落入保留段前缀（如 server="foo" 注册全名 "knowledge.search"）；
+        required_scopes 为空（Agent13 §4 K3-2：外部工具默认不可信，call 段强制点必须有
+        非空最小集——空元组会让 _check_scopes 循环体不执行，等效绕过 scope 校验）。
         返回实际登记的 tool 全名清单（发现刷新时先 unregister_server 再注册）。
         """
         if server in RESERVED_NAMESPACES:
@@ -171,6 +175,10 @@ class CapabilityRegistry:
                 raise RegistryConflictError(f"外部 tool 冒充平台命名空间: {full_name}")
             if full_name in self._tools:
                 raise RegistryConflictError(f"tool 已注册: {full_name}")
+            if not descriptor.required_scopes:
+                raise RegistryConflictError(
+                    f"外部 tool required_scopes 为空，拒绝注册（K3-2 call 段强制点须非空最小集）: {full_name}"
+                )
             marked = CapabilityDescriptor(
                 name=full_name,
                 description=descriptor.description,
@@ -200,10 +208,19 @@ class CapabilityRegistry:
         """按全名路由（"namespace.tool"；未注册返回 None，出口映射 -32601 语义）。"""
         return self._tools.get(tool_name)
 
-    def list_tools(self, tenant_id: uuid.UUID | None = None) -> list[CapabilityDescriptor]:
+    def list_tools(
+        self, tenant_id: uuid.UUID | None = None, granted_scopes: tuple[str, ...] | None = None
+    ) -> list[CapabilityDescriptor]:
         """工具清单（api/03 §2：CapabilityRegistry list_tools(tenant_id)）。
 
+        ``granted_scopes``（Agent13 §4 K3-1 双层授权·第一段可见性过滤）：调用方授权集——
+        descriptor.required_scopes 全量被包含才可见（可见即可调，与 _check_scopes 的
+        AND 语义一致）；None=不过滤，保持旧行为返回注册全集。
         tenant_id 过滤位随 mcp_tools 可见性登记收口（M5，07 §1 序列图 tools_list(ctx)）；
-        当前返回注册全集（外部 tool 以 descriptor.external 标注来源，调用方可再过滤）。
+        外部 tool 以 descriptor.external 标注来源。
         """
-        return [d for _, d in self._tools.values()]
+        all_tools = [d for _, d in self._tools.values()]
+        if granted_scopes is None:
+            return all_tools
+        granted = set(granted_scopes)
+        return [d for d in all_tools if set(d.required_scopes) <= granted]

@@ -8,6 +8,9 @@
 拒绝调用并提示替代方案，不阻塞调用方主流程；``probe()`` 半开探测成功即恢复。
 发现缓存：tools/list 按 TTL 缓存（默认 300s），``force=True`` 强刷。
 超时：一切远程调用 asyncio.wait_for 硬兜底（standards/01 §2.5）。
+授权（Agent13 §4 K3-2 双层修复）：外部 tool 登记 required_scopes 一律经
+``derive_required_scopes`` 推导非空最小集（空推导拒绝登记并告警）——空元组会使出口
+_check_scopes 空转，等效绕过 call 段 scope 校验。
 """
 
 from __future__ import annotations
@@ -27,6 +30,24 @@ from services.platform.errors import ErrorCode
 logger = logging.getLogger("services.mcp.client")
 
 _DEFAULT_FAILURE_THRESHOLD = 5  # MCP 篇 §4：连续失败 ≥5 进入 degraded
+
+
+def derive_required_scopes(server: str, local: str) -> tuple[str, ...]:
+    """外部 tool required_scopes 推导（Agent13 §4 K3-2：非空最小集，堵 call 段空转洞）。
+
+    推导序：
+    1. 目标级服务器元数据——McpTargetConfig 暂无 scope 声明字段（mcp_servers 表 M5 收口），位留空；
+    2. 工具描述语义映射——外部描述不可信且平台无约定词表，不采用（防把 destructive 工具
+       误降为只读约束）；
+    3. 保守默认：``external:{server}:{local}`` 每工具独立 scope（精确匹配最小授权；带
+       external 段与平台 {resource}:{action} 两段 scope 天然不撞名；不采信远端
+       annotations/描述作授权输入——api/03 §6 annotations 红线不变）。
+
+    server/local 任一为空 → 返回空集（调用方拒登记并告警，注册表侧对空集同样 fail-closed）。
+    """
+    if not server.strip() or not local.strip():
+        return ()
+    return (f"external:{server}:{local}",)
 
 
 def default_client_factory(target: McpTargetConfig) -> Any:
@@ -276,16 +297,25 @@ class ExternalMcpManager:
 
                 return _invoke
 
-            descriptors = [
-                CapabilityDescriptor(
-                    name=f"{name}.{tool['name']}",
-                    description=str(tool.get("description") or ""),
-                    input_schema=dict(tool.get("inputSchema") or {}),
-                    annotations=dict(tool.get("annotations") or {}),
-                    required_scopes=(),
+            descriptors = []
+            for tool in remote_tools:
+                local = str(tool.get("name") or "")
+                scopes = derive_required_scopes(name, local)
+                if not scopes:
+                    # K3-2：空推导一律拒绝登记并告警（不阻塞同 server 其余 tool 的发现登记）
+                    logger.warning(
+                        "外部 tool required_scopes 推导为空，拒绝登记: server=%s tool=%r", name, local
+                    )
+                    continue
+                descriptors.append(
+                    CapabilityDescriptor(
+                        name=f"{name}.{local}",
+                        description=str(tool.get("description") or ""),
+                        input_schema=dict(tool.get("inputSchema") or {}),
+                        annotations=dict(tool.get("annotations") or {}),
+                        required_scopes=scopes,
+                    )
                 )
-                for tool in remote_tools
-            ]
             registered.extend(
                 registry.register_external(name, descriptors, ExternalInvoker(name, _make_invoker(connector, name)))
             )

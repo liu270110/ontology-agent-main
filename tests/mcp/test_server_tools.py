@@ -14,7 +14,7 @@ fastmcp = pytest.importorskip("fastmcp")
 from fastmcp import Client  # noqa: E402
 from fastmcp.exceptions import ToolError  # noqa: E402
 
-from services.mcp.registry import CapabilityRegistry  # noqa: E402
+from services.mcp.registry import CapabilityRegistry, ExternalInvoker  # noqa: E402
 from services.mcp.server import SEVEN_TOOLS, TOOL_SPECS, build_mcp_server  # noqa: E402
 from services.platform.ports.capability_provider import (  # noqa: E402
     CallContext,
@@ -34,6 +34,25 @@ async def _wire_action_stub(registry: CapabilityRegistry) -> None:
         "action.invoke",
         handler,
         CapabilityDescriptor(name="action.invoke", description="回写桩", required_scopes=("action:invoke",)),
+    )
+
+
+async def _echo_external(full: str, params: dict, ctx: CallContext) -> dict:
+    return {"external": full}
+
+
+def _wire_external_echo(registry: CapabilityRegistry, *, server: str = "power-erp", local: str = "echo") -> None:
+    """外部 tool 注册路径预演（K3：required_scopes 非空最小集，推导口径同连接器）。"""
+    registry.register_external(
+        server,
+        [
+            CapabilityDescriptor(
+                name=f"{server}.{local}",
+                description="外部回声",
+                required_scopes=(f"external:{server}:{local}",),
+            )
+        ],
+        ExternalInvoker(server, _echo_external),
     )
 
 
@@ -212,3 +231,78 @@ async def test_writeback_status_scope不足_2001拒绝(audit_sink):
     payload = json.loads(str(exc_info.value))
     assert payload["code"] == 2001
     assert payload["detail"]["required"] == ["action:invoke"]  # api/03 §2：暂按 action:invoke
+
+
+# ------------------------------ K3 双层授权（Agent13 §4：list 过滤 + call 强制）
+
+
+async def test_外部tool_list授权过滤_未授予不挂载_授予后可见(audit_sink):
+    registry = CapabilityRegistry()
+    _wire_external_echo(registry)
+    scope = "external:power-erp:echo"
+    # 未授予：list 集 deny-by-default → 不挂载（堵「启动期无鉴权静态挂载」洞）
+    mcp = build_mcp_server(registry, audit_sink=audit_sink, granted_scopes=(), list_granted_scopes=())
+    async with Client(mcp) as client:
+        names = {t.name for t in await client.list_tools()}
+    assert "power-erp.echo" not in names
+    # 授予：第一段命中 → 挂载面可见
+    mcp = build_mcp_server(registry, audit_sink=audit_sink, granted_scopes=(scope,), list_granted_scopes=(scope,))
+    async with Client(mcp) as client:
+        names = {t.name for t in await client.list_tools()}
+    assert "power-erp.echo" in names
+
+
+async def test_外部tool_双段独立_list可见但call未授予_2001拒绝(audit_sink):
+    registry = CapabilityRegistry()
+    _wire_external_echo(registry)
+    scope = "external:power-erp:echo"
+    # list 组授予（挂载可见）、call 组空集（deny-by-default）——两组独立授出
+    mcp = build_mcp_server(registry, audit_sink=audit_sink, granted_scopes=(), list_granted_scopes=(scope,))
+    async with Client(mcp) as client:
+        names = {t.name for t in await client.list_tools()}
+        assert "power-erp.echo" in names  # 第一段放行
+        with pytest.raises(ToolError) as exc_info:
+            await client.call_tool("power-erp.echo", {"q": 1})
+    payload = json.loads(str(exc_info.value))
+    # Assert：第二段（call 组）独立强制——2001 + required 为推导的最小 scope（非空元组不再空转）
+    assert payload["code"] == 2001
+    assert payload["detail"]["required"] == [scope]
+    assert any(e.tool == "power-erp.echo" and e.status == "denied" for e in audit_sink.entries)
+
+
+async def test_外部tool_list集缺省与call集同源_单集语义兼容(audit_sink):
+    registry = CapabilityRegistry()
+    _wire_external_echo(registry)
+    scope = "external:power-erp:echo"
+    # 不传 list_granted_scopes：与 granted_scopes 同源（--anonymous-scopes 旧行为保持）
+    mcp = build_mcp_server(registry, audit_sink=audit_sink, granted_scopes=(scope,))
+    async with Client(mcp) as client:
+        names = {t.name for t in await client.list_tools()}
+        assert "power-erp.echo" in names
+        result = await client.call_tool("power-erp.echo", {"q": 1})
+    assert result.structured_content == {"external": "power-erp.echo"}
+
+
+async def test_外部tool_annotations纯透传_不产生授权效力(audit_sink):
+    registry = CapabilityRegistry()
+    scope = "external:power-erp:ro"
+    registry.register_external(
+        "power-erp",
+        [
+            CapabilityDescriptor(
+                name="power-erp.ro",
+                description="只读提示外部工具",
+                required_scopes=(scope,),
+                annotations={"readOnlyHint": True, "idempotentHint": True},
+            )
+        ],
+        ExternalInvoker("power-erp", _echo_external),
+    )
+    # readOnlyHint=True 但 call 组未授予 → 仍 2001（annotations 永不进授权，红线在外部面同样成立）
+    mcp = build_mcp_server(registry, audit_sink=audit_sink, granted_scopes=(), list_granted_scopes=(scope,))
+    async with Client(mcp) as client:
+        tools = {t.name: t for t in await client.list_tools()}
+        assert tools["power-erp.ro"].annotations.readOnlyHint is True  # 纯透传
+        with pytest.raises(ToolError) as exc_info:
+            await client.call_tool("power-erp.ro", {"q": 1})
+    assert json.loads(str(exc_info.value))["code"] == 2001

@@ -14,6 +14,8 @@ from dataclasses import dataclass, field
 from types import SimpleNamespace
 from typing import Any
 
+import pytest
+
 from services.agent.api.sessions import _build_mcp_tool_bindings
 from services.agent.business.capabilities.mcp_bridge import (
     MCP_ACTION_IRI_PREFIX,
@@ -130,7 +132,7 @@ def _external_registry(*, server: str = "weather", tool: str = "lookup") -> tupl
     registry = CapabilityRegistry()
     registered = registry.register_external(
         server,
-        [_descriptor(f"{server}.{tool}", description="外部天气查询")],
+        [_descriptor(f"{server}.{tool}", description="外部天气查询", scopes=("kb:read",))],
         ExternalInvoker(server, _invoke),
     )
     return registry, registered
@@ -178,7 +180,9 @@ def test_投影_绑定过内核注册面_行动类唯一不冲突():
     async def _invoke(tool_full: str, arguments: dict[str, Any], ctx: Any) -> dict[str, Any]:  # pragma: no cover
         return {}
 
-    combined.register_external("weather", [_descriptor("weather.lookup")], ExternalInvoker("weather", _invoke))
+    combined.register_external(
+        "weather", [_descriptor("weather.lookup", scopes=("kb:read",))], ExternalInvoker("weather", _invoke)
+    )
     bindings = build_mcp_tool_bindings(combined)
     assert len(bindings) == 2
     dispatcher = ExtensionDispatcher()
@@ -266,14 +270,21 @@ async def test_调用_有其他scope但不匹配仍拒_精确匹配非包含():
     assert stub.calls == []
 
 
-async def test_调用_外部工具空required_scopes_现状语义放行():
-    registry, _reg = _external_registry()  # 外部 descriptor required_scopes=()（M4.1 现状，M5 收口）
-    binding = build_mcp_tool_bindings(registry)[0]
-    result = await binding.invoke(
-        _make_call(action_iri=binding.meta.semantic_annotation["action_iri"]),
-        make_ctx(scopes=()),
-    )
-    assert result.ok is True  # 空要求不构成拒绝（F-1 双层授权为独立 P0，桥不补位不重构）
+def test_注册_外部工具空required_scopes_注册期即拒_K3_2新语义():
+    # develop K3-2（registry.py:179）：外部 tool required_scopes 为空拒绝注册——
+    # 桥侧无需处理该形态（投影期不存在空 scopes 外部工具）；空要求放行的旧语义已消灭。
+    # F-1 双层授权仍为独立 P0，桥不补位不重构（rebase 适配 2026-10-05）。
+    registry = CapabilityRegistry()
+
+    async def _invoke(tool_full: str, arguments: dict[str, Any], ctx: Any) -> dict[str, Any]:  # pragma: no cover
+        return {}
+
+    with pytest.raises(Exception, match="required_scopes 为空"):
+        registry.register_external(
+            "weather",
+            [_descriptor("weather.lookup")],
+            ExternalInvoker("weather", _invoke),
+        )
 
 
 # ── 结果与错误映射（结构化，会话不崩）────────────────────────────────────

@@ -16,7 +16,10 @@ NOW = datetime(2026, 9, 26, 12, 0, tzinfo=UTC)
 
 
 class StubService:
+    seen: list["RecordUpsert"] = []  # 跨实例捕获 upsert cmd（伪造 owner 用例断言用）
+
     async def upsert_record(self, cmd: RecordUpsert, *, origin="api", now=None):
+        StubService.seen.append(cmd)
         if cmd.record_type is MemoryType.OBSERVATION and origin == "api":
             raise ObservationOriginError("mem:Observation 仅限后台管线写入")
         now = now or datetime.now(UTC)
@@ -426,16 +429,67 @@ def test_settle_passes_owner_header_to_pipeline(wired):
     assert pipeline.last_owner == owner
 
 
-def test_settle_invalid_user_header_ignored(wired):
-    """X-User-Id 非法值静默忽略置 None（不报错，dev 宽松语义）。"""
+def test_settle_invalid_user_header_422(wired):
+    """K2-c §11.3 身份不变量：X-User-Id 非法值 → 422 拒绝（不再静默置 None——
+    原「非法静默忽略」宽松语义 2026-10-05 收口废除；缺失头仍为合法无主语义）。"""
     client, pipeline, _repo, _review = wired
     resp = client.post(
         f"/api/v1/memory/sessions/{uuid.uuid4()}/settle",
         headers={**_h(), "X-User-Id": "not-a-uuid"},
         json={"transcript": "t"},
     )
+    assert resp.status_code == 422
+    assert pipeline.calls == 0  # 拒绝先于管线执行（无半写状态）
+
+
+def test_settle_missing_user_header_owner_none(wired):
+    """缺失头 → None（可选归因语义保留：租户级无主记录仍合法）。"""
+    client, pipeline, _repo, _review = wired
+    resp = client.post(f"/api/v1/memory/sessions/{uuid.uuid4()}/settle", headers=_h(), json={"transcript": "t"})
+    assert resp.status_code == 200 and pipeline.last_owner is None
+
+
+def test_promotion_submit_invalid_user_header_422(wired):
+    """K2-c §11.3：升级单提交 X-User-Id 非法值 → 422（可缺省但非法拒绝）。"""
+    client, _pipeline, repo, review_port = wired
+    resp = client.post(
+        "/api/v1/memory/promotions",
+        headers={**_h(), "X-User-Id": "not-a-uuid"},
+        json={"record_id": str(repo.known_record_id), "to_layer": 3},
+    )
+    assert resp.status_code == 422
+    assert review_port.submitted == []  # 拒绝先于建单
+
+
+def test_promotion_decision_invalid_user_header_422(wired):
+    """K2-c §11.3：终审决策 X-User-Id 非法值 → 422（与缺失同归 422，决策须可归因）。"""
+    client, _pipeline, _repo, _review = wired
+    resp = client.post(
+        f"/api/v1/memory/promotions/{uuid.uuid4()}/decision",
+        headers={**_h(), "X-User-Id": "bad-uuid"},
+        json={"action": "approve"},
+    )
+    assert resp.status_code == 422
+
+
+def test_create_record_forged_owner_not_trusted(wired):
+    """K2-c §11.3 伪造 owner 拒绝：请求体携带 owner_user_id 一律不采信（身份元数据归系统
+    所有，仅认证上下文/管线可填）——落库 cmd 不含客户端伪造值，owner 恒为 None。"""
+    client, _pipeline, _repo, _review = wired
+    forger = uuid.uuid4()
+    resp = client.post(
+        "/api/v1/memory/records",
+        headers=_h(),
+        json={
+            "layer": 2,
+            "record_type": "mem:FactClaim",
+            "content": "伪造归属攻击",
+            "owner_user_id": str(forger),  # 客户端伪造 owner
+        },
+    )
     assert resp.status_code == 200
-    assert pipeline.last_owner is None
+    cmd = StubService.seen[-1]
+    assert cmd.owner_user_id is None and str(forger) not in str(cmd.model_dump())  # 伪造值未采信
 
 
 def test_promotion_to_layer_2_rejected_422(client):

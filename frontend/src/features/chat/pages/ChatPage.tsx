@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { MessageSquareDashed, Plus } from 'lucide-react'
+import { Activity, FolderOpen, MessageSquareDashed, Plus, Sparkles } from 'lucide-react'
 import { toast } from 'sonner'
 import { SessionList } from '../components/SessionList'
 import { ChatStream } from '../components/ChatStream'
@@ -44,13 +44,15 @@ const LOCAL_STOPPED = {
  *  seq 跳号 → 重拉历史校正（MESSAGES_SNAPSHOT 兜底随 M4 批）。
  *  S2 深化：上下文面板四分组+溯源 Popover（IX-CHT-04）、证据抽屉（IX-CHT-03）、
  *  停止生成（IX-CHT-06：POST /sessions/{id}/cancel + 保留已生成部分）。
- *  S3 增量（画框23 / 31 篇）：右栏双页签——上下文 ↔ Agent 工作区（文件树/终端/资源）。 */
+ *  S3 增量（画框23 / 31 篇）：右栏页签——上下文 ↔ Agent 工作区（文件树/终端/资源）；
+ *  W1b-8 增量（42 篇 §5）：第三页签「执行」——Run 树 + 快照校正 + TRACING（ExecutionPanel）。 */
 export function ChatPage() {
   const [picked, setPicked] = useState<string | null>(null)
   const sessionId = picked
   const [ctxCollapsed, setCtxCollapsed] = useState(false)
-  /** 右栏页签（画框03+23 + 40 篇 §5.3）：本次回答上下文 ↔ 执行 ↔ Agent 工作区（文件树/终端/资源）。
-   *  「执行」页签仅在有执行结构数据时出现（空态纪律：无数据不渲染页签不占位）。 */
+  /** 右栏页签（画框03+23 + 40 篇 §5.3 + 42 篇 W1b-8）：本次回答上下文 ↔ 执行 ↔ Agent
+   *  工作区（文件树/终端/资源）。「执行」页签仅在有执行结构数据时出现（空态纪律：
+   *  无数据不渲染页签不占位）。 */
   const [rightTab, setRightTab] = useState<'context' | 'execution' | 'workspace'>('context')
   /** 执行页签出现门禁（store 三 slices 有任一实质数据：plan 非空表/subruns/workflowRuns；
    *  W1a 后两者为扁平 Record——空表与空 Record 一致视为无数据——空态纪律：页签不渲染不占位） */
@@ -205,7 +207,8 @@ export function ChatPage() {
           <span className="ml-auto" />
           {sessionId && (
             <div className="seg" role="tablist" aria-label="右侧面板">
-              {/* ui-audit：tab 与面板补 id/aria-controls 关联（APG tabs 最小接线） */}
+              {/* ui-audit：tab 与面板补 id/aria-controls 关联（APG tabs 最小接线）。
+                  W1b-8 三段一致：图标=各面板头同款（Sparkles/Activity/FolderOpen），seg 样式复用 */}
               <button
                 type="button"
                 role="tab"
@@ -216,9 +219,9 @@ export function ChatPage() {
                 className={`seg-btn ${rightTab === 'context' ? 'on' : ''}`}
                 onClick={() => setRightTab('context')}
               >
-                上下文
+                <Sparkles size={11} aria-hidden /> 上下文
               </button>
-              {/* 执行页签（40 篇 §5.3）：仅存在执行结构数据时出现（空态纪律：不占位不报错） */}
+              {/* 执行页签（40 篇 §5.3 + 42 篇 W1b-8）：仅存在执行结构数据时出现（空态纪律：不占位不报错） */}
               {hasExecData && (
                 <button
                   type="button"
@@ -230,7 +233,7 @@ export function ChatPage() {
                   className={`seg-btn ${rightTab === 'execution' ? 'on' : ''}`}
                   onClick={() => setRightTab('execution')}
                 >
-                  执行
+                  <Activity size={11} aria-hidden /> 执行
                 </button>
               )}
               <button
@@ -243,7 +246,7 @@ export function ChatPage() {
                 className={`seg-btn ${rightTab === 'workspace' ? 'on' : ''}`}
                 onClick={() => setRightTab('workspace')}
               >
-                工作区
+                <FolderOpen size={11} aria-hidden /> 工作区
               </button>
             </div>
           )}
@@ -292,9 +295,9 @@ export function ChatPage() {
           </div>
         )}
       </div>
-      {/* 右栏（IX-CHT-04 + 画框23 + 40 篇 §5.3）：上下文 / 执行 / Agent 工作区 三页签切换，
-          可折叠为窄轨。tabpanel 语义接线（ui-audit）：display:contents 壳承载 role/aria，
-          不改变三档 flex 布局；执行面板数据源=store 三投影同源 + R3 快照兜底 */}
+      {/* 右栏（IX-CHT-04 + 画框23 + 40 篇 §5.3 + 42 篇 W1b-8）：上下文 / 执行 / Agent 工作区
+          三页签切换，可折叠为窄轨。tabpanel 语义接线（ui-audit）：display:contents 壳承载
+          role/aria，不改变三档 flex 布局；执行面板数据源=store 三投影同源 + R3 快照兜底 */}
       {!sessionId ? null : (
         <div
           role="tabpanel"
@@ -309,6 +312,7 @@ export function ChatPage() {
           ) : rightTab === 'context' ? (
             <ContextPanel onOpenEvidence={setEvFocus} />
           ) : rightTab === 'execution' ? (
+            // 执行面板（W1b-8 合并版）：Run 树（runs+subruns 前端派生）+ 快照校正 + TRACING + 深链
             <ExecutionPanel sessionId={sessionId} />
           ) : (
             <WorkspacePanel sessionId={sessionId} />

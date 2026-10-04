@@ -40,6 +40,12 @@ export interface ToolCall {
 
 export interface RunInfo {
   status: 'running' | 'succeeded' | 'failed'
+  /** RUN_STARTED 载荷 task_id（api/02 §3.1 必带；W1b-7 增补捕获）：对话内审批卡兜底轮询
+   *  GET /tasks/{tid}/runs/{rid}/approvals/pending 的 URL 构造依赖（42 篇 §3 过渡兜底） */
+  task_id?: string
+  /** RUN_STARTED 载荷 trace_id（40 篇 §4.2 公共字段 R2：wire_data 只补缺、可选向后兼容；
+   *  执行面板 TRACING 行数据源，无帧不存不造假——宪法 5 全程可追溯） */
+  trace_id?: string
   usage?: Record<string, unknown>
   error?: { code: number; message: string }
 }
@@ -120,6 +126,47 @@ export interface SubrunInfo {
   duration_ms?: number
   summary?: string
   error?: string
+  /** SUBRUN_STARTED 载荷 trace_id（40 篇 §4.2 公共字段 R2，可选）：执行面板 TRACING 行，无帧不存 */
+  trace_id?: string
+}
+
+/** GET /runs/{run_id}/subruns 快照行（api/01 §5.2 ★ 行，实装=services/agent/api/schemas/run.py SubRunOut；
+ *  40 篇 §4.4 R3 重连兜底：后端不发树——扁平后代列表，树由前端按 parent_run_id 派生） */
+export interface SubrunSnapshotRow {
+  id: string
+  parent_run_id: string
+  label?: string
+  goal?: string
+  depth?: number
+  /** 后端 runs 七态（04 §3）：queued/running/waiting_tool/completed/failed/timeout/cancelled */
+  status: string
+  started_at?: string
+  ended_at?: string
+  /** ended_at-started_at 毫秒（任一缺失=None） */
+  duration_ms?: number
+  /** tokens 汇总（R1 落列）；前端仅收数值 tokens */
+  usage?: Record<string, unknown>
+  /** 产物摘要 v1 恒 null（runs 表无产物列，模块 docstring） */
+  artifact?: Record<string, unknown> | null
+}
+
+/** 快照七态 → 前端 SubrunStatus 六枚举（40 篇 §3.2：rejected_artifact 为事件态、落行=completed+error，
+ *  快照行不携带；completed 及未知/畸形一律按完成收敛——SUBRUN_FINISHED 归约同纪律） */
+function snapshotStatus(st: string | undefined): SubrunStatus {
+  switch (st) {
+    case 'running':
+    case 'queued':
+    case 'waiting_tool':
+      return 'in_progress'
+    case 'failed':
+      return 'failed'
+    case 'timeout':
+      return 'timeout'
+    case 'cancelled':
+      return 'cancelled'
+    default:
+      return 'completed'
+  }
 }
 
 export type WorkflowNodeStatus = 'running' | 'succeeded' | 'failed' | 'skipped' | 'waiting_approval' | 'cancelled'
@@ -353,6 +400,12 @@ interface SessionState {
    *  帧走 apply 正常归约；返回该 seq 是否已被覆盖（applied/dup=true，仍 gap=false → 调用方
    *  回落 ?last_event_id= 重连补发）。 */
   backfill: (history: (ChatMessage & { seq?: number })[], pending: SseEvent) => boolean
+  /** 快照校正（40 篇 §4.4 R3）：GET /runs/{run_id}/subruns 的扁平后代行并入 subruns——
+   *  断线重连兜底：先吃快照重建子 Run 状态，再吃 SSE 增量。行键=快照 id；既有行保留快照
+   *  不携带的心跳字段（phase/preview/tool_name/tool_count/summary/error/trace_id/index/total），
+   *  状态/耗时/血统/label/goal/depth 以快照为准（校正语义）；本地 rejected_artifact 事件终态
+   *  不被快照 completed 降级（落行=completed+error，40 篇 §3.2）。载荷不可信逐行清洗。 */
+  mergeSubrunSnapshot: (rows: SubrunSnapshotRow[]) => void
   setConnection: (c: SessionState['connection']) => void
   /** 停止生成（IX-CHT-06）：流终止、保留已生成部分，末条助手消息追加「已手动停止」标记 */
   stopRun: () => void
@@ -397,6 +450,38 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     }),
 
   compactUsage: tokens => set({ usageTokens: tokens }),
+
+  mergeSubrunSnapshot: rows => {
+    if (!Array.isArray(rows) || rows.length === 0) return
+    set(s => {
+      const next = { ...(s.subruns ?? {}) }
+      let merged = 0
+      for (const raw of rows) {
+        if (raw == null || typeof raw !== 'object') continue
+        const id = typeof raw.id === 'string' && raw.id ? raw.id : null
+        if (!id) continue
+        const cur = next[id]
+        const mapped = snapshotStatus(typeof raw.status === 'string' ? raw.status : undefined)
+        // rejected_artifact 为事件态更富终态（快照落行=completed）：不被降级（40 篇 §3.2）
+        const status: SubrunStatus = cur?.status === 'rejected_artifact' && mapped === 'completed' ? 'rejected_artifact' : mapped
+        const usage = raw.usage != null && typeof raw.usage === 'object' ? (raw.usage as Record<string, unknown>) : undefined
+        const snapTokens = Number(usage?.tokens)
+        next[id] = {
+          ...(cur ?? { sub_run_id: id }),
+          sub_run_id: id,
+          parent_run_id: optStr(raw.parent_run_id) ?? cur?.parent_run_id,
+          label: optStr(raw.label) ?? cur?.label,
+          goal: optStr(raw.goal) ?? cur?.goal,
+          depth: optNum(raw.depth) ?? cur?.depth,
+          status,
+          duration_ms: optNum(raw.duration_ms) ?? cur?.duration_ms,
+          tokens: Number.isFinite(snapTokens) ? snapTokens : cur?.tokens,
+        }
+        merged += 1
+      }
+      return merged > 0 ? { subruns: next } : {}
+    })
+  },
 
   pushDraftInsert: text =>
     set(s => ({ draftInserts: [...s.draftInserts, { text, seq: ++draftSeq }].slice(-20) })),
@@ -530,9 +615,12 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     switch (evt.name) {
       case 'RUN_STARTED': {
         const rid = String(d.run_id ?? '')
-        // 42 篇批次 1 task_type 归约 + W-02 乐观占位让位（真运行帧已到）
+        // 42 篇批次 1 task_type 归约（api/02 §3：缺省=chat 向后兼容）+ W-02 乐观占位让位（真运行帧已到）
+        // W1b-7 增补：task_id 一并入 run 表（api/02 §3.1 必带字段），审批卡兜底轮询依赖
+        // W1b-8 增补：trace_id 捕获（40 篇 §4.2 公共字段 R2，wire_data 只补缺；执行面板 TRACING 行）
         set(s => ({
-          running: true, activeRunId: rid, runs: { ...s.runs, [rid]: { status: 'running' } }, evidence: null,
+          running: true, activeRunId: rid,
+          runs: { ...s.runs, [rid]: { status: 'running', task_id: optStr(d.task_id), trace_id: optStr(d.trace_id) } }, evidence: null,
           activeTaskType: optStr(d.task_type) ?? 'chat',
           pendingReply: false,
         }))
@@ -709,6 +797,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
           index: optNum(d.index),
           total: optNum(d.total),
           status: 'in_progress',
+          trace_id: optStr(d.trace_id),
         }
         set(s => ({ subruns: { ...s.subruns, [sid]: row } }))
         break

@@ -15,18 +15,20 @@ import { PlanCard } from '../components/PlanCard'
 import { WorkflowRunCard } from '../components/WorkflowRunCard'
 import { ChatPage } from '../pages/ChatPage'
 
-/** 执行结构波三卡 + 右栏执行页签（40 篇 §5.2/§5.3，2026-10-05 W1a store 形状适配）：
+/** 执行结构波三卡 + 右栏执行页签（40 篇 §5.2/§5.3，2026-10-05 W1a store 形状适配；
+ *  W1b 合并版：三卡=develop 归一形状 + W1b 增强（键盘可达/产物卡/审批深链/占位按钮））：
  *  数据形状唯一事实源=W1a stores/session-store（plan: PlanSlice / subruns: Record<sub_run_id,
  *  SubrunInfo> / workflowRuns: Record<run_id, {nodes}>，全部扁平 snake_case）；派生态
  *  （排序/树/分组）=lib/exec-selectors 纯函数。驱动方式=zustand setState 直设 slices 后渲染
  *  （绕过 SSE 对账；归约语义已有 exec-events-reduction.test.ts 覆盖）：
  *  ① ExecutionTaskCard：运行中置顶+紫点行/预览、终态徽标（rejected_artifact 警示非成功、
- *     失败红）、>3 折叠、RUN_FINISHED 后折叠一行+「查看执行」深链；
+ *     失败红）、>3 折叠（单按钮展开/收起回收）、RUN_FINISHED 后折叠一行+「查看执行」深链；
  *  ② PlanCard：紧凑行 n/m + 复选清单三态 + revision 原地刷新 + 空态不渲染；
  *  ③ WorkflowRunCard：节点表派生 n/m、进行中置顶、>5 折叠、终态折叠、空态不渲染；
- *  ④ ExecInlineCards 空态纪律：三 slices 全空整组不渲染；
- *  ⑤ ExecutionPanel：Run 树缩进+行展开明细、TRACING 段、R3 快照兜底=面板本地 useState 合并
- *     （补缺不覆盖实时、不改 store、卸载清空）；
+ *  ④ ExecInlineCards 空态纪律：三 slices 全空整组不渲染；三卡懒加载（W1b-7）→ 异步断言；
+ *  ⑤ ExecutionPanel：Run 树缩进+行展开明细、TRACING 段、R3 快照兜底=挂载/重连自动拉
+ *     GET /runs/{id}/subruns → store.mergeSubrunSnapshot 合并（三投影同源校正；实时行
+ *     心跳字段保留、rejected_artifact 不降级——W1b-8 语义）；
  *  ⑥ ChatPage「执行」页签门禁：无执行数据页签不出现，有数据出现可切换。 */
 
 // jsdom 无 EventSource：注入惰性桩（连接不建立、不派发帧——本文件只测 UI 投影）
@@ -125,7 +127,7 @@ describe('ExecutionTaskCard（40 篇 §5.2 协作任务卡）', () => {
       subrow('s2', { label: '乙', index: 2, tool_name: 'graph.query', tool_count: 3, preview: '查询停电范围子图', tokens: 1000 }),
       subrow('s3', { label: '丙', index: 3 }),
     ])
-    render(<ExecutionTaskCard group={{ parentRunId: 'run-1', items, done: 1 }} titleHint="停电范围分析" />)
+    render(<MemoryRouter><ExecutionTaskCard group={{ parentRunId: 'run-1', items, done: 1 }} titleHint="停电范围分析" /></MemoryRouter>)
 
     expect(screen.getByTestId('exec-task-state')).toHaveTextContent('运行中')
     expect(screen.getByTestId('exec-task-progress')).toHaveTextContent('1/3')
@@ -137,7 +139,8 @@ describe('ExecutionTaskCard（40 篇 §5.2 协作任务卡）', () => {
     expect(rows[1]).toHaveTextContent('丙')
     expect(rows[2]).toHaveTextContent('甲')
     // 紫点走令牌 --src-subagent；执行中行有 preview + 脉冲 + token 小字
-    const dot = within(rows[0]).getByRole('button').querySelector('span[aria-hidden]')
+    // （W1b 合并版：行本体即 role=button 可点击位——dot 直查行内首个 aria-hidden span）
+    const dot = rows[0].querySelector('span[aria-hidden]')
     expect(dot).toHaveStyle({ background: 'var(--src-subagent)' })
     expect(within(rows[0]).getByText('查询停电范围子图')).toBeInTheDocument()
     expect(within(rows[0]).getByText('执行中')).toBeInTheDocument()
@@ -152,7 +155,7 @@ describe('ExecutionTaskCard（40 篇 §5.2 协作任务卡）', () => {
       subrow('s2', { label: '失败员', index: 2, status: 'failed', duration_ms: 5000, error: '工具超时' }),
       subrow('s3', { label: '被拒员', index: 3, status: 'rejected_artifact', duration_ms: 8000, summary: '产物未过校验' }),
     ])
-    render(<ExecutionTaskCard group={{ parentRunId: 'run-1', items, done: 3 }} />)
+    render(<MemoryRouter><ExecutionTaskCard group={{ parentRunId: 'run-1', items, done: 3 }} /></MemoryRouter>)
 
     expect(screen.getByTestId('exec-task-progress')).toHaveTextContent('3/3')
     expect(screen.getByText('完成')).toBeInTheDocument()
@@ -163,16 +166,16 @@ describe('ExecutionTaskCard（40 篇 §5.2 协作任务卡）', () => {
     // rejected_artifact=警示态橙（非成功绿）
     expect(within(rows[2]).getByText('被拒员')).toHaveClass('text-orange')
     expect(within(rows[2]).getByText('产物被拒')).toBeInTheDocument()
-    // 行点击展开：rejected 警示文案 + 失败错误（W1a 扁平 error:string 直显）+ 完成行摘要
-    fireEvent.click(within(rows[2]).getByRole('button'))
+    // 行点击展开（行本体=role=button 可点击位）：rejected 警示文案 + 失败错误 + 完成行摘要
+    fireEvent.click(rows[2])
     expect(screen.getByTestId('subrun-detail')).toHaveTextContent('产物校验被拒')
-    fireEvent.click(within(rows[1]).getByRole('button'))
+    fireEvent.click(rows[1])
     expect(screen.getByTestId('subrun-error')).toHaveTextContent('工具超时')
-    fireEvent.click(within(rows[0]).getByRole('button'))
+    fireEvent.click(rows[0])
     expect(screen.getByTestId('subrun-detail')).toHaveTextContent('产出结构化停电范围')
   })
 
-  it('③ >3 行折叠（置顶排序后保留前 3 行=执行中优先），可展开/收起', () => {
+  it('③ >3 行折叠（置顶排序后保留前 3 行=执行中优先），单按钮可展开/收起回收', () => {
     const items = sortSubrunsByStatus([
       subrow('s1', { label: '运行甲', tool_count: 1 }),
       subrow('s2', { label: '运行乙', index: 2, tool_count: 1 }),
@@ -180,13 +183,15 @@ describe('ExecutionTaskCard（40 篇 §5.2 协作任务卡）', () => {
       subrow('c1', { label: '完成丁', index: 4, status: 'completed', duration_ms: 1000 }),
       subrow('c2', { label: '完成戊', index: 5, status: 'completed', duration_ms: 1000 }),
     ])
-    render(<ExecutionTaskCard group={{ parentRunId: 'run-1', items, done: 3 }} />)
+    render(<MemoryRouter><ExecutionTaskCard group={{ parentRunId: 'run-1', items, done: 3 }} /></MemoryRouter>)
 
     expect(screen.getAllByTestId('subrun-row')).toHaveLength(3)
-    expect(screen.getByTestId('exec-task-expand')).toHaveTextContent('还有 2 个子任务')
-    fireEvent.click(screen.getByTestId('exec-task-expand'))
+    expect(screen.getByTestId('exec-expand')).toHaveTextContent('还有 2 个子任务')
+    fireEvent.click(screen.getByTestId('exec-expand'))
     expect(screen.getAllByTestId('subrun-row')).toHaveLength(5)
-    fireEvent.click(screen.getByTestId('exec-task-collapse'))
+    // 展开后文案切「收起」，点击回收（W1b 合并版：单按钮展开/收起）
+    expect(screen.getByTestId('exec-expand')).toHaveTextContent('收起')
+    fireEvent.click(screen.getByTestId('exec-expand'))
     expect(screen.getAllByTestId('subrun-row')).toHaveLength(3)
   })
 
@@ -196,7 +201,7 @@ describe('ExecutionTaskCard（40 篇 §5.2 协作任务卡）', () => {
       subrow('s2', { label: '乙', index: 2, status: 'completed', duration_ms: 31000 }),
     ])
     let opened = 0
-    render(<ExecutionTaskCard group={{ parentRunId: 'run-1', items, done: 2 }} runStatus="succeeded" onOpenExecution={() => (opened += 1)} />)
+    render(<MemoryRouter><ExecutionTaskCard group={{ parentRunId: 'run-1', items, done: 2 }} runStatus="succeeded" onOpenExecution={() => (opened += 1)} /></MemoryRouter>)
 
     // 行不可见，一行摘要可见（done/total + 耗时 Σ=43s）
     expect(screen.queryAllByTestId('subrun-row')).toHaveLength(0)
@@ -258,7 +263,7 @@ describe('WorkflowRunCard（40 篇 §5.2 运行卡）', () => {
       wfNode('n3', { title: '汇总生成', node_type: 'agent', status: 'running' }),
       wfNode('n4', { title: '人工审批', node_type: 'approval', status: 'waiting_approval' }),
     ]
-    render(<WorkflowRunCard runId="run-wf" nodes={nodes} />)
+    render(<MemoryRouter><WorkflowRunCard runId="run-wf" nodes={nodes} /></MemoryRouter>)
     // done=非 running/waiting_approval 行数（节点表派生，W1a 无 wfCounts）
     expect(screen.getByTestId('wf-run-progress')).toHaveTextContent('2/4 节点')
     const rows = screen.getAllByTestId('wf-node-row')
@@ -270,22 +275,22 @@ describe('WorkflowRunCard（40 篇 §5.2 运行卡）', () => {
     expect(within(rows[0]).getByText('智能体')).toBeInTheDocument()
   })
 
-  it('⑨ >5 行折叠 + 根 run 终态折叠为一行摘要 + 深链', () => {
+  it('⑨ >5 行折叠（单按钮展开）+ 根 run 终态折叠为一行摘要 + 深链', () => {
     const nodes = [
       wfNode('n0', { title: '运行节点', node_type: 'tool', status: 'running' }),
       ...Array.from({ length: 6 }, (_, i) => wfNode(`d${i}`, { title: `完成${i}`, status: 'succeeded', duration_ms: 1000 })),
     ]
     let opened = 0
-    const { rerender } = render(<WorkflowRunCard runId="run-wf" nodes={nodes} runStatus="running" onOpenExecution={() => (opened += 1)} />)
+    const { rerender } = render(<MemoryRouter><WorkflowRunCard runId="run-wf" nodes={nodes} runStatus="running" onOpenExecution={() => (opened += 1)} /></MemoryRouter>)
     expect(screen.getByTestId('wf-run-progress')).toHaveTextContent('6/7 节点')
     expect(screen.getAllByTestId('wf-node-row')).toHaveLength(5)
-    expect(screen.getByTestId('wf-run-expand')).toHaveTextContent('还有 2 个节点')
-    fireEvent.click(screen.getByTestId('wf-run-expand'))
+    expect(screen.getByTestId('wf-toggle')).toHaveTextContent('还有 2 个节点')
+    fireEvent.click(screen.getByTestId('wf-toggle'))
     expect(screen.getAllByTestId('wf-node-row')).toHaveLength(7)
 
     // RUN_FINISHED（runStatus→succeeded）→ 一行摘要 + 查看执行
     // （n0 无 FINISHED 帧仍标 running：done 按节点表派生=6，诚实呈现 6/7）
-    rerender(<WorkflowRunCard runId="run-wf" nodes={nodes} runStatus="succeeded" onOpenExecution={() => (opened += 1)} />)
+    rerender(<MemoryRouter><WorkflowRunCard runId="run-wf" nodes={nodes} runStatus="succeeded" onOpenExecution={() => (opened += 1)} /></MemoryRouter>)
     expect(screen.queryAllByTestId('wf-node-row')).toHaveLength(0)
     expect(screen.getByTestId('wf-run-summary')).toHaveTextContent('已完成 · 6/7 节点 · 6s')
     fireEvent.click(screen.getByTestId('wf-open-panel'))
@@ -300,20 +305,21 @@ describe('WorkflowRunCard（40 篇 §5.2 运行卡）', () => {
 
 describe('ExecInlineCards（消息流挂载组，store setState 直设 W1a slices）', () => {
   it('⑪ 三 slices 全空 → 整组不渲染（空态纪律）', () => {
-    const { container } = render(<ExecInlineCards />)
+    const { container } = render(<MemoryRouter><ExecInlineCards /></MemoryRouter>)
     expect(container).toBeEmptyDOMElement()
   })
 
-  it('⑫ 有数据 → 计划卡+任务卡+运行卡三卡齐出（s.plan/s.subruns/s.workflowRuns 驱动）', () => {
+  it('⑫ 有数据 → 计划卡+任务卡+运行卡三卡齐出（s.plan/s.subruns/s.workflowRuns 驱动；懒加载异步挂载）', async () => {
     useSessionStore.setState({
       plan: { plan_id: 'plan-1', revision: 1, items: [{ id: 'p1', content: '检索停电工单', status: 'in_progress' }] },
       subruns: { s1: subrow('s1', { tool_count: 1 }) },
       workflowRuns: { 'run-wf': { nodes: { n1: wfNode('n1', { title: '开始' }) } } },
     })
-    render(<ExecInlineCards />)
-    expect(screen.getByTestId('plan-card')).toBeInTheDocument()
-    expect(screen.getByTestId('exec-task-card')).toBeInTheDocument()
-    expect(screen.getByTestId('wf-run-card')).toBeInTheDocument()
+    render(<MemoryRouter><ExecInlineCards /></MemoryRouter>)
+    // 三卡懒加载（W1b-7）：数据到达才拉 chunk → findBy 异步等待挂载
+    expect(await screen.findByTestId('plan-card')).toBeInTheDocument()
+    expect(await screen.findByTestId('exec-task-card')).toBeInTheDocument()
+    expect(await screen.findByTestId('wf-run-card')).toBeInTheDocument()
   })
 })
 
@@ -371,9 +377,9 @@ describe('ExecutionPanel（40 篇 §5.3 右栏「执行」页签）', () => {
     expect(rows[2]).toHaveTextContent('检索')
   })
 
-  it('⑮ R3 重连兜底：快照补缺进面板本地态，不覆盖实时、不写 store', async () => {
-    // 实时 store 已有 s-live（in_progress 无心跳）；快照同 id 给 running 不得改写本地行；
-    // 快照另带终态行 s-done → 仅面板本地补建可见
+  it('⑮ R3 重连兜底：挂载自动拉快照 → mergeSubrunSnapshot 并入 store（补缺不降级实时）', async () => {
+    // 实时 store 已有 s-live（in_progress 无心跳）；快照同 id running→in_progress 同态不降级；
+    // 快照另带终态行 s-done → 并入 store 补建、树上可见（合并版=W1b-8 store 级合并，三投影同源）
     useSessionStore.setState({
       subruns: { 's-live': subrow('s-live', { label: '实时行' }) },
       activeRunId: 'run-1',
@@ -389,21 +395,21 @@ describe('ExecutionPanel（40 篇 §5.3 右栏「执行」页签）', () => {
       ),
     )
     renderPanel()
-    // 快照完成行补缺可见（面板本地合并态）
+    // 快照完成行并入 store 后在树上可见
     await waitFor(() => expect(screen.getByText('快照完成行')).toBeInTheDocument())
     const doneRow = screen.getByText('快照完成行').closest('[data-testid="exec-tree-row"]')
     expect(doneRow).not.toBeNull()
     expect(within(doneRow as HTMLElement).getByText('完成')).toBeInTheDocument()
     expect(within(doneRow as HTMLElement).getByText('15s')).toBeInTheDocument()
-    // 不写 store：实时事件流是唯一权威，subruns 仍只有实时一行
-    expect(Object.keys(useSessionStore.getState().subruns!)).toEqual(['s-live'])
-    // 实时行保持实时归并态（W1a 扁平行原样，未被快照覆盖）
+    // store 合并语义：快照行并入（s-live 实时 + s-done 补建）
+    expect(Object.keys(useSessionStore.getState().subruns!).sort()).toEqual(['s-done', 's-live'])
+    // 实时行保持实时归并态（快照 running→in_progress 同态，心跳字段原样保留未被覆盖降级）
     const live = useSessionStore.getState().subruns!['s-live']
     expect(live?.label).toBe('实时行')
     expect(live?.status).toBe('in_progress')
   })
 
-  it('⑯ 无 activeRunId → 快照 run_id 回退树首行 parent_run_id（根 run）；快照失败静默不炸', async () => {
+  it('⑯ 无 activeRunId → 快照 run_id 回退树首行 parent_run_id（根 run）；未知态收敛不炸', async () => {
     useSessionStore.setState({
       subruns: {
         's-done': subrow('s-done', { parent_run_id: 'run-root-x', label: '已终态', status: 'completed', duration_ms: 99000 }),
@@ -417,7 +423,7 @@ describe('ExecutionPanel（40 篇 §5.3 右栏「执行」页签）', () => {
         return HttpResponse.json({
           items: [
             { id: 's-new', parent_run_id: 'run-root-x', label: '快照补建行', depth: 1, status: 'completed', duration_ms: 5000 },
-            { id: 's-junk', parent_run_id: 'run-root-x', depth: 1, status: 'weird-state' }, // 未知态整行丢弃（宁缺勿错）
+            { id: 's-junk', parent_run_id: 'run-root-x', depth: 1, status: 'weird-state' }, // 未知态（见下断言）
           ],
         })
       }),
@@ -425,12 +431,14 @@ describe('ExecutionPanel（40 篇 §5.3 右栏「执行」页签）', () => {
     renderPanel()
     await waitFor(() => {
       expect(screen.getByText('快照补建行')).toBeInTheDocument()
-      // 未知态行不入树
-      expect(screen.queryByText('s-junk')).not.toBeInTheDocument()
     })
     // 无 activeRunId → 快照 run_id 回退树首行 parent_run_id（根 run）
     expect(fetchedPath).toBe('/api/v1/runs/run-root-x/subruns')
-    // 既有实时行不受影响（store 未被触碰）
+    // 未知态按 completed 收敛入树（W1a SUBRUN_FINISHED 同纪律：畸形 status=完成收敛，不丢行不炸）
+    await waitFor(() => expect(screen.getByText('s-junk')).toBeInTheDocument())
+    const junkRow = screen.getByText('s-junk').closest('[data-testid="exec-tree-row"]')
+    expect(within(junkRow as HTMLElement).getByText('完成')).toBeInTheDocument()
+    // 既有实时行不受影响（快照未携带的行原样保留）
     expect(useSessionStore.getState().subruns!['s-done']?.label).toBe('已终态')
     expect(useSessionStore.getState().subruns!['s-done']?.duration_ms).toBe(99000)
   })
@@ -465,8 +473,8 @@ describe('ChatPage「执行」页签门禁（40 篇 §5.3 + 空态纪律）', ()
     fireEvent.click(await screen.findByTestId('right-tab-execution'))
     expect(await screen.findByTestId('exec-panel')).toBeInTheDocument()
     expect(screen.getAllByTestId('exec-tree-row').length).toBeGreaterThanOrEqual(1)
-    // 消息流内联卡同源出现（挂载位=助手消息下）
-    expect(screen.getByTestId('plan-card')).toBeInTheDocument()
-    expect(screen.getByTestId('exec-task-card')).toBeInTheDocument()
+    // 消息流内联卡同源出现（挂载位=助手消息下；三卡懒加载 → 异步等待挂载）
+    expect(await screen.findByTestId('plan-card')).toBeInTheDocument()
+    expect(await screen.findByTestId('exec-task-card')).toBeInTheDocument()
   }, 20_000)
 })

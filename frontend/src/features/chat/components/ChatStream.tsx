@@ -1,4 +1,4 @@
-import { lazy, memo, Suspense, useEffect, useRef, useState } from 'react'
+import { lazy, memo, Suspense, useEffect, useRef, useState, type ComponentType } from 'react'
 import { AlertTriangle, Brain, Check, ChevronDown, Copy, FileText, ListTree, MessagesSquare, RefreshCw, ThumbsDown, ThumbsUp } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import Markdown, { type Components } from 'react-markdown'
@@ -25,6 +25,22 @@ const AgenticTracePanel = lazy(async () => {
     return { default: () => null }
   }
 })
+
+// ---- W1b-7 挂载编排（42 篇 §5 批次表第 7 项）：执行可视化卡族懒加载工厂——首包不增重，
+// 数据到达才拉 chunk；工厂 catch 降级空实现（与 AgenticTracePanel 同红线：全仓无渲染树
+// ErrorBoundary，chunk 拉取失败裸抛会炸根整页白屏）。泛型签名让降级分支与真实 props 对齐。
+// 三卡（Plan/ExecutionTask/WorkflowRun）的懒加载在 ExecCards.tsx 宿主内（挂载位=末条助手消息下）。 ----
+function lazyCard<P>(load: () => Promise<{ default: ComponentType<P> }>) {
+  return lazy(async () => {
+    try {
+      return { default: (await load()).default }
+    } catch {
+      return { default: (() => null) as ComponentType<P> }
+    }
+  })
+}
+const ReasoningBlock = lazyCard(async () => ({ default: (await import('./ReasoningBlock')).ReasoningBlock }))
+const ApprovalCard = lazyCard(async () => ({ default: (await import('./ApprovalCard')).ApprovalCard }))
 
 /** 消息流（画框03）：用户气泡实底蓝、助手气泡玻璃、工具卡、证据 chip（点击开抽屉 IX-CHT-03）、
  *  流式光标、助手消息悬停操作条（IX-CHT-07：复制/重新生成/赞踩——复制真实剪贴板，
@@ -427,6 +443,11 @@ export function ChatStream({
   // 同源取 auth-store displayName；缺失回退「A」），替代 mock 残留硬编码「刘」
   const displayName = useAuthStore(s => s.user?.displayName ?? '')
   const userAvatarChar = (displayName.trim()[0] ?? 'A').toUpperCase()
+  // W1b-7 卡族数据源（W1a 归约全家桶）：thinking（ReasoningBlock）/approvalPends+activeRunId
+  // （审批卡置顶槽位）；三卡数据（plan/subruns/workflowRuns）由 ExecCards 宿主自订阅
+  const thinking = useSessionStore(s => s.thinking)
+  const approvalPends = useSessionStore(s => s.approvalPends)
+  const activeRunId = useSessionStore(s => s.activeRunId)
   const bottomRef = useRef<HTMLDivElement>(null)
 
   // S8 状态切片：历史基线加载中（宿主 GET /sessions/{id}/messages → seed）。基线等待窗口内
@@ -492,8 +513,30 @@ export function ChatStream({
   }
   const failedRun = Object.values(runs).find(r => r.status === 'failed')
 
+  // ---- W1b-7 挂载编排（42 篇 §5 批次表第 7 项）----
+  // 审批卡置顶（42 篇 §3）：waiting 卡最新优先（waiting_since 降序，无值按 0 保持稳定），
+  // 终态卡随后保留可见；运行中但 store 尚无本 run 卡 → 追加活跃 run 兜底轮询槽位
+  // （ApprovalCard 自轮询 pending 端点，action_iri 非空写入 store 后由此列表自然接管渲染）
+  // 三卡（Plan/ExecutionTask/WorkflowRun）挂载=末条助手消息下 ExecInlineCards 宿主
+  // （activeTaskType=workflow_run 时 WorkflowRunCard 优先的排序在 ExecCards 内实现）。
+  const cards = approvalPends ?? {}
+  const cardIds = Object.keys(cards)
+  const byNewest = (a: string, b: string) =>
+    (Date.parse(cards[b].waiting_since ?? '') || 0) - (Date.parse(cards[a].waiting_since ?? '') || 0)
+  const approvalSlots = [
+    ...cardIds.filter(id => cards[id].cardStatus === 'waiting').sort(byNewest),
+    ...cardIds.filter(id => cards[id].cardStatus !== 'waiting').sort(byNewest),
+    ...(running && activeRunId && !cards[activeRunId] ? [activeRunId] : []),
+  ]
+
   return (
     <div className="msgs flex flex-1 flex-col gap-4 overflow-auto px-6 py-4">
+      {/* W1b-7 审批卡置顶（42 篇 §3）：waiting 最新优先、终态卡保留；兜底槽位无卡时组件渲染 null */}
+      {approvalSlots.map(rid => (
+        <Suspense key={`approval-${rid}`} fallback={null}>
+          <ApprovalCard runId={rid} />
+        </Suspense>
+      ))}
       {showSkeleton && <SkeletonRows rows={3} rowHeight={40} className="pt-2" />}
       {showBanner && (
         // 36 §B1 降级版式：顶部警示条（err-banner 令牌样式同 failedRun 横幅）+ 输入保持可用
@@ -556,10 +599,17 @@ export function ChatStream({
             <div className="min-w-0 max-w-[80%]">
               {/* 助手消息头元信息（设计稿 L2411-2413）：名称/模型徽标/角色徽标/时间 */}
               <AssistantMsgHead m={m} />
+              {/* W1b-7 思考折叠块（42 篇 W1b-1）：本消息有非空思考流时挂正文气泡前（默认收起） */}
+              {thinking?.[m.id]?.text && (
+                <Suspense fallback={null}>
+                  <ReasoningBlock messageId={m.id} />
+                </Suspense>
+              )}
               {/* 直播期工具卡只挂末条助手消息（对齐 GroupStream 归属模式；原全量×每条重复渲染） */}
               {m.id === lastAssistantId && Object.entries(toolCalls).map(([id, c]) => <ToolCallCard key={id} id={id} call={c} />)}
               {/* 执行结构卡组（40 篇 §5.2 形态①，挂载位复用工具卡行）：计划卡+协作任务卡+运行卡，
-                  store 三投影同源、全空不渲染（空态纪律） */}
+                  store 三投影同源、全空不渲染（空态纪律）；三卡懒加载与 activeTaskType
+                  排序（workflow_run 优先）在 ExecCards 宿主内（42 篇 W1b-7） */}
               {m.id === lastAssistantId && <ExecInlineCards onOpenExecution={onOpenExecution} />}
               {/* 气泡左缘 3px 来源分类色（--src-system=indigo，tokens.css 来源分类变量） */}
               <div

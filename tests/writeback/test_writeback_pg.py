@@ -53,9 +53,12 @@ def test_两表入metadata():
 
 
 def test_迁移链单头_a1b2c3d4e5f6():
-    """静态扫描迁移目录：恰好一个头，且为本批新增 revision（downgrade 可执行已由本地库验证）。
+    """静态扫描迁移目录：恰好一个头（不锁具体 revision id；downgrade 可执行已由本地库验证）。
 
-    M5-1 批次（插件市场 §3.6 四表）推进头至 a1b2c3d4e5f6——迁移链唯一归属者随批更新断言。
+    扫描须与 alembic 官方两种生成样式都兼容，否则 merge 迁移会被漏掉造成「假多头」：
+    - 新模板：revision: str = "xxx" / down_revision: str | None = "yyy"（双引号）；
+    - 旧模板（f3b13a5 的 b835a095ffe4 merge 迁移即此款）：revision: str = 'xxx'（单引号）、
+      down_revision: Union[str, None] = ('a', 'b')（元组多父）。
     """
     import re
     from pathlib import Path
@@ -65,12 +68,12 @@ def test_迁移链单头_a1b2c3d4e5f6():
     downs: set[str] = set()
     for path in versions.glob("*.py"):
         text = path.read_text(encoding="utf-8")
-        rev = re.search(r'^revision: str = "([0-9a-f]+)"', text, re.MULTILINE)
-        down = re.search(r'^down_revision:.*?([0-9a-f]{12})"', text, re.MULTILINE)
+        rev = re.search(r"^revision:\s*str\s*=\s*['\"]([0-9a-f]+)['\"]", text, re.MULTILINE)
+        down = re.search(r"^down_revision:.*$", text, re.MULTILINE)
         if rev:
             revisions.add(rev.group(1))
-        if down:
-            downs.add(down.group(1))
+        if down:  # 整行扫描提全部 12 位 hex：兼容 None / 单串（单双引号）/ 元组多父
+            downs.update(re.findall(r"[0-9a-f]{12}", down.group(0)))
     heads = revisions - downs
     # 不变量=单头（迁移只增不改，链可持续生长；不锁具体 revision id）
     assert len(heads) == 1, f"迁移链出现多头: {sorted(heads)}"

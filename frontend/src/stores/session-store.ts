@@ -4,6 +4,7 @@ import type {
   PlanItem,
   RunUsageEventData,
   SubrunFinishedEventData,
+  SubrunFinishStatus,
   SubrunStartedEventData,
   SubrunUpdatedEventData,
   SseEvent,
@@ -90,6 +91,30 @@ export interface TerminalLine {
 export interface DraftInsert {
   text: string
   seq: number
+}
+
+/** R3 重连兜底快照行（GET /runs/{run_id}/subruns → {items:[…]}，40 篇 §4.4；信封=裸对象
+ *  items 键，api.list/normalizeList 兼容）：快照只有状态摘要，无 index/total/task_id 等实时
+ *  载荷字段——补建条目时以空值填充，实时 SUBRUN_* 帧随后原地合补全。 */
+export interface SubrunSnapshotRow {
+  id: string
+  parent_run_id: string
+  label?: string
+  goal?: string
+  depth?: number
+  /** runs 七态既有（queued/running/waiting_tool/…）或子 run 终态五枚举；未知值按非终态处理 */
+  status?: string
+  started_at?: string
+  ended_at?: string
+  duration_ms?: number
+  usage?: unknown
+}
+
+/** 快照 usage 载荷防御性收窄（wire 不可信）：{input_tokens,output_tokens} 数字字段才收 */
+function parseSnapshotUsage(u: unknown): { input_tokens: number; output_tokens: number } | undefined {
+  if (u == null || typeof u !== 'object') return undefined
+  const o = u as Record<string, unknown>
+  return { input_tokens: Number(o.input_tokens ?? 0), output_tokens: Number(o.output_tokens ?? 0) }
 }
 
 // ---- 执行结构波三 slices（40 篇 §5.1）：一事件一 reducer，按 id 原地合并（ACP
@@ -228,6 +253,10 @@ interface SessionState {
   setConnection: (c: SessionState['connection']) => void
   /** 停止生成（IX-CHT-06）：流终止、保留已生成部分，末条助手消息追加「已手动停止」标记 */
   stopRun: () => void
+  /** R3 重连兜底（40 篇 §4.4）：GET /runs/{run_id}/subruns 快照行归并进 subruns slice——
+   *  按 sub_run_id 原地合：既有终态条目不动（终态优先）；快照终态仅补缺（不覆盖实时
+   *  FINISHED 明细）；快照非终态行只补建缺失条目（不覆盖本地 updated 心跳态）。 */
+  ingestSubrunsSnapshot: (rows: SubrunSnapshotRow[]) => void
   /** 归约一帧：返回 'applied' | 'dup' | 'gap'（gap 由调用方触发补发/快照，§3.2） */
   apply: (evt: SseEvent) => 'applied' | 'dup' | 'gap'
 }
@@ -317,6 +346,52 @@ export const useSessionStore = create<SessionState>((set, get) => {
         m.role === 'assistant' && i === s.messages.length - 1 ? { ...m, finishReason: 'stopped' } : m,
       ),
     }))
+  },
+
+  ingestSubrunsSnapshot(rows) {
+    const list = Array.isArray(rows) ? rows : []
+    if (list.length === 0) return
+    set(s => {
+      const next = new Map(s.subruns)
+      for (const row of list) {
+        const id = String(row?.id ?? '')
+        if (!id) continue
+        const cur = next.get(id)
+        if (cur?.finished) continue // 终态优先：快照不覆盖既有终态明细（§4.3.3 终态不变量）
+        // 快照 status 非终态枚举（runs 七态 active 族/未知值）一律按非终态处理（宁缺勿错）
+        const terminal = isSubrunFinishStatus(row.status)
+        const finished: SubrunFinishedEventData | undefined = terminal
+          ? {
+              sub_run_id: id,
+              status: row.status as SubrunFinishStatus,
+              duration_ms: Number(row.duration_ms ?? 0),
+              usage: parseSnapshotUsage(row.usage),
+            }
+          : undefined
+        if (cur) {
+          // 既有条目：仅快照带终态且本地未终态时回填；非终态快照不覆盖本地 updated 心跳态
+          if (!finished) continue
+          next.set(id, { ...cur, finished })
+        } else {
+          // 缺失条目补建（快照无 index/total/task_id 等实时字段，空值填充待实时帧补全）
+          const started: SubrunStartedEventData = {
+            sub_run_id: id,
+            parent_run_id: String(row.parent_run_id ?? ''),
+            task_id: '',
+            session_id: '',
+            label: String(row.label ?? ''),
+            goal: String(row.goal ?? ''),
+            depth: Number(row.depth ?? 0),
+            index: 0,
+            total: 0,
+            context_budget: 0,
+            started_at: typeof row.started_at === 'string' ? row.started_at : undefined,
+          }
+          next.set(id, finished ? { started, finished } : { started })
+        }
+      }
+      return next === s.subruns ? {} : { subruns: next }
+    })
   },
 
   apply(evt) {
@@ -705,10 +780,40 @@ const SUBRUN_RANK: Record<SubRunDerivedStatus, number> = {
   completed: 2, failed: 2, rejected_artifact: 2, cancelled: 2, timeout: 2,
 }
 
+/** 列表版置顶排序（40 篇 §5.2 codex PlanUpdateCell 规则）：in_progress 置顶 → pending → 终态；
+ *  同组保持插入序（Map 迭代序=STARTED 到达序；ES2019+ sort 稳定）。selector 与分组卡共用。 */
+export function sortSubRunsByStatus(list: SubRunState[]): SubRunState[] {
+  return [...list].sort((a, b) => SUBRUN_RANK[subRunStatus(a)] - SUBRUN_RANK[subRunStatus(b)])
+}
+
 /** 扁平排序（40 篇 §5.2 codex PlanUpdateCell 规则）：in_progress 置顶 → pending → 终态；
  *  同组保持插入序（Map 迭代序=STARTED 到达序；ES2019+ sort 稳定）。 */
 export function selectSortedSubRuns(s: SessionState): SubRunState[] {
-  return [...s.subruns.values()].sort((a, b) => SUBRUN_RANK[subRunStatus(a)] - SUBRUN_RANK[subRunStatus(b)])
+  return sortSubRunsByStatus([...s.subruns.values()])
+}
+
+/** 父 run 分组卡（40 篇 §5.2 消息流内联卡）：同一 parent_run_id 的子 run 归一组（一次派发
+ *  批次=一张 ExecutionTaskCard），组内按置顶排序，done=已终态数；组序=首个 STARTED 到达序。 */
+export interface SubRunGroup {
+  parentRunId: string
+  items: SubRunState[]
+  done: number
+}
+
+export function selectSubRunGroups(s: SessionState): SubRunGroup[] {
+  const byParent = new Map<string, SubRunState[]>()
+  for (const sr of s.subruns.values()) {
+    // parent_run_id 缺帧（快照补建的撕裂行）自成一组，不误挂他组
+    const pid = sr.started.parent_run_id || sr.started.sub_run_id
+    const arr = byParent.get(pid)
+    if (arr) arr.push(sr)
+    else byParent.set(pid, [sr])
+  }
+  return [...byParent.entries()].map(([parentRunId, items]) => ({
+    parentRunId,
+    items: sortSubRunsByStatus(items),
+    done: items.filter(x => x.finished).length,
+  }))
 }
 
 /** 缩进树行：depth 供 UI 缩进（按 parent_run_id 派生，后端不发树） */

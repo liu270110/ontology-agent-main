@@ -89,6 +89,8 @@ export function buildTimeline(messages: ChatMessage[], frames: TrajFrame[]): Tra
   const extras: TrajItemBase[] = []
   const tools = new Map<string, { seq: number; tool: string; args: string; endSeq?: number; result?: { seq: number; ok: boolean; summary?: string; costMs?: number } }>()
   const liveMsgs = new Map<string, { seq: number; content: string; endSeq?: number }>()
+  /** 工作流节点标题表（STARTED 带 title，FINISHED 只有 node_id——回填显示名） */
+  const wfNodeTitles = new Map<string, string>()
   let runCount = 0
   // ---- 对话执行可视化批次聚合桶（docs/api/02 §3；归并口径=每实体一行，落位终态帧 seq）----
   const plans = new Map<string, { revision: number; seq: number; steps: string[] }>()
@@ -193,6 +195,65 @@ export function buildTimeline(messages: ChatMessage[], frames: TrajFrame[]): Tra
       case 'artifact.created': {
         const a = d.artifact as { name?: string; summary?: string } | undefined
         extras.push({ seq: f.seq, source: 'system', kind: '系统', title: `产物生成：${a?.name ?? '未命名产物'}`, detail: a?.summary ? cut(a.summary) : undefined })
+        break
+      }
+      // —— 执行结构波 6 事件归类（40 篇 §5.3：新事件归并进既有 TrajSource 分类，subagent
+      //    紫已备于 memory 槽位；plan 归 system 从简；工作流节点走 tool 执行槽）——
+      case 'PLAN_UPDATED': {
+        const items = Array.isArray(d.items) ? (d.items as { content?: unknown; status?: unknown }[]) : []
+        const done = items.filter(i => i.status === 'completed').length
+        extras.push({
+          seq: f.seq, source: 'system', kind: '计划',
+          title: `计划更新 rev ${String(d.revision ?? '')} · ${done}/${items.length} 完成`,
+          detail: cut(items.map(i => String(i.content ?? '')).filter(Boolean).join('；')),
+        })
+        break
+      }
+      case 'SUBRUN_STARTED':
+        extras.push({
+          seq: f.seq, source: 'memory', kind: '子代理',
+          title: `子代理启动：${String(d.label ?? '')}（depth ${String(d.depth ?? 0)} · ${String(d.index ?? 0)}/${String(d.total ?? 0)}）`,
+          detail: cut(String(d.goal ?? '')),
+        })
+        break
+      case 'SUBRUN_UPDATED': {
+        // 纯实时事件不落 task_events（40 篇 §4.1）——回放通道正常不见，兼容分支仅防未来落库
+        const preview = d.preview != null ? String(d.preview) : d.tool_name != null ? `${String(d.tool_name)} · ${String(d.tool_count ?? 0)} 次调用` : ''
+        if (preview) {
+          extras.push({
+            seq: f.seq, source: 'memory', kind: '子代理',
+            title: `子代理心跳：${String(d.sub_run_id ?? '').slice(0, 8)}`,
+            detail: cut(preview),
+          })
+        }
+        break
+      }
+      case 'SUBRUN_FINISHED': {
+        const ms = Number(d.duration_ms ?? 0)
+        const err = d.error as { message?: string } | undefined
+        extras.push({
+          seq: f.seq, source: 'memory', kind: '子代理',
+          title: `子代理结束：${String(d.status ?? '')}${ms > 0 ? ` · ${(ms / 1000).toFixed(1)}s` : ''}`,
+          detail: d.summary != null ? cut(String(d.summary)) : err?.message ? cut(String(err.message)) : undefined,
+        })
+        break
+      }
+      case 'WORKFLOW_NODE_STARTED':
+        wfNodeTitles.set(String(d.node_id ?? ''), String(d.title ?? ''))
+        extras.push({
+          seq: f.seq, source: 'tool', kind: '节点',
+          title: `工作流节点开始：${String(d.title ?? d.node_id ?? '')}`,
+          detail: d.node_type != null ? `类型 ${String(d.node_type)} · attempt ${String(d.attempt ?? 1)}` : undefined,
+        })
+        break
+      case 'WORKFLOW_NODE_FINISHED': {
+        const nms = Number(d.duration_ms ?? 0)
+        const nerr = d.error as { message?: string } | undefined
+        extras.push({
+          seq: f.seq, source: 'tool', kind: '节点',
+          title: `工作流节点结束：${wfNodeTitles.get(String(d.node_id ?? '')) ?? String(d.node_id ?? '')} → ${String(d.status ?? '')}${nms > 0 ? ` · ${(nms / 1000).toFixed(1)}s` : ''}`,
+          detail: nerr?.message ? cut(String(nerr.message)) : undefined,
+        })
         break
       }
       case 'workspace.file.created':

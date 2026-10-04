@@ -541,6 +541,12 @@ export const handlers = [
     })
   }),
 
+  // ---- 执行结构波快照端点（40 篇 §4.4 R3 / api/01 §5.2 增行）----
+  // GET /runs/:id/subruns —— 子 run 列表快照（重连兜底）：信封=裸对象 items 键（前端
+  //  normalizeList 兼容）。mock 恒空列表（执行结构数据由 live SSE 驱动，mock SSE 主干波
+  //  无 SUBRUN_* 帧；空态纪律=不渲染执行卡与执行页签）。
+  http.get('*/api/v1/runs/:id/subruns', () => HttpResponse.json({ items: [] })),
+
   // ---- Agent 工作区面板（31 篇：文件树 + 终端 + 资源，画框23）----
   // GET /sessions/:id/workspace/tree —— 沙箱 /workspace 层级树（20 篇 SBX-3 daemon 代理；M1 静态 mock）
   http.get('*/api/v1/sessions/:id/workspace/tree', () =>

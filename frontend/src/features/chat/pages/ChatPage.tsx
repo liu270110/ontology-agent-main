@@ -9,6 +9,7 @@ import { MessageInput } from '../components/MessageInput'
 import { ContextMeter, useContextTokens } from '../components/ContextMeter'
 import { ContextCollapseButton, ContextPanel, ContextPanelRail } from '../components/ContextPanel'
 import { WorkspacePanel } from '../components/WorkspacePanel'
+import { ExecutionPanel } from '../components/ExecutionPanel'
 import { EvidenceSheet, type EvidenceFocus } from '../components/EvidenceSheet'
 import { EmptyState } from '@/components/states'
 import { api } from '@/api/client'
@@ -48,8 +49,19 @@ export function ChatPage() {
   const [picked, setPicked] = useState<string | null>(null)
   const sessionId = picked
   const [ctxCollapsed, setCtxCollapsed] = useState(false)
-  /** 右栏双页签（画框03+23）：本次回答上下文 ↔ Agent 工作区（文件树/终端/资源） */
-  const [rightTab, setRightTab] = useState<'context' | 'workspace'>('context')
+  /** 右栏页签（画框03+23 + 40 篇 §5.3）：本次回答上下文 ↔ 执行 ↔ Agent 工作区（文件树/终端/资源）。
+   *  「执行」页签仅在有执行结构数据时出现（空态纪律：无数据不渲染页签不占位）。 */
+  const [rightTab, setRightTab] = useState<'context' | 'execution' | 'workspace'>('context')
+  /** 执行页签出现门禁（store 三 slices 有任一实质数据：plan 非空表/subruns/workflowRuns；
+   *  空表 plan 与空 Map 一致视为无数据——空态纪律：页签不渲染不占位） */
+  const hasExecData = useSessionStore(
+    s => (s.plan != null && s.plan.items.length > 0) || s.subruns.size > 0 || s.workflowRuns.size > 0,
+  )
+  /** 执行卡「查看执行」深链：切执行页签 + 展开右栏（40 篇 §5.2） */
+  function openExecutionTab() {
+    setCtxCollapsed(false)
+    setRightTab('execution')
+  }
   const [evFocus, setEvFocus] = useState<EvidenceFocus | null>(null)
   const apply = useSessionStore(s => s.apply)
   const seed = useSessionStore(s => s.seed)
@@ -203,6 +215,21 @@ export function ChatPage() {
               >
                 上下文
               </button>
+              {/* 执行页签（40 篇 §5.3）：仅存在执行结构数据时出现（空态纪律：不占位不报错） */}
+              {hasExecData && (
+                <button
+                  type="button"
+                  role="tab"
+                  id="right-tab-execution"
+                  aria-controls="chat-right-panel"
+                  data-testid="right-tab-execution"
+                  aria-selected={rightTab === 'execution'}
+                  className={`seg-btn ${rightTab === 'execution' ? 'on' : ''}`}
+                  onClick={() => setRightTab('execution')}
+                >
+                  执行
+                </button>
+              )}
               <button
                 type="button"
                 role="tab"
@@ -226,6 +253,8 @@ export function ChatPage() {
               onOpenEvidence={setEvFocus}
               // 产物卡「在工作区查看」→ 切右栏工作区页签（设计稿 L2427 操作接线）
               onOpenWorkspace={() => setRightTab('workspace')}
+              // 执行卡「查看执行」→ 切右栏执行页签（40 篇 §5.2 深链）
+              onOpenExecution={openExecutionTab}
               // 36 §B 消息基线错误态：宿主持有错误/重载，ChatStream 承担渲染位与互斥
               baselineError={baselineError?.err ?? null}
               baselineDegraded={baselineError?.degraded ?? false}
@@ -260,14 +289,24 @@ export function ChatPage() {
           </div>
         )}
       </div>
-      {/* 右栏（IX-CHT-04 + 画框23）：上下文面板 / Agent 工作区面板 页签切换，可折叠为窄轨。
-          tabpanel 语义接线（ui-audit）：display:contents 壳承载 role/aria，不改变三档 flex 布局 */}
+      {/* 右栏（IX-CHT-04 + 画框23 + 40 篇 §5.3）：上下文 / 执行 / Agent 工作区 三页签切换，
+          可折叠为窄轨。tabpanel 语义接线（ui-audit）：display:contents 壳承载 role/aria，
+          不改变三档 flex 布局；执行面板数据源=store 三投影同源 + R3 快照兜底 */}
       {!sessionId ? null : (
-        <div role="tabpanel" id="chat-right-panel" aria-labelledby={rightTab === 'context' ? 'right-tab-context' : 'right-tab-workspace'} className="contents">
+        <div
+          role="tabpanel"
+          id="chat-right-panel"
+          aria-labelledby={
+            rightTab === 'context' ? 'right-tab-context' : rightTab === 'execution' ? 'right-tab-execution' : 'right-tab-workspace'
+          }
+          className="contents"
+        >
           {ctxCollapsed ? (
             <ContextPanelRail onExpand={() => setCtxCollapsed(false)} />
           ) : rightTab === 'context' ? (
             <ContextPanel onOpenEvidence={setEvFocus} />
+          ) : rightTab === 'execution' ? (
+            <ExecutionPanel sessionId={sessionId} />
           ) : (
             <WorkspacePanel sessionId={sessionId} />
           )}

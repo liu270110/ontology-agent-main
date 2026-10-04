@@ -167,6 +167,7 @@ class DocumentListItem(BaseModel):
     tier: str | None = None  # 文档分层后端未建模，恒 None（对账 DTO 占位）
     job_id: str | None = None  # lite 流水线进程内执行，无独立任务号
     error: str | None = None  # failed 步错误摘录
+    degraded: list[str] = Field(default_factory=list)  # 软降级步清单（如实透出 meta["degraded"]，如 ["embed"]）
     created_at: datetime
     updated_at: datetime
     indexed_today: bool = False  # 当日入库（前端规模统计带）

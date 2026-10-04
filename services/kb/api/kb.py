@@ -499,6 +499,7 @@ def _document_item_of(
     """documents 行 → 前端 KbDocument 行 DTO（列表/详情共用投影，R51/R17 同源）。"""
     total_steps = len(M2_FULL_STEPS)
     done, err = step_stats.get(doc.id, (0, None))
+    meta = doc.meta or {}
     return DocumentListItem(
         id=doc.id,
         name=doc.title,
@@ -510,6 +511,7 @@ def _document_item_of(
         progress=100 if doc.status == "indexed" else int(round(100 * done / total_steps)),
         pipeline=DocumentPipelineProgress(step=done, total=total_steps),
         error=err if doc.status == "failed" else None,
+        degraded=[str(step) for step in (meta.get("degraded") or [])],  # 软降级如实透出（embed 不可达等）
         created_at=doc.created_at,
         updated_at=doc.updated_at,
         indexed_today=(doc.status == "indexed" and doc.updated_at.date() == datetime.now(UTC).date()),

@@ -45,6 +45,7 @@ from starlette.middleware.cors import CORSMiddleware
 
 from services.agent.api.agents import router as agents_router
 from services.agent.api.approvals import router as approvals_router  # H-0b 运行中审批（api/01 §5.15 ★，2026-09-29）
+from services.agent.api.control import router as run_control_router  # M4.5-A：运行中输入面（inbox+estop）
 from services.agent.api.prompts import router as prompts_router  # H-1 提示词模板库（api/01 §5.10，2026-09-29）
 from services.agent.api.sessions import get_or_build_chat_orchestrator
 from services.agent.api.sessions import router as sessions_router
@@ -276,12 +277,15 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     worker_task: asyncio.Task | None = None
     if getattr(s, "task_worker_enabled", True):
         try:
+            from services.agent.api.control import get_or_build_estop_store  # M4.5-A：estop 前检（§1.2 生效点①）
+
             worker = TaskRunWorker(
                 uow=app.state.uow,
                 poller=RunQueuePoller(get_session_factory(s)),
                 orchestrator_provider=lambda: get_or_build_chat_orchestrator(app.state),
                 policy=RunRetryPolicy(),
                 poll_interval_s=s.task_worker_poll_interval_s,
+                estop_store=get_or_build_estop_store(app.state, redis=get_redis(s)),  # 与 API/编排器同一单例
             )
             worker_task = asyncio.create_task(worker.run(worker_stop))
             logger.info("task worker started: poll_interval=%ss", s.task_worker_poll_interval_s)
@@ -437,6 +441,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(invites_router, prefix=settings.api_prefix)  # 邀请链接五端点（api/01 §5.8）
     app.include_router(agents_router, prefix=settings.api_prefix)  # M3.1：agents CRUD（api/01 §5.1）
     app.include_router(sessions_router, prefix=settings.api_prefix)
+    app.include_router(run_control_router, prefix=settings.api_prefix)  # M4.5-A：inbox 提交 + admin estop（§1.4）
     app.include_router(tasks_router, prefix=settings.api_prefix)
     app.include_router(approvals_router, prefix=settings.api_prefix)  # H-0b：运行中审批（api/01 §5.15 ★）
     app.include_router(prompts_router, prefix=settings.api_prefix)  # H-1：提示词模板库（api/01 §5.10）

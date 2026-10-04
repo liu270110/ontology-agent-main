@@ -2034,6 +2034,24 @@
         "title": "DocumentPipelineProgress",
         "type": "object"
       },
+      "EStopActivateIn": {
+        "additionalProperties": false,
+        "description": "紧急停止激活入参（§1.2：reason 必填，审计留痕）。",
+        "properties": {
+          "reason": {
+            "description": "激活原因（审计必需）",
+            "maxLength": 2000,
+            "minLength": 1,
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "reason"
+        ],
+        "title": "EStopActivateIn",
+        "type": "object"
+      },
       "ElementDiffOut": {
         "additionalProperties": false,
         "properties": {
@@ -2496,6 +2514,34 @@
           "checksum"
         ],
         "title": "HeadVersionOut",
+        "type": "object"
+      },
+      "InboxSubmitIn": {
+        "additionalProperties": false,
+        "description": "inbox 提交入参（§1.1 三通道；text 非空由 DTO 先挡，容量上限在内核 4203 结构化拒绝）。",
+        "properties": {
+          "kind": {
+            "enum": [
+              "followup",
+              "steer",
+              "inject"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "text": {
+            "description": "注入文本（用户指令，审计必需内容）",
+            "maxLength": 8000,
+            "minLength": 1,
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "text"
+        ],
+        "title": "InboxSubmitIn",
         "type": "object"
       },
       "InstallOut": {
@@ -7127,6 +7173,82 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/api/v1/admin/estop": {
+      "delete": {
+        "operationId": "deactivate_estop_api_v1_admin_estop_delete",
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          }
+        },
+        "summary": "紧急停止解除（幂等；解除后新 Run 恢复受理）",
+        "tags": [
+          "control"
+        ]
+      },
+      "get": {
+        "operationId": "get_estop_state_api_v1_admin_estop_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Get Estop State Api V1 Admin Estop Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "紧急停止状态视图（active=false 时详情为 None）",
+        "tags": [
+          "control"
+        ]
+      },
+      "post": {
+        "operationId": "activate_estop_api_v1_admin_estop_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EStopActivateIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Activate Estop Api V1 Admin Estop Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "紧急停止激活（覆盖写、幂等；闸门语义=拒新工作，在途自然收敛）",
+        "tags": [
+          "control"
+        ]
+      }
+    },
     "/api/v1/admin/reviews": {
       "get": {
         "description": "分页列出本租户工单（最新优先）；审批工作台缺省看 pending_review。\n\nR50 联调修复（2026-09-28）：status 接受前端别名 pending/done（别名面保留不变）。\nB1 批（2026-10-04）：信封改 api/01 §3.1 {data, meta:{page,page_size,total}}——废止\n{code,message,data} 旧信封（A-5 证据端点）；offset/limit 参数改 page/page_size。",
@@ -13204,6 +13326,72 @@
         "summary": "发送消息（Accept: text/event-stream → SSE 流；否则 202+占位 run）",
         "tags": [
           "sessions"
+        ]
+      }
+    },
+    "/api/v1/sessions/{session_id}/runs/{run_id}/inbox": {
+      "post": {
+        "description": "提交一笔运行中输入：session 归属校验（租户内存在 + 活跃 Run 绑定）→ 注册表直达。\n\n409+4105=Run 不在本进程（终态已注销/他副本执行/与该会话活跃 Run 不符）；\n429+4203=收件箱容量超限（每 Run 待处理上限，Settings.kernel_inbox_max_per_run）。\n受理即发布 INBOX_SPLICED 回执（用户可见；hub 未装配仅记日志不阻断）。",
+        "operationId": "submit_run_inbox_api_v1_sessions__session_id__runs__run_id__inbox_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Session Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InboxSubmitIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Submit Run Inbox Api V1 Sessions  Session Id  Runs  Run Id  Inbox Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "运行中输入提交（followup/steer/inject 三通道；M4.5-A，§1.4）",
+        "tags": [
+          "control"
         ]
       }
     },

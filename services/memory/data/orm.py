@@ -1,8 +1,9 @@
-"""memory 模块 ORM：memory_l2_facts（域⑦ 记忆 | M3）。
+"""memory 模块 ORM：memory_l2_facts（域⑦ 记忆 | M3）+ memory_l2_fact_invalidations（K2-a 影子表）。
 
 DDL 权威：database/01 §3.7（memory_l2_facts）+ docs/memory/多层记忆设计.md §7
 （category/source_message_ids/supersedes_id/agent_id/decay_score/invalidated 状态等
-记忆篇字段；database/01 §3.7 未收录部分的回填欠账见本批报告）。迁移只增不改。
+记忆篇字段；database/01 §3.7 未收录部分的回填欠账见本批报告）+ §11.1
+（memory_l2_fact_invalidations 失效即归档影子表，2026-10-05 K2 批）。迁移只增不改。
 """
 
 from __future__ import annotations
@@ -60,4 +61,30 @@ class MemoryL2Fact(Base, PkMixin, TenantMixin, TimestampMixin):
         UniqueConstraint("tenant_id", "user_id", "fingerprint", name="uk_memory_l2_facts_tenant_user_fingerprint"),
         Index("idx_memory_l2_lookup", "tenant_id", "user_id", "status"),  # database/01 §3.7
         Index("idx_memory_l2_user_category", "user_id", "category"),  # memory §7 索引清单
+    )
+
+
+class MemoryL2FactInvalidation(Base, PkMixin, TenantMixin, TimestampMixin):
+    """L2 事实失效影子行（K2-a 失效即归档，hindsight 范式；契约=memory 权威篇 §11.1）。
+
+    归档追溯面而非复活通道：restore 仅回填 restored_at（影子层可见性恢复），主表
+    INVALIDATED 终态不动（P3-3 防复活红线）；fact_id/user_id 不设 FK（归档行独立于主表
+    生命周期存续）；写入与主表失效 save_state 同事务（repo_impl 同款纪律）。
+    """
+
+    __tablename__ = "memory_l2_fact_invalidations"
+
+    fact_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False, index=True)
+    user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    content: Mapped[str] = mapped_column(Text, nullable=False)  # 失效时事实文本快照
+    reason: Mapped[str] = mapped_column(Text, nullable=False)  # 必填（无 reason 拒绝失效，§11.1）
+    invalidated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    restored_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))  # null=失效生效中
+
+    __table_args__ = (
+        CheckConstraint(
+            "restored_at IS NULL OR restored_at >= invalidated_at",
+            name="ck_memory_l2_fact_invalidations_restore_after_invalidate",
+        ),
+        Index("ix_memory_l2_fact_inval_tenant_user_active", "tenant_id", "user_id", "fact_id", "restored_at"),
     )

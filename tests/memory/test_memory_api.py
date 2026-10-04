@@ -207,22 +207,28 @@ async def test_POST_memory_search_命中带来源标注(mem_seed):
 async def test_POST_invalidate_202墓碑_幂等与404(mem_seed):
     from services.platform.errors import GatewayError
 
+    from services.memory.api.schemas.memory import FactInvalidateIn
+
     async with mem_seed.factory() as db:
         # Arrange：先写一条
         written = await write_memory(
             _write_l2_body("将失效的事实", mem_seed), principal=mem_seed.principal, db=db, l1=_store(mem_seed)
         )
         await db.commit()
-        # Act：失效标记
-        out = await invalidate_fact(written.fact_id, principal=mem_seed.principal, db=db)
+        # Act：失效标记（K2-a：reason 必填，影子行同事务归档）
+        out = await invalidate_fact(
+            written.fact_id, FactInvalidateIn(reason="信息过期"), principal=mem_seed.principal, db=db
+        )
         # Assert：墓碑式软删（无物理删除）
         assert out.status == FactStatus.INVALIDATED.value and out.valid_to is not None
-        # Act / Assert：重复失效幂等（202 原样返回）
-        again = await invalidate_fact(written.fact_id, principal=mem_seed.principal, db=db)
+        # Act / Assert：重复失效幂等（202 原样返回；影子行不重复归档——由 K2 影子用例细验）
+        again = await invalidate_fact(
+            written.fact_id, FactInvalidateIn(reason="再次失效"), principal=mem_seed.principal, db=db
+        )
         assert again.status == FactStatus.INVALIDATED.value
         # Act / Assert：未知 id → 404
         with pytest.raises(GatewayError) as ei:
-            await invalidate_fact(uuid4(), principal=mem_seed.principal, db=db)
+            await invalidate_fact(uuid4(), FactInvalidateIn(reason="x"), principal=mem_seed.principal, db=db)
         assert ei.value.status_code == 404
         await db.commit()
 
@@ -375,7 +381,7 @@ async def test_GET_memory_facts_timeline_产生失效留痕_未知404(mem_seed):
         assert tl.fact_id == fact.id and tl.chain == [fact.id]
         assert [e.type for e in tl.events] == ["created"]
         # Act / Assert：失效后事件追加（FR-MEM-06 全程留痕）
-        fact.invalidate(datetime.now(UTC))
+        fact.invalidate(datetime.now(UTC), reason="信息过期")  # K2-a：reason 必填
         await repo.save_state(fact)
         await db.commit()
         tl2 = await fact_timeline(fact.id, principal=mem_seed.principal, db=db)

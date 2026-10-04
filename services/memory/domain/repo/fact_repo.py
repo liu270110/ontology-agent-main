@@ -9,11 +9,12 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
+from datetime import datetime
 from typing import Protocol, runtime_checkable
 from uuid import UUID
 
 from services.memory.domain.model.l1 import L1SessionSummary, L1Snapshot, MemoryBlock, WindowMessage
-from services.memory.domain.model.l2_fact import FactCategory, FactStatus, L2Fact
+from services.memory.domain.model.l2_fact import FactCategory, FactInvalidation, FactStatus, L2Fact
 
 
 @runtime_checkable
@@ -48,6 +49,29 @@ class L2FactRepository(Protocol):
 
     async def save_state(self, fact: L2Fact) -> None:
         """仅标量状态（status/supersedes_id/valid_to/updated_at；内容不可变不落列）。"""
+        ...
+
+    async def archive_invalidated(self, fact: L2Fact, *, reason: str, invalidated_at: datetime) -> None:
+        """失效即归档（K2-a §11.1）：写失效影子行（fact_id/tenant/user/content 快照/reason/
+        invalidated_at），与 save_state 同事务（本仓储不提交——提交归调用方会话管理），杜绝
+        「主表已失效、影子缺失」断链。影子行是归档追溯面非复活通道。"""
+        ...
+
+    async def list_invalidated(
+        self,
+        user_id: UUID,
+        *,
+        active_only: bool = True,
+        offset: int = 0,
+        limit: int = 50,
+    ) -> list[FactInvalidation]:
+        """用户失效归档分页（invalidated_at 倒序；active_only=True 仅 restored_at 为空的生效行）。"""
+        ...
+
+    async def restore(self, fact_id: UUID, *, now: datetime) -> FactInvalidation | None:
+        """影子层可见性恢复（K2-a §11.1）：该事实**最新生效中**影子行 restored_at 回填后返回；
+        非复活——主表 fact 保持 INVALIDATED 终态不动（P3-3 防复活红线）。无生效影子行
+        （未失效过/已恢复）返回 None，调用方据语义映射 4xx。"""
         ...
 
     async def list_for_user(

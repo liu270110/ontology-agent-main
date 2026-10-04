@@ -119,6 +119,8 @@ async def test_observation_allowed_from_pipeline(svc):
             record_type=MemoryType.OBSERVATION,
             content="o",
             proof_count=3,
+            # K2-b §11.2：固化强制证据链（supported_by 与 proof_count 自洽，无证据链拒绝落库）
+            source_ref=[{"supported_by": [str(uuid.uuid4()) for _ in range(3)]}],
         ),
         origin="pipeline",
         now=NOW,
@@ -135,6 +137,8 @@ async def test_search_rrf_and_freshness(svc):
             record_type=MemoryType.OBSERVATION,
             subject_iri=s_iri,
             content="系统 A 观察信念",
+            proof_count=2,  # K2-b：观察必须携带自洽证据链（§11.2）
+            source_ref=[{"supported_by": [str(uuid.uuid4()) for _ in range(2)]}],
         ),
         origin="pipeline",
         now=NOW - timedelta(days=2),

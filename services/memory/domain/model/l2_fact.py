@@ -108,8 +108,15 @@ class L2Fact(BaseModel):
         self.status = target
         self.updated_at = now
 
-    def invalidate(self, now: datetime) -> None:
-        """失效标记（墓碑式软删，api/01 §5.5：无 DELETE 端点；同时写 valid_to 双时间线）。"""
+    def invalidate(self, now: datetime, *, reason: str) -> None:
+        """失效标记（墓碑式软删，api/01 §5.5：无 DELETE 端点；同时写 valid_to 双时间线）。
+
+        reason 必填（K2-a §11.1：无 reason 拒绝失效）——理由本身落失效影子表
+        （memory_l2_fact_invalidations，与 save_state 同事务），主表不加列（迁移只增不改，
+        影子行承载完整归档语义）。
+        """
+        if not (reason and reason.strip()):
+            raise ValueError("失效必须携带 reason（§11.1：无 reason 拒绝失效）")
         self._transition(FactStatus.INVALIDATED, now)
         self.valid_to = now
 
@@ -122,3 +129,36 @@ class L2Fact(BaseModel):
         """confidence × 时间衰减（memory §3 加权合并：半衰期默认 30 天，config 可调）。"""
         age_days = max((now - self.created_at).total_seconds(), 0.0) / 86400.0
         return float(self.confidence * 0.5 ** (age_days / half_life_days))
+
+
+class FactInvalidation(BaseModel):
+    """失效影子行领域对象（K2-a §11.1 hindsight 范式：失效即归档，行不可变、仅 restored_at 可回填）。
+
+    restore 语义红线：**影子层可见性恢复，非复活**——主表 fact 保持 INVALIDATED 终态不动
+    （P3-3 防复活：失效事实不得复活，同指纹再写入仍被永久抑制）；本对象只承载归档行自身的
+    恢复标记，全程审计留痕归 repo/api 层。
+    """
+
+    model_config = ConfigDict(validate_assignment=True)
+
+    id: uuid.UUID
+    tenant_id: uuid.UUID
+    fact_id: uuid.UUID
+    user_id: uuid.UUID
+    content: str = Field(min_length=1)  # 失效时事实文本快照（主表后续 UPDATE 不影响追溯）
+    reason: str = Field(min_length=1)  # 必填（§11.1）
+    invalidated_at: datetime
+    restored_at: datetime | None = None
+
+    @property
+    def active(self) -> bool:
+        """失效是否生效中（restored_at 为空 = 生效中）。"""
+        return self.restored_at is None
+
+    def restore(self, now: datetime) -> None:
+        """影子行 restored_at 回填（幂等：已恢复原样不动；先恢复后失效的时间倒置拒绝）。"""
+        if self.restored_at is not None:
+            return
+        if now < self.invalidated_at:
+            raise FactStateError(f"restored_at({now}) 不得早于 invalidated_at({self.invalidated_at})")
+        self.restored_at = now

@@ -3,7 +3,8 @@
     GET  /memory                              读记忆（按 layer/key 过滤）
     POST /memory/search                       语义检索（M3 过渡：关键词+新近双通道 RRF）
     POST /memory                              写入记忆（按层授权；l2 走指纹幂等）
-    POST /memory/facts/{id}/invalidate        失效标记（墓碑式软删，无 DELETE 端点）
+    POST /memory/facts/{id}/invalidate        失效标记（墓碑式软删，无 DELETE 端点；reason 必填）
+    POST /memory/facts/{id}/restore           失效归档恢复（影子层 restored_at 回填，非复活；K2-a）
     POST /memory/consolidate                  触发 L1→L2 沉淀（202 受理，后台执行）
     GET  /memory/context                      组装会话上下文记忆（mode=full|light）
     ── ★ 端点（api/01 §5.5 登记册补齐，2026-09-28）──
@@ -49,6 +50,8 @@ from services.memory.api.schemas.memory import (
     AuditPageOut,
     ConsolidateIn,
     ConsolidateOut,
+    FactInvalidateIn,
+    FactInvalidationOut,
     FactOut,
     FactPageOut,
     FactTimelineOut,
@@ -254,9 +257,14 @@ async def write_memory(
 @router.post(
     "/facts/{fact_id}/invalidate",
     status_code=status.HTTP_202_ACCEPTED,
-    summary="失效标记（墓碑式软删：置 status=invalidated 并写 valid_to，不物理删除）",
+    summary="失效标记（墓碑式软删：置 status=invalidated 并写 valid_to，不物理删除；reason 必填）",
 )
-async def invalidate_fact(fact_id: uuid.UUID, principal: MemoryWriteDep, db: SessionDep) -> FactOut:
+async def invalidate_fact(
+    fact_id: uuid.UUID, body: FactInvalidateIn, principal: MemoryWriteDep, db: SessionDep
+) -> FactOut:
+    """失效标记（K2-a §11.1 失效即归档）：reason 必填（DTO min_length 把守，缺省/空 → 422）；
+    影子行（content 快照+reason+invalidated_at）与主表 save_state 同事务写入（SessionDep
+    统一提交），杜绝「主表已失效、影子缺失」断链。幂等：已失效重复提交原样返回、不重复归档。"""
     repo = _repo(db, principal.tenant_id)
     fact = await repo.get(fact_id)
     if fact is None:  # 未命中或跨租户一律 404（不泄露存在性）
@@ -264,9 +272,41 @@ async def invalidate_fact(fact_id: uuid.UUID, principal: MemoryWriteDep, db: Ses
     if fact.user_id != principal.user_id:
         raise GatewayError(2002, "仅可操作本人记忆", status_code=403)
     if fact.status is not FactStatus.INVALIDATED:  # 幂等：已失效重复提交原样返回
-        fact.invalidate(datetime.now(UTC))
+        now = datetime.now(UTC)
+        fact.invalidate(now, reason=body.reason)
+        await repo.archive_invalidated(fact, reason=body.reason, invalidated_at=now)
         await repo.save_state(fact)
     return FactOut.from_domain(fact)
+
+
+@router.post(
+    "/facts/{fact_id}/restore",
+    summary="失效归档恢复（影子层可见性恢复：restored_at 回填；非复活，主表 INVALIDATED 终态不动）",
+)
+async def restore_fact(fact_id: uuid.UUID, principal: MemoryWriteDep, db: SessionDep) -> FactInvalidationOut:
+    """失效归档恢复（K2-a §11.1，hindsight 范式）：仅回填影子行 restored_at——主表 fact 保持
+    INVALIDATED 终态不动（P3-3 防复活：失效事实不得复活，同指纹再写入仍被永久抑制），
+    全程审计留痕归影子行自身（who/when 由网关审计面覆盖）。
+    治理档 v1 简化（solo 本人 / team 单审 / enterprise 双审的分档审批随 M5 审批中心接入收口）：
+    本人或 admin 可 restore，复用 principal.roles 判定（memory_audit 同款模式）。
+    未命中/跨租户 → 404（不泄露存在性）；他人且非 admin → 403（2002）；无生效中影子行
+    （未失效过/已恢复）→ 409。"""
+    repo = _repo(db, principal.tenant_id)
+    fact = await repo.get(fact_id)
+    if fact is None:  # 未命中或跨租户一律 404（不泄露存在性）
+        raise GatewayError(404, "记忆事实不存在", status_code=404)
+    if fact.user_id != principal.user_id and "admin" not in principal.roles:
+        raise GatewayError(2002, "仅本人或管理员可恢复失效归档", status_code=403)
+    shadow = await repo.restore(fact_id, now=datetime.now(UTC))
+    if shadow is None:
+        raise GatewayError(409, "该事实无生效中的失效归档（未失效过或已恢复）", status_code=409)
+    return FactInvalidationOut(
+        fact_id=fact_id,
+        reason=shadow.reason,
+        content=shadow.content,
+        invalidated_at=shadow.invalidated_at,
+        restored_at=shadow.restored_at,
+    )
 
 
 @router.post("/consolidate", status_code=status.HTTP_202_ACCEPTED, summary="触发 L1→L2 沉淀（202 受理，后台执行）")
@@ -556,18 +596,21 @@ def get_pipeline(request: Request) -> tuple:
 Pipe = Annotated[tuple, Depends(get_pipeline)]
 
 
-def _parse_optional_uuid(raw: str | None) -> uuid.UUID | None:
-    """可选用户头解析（dev 模式，TODO(M1) JWT）：缺失/非法值一律忽略置 None，不报错。
+def _user_header(raw: str | None) -> uuid.UUID | None:
+    """可选用户头严格解析（dev 模式，TODO(M1) JWT）——K2-c §11.3 身份所有权不变量。
 
-    滥用面备案（dev 模式，登记册偏差备注同步）：客户端可自报 user_id 写记录污染其画像
-    （写侧伪造），profile 路径参数可查任意用户画像（读侧扩大）——均为 M1 JWT 统一收口点。
+    缺失 → None（可选归因语义保留：settle 可无主、promotions 提交人可缺省）；
+    出现但非法（非 UUID）→ 422 拒绝，**不再静默置 None**（原 _parse_optional_uuid 的
+    「非法静默 None」2026-10-05 K2-c 收口废除：身份元数据归系统所有，伪造/污染输入必须
+    显式暴露而非吞掉——静默 None 会把越权写/错归因伪装成正常无主记录）。
+    滥用面余项（dev 头可自报他人 id，写侧伪造）随 M1 JWT 统一收口（登记册偏差备注）。
     """
     if raw is None:
         return None
     try:
         return uuid.UUID(raw)
-    except ValueError:
-        return None
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail="X-User-Id 非法 UUID（身份头拒绝非法值，§11.3）") from e
 
 
 def _rec_fields(rec) -> dict:
@@ -650,7 +693,7 @@ async def settle_session(
     exclude_none：成功面无 skipped 键，幂等面才有）。
     """
     pipeline, repo = pipe
-    owner_user_id = _parse_optional_uuid(x_user_id)  # 归属用户（dev 头；非法值已静默忽略）
+    owner_user_id = _user_header(x_user_id)  # 归属用户（dev 头；非法值 422，K2-c §11.3 收口）
     key = f"manual:{session_id}:{hashlib.sha256(body.transcript.encode()).hexdigest()}"
     payload = {
         "session_id": str(session_id),
@@ -725,7 +768,7 @@ async def create_record_promotion(
             tenant_id=tid,
             record_id=body.record_id,
             to_layer=body.to_layer,
-            submitter_id=_parse_optional_uuid(x_user_id),
+            submitter_id=_user_header(x_user_id),  # 可选归因：缺省 None 可；非法值 422（K2-c §11.3）
             trace_id=getattr(request.state, "trace_id", "") or "",
         )
     except LookupError as exc:  # record 存在性+归属双校验（顺带封跨租户引用）
@@ -768,7 +811,7 @@ async def decide_record_promotion(
     {pm_id, action, fact_id, fact_layer}。"""
     _pipeline, repo = pipe
     svc = _promotion_review(request, repo)
-    approver_id = _parse_optional_uuid(x_user_id)
+    approver_id = _user_header(x_user_id)  # 非法值 422（K2-c §11.3；与下方缺失同归 422 口径）
     if approver_id is None:  # 终审须可归因（审计决策行 approver 必填；M1 JWT 后由令牌派生）
         raise HTTPException(status_code=422, detail="X-User-Id 缺失或非法（终审决策须可归因）")
     promo = await repo.get_promotion(tid, promotion_id)

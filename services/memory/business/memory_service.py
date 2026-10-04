@@ -12,7 +12,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from services.memory.business.retrieval_pg import KeywordChannel, RecallChannel, Scored, TimeChannel, search_by_channels
 from services.memory.data.cache.l1_redis import L1SessionStore
@@ -33,12 +33,29 @@ class ObservationOriginError(Exception):
     """mem:Observation 仅由 sleep-time 反思管线产生（规格 §3.1）。"""
 
 
+class ObservationEvidenceError(Exception):
+    """mem:Observation 无证据链/证据链不自洽拒绝落库（K2-b §11.2：拒绝而非降级写入）。"""
+
+
+def _evidence_ids(source_ref: list[dict]) -> set[str]:
+    """source_ref 证据链抽取：supported_by / source_fact_ids 键的并集（§11.2 双键同源）。"""
+    evidence: set[str] = set()
+    for ref in source_ref or []:
+        if not isinstance(ref, dict):
+            continue
+        for key in ("supported_by", "source_fact_ids"):
+            for item in ref.get(key) or []:
+                evidence.add(str(item))
+    return evidence
+
+
 class RecordUpsert(BaseModel):
     model_config = ConfigDict(validate_assignment=True)
 
     tenant_id: uuid.UUID
     layer: MemoryLayer
     record_type: MemoryType
+    owner_user_id: uuid.UUID | None = None  # 系统所有（K2-c §11.3）：仅认证上下文/管线可填，请求 DTO 不暴露
     subject_iri: str | None = None
     content: str = Field(min_length=1)
     structured: dict = Field(default_factory=dict)
@@ -49,6 +66,17 @@ class RecordUpsert(BaseModel):
     valid_from: datetime | None = None
     valid_to: datetime | None = None
     decay_at: datetime | None = None
+
+    @model_validator(mode="after")
+    def _tenant_owner_consistency(self) -> RecordUpsert:
+        """tenant/owner 一致性断言（K2-c §11.3 身份所有权不变量）：owner 归属是 L2 画像/预热
+        维度（memory.py 领域模型注释同口径），仅对 layer=USER 记录有意义——非 USER 层携带
+        owner = 身份元数据错挂，构造期拒绝（repo insert 另有兜底断言，防御纵深）。"""
+        if self.owner_user_id is not None and self.layer is not MemoryLayer.USER:
+            raise ValueError(
+                f"owner_user_id 仅适用于 layer=2（USER）记录，当前 layer={int(self.layer)}（§11.3 tenant/owner 一致性）"
+            )
+        return self
 
 
 class SearchQuery(BaseModel):
@@ -77,6 +105,17 @@ class MemoryService:
         # TODO(plan3): SHACL shape 校验（mem TBox）+ 术语对齐 subject_iri（规格 §5.1 步骤②）
         if cmd.record_type is MemoryType.OBSERVATION and origin != "pipeline":
             raise ObservationOriginError("mem:Observation 仅限后台管线写入")
+        if cmd.record_type is MemoryType.OBSERVATION:
+            # K2-b §11.2 固化强制证据链：无证据链/证据不自洽一律拒绝落库（拒绝而非降级写入）
+            evidence = _evidence_ids(cmd.source_ref)
+            if cmd.proof_count is None or cmd.proof_count < 1 or not evidence:
+                raise ObservationEvidenceError(
+                    "mem:Observation 必须携带证据链（source_ref supported_by/source_fact_ids 非空且 proof_count≥1，§11.2）"
+                )
+            if len(evidence) != cmd.proof_count:
+                raise ObservationEvidenceError(
+                    f"mem:Observation 证据链不自洽：proof_count={cmd.proof_count} != len(证据)={len(evidence)}（§11.2）"
+                )
         rec = MemoryRecord(id=uuid.uuid4(), created_at=now, updated_at=now, **cmd.model_dump())
         await self.repo.insert(rec)
         return rec

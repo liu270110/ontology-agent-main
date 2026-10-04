@@ -22,8 +22,9 @@ from sqlalchemy import or_, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from services.memory.data.orm import MemoryL2Fact as MemoryL2FactORM
+from services.memory.data.orm import MemoryL2FactInvalidation as MemoryL2FactInvalidationORM
 from services.memory.data.vector import EMBED_MODEL, set_fact_embedding
-from services.memory.domain.model.l2_fact import FactCategory, FactStatus, L2Fact
+from services.memory.domain.model.l2_fact import FactCategory, FactInvalidation, FactStatus, L2Fact
 
 
 def _to_domain(row: MemoryL2FactORM) -> L2Fact:
@@ -121,6 +122,72 @@ class PgL2FactRepository:
         row.decay_score = fact.decay_score
         row.updated_at = datetime.now(UTC)
         await self._session.flush()
+
+    async def archive_invalidated(self, fact: L2Fact, *, reason: str, invalidated_at: datetime) -> None:
+        """失效即归档（K2-a §11.1）：影子行与 save_state 同会话同事务（本仓储不提交）。
+
+        content=失效时事实文本快照（主表后续 UPDATE 不影响追溯）；reason 必填由领域层
+        invalidate 与 API DTO 双层把守，此处兜底拒空（fail-closed）。
+        """
+        if not (reason and reason.strip()):
+            raise ValueError("失效影子行 reason 必填（§11.1：无 reason 拒绝失效）")
+        self._session.add(
+            MemoryL2FactInvalidationORM(
+                id=uuid.uuid4(),
+                tenant_id=self._tenant_id,
+                fact_id=fact.id,
+                user_id=fact.user_id,
+                content=fact.content,
+                reason=reason,
+                invalidated_at=invalidated_at,
+                restored_at=None,
+            )
+        )
+        await self._session.flush()
+
+    async def list_invalidated(
+        self,
+        user_id: UUID,
+        *,
+        active_only: bool = True,
+        offset: int = 0,
+        limit: int = 50,
+    ) -> list[FactInvalidation]:
+        """用户失效归档分页（invalidated_at 倒序；active_only 仅 restored_at 为空的生效行）。"""
+        stmt = select(MemoryL2FactInvalidationORM).where(
+            MemoryL2FactInvalidationORM.tenant_id == self._tenant_id,
+            MemoryL2FactInvalidationORM.user_id == user_id,
+        )
+        if active_only:
+            stmt = stmt.where(MemoryL2FactInvalidationORM.restored_at.is_(None))
+        stmt = stmt.order_by(MemoryL2FactInvalidationORM.invalidated_at.desc()).offset(offset).limit(limit)
+        rows = (await self._session.execute(stmt)).scalars().all()
+        return [_invalidation_to_domain(row) for row in rows]
+
+    async def restore(self, fact_id: UUID, *, now: datetime) -> FactInvalidation | None:
+        """影子层可见性恢复（K2-a §11.1）：最新生效影子行 restored_at 回填；非复活——
+        主表 fact 不动（INVALIDATED 终态）。无生效影子行（未失效过/已恢复）返回 None。
+        """
+        row = (
+            await self._session.execute(
+                select(MemoryL2FactInvalidationORM)
+                .where(
+                    MemoryL2FactInvalidationORM.tenant_id == self._tenant_id,
+                    MemoryL2FactInvalidationORM.fact_id == fact_id,
+                    MemoryL2FactInvalidationORM.restored_at.is_(None),
+                )
+                .order_by(MemoryL2FactInvalidationORM.invalidated_at.desc())
+                .limit(1)
+            )
+        ).scalar_one_or_none()
+        if row is None:
+            return None
+        shadow = _invalidation_to_domain(row)
+        shadow.restore(now)  # 领域方法回填（幂等/时间倒置守卫）
+        row.restored_at = shadow.restored_at
+        row.updated_at = datetime.now(UTC)
+        await self._session.flush()
+        return shadow
 
     async def list_for_user(
         self,
@@ -226,6 +293,20 @@ class PgL2FactRepository:
             )
         ).scalar_one_or_none()
         return cast(MemoryL2FactORM | None, row)
+
+
+def _invalidation_to_domain(row: MemoryL2FactInvalidationORM) -> FactInvalidation:
+    """影子行 ORM → 领域对象（K2-a §11.1；列白名单与 ORM 精确相等）。"""
+    return FactInvalidation(
+        id=row.id,
+        tenant_id=row.tenant_id,
+        fact_id=row.fact_id,
+        user_id=row.user_id,
+        content=row.content,
+        reason=row.reason,
+        invalidated_at=row.invalidated_at,
+        restored_at=row.restored_at,
+    )
 
 
 def _query_terms(query: str, *, min_len: int = 2, max_terms: int = 8) -> list[str]:

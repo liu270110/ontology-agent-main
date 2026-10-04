@@ -2619,6 +2619,73 @@
         "title": "FactCategory",
         "type": "string"
       },
+      "FactInvalidateIn": {
+        "additionalProperties": false,
+        "description": "POST /memory/facts/{id}/invalidate 请求（K2-a §11.1：reason 必填，无 reason 422 拒绝失效）。",
+        "properties": {
+          "reason": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "reason"
+        ],
+        "title": "FactInvalidateIn",
+        "type": "object"
+      },
+      "FactInvalidationOut": {
+        "additionalProperties": false,
+        "description": "失效影子行投影（K2-a §11.1）：POST /memory/facts/{id}/restore 响应 data。\n\nrestored 语义=影子层可见性恢复（restored_at 回填），非复活——fact 本体保持\nINVALIDATED 终态（P3-3 防复活红线，权威篇 §11.1 与领域模型注释同口径）。",
+        "properties": {
+          "content": {
+            "title": "Content",
+            "type": "string"
+          },
+          "fact_id": {
+            "format": "uuid",
+            "title": "Fact Id",
+            "type": "string"
+          },
+          "invalidated_at": {
+            "format": "date-time",
+            "title": "Invalidated At",
+            "type": "string"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          },
+          "restored_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Restored At"
+          },
+          "status": {
+            "const": "invalidated",
+            "default": "invalidated",
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "fact_id",
+          "reason",
+          "content",
+          "invalidated_at"
+        ],
+        "title": "FactInvalidationOut",
+        "type": "object"
+      },
       "FactOut": {
         "description": "L2 事实（api/01 §6.6：fact_id/content/source；列表态附状态与溯源）。",
         "properties": {
@@ -11462,6 +11529,7 @@
     },
     "/api/v1/memory/facts/{fact_id}/invalidate": {
       "post": {
+        "description": "失效标记（K2-a §11.1 失效即归档）：reason 必填（DTO min_length 把守，缺省/空 → 422）；\n影子行（content 快照+reason+invalidated_at）与主表 save_state 同事务写入（SessionDep\n统一提交），杜绝「主表已失效、影子缺失」断链。幂等：已失效重复提交原样返回、不重复归档。",
         "operationId": "invalidate_fact_api_v1_memory_facts__fact_id__invalidate_post",
         "parameters": [
           {
@@ -11475,6 +11543,16 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FactInvalidateIn"
+              }
+            }
+          },
+          "required": true
+        },
         "responses": {
           "202": {
             "content": {
@@ -11497,7 +11575,7 @@
             "description": "Validation Error"
           }
         },
-        "summary": "失效标记（墓碑式软删：置 status=invalidated 并写 valid_to，不物理删除）",
+        "summary": "失效标记（墓碑式软删：置 status=invalidated 并写 valid_to，不物理删除；reason 必填）",
         "tags": [
           "memory"
         ]
@@ -11540,6 +11618,50 @@
           }
         },
         "summary": "发起 L2→L3 升级申请单（M3 过渡：仅审计留痕，不写 L3、不建工单）",
+        "tags": [
+          "memory"
+        ]
+      }
+    },
+    "/api/v1/memory/facts/{fact_id}/restore": {
+      "post": {
+        "description": "失效归档恢复（K2-a §11.1，hindsight 范式）：仅回填影子行 restored_at——主表 fact 保持\nINVALIDATED 终态不动（P3-3 防复活：失效事实不得复活，同指纹再写入仍被永久抑制），\n全程审计留痕归影子行自身（who/when 由网关审计面覆盖）。\n治理档 v1 简化（solo 本人 / team 单审 / enterprise 双审的分档审批随 M5 审批中心接入收口）：\n本人或 admin 可 restore，复用 principal.roles 判定（memory_audit 同款模式）。\n未命中/跨租户 → 404（不泄露存在性）；他人且非 admin → 403（2002）；无生效中影子行\n（未失效过/已恢复）→ 409。",
+        "operationId": "restore_fact_api_v1_memory_facts__fact_id__restore_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "fact_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Fact Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FactInvalidationOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "失效归档恢复（影子层可见性恢复：restored_at 回填；非复活，主表 INVALIDATED 终态不动）",
         "tags": [
           "memory"
         ]

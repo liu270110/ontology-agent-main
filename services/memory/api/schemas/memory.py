@@ -137,6 +137,31 @@ class FactWrittenOut(BaseModel):
     duplicate: bool = False
 
 
+class FactInvalidateIn(BaseModel):
+    """POST /memory/facts/{id}/invalidate 请求（K2-a §11.1：reason 必填，无 reason 422 拒绝失效）。"""
+
+    model_config = _FORBID
+
+    reason: str = Field(min_length=1, max_length=500)  # 失效理由（落影子表归档行，审计追溯依据）
+
+
+class FactInvalidationOut(BaseModel):
+    """失效影子行投影（K2-a §11.1）：POST /memory/facts/{id}/restore 响应 data。
+
+    restored 语义=影子层可见性恢复（restored_at 回填），非复活——fact 本体保持
+    INVALIDATED 终态（P3-3 防复活红线，权威篇 §11.1 与领域模型注释同口径）。
+    """
+
+    model_config = _FORBID
+
+    fact_id: UUID
+    status: Literal["invalidated"] = "invalidated"  # 主表终态不变（restore 不复活）
+    reason: str
+    content: str  # 失效时文本快照
+    invalidated_at: datetime
+    restored_at: datetime | None = None
+
+
 class L1ReadOut(BaseModel):
     """GET /memory?layer=l1 响应（memory §5.1：blocks（按 key 索引）/window/state）。"""
 

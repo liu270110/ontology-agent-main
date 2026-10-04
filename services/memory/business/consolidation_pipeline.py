@@ -89,6 +89,11 @@ class ConsolidationPipeline:
             if verdict.kind is VerdictKind.DUPLICATE:
                 duplicates += 1
                 continue
+            # 证据链（K2-b §11.2）：source_ref 扩展为 session_id + source_fact_ids——仅 session_id
+            # 无法回溯到具体支撑事实。CONFLICT 路径的 source_fact_ids=冲突对象旧记录 id（待复核
+            # 审什么的具体证据）；低置信/ADD 路径在图内无既有支撑事实，置空列表占位（证据=
+            # transcript 本身，经 session_id 回溯会话）。
+            source_fact_ids = [str(verdict.old_record_id)] if verdict.old_record_id else []
             rec = MemoryRecord(
                 id=uuid.uuid4(),
                 tenant_id=tenant_id,
@@ -100,7 +105,7 @@ class ConsolidationPipeline:
                 structured=c.structured,
                 scope=MemoryScope.PERSONAL,
                 confidence=c.confidence,
-                source_ref=[{"session_id": str(session_id)}],
+                source_ref=[{"session_id": str(session_id), "source_fact_ids": source_fact_ids}],
                 created_at=now,
                 updated_at=now,
             )

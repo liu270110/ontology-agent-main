@@ -351,7 +351,7 @@ def build_mcp_server(
         )
 
     async def memory_invalidate(fact_id: str, reason: str) -> dict[str, Any]:
-        """失效标记（墓碑式软删：置 invalidated 并写 valid_to，不物理删除；重复失效返回原状态）。"""
+        """失效标记（墓碑式软删：置 invalidated 并写 valid_to，不物理删除；reason 必填，空则拒绝）。"""
         return await dispatch("memory.invalidate", {"fact_id": fact_id, "reason": reason})
 
     async def action_invoke(

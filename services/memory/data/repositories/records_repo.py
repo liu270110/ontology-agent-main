@@ -127,6 +127,12 @@ class PgMemoryRepository(MemoryRepository):
         self._sm = sessionmaker
 
     async def insert(self, rec: MemoryRecord) -> None:
+        # K2-c §11.3 兜底断言（防御纵深）：身份元数据 tenant/owner 一致性——owner 仅允许挂在
+        # L2 USER 记录（与 RecordUpsert 校验器同款不变量；直插路径绕过应用层时由仓储把守，
+        # api/memory.py 端点直调断言先例同款——不引入运行时分支，语义违规即开发期暴露）。
+        assert rec.owner_user_id is None or rec.layer == MemoryLayer.USER, (
+            f"owner_user_id 仅适用于 layer=2（USER）记录，当前 layer={int(rec.layer)}（§11.3 tenant/owner 一致性兜底）"
+        )
         async with self._sm() as s, s.begin():
             s.add(MemoryRecordORM(**rec.model_dump()))
 

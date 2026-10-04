@@ -43,6 +43,9 @@ class ErrorCode(IntEnum):
     # 边界闸门共用）；4105=目标 Run 不在本进程运行注册表（inbox 端点归属/可达性口径）。
     ESTOP_ACTIVE = 4104
     RUN_NOT_LOCAL = 4105
+    # 2026-10-05 M4.6-D2 批登记（docs/Agent/13 §2.3；02 §7 表格回填随文档批）：
+    # 4106=rewind 锚点非法（before_seq 不存在或非用户轮——仅用户消息 seq 可作回退锚）。
+    SESSION_REWIND_INVALID = 4106
     # 42xx 段（与 4201 VERSION_IMMUTABLE 同段）：inbox 每 Run 容量上限拒绝（§1.1）
     INBOX_CAPACITY = 4203
     VERSION_IMMUTABLE = 4201

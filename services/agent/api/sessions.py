@@ -38,6 +38,7 @@ from services.agent.api.schemas.session import (
     SessionListOut,
     SessionOut,
     SessionPatchIn,
+    SessionRewindIn,
     from_domain,
     member_from_domain,
     message_from_domain,
@@ -49,12 +50,12 @@ from services.agent.business.chat_orchestrator import build_chat_orchestrator
 from services.agent.business.exec_events import EXEC_PERSISTED_EVENTS
 from services.agent.domain.model.agent import AgentError
 from services.agent.domain.model.kernel_context import KernelEvent
-from services.agent.domain.model.session import MemberRole, Message, RoutingMode, SessionError
+from services.agent.domain.model.session import MemberRole, Message, RoutingMode, SessionError, SessionStatus
 from services.agent.domain.model.task import Run, RunStatus, Task, TaskError, TaskEvent, TaskStatus
 from services.memory.business.runtime import build_l1_store  # memory 公开装配面（memory.data 模块私有，P2-2 收口）
 from services.platform.db.uow import AsyncUnitOfWork
 from services.platform.deps import get_redis, get_session_factory
-from services.platform.errors import GatewayError
+from services.platform.errors import ErrorCode, GatewayError
 from services.platform.schemas import PageMeta
 
 router = APIRouter(prefix="/sessions", tags=["sessions"])
@@ -73,6 +74,19 @@ def _current_request(request: Request) -> Request:
 
 
 RequestOptDep = Annotated[Request | None, Depends(_current_request)]
+
+
+def _l1_store_from_state(request: Request) -> Any | None:
+    """rewind 的 L1 实例就近解析（M4.6-D2，docs/Agent/13 §2.3）：app.state.l1_store 单例。
+
+    组合根（get_or_build_chat_orchestrator / gateway lifespan）已装配同一实例；缺失
+    （无 Redis 形态未装配/端点直调未注入）返回 None——端点跳过失效并记日志（L1 有
+    TTL 兜底过期，失效失败不阻断回退主流程）。
+    """
+    return getattr(request.app.state, "l1_store", None)
+
+
+RewindL1Dep = Annotated[Any | None, Depends(_l1_store_from_state)]
 
 
 class SseHubProtocol(Protocol):
@@ -272,6 +286,8 @@ def build_llm_event_emitter_factory(
         return emit
 
     return factory
+
+
 def build_exec_event_dual_write(
     uow: AsyncUnitOfWork, tenant_id: uuid.UUID
 ) -> Callable[[uuid.UUID, ChatEvent], Awaitable[None]]:
@@ -367,21 +383,26 @@ async def create_session(body: SessionCreateIn, principal: SessionWriteDep, uow:
     return from_domain(session)
 
 
-@router.get("", summary="当前用户会话列表（api/01 §3.1 信封）")
+@router.get("", summary="当前用户会话列表（api/01 §3.1 信封；M4.6-D2 增 query 检索）")
 async def list_sessions(
     principal: SessionReadDep,
     uow: UowDep,
     page: Annotated[int, Query(ge=1)] = 1,
     page_size: Annotated[int, Query(ge=1, le=100)] = 20,
     session_type: Annotated[str | None, Query(alias="type", pattern="^(single|group)$")] = None,
+    query: Annotated[str | None, Query(max_length=256)] = None,
 ) -> SessionListOut:
-    """偏移分页改 page/page_size（B1 批，api/01 §3.1；offset=(page-1)*page_size 内部换算）。"""
+    """偏移分页改 page/page_size（B1 批，api/01 §3.1；offset=(page-1)*page_size 内部换算）。
+
+    M4.6-D2（docs/Agent/13 §2.3）：query 非空 → 检索面过滤（simple tsvector 全文 OR
+    pg_trgm 相似，repo 层同口径），排序维持 recency 现状（相关性排序登记后续）；空/空白
+    query 行为不变。page/page_size 语义不变，count 同过滤口径。"""
     offset = (page - 1) * page_size
     async with uow.for_tenant(principal.tenant_id) as tx:
         items = await tx.sessions.list_for_user(
-            principal.user_id, offset=offset, limit=page_size, session_type=session_type
+            principal.user_id, offset=offset, limit=page_size, session_type=session_type, query=query
         )
-        total = await tx.sessions.count_for_user(principal.user_id, session_type=session_type)
+        total = await tx.sessions.count_for_user(principal.user_id, session_type=session_type, query=query)
     return SessionListOut(
         data=[from_domain(s) for s in items],
         meta=PageMeta(page=page, page_size=page_size, total=total),
@@ -508,6 +529,74 @@ async def patch_session(
     return from_domain(session)
 
 
+@router.post(
+    "/{session_id}/rewind",
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="回退会话（before_seq 起软删；M4.6-D2 G-07）",
+)
+async def rewind_session(
+    session_id: uuid.UUID,
+    body: SessionRewindIn,
+    principal: SessionWriteDep,
+    uow: UowDep,
+    request: RequestOptDep = None,
+    l1_store: RewindL1Dep = None,
+) -> dict:
+    """会话回退（docs/Agent/13 §2.3，G-07；api/01 登记随文档批）：
+
+    - 锚点：仅用户消息 seq 可作锚——get_message_by_seq 不过滤软删行，重复同锚幂等
+      202/零新增软删；不存在或非用户轮 → 4106 SESSION_REWIND_INVALID（HTTP 409）；
+    - 软删：seq>=before_seq 置 deleted_at（仓储 soft_delete_from，幂等），last_message_at
+      回退到边界前最后一条未删消息，检索面同点重算（被删正文退出检索面）；
+    - L1 失效：事务提交后 RedisL1Store.delete_all 三键（就近取 app.state 单例注入；
+      无实例跳过并日志；失败仅告警——TTL 兜底过期，memory §4 底线）；
+    - 审计：session.rewound → task_events（复用既有 append_event 路径，payload
+      before_seq/deleted_count/session_id；会话无任务载体时告警跳过，审计不阻断主流程）；
+    - closed/archived 会话 4101 拒（状态机口径同 send_message）。
+    """
+    try:
+        async with uow.for_tenant(principal.tenant_id) as tx:
+            session = await tx.sessions.get(session_id)
+            if session is None:
+                raise GatewayError(404, "会话不存在", status_code=404)
+            if session.status in (SessionStatus.CLOSED, SessionStatus.ARCHIVED):
+                raise SessionError("4101 SESSION_CLOSED: 会话已关闭，拒绝回退")
+            anchor = await tx.sessions.get_message_by_seq(session_id, body.before_seq)
+            if anchor is None or anchor.role != "user":
+                raise GatewayError(
+                    ErrorCode.SESSION_REWIND_INVALID,
+                    f"4106 SESSION_REWIND_INVALID: 回退锚非法（seq={body.before_seq} 不存在或非用户轮）",
+                    status_code=409,
+                )
+            deleted_count = await tx.sessions.soft_delete_from(session_id, before_seq=body.before_seq)
+            carrier = await tx.tasks.list(session_id=session_id, limit=1)  # 审计载体=最近任务（created_at desc）
+            if carrier:
+                await tx.tasks.append_event(
+                    carrier[0].id,
+                    TaskEvent(
+                        task_id=carrier[0].id,
+                        event_type="session.rewound",
+                        data={
+                            "session_id": str(session_id),
+                            "before_seq": body.before_seq,
+                            "deleted_count": deleted_count,
+                        },
+                    ),
+                )
+            else:
+                logger.warning("session.rewound 审计跳过（会话无任务载体，回退不受影响）: session=%s", session_id)
+    except SessionError as exc:
+        raise domain_error(exc, fallback_code=4101) from exc
+    if l1_store is not None:  # 事务提交后失效（回滚不误清缓存）；delete_all 内置降级契约（无 Redis 记日志跳过）
+        try:
+            await l1_store.delete_all(principal.tenant_id, session_id)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("rewind L1 失效失败（TTL 兜底过期，不阻断）: session=%s: %s", session_id, exc)
+    else:
+        logger.info("rewind L1 失效跳过（无可用 L1 实例）: session=%s", session_id)
+    return {"data": {"before_seq": body.before_seq, "deleted_count": deleted_count}, "meta": {}}
+
+
 @router.delete(
     "/{session_id}",
     status_code=status.HTTP_204_NO_CONTENT,
@@ -582,9 +671,7 @@ async def cancel_session_run(
                             data={"run_id": str(run.id), "source": "session.cancel"},
                         ),
                     )
-                    tx.enqueue_projection(
-                        "run.cancelled", task.id, {"task_id": str(task.id), "run_id": str(run.id)}
-                    )
+                    tx.enqueue_projection("run.cancelled", task.id, {"task_id": str(task.id), "run_id": str(run.id)})
             effective_run_id = run.id if run is not None else body.run_id
     except TaskError as exc:
         raise domain_error(exc, fallback_code=4102) from exc
@@ -623,8 +710,11 @@ async def send_message(
             message = Message(
                 session_id=session_id, seq=seq, role="user", content=body.content, content_type=body.content_type
             )
-            await tx.sessions.append_message(session_id, message)
+            # 同事务内先存 meta 再落消息：append_message 的 M4.6-D2 定题（docs/Agent/13 §2.4）
+            # 写库在 save_meta 之后——否则 save_meta 以本端点持有的陈旧域对象（title=None）
+            # 全量覆写，刚生成的标题即被冲掉（save_meta 不触 search_text，检索面无此问题）。
             await tx.sessions.save_meta(session)  # created→active（首条用户消息，04 §3）随标量保存
+            await tx.sessions.append_message(session_id, message)
             task = Task(
                 tenant_id=principal.tenant_id,
                 type="chat",

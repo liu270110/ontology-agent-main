@@ -42,7 +42,12 @@ async def probe_pg(dsn: str) -> bool:
 
 
 async def create_test_database(dsn: str) -> str:
-    """建一次性测试库，返回指向新库的 DSN（库 oa_wt_test_<hex10>，用毕须 drop）。"""
+    """建一次性测试库，返回指向新库的 DSN（库 oa_wt_test_<hex10>，用毕须 drop）。
+
+    M4.6-D2 起 ORM 元数据含 pg_trgm 表达式索引（orm.py Session ix_sessions_search_trgm），
+    建库即预装扩展（CREATE EXTENSION 须连目标库执行，不能跨库）——否则
+    Base.metadata.create_all 在无 pg_trgm 的库上建索引即炸。
+    """
     dbname = f"oa_wt_test_{uuid.uuid4().hex[:10]}"
     engine = create_async_engine(_admin_dsn(dsn), isolation_level="AUTOCOMMIT")
     try:
@@ -50,7 +55,14 @@ async def create_test_database(dsn: str) -> str:
             await conn.execute(sa.text(f'CREATE DATABASE "{dbname}"'))
     finally:
         await engine.dispose()
-    return dsn.rsplit("/", 1)[0] + f"/{dbname}"
+    test_dsn = dsn.rsplit("/", 1)[0] + f"/{dbname}"
+    ext_engine = create_async_engine(test_dsn, isolation_level="AUTOCOMMIT")
+    try:
+        async with ext_engine.begin() as conn:
+            await conn.execute(sa.text("CREATE EXTENSION IF NOT EXISTS pg_trgm"))
+    finally:
+        await ext_engine.dispose()
+    return test_dsn
 
 
 async def drop_test_database(test_dsn: str) -> None:

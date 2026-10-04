@@ -50,6 +50,17 @@ class Settings(BaseSettings):
     llm_base_url: str | None = None  # 云渠道 https://api.deepseek.com；本地 vLLM http://127.0.0.1:8001/v1
     llm_model: str = "deepseek-chat"  # 现役默认对话模型；本地渠道用 vLLM served-model-name 固定值 local-main
     llm_api_key: str | None = None
+
+    # 模型韧性（M4.5-C，docs/Agent/12 §3 批次 C：凭证池 + 模型冷却/fallback 链 + 调用级重试落盘）。
+    # 缺省全部零行为变化：extra 空串=单凭证直驱（不建池）、chains 空串=禁用降级链。
+    llm_api_keys_extra: str = ""  # 逗号分隔附加 API key（并入主 provider 凭证池；主 key=llm_api_key）
+    llm_credential_cooldown_s: int = Field(default=60, ge=1)  # 单凭证 429/401 首次冷却；连续失败 ×2 递增
+    llm_credential_cooldown_max_s: int = Field(default=600, ge=1)  # 冷却递增封顶
+    llm_model_fail_threshold: int = Field(default=3, ge=1)  # per-model 连续失败次数 ≥ 阈值 → 冷却
+    llm_model_cooldown_s: int = Field(default=120, ge=1)  # 模型冷却时长（到期自愈，成功清零连败计数）
+    llm_fallback_chains: str = ""  # 降级链 "main->backup;a->b->c"（->接续；分号分隔多链；空=禁用）
+    llm_call_retry_max_attempts: int = Field(default=2, ge=1, le=10)  # 调用级总尝试数（含首次；1=不重试）
+    llm_call_retry_backoff_ms: int = Field(default=200, ge=0)  # 退避基值（指数 ×2；先落 llm.retry_scheduled 再等）
     # M0 历史字段（ops/03 单轨 Ollama 时期）：14 篇 §9 vLLM 定稿后随网关改造移除，勿新增依赖
     ollama_base_url: str = "http://localhost:11434"
     # 嵌入端点协议开关（docs/Agent/09 §2.1 工程问题 2「嵌入协议漂移」）：ollama=POST

@@ -10,6 +10,7 @@ send_message 适用豁免①（消息落库 + 任务受理同一事务，03 §6.
 from __future__ import annotations
 
 import inspect
+import logging
 import uuid
 from collections.abc import AsyncIterator, Awaitable, Callable
 from typing import Annotated, Any, Protocol
@@ -57,6 +58,8 @@ router = APIRouter(prefix="/sessions", tags=["sessions"])
 
 _SSE_MEDIA_TYPE = "text/event-stream"
 _SSE_HEADERS = {"Cache-Control": "no-cache", "X-Accel-Buffering": "no"}  # 02 §5 响应头固定项
+
+logger = logging.getLogger(__name__)
 
 
 def _current_request(request: Request) -> Request:
@@ -143,6 +146,43 @@ def build_kernel_ledger_sink_factory(
     return factory
 
 
+def build_llm_event_emitter_factory(
+    uow: AsyncUnitOfWork, hub: Any = None
+) -> Callable[[ChatCommand], Callable[[str, dict[str, Any]], Awaitable[None]]]:
+    """M4.5-C llm.* 事件汇工厂（组合根，docs/Agent/12 §3）：llm.failover / llm.retry_* → task_events。
+
+    每次对话经 factory(command) 取得闭包 emitter；编排器在 Run 生命周期内绑定
+    （platform.llm.events ContextVar），模型韧性层（platform.llm.resilience）在降级/
+    重试调度点调用。落库经 UoW 短事务（**先落库**），随后 hub 尽力推送（**后推送**；
+    hub 二态：进程内 publish=同步二元组 / Redis Stream publish=协程，
+    _chat_stream_response 同款收敛）。本函数是编排器（业务层）与 UoW/hub 之间的注入
+    边界（build_kernel_ledger_sink_factory 先例）；落库/推送失败只告警——事件留痕不
+    阻断模型调用（审计不阻塞主流程，02 §3 ⑥）。
+    """
+
+    def factory(command: ChatCommand) -> Callable[[str, dict[str, Any]], Awaitable[None]]:
+        async def emit(event_type: str, data: dict[str, Any]) -> None:
+            try:  # 先落库（task_events 只追加行；时间线端点取数口）
+                async with uow.for_tenant(command.tenant_id) as tx:
+                    await tx.tasks.append_event(
+                        command.task_id,
+                        TaskEvent(task_id=command.task_id, event_type=event_type, data=dict(data)),
+                    )
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("llm 事件落库失败（task=%s type=%s）: %s", command.task_id, event_type, exc)
+            if hub is not None:  # 后推送（尽力；失败不影响已落库行）
+                try:
+                    published = hub.publish(command.session_id, event_type, dict(data))
+                    if inspect.isawaitable(published):
+                        await published
+                except Exception as exc:  # noqa: BLE001
+                    logger.warning("llm 事件推送失败（session=%s type=%s）: %s", command.session_id, event_type, exc)
+
+        return emit
+
+    return factory
+
+
 def get_or_build_chat_orchestrator(state: Any) -> Any:
     """取/建对话编排器（模块级组合模式，同 kb.py get_model_port 先例；app.state 单例缓存）。
 
@@ -169,6 +209,9 @@ def get_or_build_chat_orchestrator(state: Any) -> Any:
         ollama_base_url=settings.ollama_base_url,
         result_sink=build_chat_result_sink(state.uow),  # lifespan 装配于 app.state（06 §1）
         kernel_ledger_sink_factory=build_kernel_ledger_sink_factory(state.uow),  # C1 锚点投影（2026-09-27 批）
+        llm_event_emitter_factory=build_llm_event_emitter_factory(
+            state.uow, getattr(state, "sse_hub", None)
+        ),  # M4.5-C：llm.* 事件 → task_events（先落库后推送）
         spill_store=_build_spill_store(settings),  # spill（02 §11.2-11）：未配置目录=关闭
         run_registry=get_or_build_run_registry(state),  # M4.5-A：运行中输入面注册表
         estop_probe_factory=estop_store.probe,  # M4.5-A：estop 步边界闸门探针工厂

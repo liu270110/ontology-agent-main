@@ -42,6 +42,7 @@ from services.agent.domain.model.kernel_context import KernelEvent, TaskRef, Ten
 from services.agent.domain.model.task import RunStatus
 from services.memory.domain.repo.fact_repo import L1MemoryStore
 from services.platform.errors import ErrorCode
+from services.platform.llm.events import LlmEventEmitter, reset_llm_event_emitter, set_llm_event_emitter
 from services.platform.ports.model_port import ModelPort, ModelPortError
 
 logger = logging.getLogger(__name__)
@@ -108,6 +109,7 @@ class ChatOrchestrator:
         result_sink: Callable[[ChatOutcome], Awaitable[None]] | None = None,
         faithfulness_hook: Callable[[ChatOutcome], Awaitable[None]] | None = None,
         kernel_ledger_sink_factory: Callable[[UUID, UUID], Callable[[KernelEvent], Awaitable[None]]] | None = None,
+        llm_event_emitter_factory: Callable[[ChatCommand], LlmEventEmitter] | None = None,
         spill_store: Any | None = None,  # SpillStore（02 §11.2-11：超大结果→有界预览+locator）
         extra_tool_bindings: tuple = (),  # 能力层 P0（docs/Agent/06）：fs/web 等工具绑定，经 B1 门禁链注册
         run_registry: Any | None = None,  # M4.5-A：RunRegistry（进程内 run_id→inbox/probe；None=不注册）
@@ -131,6 +133,11 @@ class ChatOrchestrator:
         # C1 内核账本投影工厂（2026-09-27 批）：factory(task_id, run_id) → sink(KernelEvent)；
         # None=不投影（内存账本兜底）。落点=PG task_events（组合根经 sessions.build_kernel_ledger_sink_factory）。
         self._ledger_sink_factory = kernel_ledger_sink_factory
+        # M4.5-C llm.* 事件汇工厂（docs/Agent/12 §3）：factory(command) → emitter(event_type, data)；
+        # Run 开始处绑定 ContextVar（模型韧性层降级/重试点读取），结束处解除；None=不绑定
+        # （事件丢弃——kb 抽取等后台面同口径）。落点=PG task_events（组合根经 sessions
+        # build_llm_event_emitter_factory，先落库后推送）。
+        self._llm_event_emitter_factory = llm_event_emitter_factory
         self._spill_store = spill_store
         # M4.5-A 运行中输入面（docs/Agent/12 §1.1/§1.2）：spawn 注册 inbox+estop 探针、
         # 终态注销（_execute_turn finally 面）；两者缺省 None=零行为变化（直跑形态）。
@@ -138,6 +145,18 @@ class ChatOrchestrator:
         self._estop_probe_factory = estop_probe_factory
 
     async def stream_chat(self, command: ChatCommand) -> AsyncIterator[ChatEvent]:
+        """执行一次对话（M4.5-C：Run 生命周期内绑定 llm.* 事件汇，见 _stream_chat_impl）。"""
+        token = None
+        if self._llm_event_emitter_factory is not None:
+            token = set_llm_event_emitter(self._llm_event_emitter_factory(command))
+        try:
+            async for event in self._stream_chat_impl(command):
+                yield event
+        finally:
+            if token is not None:
+                reset_llm_event_emitter(token)
+
+    async def _stream_chat_impl(self, command: ChatCommand) -> AsyncIterator[ChatEvent]:
         """执行一次对话，产出主干波事件流（消费方取消 → 内核取消清单收敛后重抛）。"""
         started = time.monotonic()
         # ① RUN_STARTED（02 §5：{run_id, session_id, task_id, agent_id}）
@@ -417,6 +436,7 @@ def build_chat_orchestrator(
     claude_adapter: ClaudeAdapter | None = None,
     result_sink: Callable[[ChatOutcome], Awaitable[None]] | None = None,
     kernel_ledger_sink_factory: Callable[[UUID, UUID], Callable[[KernelEvent], Awaitable[None]]] | None = None,
+    llm_event_emitter_factory: Callable[[ChatCommand], LlmEventEmitter] | None = None,
     spill_store: Any | None = None,
     extra_tool_bindings: tuple = (),
     run_registry: Any | None = None,  # M4.5-A：进程内运行注册表（None=不注册，inbox/estop 面关闭）
@@ -427,6 +447,8 @@ def build_chat_orchestrator(
     - model_port 缺失（无 LLM 配置）→ builtin 不注册，调用报 5002（与 kb extract 同口径）；
     - claude 恒注册（无 key 注册成功、调用 5002，任务口径）；组合根对 kb 零直接 import
       ——检索服务在 chat_context 工厂内装配（import 链收敛，报告附新契约需求）；
+    - llm_event_emitter_factory（M4.5-C）：llm.* 事件汇工厂（factory(command) → emitter），
+      None=不绑定（事件丢弃）；组合根经 sessions.build_llm_event_emitter_factory 装配；
     - faithfulness 抽检开关（08 §7.4）缺省读统一配置层（OA_ 环境变量，默认开/1%）；显式
       传入 policy 时以 policy 值为准（组合根/测试可覆盖）。
     """
@@ -508,6 +530,7 @@ def build_chat_orchestrator(
         result_sink=result_sink,
         faithfulness_hook=_faithfulness_pg_sink,
         kernel_ledger_sink_factory=kernel_ledger_sink_factory,
+        llm_event_emitter_factory=llm_event_emitter_factory,
         spill_store=spill_store,
         extra_tool_bindings=extra_tool_bindings,
         run_registry=run_registry,

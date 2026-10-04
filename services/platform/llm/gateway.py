@@ -21,6 +21,8 @@ from collections.abc import AsyncIterator, Callable, Mapping
 
 import httpx
 
+from services.platform.llm.cred_pool import CredentialPool
+
 logger = logging.getLogger("services.platform.llm.gateway")
 
 # jsonschema 未列入 pyproject 依赖（禁改 pyproject）；传递可用即用，否则退回内置最小校验。
@@ -187,6 +189,11 @@ class OpenAICompatibleModelPort:
     AsyncClient 可注入复用（组合根/测试挂连接池）；未注入则按 timeout_s 自建。
     任何失败归一为 ModelGatewayError 族（码值=02 篇 §7 已登记段），调用方按码处理。
     provider 属性供审计装饰器落 llm_calls.provider。
+
+    凭证池（M4.5-C §3.1）：``credential_pool`` 注入后每次请求经 RR 取凭证、逐请求携带
+    Authorization（客户端不再固化 Bearer 头）；响应 429/401 → 该凭证冷却并轮换下一凭证
+    重试（对调用方透明）；池空（全冷却）→ 抛**最后一次原始错误**（透传）。未注入=单凭证
+    直驱（构造期固定 Bearer 头，行为与 M4.5 前逐位一致）。
     """
 
     provider = "openai_compatible"
@@ -199,6 +206,7 @@ class OpenAICompatibleModelPort:
         model: str,
         timeout_s: float = 60.0,
         client: httpx.AsyncClient | None = None,
+        credential_pool: CredentialPool | None = None,
     ) -> None:
         if not api_key:
             raise ModelGatewayConfigError("5002 LLM_UNAVAILABLE: llm_api_key 缺失，模型网关拒绝构造")
@@ -207,7 +215,9 @@ class OpenAICompatibleModelPort:
         self._base_url = base_url.rstrip("/")
         self._model = model
         self._timeout_s = timeout_s
-        self._client = client or httpx.AsyncClient(timeout=timeout_s, headers={"Authorization": f"Bearer {api_key}"})
+        self._credential_pool = credential_pool
+        default_headers = None if credential_pool is not None else {"Authorization": f"Bearer {api_key}"}
+        self._client = client or httpx.AsyncClient(timeout=timeout_s, headers=default_headers)
 
     async def complete_structured(
         self,
@@ -236,16 +246,7 @@ class OpenAICompatibleModelPort:
         }
         if num_ctx is not None:
             body["num_ctx"] = num_ctx
-        try:
-            resp = await self._client.post(
-                f"{self._base_url}/chat/completions", json=body, timeout=httpx.Timeout(timeout_s)
-            )
-        except httpx.TimeoutException as exc:
-            raise ModelGatewayTimeoutError(str(exc)) from exc
-        except httpx.HTTPError as exc:
-            raise ModelGatewayUnavailableError(f"模型服务不可达（{self._base_url}）: {exc}") from exc
-        if resp.status_code != 200:
-            raise ModelGatewayUnavailableError(f"模型服务返回 {resp.status_code}: {resp.text[:200]}")
+        resp = await self._post_chat_completions(body=body, timeout_s=timeout_s)
         try:
             payload = resp.json()
             content = payload["choices"][0]["message"]["content"]
@@ -263,6 +264,48 @@ class OpenAICompatibleModelPort:
         return data
 
     # ── 对话生成面（H-6 模型协议主干批，2026-09-29：裸对话 + 真流式）──────────
+
+    async def _post_chat_completions(self, *, body: dict, timeout_s: float) -> httpx.Response:
+        """POST /chat/completions（凭证轮换面，M4.5-C §3.1）：429/401 → 冷却+轮换重试。
+
+        - 无池=单凭证直驱（构造期固定 Bearer 头，单次尝试，行为与引入前逐位一致）；
+        - 有池=逐请求 RR 取凭证携带 Authorization；响应 429/401 → 该凭证冷却并换下一凭证
+          重试（对调用方透明）；池空（全冷却）→ 抛**最后一次原始错误**（透传，不换错型）；
+        - 其余非 200/超时/不可达照旧归一错误族，不轮换（非凭证问题）。
+        """
+        pool = self._credential_pool
+        last_error: ModelGatewayUnavailableError | None = None
+        while True:
+            credential: str | None = None
+            headers: dict[str, str] | None = None
+            if pool is not None:
+                credential = pool.acquire()
+                if credential is None:
+                    # 池空（全冷却）：至少一次凭证失败才可能全冷却——透传最后一次原始错误
+                    assert last_error is not None  # noqa: S101 ——不变式（见上）
+                    raise last_error
+                headers = {"Authorization": f"Bearer {credential}"}
+            try:
+                resp = await self._client.post(
+                    f"{self._base_url}/chat/completions",
+                    json=body,
+                    timeout=httpx.Timeout(timeout_s),
+                    headers=headers,
+                )
+            except httpx.TimeoutException as exc:
+                raise ModelGatewayTimeoutError(str(exc)) from exc
+            except httpx.HTTPError as exc:
+                raise ModelGatewayUnavailableError(f"模型服务不可达（{self._base_url}）: {exc}") from exc
+            if resp.status_code != 200:
+                error = ModelGatewayUnavailableError(f"模型服务返回 {resp.status_code}: {resp.text[:200]}")
+                if pool is not None and resp.status_code in (429, 401):
+                    pool.report_failure(credential)  # type: ignore[arg-type] ——池面恒有凭证
+                    last_error = error
+                    continue  # 换下一凭证；全冷却后由 acquire None 分支透传 last_error
+                raise error
+            if pool is not None:
+                pool.report_success(credential)  # type: ignore[arg-type]
+            return resp
 
     def _resolve_timeout(self, timeout_s: float | None) -> float:
         """每次调用超时归一：显式值优先，None=构造期默认（standards/01 §2.5：必设）。"""
@@ -321,16 +364,7 @@ class OpenAICompatibleModelPort:
             tools=tools,
             tool_choice=tool_choice,
         )
-        try:
-            resp = await self._client.post(
-                f"{self._base_url}/chat/completions", json=body, timeout=httpx.Timeout(self._resolve_timeout(timeout_s))
-            )
-        except httpx.TimeoutException as exc:
-            raise ModelGatewayTimeoutError(str(exc)) from exc
-        except httpx.HTTPError as exc:
-            raise ModelGatewayUnavailableError(f"模型服务不可达（{self._base_url}）: {exc}") from exc
-        if resp.status_code != 200:
-            raise ModelGatewayUnavailableError(f"模型服务返回 {resp.status_code}: {resp.text[:200]}")
+        resp = await self._post_chat_completions(body=body, timeout_s=self._resolve_timeout(timeout_s))
         try:
             payload = resp.json()
             content = payload["choices"][0]["message"]["content"]
@@ -374,39 +408,62 @@ class OpenAICompatibleModelPort:
             tool_choice=tool_choice,
         )
         body["stream"] = True
-        try:
-            async with self._client.stream(
-                "POST",
-                f"{self._base_url}/chat/completions",
-                json=body,
-                timeout=httpx.Timeout(self._resolve_timeout(timeout_s)),
-            ) as resp:
-                if resp.status_code != 200:
-                    detail = (await resp.aread()).decode("utf-8", errors="replace")[:200]
-                    raise ModelGatewayUnavailableError(f"模型服务返回 {resp.status_code}: {detail}")
-                async for line in resp.aiter_lines():
-                    if not line.startswith("data:"):
-                        continue
-                    data_text = line[len("data:") :].strip()
-                    if data_text == "[DONE]":
-                        break
-                    try:
-                        payload = json.loads(data_text)
-                    except ValueError:
-                        continue
-                    if isinstance(payload.get("usage"), dict):
-                        self._capture_usage(payload)  # 末块用量（上游主动携带时）
-                    try:
-                        piece = payload["choices"][0]["delta"]["content"]
-                    except (KeyError, IndexError, TypeError):
-                        continue  # role 首块 / finish 块 / usage-only 块均无 content
-                    if isinstance(piece, str) and piece:
-                        yield piece
-        except httpx.TimeoutException as exc:
-            raise ModelGatewayTimeoutError(str(exc)) from exc
-        except httpx.HTTPError as exc:
-            raise ModelGatewayUnavailableError(f"模型服务不可达（{self._base_url}）: {exc}") from exc
-        logger.info("llm_stream ok: model=%s trace_id=%s", self._model, trace_id)
+        pool = self._credential_pool
+        last_error: ModelGatewayUnavailableError | None = None
+        while True:
+            credential: str | None = None
+            headers: dict[str, str] | None = None
+            if pool is not None:
+                credential = pool.acquire()
+                if credential is None:
+                    # 池空（全冷却）：透传最后一次原始错误（同 _post_chat_completions 口径）
+                    assert last_error is not None  # noqa: S101 ——不变式（见上）
+                    raise last_error
+                headers = {"Authorization": f"Bearer {credential}"}
+            try:
+                async with self._client.stream(
+                    "POST",
+                    f"{self._base_url}/chat/completions",
+                    json=body,
+                    timeout=httpx.Timeout(self._resolve_timeout(timeout_s)),
+                    headers=headers,
+                ) as resp:
+                    if resp.status_code != 200:
+                        detail = (await resp.aread()).decode("utf-8", errors="replace")[:200]
+                        error = ModelGatewayUnavailableError(f"模型服务返回 {resp.status_code}: {detail}")
+                        if pool is not None and resp.status_code in (429, 401):
+                            # 连接期失败：冷却+轮换（尚未产出任何增量，重试对调用方透明）
+                            pool.report_failure(credential)  # type: ignore[arg-type]
+                            last_error = error
+                            continue
+                        raise error
+                    # 已连接（200）：自此不再轮换——首字节后重试会向调用方重复产出增量
+                    async for line in resp.aiter_lines():
+                        if not line.startswith("data:"):
+                            continue
+                        data_text = line[len("data:") :].strip()
+                        if data_text == "[DONE]":
+                            break
+                        try:
+                            payload = json.loads(data_text)
+                        except ValueError:
+                            continue
+                        if isinstance(payload.get("usage"), dict):
+                            self._capture_usage(payload)  # 末块用量（上游主动携带时）
+                        try:
+                            piece = payload["choices"][0]["delta"]["content"]
+                        except (KeyError, IndexError, TypeError):
+                            continue  # role 首块 / finish 块 / usage-only 块均无 content
+                        if isinstance(piece, str) and piece:
+                            yield piece
+            except httpx.TimeoutException as exc:
+                raise ModelGatewayTimeoutError(str(exc)) from exc
+            except httpx.HTTPError as exc:
+                raise ModelGatewayUnavailableError(f"模型服务不可达（{self._base_url}）: {exc}") from exc
+            if pool is not None:
+                pool.report_success(credential)  # type: ignore[arg-type]
+            logger.info("llm_stream ok: model=%s trace_id=%s", self._model, trace_id)
+            return
 
     def _capture_usage(self, payload: dict) -> None:
         """回填用量上下文（DeepSeek prompt_cache_hit_tokens / OpenAI prompt_tokens_details 双兼容）。"""

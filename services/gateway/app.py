@@ -114,26 +114,62 @@ def _build_model_port(s: Settings) -> ModelPort | None:
     extract 步以 5002 LLM_UNAVAILABLE 失败（步级重试耗尽冻结，配置后可重跑）。
     本地渠道无密钥可用：llm_api_key 留空（None/空串）不阻塞装配，传占位符 "EMPTY"
     构造（.env 口径「本地渠道 OA_LLM_API_KEY 留空即可」）。
-    计划 3.3：外层包 AuditedModelPort（预算 5005 前置 + llm_calls 批量审计）。"""
+    计划 3.3：外层包 AuditedModelPort（预算 5005 前置 + llm_calls 批量审计）。
+    M4.5-C 模型韧性（docs/Agent/12 §3）：装配序
+        FailoverModelPort( AuditedModelPort( OpenAICompatibleModelPort(pool?) ) )
+    ——韧性层在审计层之外（每次重试/降级尝试各过一次审计，audited「每次尝试各记一行」）；
+    凭证池仅多凭证（llm_api_keys_extra 非空）时启用（单凭证=原直驱零行为变化）；
+    降级链经 llm_fallback_chains 声明，同 base_url/凭证池按模型名惰性建降级通道（共享
+    同一审计缓冲与预算闸——flush 循环与停机冲刷单一持有口不变）。"""
     if not s.llm_base_url:
         return None
     from services.platform.deps import get_redis, get_session_factory
     from services.platform.llm.audit import LlmCallAuditBuffer
     from services.platform.llm.audited import AuditedModelPort
     from services.platform.llm.budget import LlmBudgetGate
+    from services.platform.llm.cred_pool import CredentialPool, parse_api_keys
     from services.platform.llm.gateway import OpenAICompatibleModelPort  # L7 客户端惰性装配
+    from services.platform.llm.resilience import FailoverModelPort, parse_fallback_chains
 
-    inner: ModelPort = OpenAICompatibleModelPort(
-        base_url=s.llm_base_url,
-        api_key=s.llm_api_key or _LLM_KEY_PLACEHOLDER,
-        model=s.llm_model,
-        timeout_s=_LLM_TIMEOUT_S,
+    keys = parse_api_keys(s.llm_api_key or _LLM_KEY_PLACEHOLDER, s.llm_api_keys_extra)
+    pool = (
+        CredentialPool(
+            provider="openai_compatible",
+            keys=keys,
+            cooldown_s=s.llm_credential_cooldown_s,
+            max_cooldown_s=s.llm_credential_cooldown_max_s,
+        )
+        if len(keys) > 1
+        else None
     )
     audit = LlmCallAuditBuffer(
         get_session_factory(s), max_batch=_LLM_AUDIT_MAX_BATCH, flush_interval_s=_LLM_AUDIT_FLUSH_INTERVAL_S
     )
     budget = LlmBudgetGate(get_redis(s), limit_tokens=_LLM_BUDGET_WINDOW_TOKENS, window_s=_LLM_BUDGET_WINDOW_S)
-    return AuditedModelPort(inner, audit, budget)
+
+    def build_channel(model_name: str) -> ModelPort:
+        """按模型名建审计包裹通道（主通道 + 降级通道同构；共享审计缓冲/预算闸/凭证池）。"""
+        http_channel = OpenAICompatibleModelPort(
+            base_url=s.llm_base_url or "",
+            api_key=keys[0],
+            model=model_name,
+            timeout_s=_LLM_TIMEOUT_S,
+            credential_pool=pool,
+        )
+        return AuditedModelPort(http_channel, audit, budget)
+
+    inner: ModelPort = build_channel(s.llm_model)
+    return FailoverModelPort(
+        inner,
+        provider="openai_compatible",
+        model=s.llm_model,
+        fallback_factory=build_channel,
+        chains=parse_fallback_chains(s.llm_fallback_chains),
+        fail_threshold=s.llm_model_fail_threshold,
+        model_cooldown_s=float(s.llm_model_cooldown_s),
+        retry_max_attempts=s.llm_call_retry_max_attempts,
+        retry_backoff_ms=s.llm_call_retry_backoff_ms,
+    )
 
 
 def _build_capability_bindings(settings: Any) -> tuple:

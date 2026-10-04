@@ -45,8 +45,8 @@ from typing import Final
 
 os.environ.setdefault("MEM0_TELEMETRY", "False")  # posthog 遥测关闭（本地 PoC 不外发）
 
-REPO_ROOT: Final = Path(__file__).resolve().parent.parent
-DEFAULT_OUTPUT: Final = REPO_ROOT / "tools" / "poc4_results.json"
+REPO_ROOT: Final = Path(__file__).resolve().parent.parent.parent
+DEFAULT_OUTPUT: Final = REPO_ROOT / "services" / "tools" / "poc4_results.json"
 MB: Final = 1024 * 1024
 SEARCH_TOP_K: Final = 5
 GRAPHITI_PKG: Final = "graphiti-core"

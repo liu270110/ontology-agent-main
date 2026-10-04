@@ -43,8 +43,8 @@ from typing import Any, Final
 import httpx
 from jsonschema import Draft202012Validator
 
-REPO_ROOT: Final = Path(__file__).resolve().parent.parent
-DEFAULT_OUTPUT: Final = REPO_ROOT / "tools" / "poc5_results.json"
+REPO_ROOT: Final = Path(__file__).resolve().parent.parent.parent
+DEFAULT_OUTPUT: Final = REPO_ROOT / "services" / "tools" / "poc5_results.json"
 HTTP_TIMEOUT_S: Final = 150.0
 PROBE_TIMEOUT_S: Final = 6.0
 MAX_TOKENS_LOCAL: Final = 900  # 本地 vLLM 无思考损耗，短输出足够
@@ -229,7 +229,7 @@ def load_s1_samples() -> list[ExtractSample]:
     """S1 样例 = 复用 poc2 语料 12 篇（金标三元组映射为候选；rdf:type→实体惯例）+ 增补 8 篇 = 20 篇。"""
     samples: list[ExtractSample] = []
     try:
-        sys.path.insert(0, str(REPO_ROOT / "tools"))
+        sys.path.insert(0, str(REPO_ROOT / "services" / "tools"))
         import poc2_confidence_calibration as poc2
     except ImportError:
         print("[警告] poc2 语料导入失败，S1 仅用增补 8 篇（样例数不足 20，结果需标注）", flush=True)

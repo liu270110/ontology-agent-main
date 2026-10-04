@@ -19,7 +19,7 @@ import time
 import urllib.request
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[3]
+ROOT = Path(__file__).resolve().parents[2]
 OLLAMA_EMBED_URL = "http://localhost:11434/api/embed"  # 原生通道：/v1/embeddings 兼容层对特定文本会稳定 500
 EMBED_MODEL = "bge-m3"  # 平台嵌入契约模型（架构 07 篇定案），本机 Ollama 同款
 

@@ -24,7 +24,7 @@ os.environ.setdefault("HF_ENDPOINT", "https://hf-mirror.com")
 
 import torch
 
-ROOT = Path(__file__).resolve().parents[3]
+ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "src"))
 
 from onto_train.tokenizer_utils import load_domain_dict  # noqa: E402

@@ -22,7 +22,7 @@ import os
 import sys
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[3]
+ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "src"))
 
 from onto_train.tokenizer_utils import char_span_to_token_span, tokenized_text  # noqa: E402

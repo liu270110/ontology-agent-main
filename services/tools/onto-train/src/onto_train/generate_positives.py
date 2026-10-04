@@ -17,14 +17,14 @@ import random
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from onto_train.tokenizer_utils import (  # noqa: E402
     char_span_to_token_span,
     tokenized_text,
 )
 
-ROOT = Path(__file__).resolve().parents[3]
+ROOT = Path(__file__).resolve().parents[2]
 
 STDS = ["GB/T 31486-2024", "GB/T 48000.3-2026", "GB/T 1.1-2020", "DL/T 634.5104-2025"]
 STD_NAMES = ["电动汽车用动力蓄电池", "标准数字化 第3部分：本体建模要求", "标准化工作导则", "远动设备及系统"]

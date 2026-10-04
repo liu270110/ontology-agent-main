@@ -16,7 +16,7 @@ from pathlib import Path
 
 import jieba
 
-_DICT_PATH = Path(__file__).resolve().parents[3] / "dictionaries" / "domain_terms.dic"
+_DICT_PATH = Path(__file__).resolve().parents[2] / "dictionaries" / "domain_terms.dic"
 
 _loaded = False
 

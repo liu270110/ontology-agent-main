@@ -474,7 +474,7 @@ def _to_candidates(parsed: object) -> list[Candidate]:
 def resolve_llm_config() -> tuple[str, str, str | None, str]:
     """返回 (base_url, model, api_key, 来源说明)；未配置时 base_url 为空串。"""
     try:
-        repo_root = str(Path(__file__).resolve().parent.parent)
+        repo_root = str(Path(__file__).resolve().parent.parent.parent)
         if repo_root not in sys.path:
             sys.path.insert(0, repo_root)  # 脚本直跑时 sys.path 只有 services/tools/，需显式补仓库根
         from services.platform.config import get_settings
@@ -482,7 +482,7 @@ def resolve_llm_config() -> tuple[str, str, str | None, str]:
         s = get_settings()
         return (s.llm_base_url or "", s.llm_model, s.llm_api_key, "services.platform.config")
     except Exception:  # noqa: BLE001 — tools 场景：任何 import/加载失败都走 .env 回退
-        env_path = Path(__file__).resolve().parent.parent / ".env"
+        env_path = Path(__file__).resolve().parent.parent.parent / ".env"
         values: dict[str, str] = {}
         if env_path.exists():
             for line in env_path.read_text(encoding="utf-8", errors="replace").splitlines():

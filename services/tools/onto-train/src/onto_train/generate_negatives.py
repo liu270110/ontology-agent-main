@@ -20,14 +20,14 @@ import random
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from onto_train.tokenizer_utils import (  # noqa: E402
     char_span_to_token_span,
     tokenized_text,
 )
 
-ROOT = Path(__file__).resolve().parents[3]
+ROOT = Path(__file__).resolve().parents[2]
 
 # 与 configs/labels.json 对应的互斥类型对（国标第 8 章：互斥类型定义不相交）
 DISJOINT_PAIRS = [

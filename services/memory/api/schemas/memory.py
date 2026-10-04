@@ -10,7 +10,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from services.memory.business.context import ContextBundle
 from services.memory.business.timeline import FactTimeline, TimelineEvent
-from services.memory.domain.model.l1 import L1Snapshot, MemoryBlock, WindowMessage
+from services.memory.domain.model.l1 import L1SessionSummary, L1Snapshot, MemoryBlock, WindowMessage
 from services.memory.domain.model.l2_fact import FactCategory, L2Fact
 
 _FORBID = ConfigDict(extra="forbid")  # 契约面：未知字段拒绝（api/01 §5.5 新增端点统一口径）
@@ -148,6 +148,47 @@ class L1ReadOut(BaseModel):
             state=snapshot.state,
             degraded=snapshot.degraded,
         )
+
+
+class L1SessionBlockOut(BaseModel):
+    """GET /memory/l1 块行（前端 api.ts L1Session.blocks 逐字段；masked 恒 False=掩码引擎未接入，
+    服务端透传块原文，页面侧脱敏展示承诺随权限矩阵评审落位——25 篇 §14）。"""
+
+    model_config = _FORBID
+
+    key: str
+    value: str
+    masked: bool = False
+
+
+class L1SessionOut(BaseModel):
+    """GET /memory/l1 单条（前端 api.ts L1Session 逐字段：容量卡计数 + TTL 倒计时）。"""
+
+    model_config = _FORBID
+
+    session_id: UUID
+    title: str = ""
+    ttl_total_s: int
+    ttl_remaining_s: int
+    blocks: list[L1SessionBlockOut]
+
+    @classmethod
+    def from_summary(cls, summary: L1SessionSummary) -> L1SessionOut:
+        return cls(
+            session_id=summary.session_id,
+            title=summary.title,
+            ttl_total_s=summary.ttl_total_s,
+            ttl_remaining_s=summary.ttl_remaining_s,
+            blocks=[L1SessionBlockOut(**b.model_dump()) for b in summary.blocks],
+        )
+
+
+class L1SessionListOut(BaseModel):
+    """GET /memory/l1 响应（前端 listL1 消费形状 {items}；空=无活跃会话或 Redis 降级）。"""
+
+    model_config = _FORBID
+
+    items: list[L1SessionOut]
 
 
 # ---------------------------------------------------------------- 检索与上下文
@@ -301,6 +342,31 @@ class PromotionPageOut(BaseModel):
     items: list[PromotionRecordOut]
     offset: int
     limit: int
+
+
+class PromotionDecisionIn(BaseModel):
+    """POST /memory/promotions/{id}/decision 请求（前端 decidePromotion body 逐字段：
+    {action: 'approve'|'reject', reason?}）。"""
+
+    model_config = _FORBID
+
+    action: Literal["approve", "reject"]
+    reason: str | None = Field(default=None, max_length=500)  # 驳回原因（审批链 note，审计留痕；approve 可缺省）
+
+
+class PromotionDecisionOut(BaseModel):
+    """POST /memory/promotions/{id}/decision 响应 data（前端消费逐字段：pm_id/action/fact_id/fact_layer）。
+
+    fact_id=升级单引用的 records 记录 id（records 权威链路；前端 MemoryPromotion.fact_id 同名对位）；
+    fact_layer=决策后记录所在层（approve 生效→L3，其余（reject/多签未集齐）→L2）。
+    """
+
+    model_config = _FORBID
+
+    pm_id: UUID
+    action: Literal["approve", "reject"]
+    fact_id: UUID
+    fact_layer: Literal["L2", "L3"]
 
 
 class AuditEntryOut(BaseModel):

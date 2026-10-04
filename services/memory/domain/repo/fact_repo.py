@@ -12,7 +12,7 @@ from collections.abc import Sequence
 from typing import Protocol, runtime_checkable
 from uuid import UUID
 
-from services.memory.domain.model.l1 import L1Snapshot, MemoryBlock, WindowMessage
+from services.memory.domain.model.l1 import L1SessionSummary, L1Snapshot, MemoryBlock, WindowMessage
 from services.memory.domain.model.l2_fact import FactCategory, FactStatus, L2Fact
 
 
@@ -95,6 +95,11 @@ class L1MemoryStore(Protocol):
 
     async def read(self, tenant_id: UUID, session_id: UUID) -> L1Snapshot:
         """全量读取；Redis 不可达时返回 degraded=True 空快照（不阻塞会话）。"""
+        ...
+
+    async def list_sessions(self, tenant_id: UUID, *, limit: int = 50) -> list[L1SessionSummary]:
+        """列出租户内仍有 L1 键的活跃会话（GET /memory/l1 数据面；TTL 剩余降序，
+        Redis 不可达返回空列表——read 同款降级契约，不阻塞容量卡）。"""
         ...
 
     async def write_blocks(self, tenant_id: UUID, session_id: UUID, blocks: list[MemoryBlock]) -> int:

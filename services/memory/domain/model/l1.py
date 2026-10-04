@@ -34,6 +34,28 @@ class WindowMessage(BaseModel):
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
 
+class L1BlockEntry(BaseModel):
+    """L1 会话列表块行（GET /memory/l1 条目内嵌；masked 预留脱敏位，掩码引擎未接入前恒 False）。"""
+
+    key: str
+    value: str
+    masked: bool = False
+
+
+class L1SessionSummary(BaseModel):
+    """L1 会话工作记忆列表条目（GET /memory/l1 聚合形状；前端 api.ts L1Session 逐字段对应）。
+
+    title 为块级代理（取首个非空块 title；会话权威标题归 agent sessions 表，L1 Redis 键空间
+    不自知——跨域聚合随 gateway 聚合面接入，read_l1_snapshot 同款分期口径）。
+    """
+
+    session_id: UUID
+    title: str = ""
+    ttl_total_s: int = 0
+    ttl_remaining_s: int = 0
+    blocks: list[L1BlockEntry] = Field(default_factory=list)
+
+
 class L1Snapshot(BaseModel):
     """一次 L1 全量读取（blocks/window/state 三件套；降级时返回空快照不抛错）。"""
 

@@ -26,7 +26,8 @@ interface SessionItem {
   id: string
   title: string
   agent_id: string
-  updated_at: string
+  updated_at?: string | null
+  created_at?: string | null
   pinned?: boolean
 }
 
@@ -236,10 +237,12 @@ export function SessionList({ onPicked }: { onPicked?: (id: string | null) => vo
                   {/* C-3 贴稿（画板 L2534）：置顶=标题行徽标（替代 Pin 图标+副行前缀文字） */}
                   {s.pinned && <span className="badge b-gray flex-none" style={{ fontSize: 9, padding: '0 6px' }}>置顶</span>}
                 </div>
-                <div className="text-[11px] text-label-3">
-                  {/* C-3 副行：reltime 在前 + 元信息（agent 来源）；证据/记忆计数载荷随 M4 后补 */}
-                  {relativeTime(s.updated_at)} · {s.agent_id}
-                </div>
+                {/* C-3 副行：reltime（业务时间）。agent_id 为系统标识不外显（非业务字段治理，
+                    用户指令 2026-10-04；agent 来源名待共享 id→name 映射后补）——live DTO 无
+                    updated_at 且 created_at=null（实测），两者皆缺时整行隐藏；证据/记忆计数载荷随 M4 后补 */}
+                {(s.updated_at || s.created_at) && (
+                  <div className="text-[11px] text-label-3">{relativeTime((s.updated_at ?? s.created_at)!)}</div>
+                )}
               </button>
               <button
                 type="button"

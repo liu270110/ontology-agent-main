@@ -1,6 +1,9 @@
-"""iam 模块 ORM：identity 5 表 + audit_logs（08 §3 只追加审计）。
+"""iam 模块 ORM：identity 5 表 + audit_logs（08 §3 只追加审计）+ admin 域 4 表。
 
-DDL 权威：database/01 §3.1/§3.9。"""
+DDL 权威：database/01 §3.1/§3.9；admin 域 4 表（user_groups / role_permission_matrix /
+model_channels / permission_requests）= 2026-10-05 admin 域批补录（迁移
+20261005_c5e9a1d3b7f5，契约源=frontend mock admin-handlers.ts + api/01 §5.8/§5.10 预登记行，
+database/01 表格补录随文档批）。"""
 
 from __future__ import annotations
 
@@ -8,6 +11,7 @@ import uuid
 from datetime import datetime
 
 from sqlalchemy import (
+    Boolean,
     CheckConstraint,
     DateTime,
     ForeignKey,
@@ -110,4 +114,78 @@ class AuditLog(Base, PkMixin, TenantMixin):  # 只追加；无 update/delete（0
         CheckConstraint("actor_type IN ('user','api_key','agent','system')", name="ck_audit_logs_actor_type"),
         Index("ix_audit_tenant_time", "tenant_id", "created_at"),
         Index("ix_audit_resource", "resource_type", "resource_id"),  # 2026-09-26 缺口核查修复（按资源查审计）
+    )
+
+
+# ================================================================
+# admin 域 4 表（2026-10-05 批；契约源=mock admin-handlers.ts + api/01 §5.8/§5.10 预登记行）
+# ================================================================
+
+
+class UserGroup(Base, PkMixin, TenantMixin, TimestampMixin):
+    """用户组（api/01 §5.10 GET/POST /admin/groups 预登记；RBAC 之上的批量授权单元，25 篇 F-10/X6）。
+
+    members=M1 展示位（display_name 字符串数组，mock 契约同形；组内用户与角色的批量绑定
+    解析随 X6 资源 ACL 批转真，本批不建 group_members 关联表——最小够用）。"""
+
+    __tablename__ = "user_groups"
+    name: Mapped[str] = mapped_column(String(128), nullable=False)
+    description: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    role_template: Mapped[str] = mapped_column(String(32), nullable=False)  # Role.code（08 §2.2 英文码）
+    members: Mapped[list[str]] = mapped_column(ARRAY(Text), default=list, nullable=False)
+    __table_args__ = (UniqueConstraint("tenant_id", "name", name="uk_user_groups_tenant_id_name"),)
+
+
+class RolePermissionMatrix(Base, PkMixin, TenantMixin, TimestampMixin):
+    """角色-权限矩阵覆写行（api/01 §5.8 GET/PUT /admin/roles/matrix；08 §2.2 矩阵的管理面）。
+
+    只存**覆写**：缺省布尔=代码内基线矩阵（mock MATRIX 常量同源，08 §2.2 快照）；
+    GET=基线 ∪ 覆写合并投影，PUT=覆写 upsert（未知角色/权限点 422+3001）。"""
+
+    __tablename__ = "role_permission_matrix"
+    role_code: Mapped[str] = mapped_column(String(32), nullable=False)
+    permission: Mapped[str] = mapped_column(String(64), nullable=False)  # 11 篇 §2 资源:动作 词汇
+    granted: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "role_code", "permission", name="uk_role_matrix_tenant_role_permission"),
+    )
+
+
+class ModelChannel(Base, PkMixin, TenantMixin, TimestampMixin):
+    """模型渠道（api/01 §5.8 models 族；LiteLLM 网关渠道登记）。
+
+    安全红线（08 §2.0）：密钥类只存掩码串 api_key_masked，明文不落库；usage_30d 为读时
+    从 llm_calls 聚合的展示串，不落列。"""
+
+    __tablename__ = "model_channels"
+    provider: Mapped[str] = mapped_column(String(32), nullable=False)
+    provider_label: Mapped[str] = mapped_column(String(64), nullable=False)
+    name: Mapped[str] = mapped_column(String(128), nullable=False)
+    models: Mapped[list[str]] = mapped_column(ARRAY(Text), default=list, nullable=False)
+    api_key_masked: Mapped[str | None] = mapped_column(String(64))  # 掩码串；本地渠道 None
+    priority: Mapped[int] = mapped_column(Integer, default=4, nullable=False)
+    budget_daily: Mapped[int | None] = mapped_column(Integer)  # 日预算（元）
+    status: Mapped[str] = mapped_column(String(16), default="active", nullable=False)
+    __table_args__ = (CheckConstraint("status IN ('active','disabled')", name="ck_model_channels_status"),)
+
+
+class PermissionRequest(Base, PkMixin, TenantMixin, TimestampMixin):
+    """权限申请单（api/01 §5.10 POST/GET /permission-requests 预登记；403 页申请闭环，25 篇 F-11/X7）。
+
+    审批联动=第六类 permission_request 工单（review_tickets，CHECK 枚举随本批迁移扩展；
+    review_ticket_id 指针不设 FK——跨模块表，随 M4 收口转端口化）。requester 取自令牌
+    （api/01 §5.10 注记：正式实现从令牌解析，M1 前端过渡 body 上送字段后端不落库）。"""
+
+    __tablename__ = "permission_requests"
+    route: Mapped[str] = mapped_column(String(256), nullable=False)  # 被拒资源路径（403 页 useLocation）
+    permission: Mapped[str | None] = mapped_column(String(64))  # 缺失权限点（11 篇 资源:动作）
+    reason: Mapped[str] = mapped_column(Text, nullable=False)  # ≥10 字（mock 同规）
+    desired_role: Mapped[str | None] = mapped_column(String(32))
+    requester_name: Mapped[str] = mapped_column(String(128), nullable=False)  # 令牌解析（用户行 display_name）
+    requester_email: Mapped[str] = mapped_column(String(256), nullable=False)  # 令牌解析（用户行 email）
+    status: Mapped[str] = mapped_column(String(16), default="pending", nullable=False)
+    review_ticket_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
+    __table_args__ = (
+        CheckConstraint("status IN ('pending','approved','rejected')", name="ck_permission_requests_status"),
+        Index("ix_permission_requests_tenant_status", "tenant_id", "status"),
     )

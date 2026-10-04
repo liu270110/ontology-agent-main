@@ -43,7 +43,9 @@ export default defineConfig({
     globals: true,
     // 懒加载路由 chunk + query 首拉链路（S8）：单测默认 5s 不够
     testTimeout: 15000,
-    // jsdom 相对 URL fetch 需 MSW node 拦截（S1 回归：缺 setup 后 login 请求抛 Invalid URL）
-    setupFiles: ['./src/mocks/node-setup.ts'],
+    // jsdom 相对 URL fetch 需 MSW node 拦截（S1 回归：缺 setup 后 login 请求抛 Invalid URL）；
+    // xyflow 垫片（ResizeObserver/DOMMatrixReadOnly）归全局 src/test/xyflow-setup.ts
+    //（2026-10-05 收敛，替代各测试文件私有复制；??= 不覆盖真实/私有实现）
+    setupFiles: ['./src/mocks/node-setup.ts', './src/test/xyflow-setup.ts'],
   },
 })

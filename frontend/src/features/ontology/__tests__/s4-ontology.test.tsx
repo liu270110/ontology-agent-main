@@ -1,6 +1,6 @@
 import '@testing-library/jest-dom/vitest'
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
-import { afterEach, beforeAll, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it } from 'vitest'
 import { http, HttpResponse } from 'msw'
 import { App } from '@/app/App'
 import { server } from '@/mocks/node'
@@ -8,25 +8,8 @@ import { useAuthStore } from '@/stores/auth-store'
 import { propertyEdgesOf } from '../hooks'
 import type { OntoClassNode, OntoPropertyRow } from '../api'
 
-beforeAll(() => {
-  // xyflow（工作台画布 / 图谱浏览）在 jsdom 需要 ResizeObserver / DOMMatrixReadOnly 垫片（官方指引）
-  class RO {
-    observe() {}
-    unobserve() {}
-    disconnect() {}
-  }
-  ;(globalThis as unknown as { ResizeObserver: unknown }).ResizeObserver ??= RO
-  class DOMMatrixReadOnlyMock {
-    m22 = 1
-    m41 = 0
-    m42 = 0
-    constructor(transform?: string) {
-      const scale = /scale\(([1-9.])\)/.exec(transform ?? '')
-      if (scale) this.m22 = Number(scale[1])
-    }
-  }
-  ;(globalThis as unknown as { DOMMatrixReadOnly: unknown }).DOMMatrixReadOnly ??= DOMMatrixReadOnlyMock
-})
+// xyflow（工作台画布 / 图谱浏览）jsdom 垫片已收敛到全局 src/test/xyflow-setup.ts
+//（vite.config.ts test.setupFiles），本文件私有复制已删除（2026-10-05）。
 afterEach(() => {
   server.resetHandlers()
   cleanup()

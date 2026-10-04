@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """PoC1 OWL 推理基准 · 电力模板增强版（锚点 docs/architecture/01 §7 PoC① 出口条件）。
 
-与 tools/poc1_owl_benchmark.py 的关系：本脚本是该初版的**迁移增强版**（初版原样保留，
+与 services/tools/poc1_owl_benchmark.py 的关系：本脚本是该初版的**迁移增强版**（初版原样保留，
 作为通用标本图基准）。差异四点：
   1. 合成图换成「设备—故障—工单」电力模板（类/属性与 services/seeds/power_seed.ttl 同构：
      馈线/开关/变压器/区段/工单/停电事件 + inSection/servesCustomer/dispatchedTo +
@@ -17,11 +17,11 @@
   3. pySHACL 校验（未物化原始图，inference=none；含确定性注入的违规样本）。
 
 用法（在仓库根目录执行）：
-  python tools/kb-eval/poc1_inference_benchmark.py            # 四档全跑（100k 受 30 分钟硬顶保护）
-  python tools/kb-eval/poc1_inference_benchmark.py --quick    # 仅 1k 档（管线自检快速档）
-  python tools/kb-eval/poc1_inference_benchmark.py --smoke    # 2k 三元组 x1 轮冒烟，不入报告
+  python services/tools/kb-eval/poc1_inference_benchmark.py            # 四档全跑（100k 受 30 分钟硬顶保护）
+  python services/tools/kb-eval/poc1_inference_benchmark.py --quick    # 仅 1k 档（管线自检快速档）
+  python services/tools/kb-eval/poc1_inference_benchmark.py --smoke    # 2k 三元组 x1 轮冒烟，不入报告
 
-结果写 stdout（markdown 矩阵）与 tools/kb-eval/poc1_results.json（每档完成即增量落盘）。
+结果写 stdout（markdown 矩阵）与 services/tools/kb-eval/poc1_results.json（每档完成即增量落盘）。
 """
 
 from __future__ import annotations
@@ -610,7 +610,7 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
     parser.add_argument("--quick", action="store_true", help="仅 1k 档")
     parser.add_argument("--smoke", action="store_true", help="2k 三元组 x1 轮冒烟自检（不入报告）")
     parser.add_argument(
-        "--output", type=Path, default=None, help="JSON 结果输出路径（默认 tools/kb-eval/poc1_results.json）"
+        "--output", type=Path, default=None, help="JSON 结果输出路径（默认 services/tools/kb-eval/poc1_results.json）"
     )
     return parser.parse_args(argv)
 

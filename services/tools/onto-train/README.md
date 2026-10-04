@@ -6,7 +6,7 @@
 ## 快速开始
 
 ```bash
-cd tools/onto-train
+cd services/tools/onto-train
 uv sync                    # 自动装 Python 3.12 + 依赖（torch 走 cu128 显式索引）
 uv run python src/onto_train/smoke_train.py              # 10-step 冒烟 + 显存实测
 uv run python src/onto_train/generate_positives.py       # 模板正例

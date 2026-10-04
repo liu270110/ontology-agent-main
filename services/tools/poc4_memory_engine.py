@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """PoC4 L2 记忆引擎选型 harness（实施计划 13 篇 §3.4；裁决依据 docs/memory/多层记忆设计.md §1 裁决框 / §8）。
 
-两路证据，输出 tools/poc4_results.json（全程可追溯，回报告 docs/architecture/PoC④-记忆引擎选型报告.md）：
+两路证据，输出 services/tools/poc4_results.json（全程可追溯，回报告 docs/architecture/PoC④-记忆引擎选型报告.md）：
 
 - mem0 实测（live）：mem0ai 1.0.5 + 本地 vLLM（OpenAI 兼容，qwen3-4b-awq）+ 本地 TEI bge-m3 嵌入
   + PG pgvector 向量库。电力域自造语料 22 条基础事实 + 4 条后续更新/否定写入（探测 ADD/UPDATE
@@ -15,10 +15,10 @@
 备=归一化文本包含某 gold 关键词组全部成员（NFKC+去空白+小写）。更新探针另记 stale 命中。
 
 用法：
-  python tools/poc4_memory_engine.py                    # 双路全跑（mem0 live + Graphiti 评估）
-  python tools/poc4_memory_engine.py --skip-mem0        # 只跑 Graphiti 评估
-  python tools/poc4_memory_engine.py --no-reset         # 不清空 collection（追加口径）
-  python tools/poc4_memory_engine.py --limit 3          # mem0 只跑前 3 条写入（管线自检）
+  python services/tools/poc4_memory_engine.py                    # 双路全跑（mem0 live + Graphiti 评估）
+  python services/tools/poc4_memory_engine.py --skip-mem0        # 只跑 Graphiti 评估
+  python services/tools/poc4_memory_engine.py --no-reset         # 不清空 collection（追加口径）
+  python services/tools/poc4_memory_engine.py --limit 3          # mem0 只跑前 3 条写入（管线自检）
 
 依赖：pip install mem0ai（1.0.5）；pgvector 容器（本机 = oa-poc-pgvector:5433，PoC 专用临时容器，
 主栈 postgres:16-alpine 未带 vector 扩展——该事实本身入报告「存储依赖」维度）。
@@ -45,8 +45,8 @@ from typing import Final
 
 os.environ.setdefault("MEM0_TELEMETRY", "False")  # posthog 遥测关闭（本地 PoC 不外发）
 
-REPO_ROOT: Final = Path(__file__).resolve().parent.parent
-DEFAULT_OUTPUT: Final = REPO_ROOT / "tools" / "poc4_results.json"
+REPO_ROOT: Final = Path(__file__).resolve().parent.parent.parent
+DEFAULT_OUTPUT: Final = REPO_ROOT / "services" / "tools" / "poc4_results.json"
 MB: Final = 1024 * 1024
 SEARCH_TOP_K: Final = 5
 GRAPHITI_PKG: Final = "graphiti-core"

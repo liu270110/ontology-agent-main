@@ -33,14 +33,14 @@
 
 ## 技能（按任务加载，SKILL.md）
 
-- 写前端代码前 → `skills/frontend-dev-standards/`
-- 做界面/组件/样式 → `skills/frontend-ui-apple/`（与 React+Apple 设计系统同源，可直接用）
-- 测试与视觉验收 → `skills/frontend-testing/`
-- 提交/PR 前代码评审 → `skills/code-review-ocr/`（OpenCodeReview `ocr` CLI，AI 行级评审，LLM 已配 deepseek）
+- 写前端代码前 → `services/skills/frontend-dev-standards/`
+- 做界面/组件/样式 → `services/skills/frontend-ui-apple/`（与 React+Apple 设计系统同源，可直接用）
+- 测试与视觉验收 → `services/skills/frontend-testing/`
+- 提交/PR 前代码评审 → `services/skills/code-review-ocr/`（OpenCodeReview `ocr` CLI，AI 行级评审，LLM 已配 deepseek）
 
 ## 工程约定
 
-- 分支与多 Agent 协作（2026-09-27 起，hooks 强制）：**主工作区=develop 集成区，禁止直接提交**（合并提交除外）；任何改动先 `sh tools/git/wt new <域>-<简述>` 开独立 worktree + feature 分支，完成后 `sh tools/git/wt finish [--push]` 串行合入；共享索引文件（各 README/AGENTS）**追加式编辑**；规范见 [docs/standards/02](docs/standards/02-git多Agent协作与Worktree规范.md)；commit 中文 conventional（`feat: xxx`，commit-msg hook 强制）；**提交纪律（2026-09-29 用户指令）：阶段性小步提交（一个逻辑单元一个 commit，勿积大包），信息必含五要素——做了什么/边界（范围与不做什么）/测试（门禁数值）/审核（ocr·人工·验收结论）/方案依据（设计文档章节）**；仓库根 `.gitmessage` 为模板（`git config commit.template .gitmessage` 已生效）。
+- 分支与多 Agent 协作（2026-09-27 起，hooks 强制）：**主工作区=develop 集成区，禁止直接提交**（合并提交除外）；任何改动先 `sh services/tools/git/wt new <域>-<简述>` 开独立 worktree + feature 分支，完成后 `sh services/tools/git/wt finish [--push]` 串行合入；共享索引文件（各 README/AGENTS）**追加式编辑**；规范见 [docs/standards/02](docs/standards/02-git多Agent协作与Worktree规范.md)；commit 中文 conventional（`feat: xxx`，commit-msg hook 强制）；**提交纪律（2026-09-29 用户指令）：阶段性小步提交（一个逻辑单元一个 commit，勿积大包），信息必含五要素——做了什么/边界（范围与不做什么）/测试（门禁数值）/审核（ocr·人工·验收结论）/方案依据（设计文档章节）**；仓库根 `.gitmessage` 为模板（`git config commit.template .gitmessage` 已生效）。
 - 前端铁律：令牌唯一事实源（frontend/src/design-system/tokens）、契约先行（端点登记册=docs/api/01）、组件清单优先、基元只读、小步可验证、截图验收闭环。
 - 后端语言全栈 Python ≥3.11（ADR-1）；规则引擎 v1 = SPARQL CONSTRUCT + pySHACL + rdflib（owlrl）；TBox = MinIO 版本化 Turtle + rdflib；ABox = Neo4j（只读物化，非推理机）。
 - 平台 LLM/工具调用一律带审计与 trace_id；MCP annotations 不作授权依据。
@@ -50,4 +50,4 @@
 
 - 首次代码提交前统一改名：`services/ → services/`、`docs/Agent/ → docs/Agent/`、`docs/memory/ → docs/memory/`、`docs/OntRAG/ → docs/OntRAG/`（零代码引用，零成本窗口）；
 - 本机 → Gitee HTTPS 推 >1MB 单文件会被重置，大文件拆分提交；
-- 本平台开发流程自身吃狗粮：`skills/` 即平台 Skills 服务的第一批资产，格式（agentskills.io）即为平台技能格式。
+- 本平台开发流程自身吃狗粮：`services/skills/` 即平台 Skills 服务的第一批资产，格式（agentskills.io）即为平台技能格式。

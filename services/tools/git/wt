@@ -32,7 +32,7 @@ case "$cmd" in
     git worktree add -b "$branch" "$wtpath" "$base" >/dev/null || die "创建 worktree 失败"
     echo "✓ worktree: $wtpath"
     echo "✓ 分支:     $branch（基线 $base）"
-    echo "下一步: cd \"$wtpath\" 开始工作（提交受 hooks 门禁）；完成后: sh tools/git/wt finish"
+    echo "下一步: cd \"$wtpath\" 开始工作（提交受 hooks 门禁）；完成后: sh services/tools/git/wt finish"
     ;;
   list)
     git worktree list

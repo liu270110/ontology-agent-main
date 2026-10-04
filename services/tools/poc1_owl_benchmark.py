@@ -8,11 +8,11 @@ ABox：实例 + feeds 关系 + hasStatus/hasCapacity 数据属性），测量三
   3. pySHACL 校验（1 万档 20 次取 P50/P99；10 万档 3 次）。
 
 用法：
-  python tools/poc1_owl_benchmark.py             # 1 万 + 10 万全量（每档 3 轮）
-  python tools/poc1_owl_benchmark.py --quick     # 仅 1 万档
-  python tools/poc1_owl_benchmark.py --smoke     # 管线自检：2000 三元组 x 1 轮（不入报告）
+  python services/tools/poc1_owl_benchmark.py             # 1 万 + 10 万全量（每档 3 轮）
+  python services/tools/poc1_owl_benchmark.py --quick     # 仅 1 万档
+  python services/tools/poc1_owl_benchmark.py --smoke     # 管线自检：2000 三元组 x 1 轮（不入报告）
 
-结果写 stdout（markdown 矩阵）与 tools/poc1_results.json（每档完成即增量落盘）。
+结果写 stdout（markdown 矩阵）与 services/tools/poc1_results.json（每档完成即增量落盘）。
 """
 
 from __future__ import annotations

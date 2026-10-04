@@ -5,7 +5,7 @@
 lite 部署档无 Neo4j 节点（存储职责：lite=PG+pgvector；Neo4j 随 full 档）——①在本机标 N/A
 （附可执行探针：full 档上线时跑 neo4j 分支）；②③④在真实 rdflib + 07b 域切片上实测。
 
-用法：python tools/onto-poc/poc6_full.py
+用法：python services/tools/onto-poc/poc6_full.py
 """
 from __future__ import annotations
 
@@ -15,7 +15,7 @@ import time
 import uuid
 from pathlib import Path
 
-REPO = Path(__file__).resolve().parents[2]
+REPO = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(REPO))
 
 from pyshacl import validate  # noqa: E402

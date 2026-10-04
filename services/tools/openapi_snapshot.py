@@ -7,8 +7,8 @@
   diff 即红。
 
 用法（仓库根目录执行）：
-    python tools/openapi_snapshot.py --update   # 生成/刷新快照（随 PR 显式提交）
-    python tools/openapi_snapshot.py --check    # 比对当前 schema，漂移则退出码 1
+    python services/tools/openapi_snapshot.py --update   # 生成/刷新快照（随 PR 显式提交）
+    python services/tools/openapi_snapshot.py --check    # 比对当前 schema，漂移则退出码 1
 
 快照文件：tests/gateway/openapi_snapshot.json——排序后的 OpenAPI JSON 全量
 （paths + components 不裁剪），UTF-8 + LF，保证跨平台字节级可 diff。
@@ -26,14 +26,14 @@ import sys
 from pathlib import Path
 from typing import Any
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
+REPO_ROOT = Path(__file__).resolve().parents[2]
 SNAPSHOT_PATH = REPO_ROOT / "tests" / "gateway" / "openapi_snapshot.json"
 
 _HTTP_METHODS = {"get", "put", "post", "delete", "options", "head", "patch", "trace"}
 _DIFF_LIMIT = 30
 
 UPDATE_HINT = (
-    "运行 python tools/openapi_snapshot.py --update 显式刷新"
+    "运行 python services/tools/openapi_snapshot.py --update 显式刷新"
     "（08 篇 §8.2 契约纪律：OpenAPI schema 快照变更必须在 PR 中显式确认，防接口悄悄漂移）"
 )
 
@@ -135,7 +135,7 @@ def main(argv: list[str] | None = None) -> int:
     if not SNAPSHOT_PATH.exists():
         print(
             f"[openapi-snapshot] 快照缺失：{SNAPSHOT_PATH} 不存在。\n"
-            f"请先运行 python tools/openapi_snapshot.py --update 生成快照并随 PR 提交。",
+            f"请先运行 python services/tools/openapi_snapshot.py --update 生成快照并随 PR 提交。",
             file=sys.stderr,
         )
         return 1

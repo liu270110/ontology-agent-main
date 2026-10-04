@@ -1,4 +1,4 @@
-# tools/kb-eval — M2.5 知识库评估工具包
+# services/tools/kb-eval — M2.5 知识库评估工具包
 
 PoC①②③ 的执行与冻结工具（锚点：docs/architecture/01 §7 PoC 出口条件）。全部脚本在**仓库根目录**执行，Python ≥3.11（本仓 3.13），依赖 rdflib/owlrl/pyshacl/httpx/psutil（psutil 可缺省）。
 
@@ -12,17 +12,17 @@ PoC①②③ 的执行与冻结工具（锚点：docs/architecture/01 §7 PoC �
 
 ```bash
 # PoC1：四档全跑（100k 受 30 分钟硬顶保护；本批实测约 5 分钟）
-python tools/kb-eval/poc1_inference_benchmark.py
-python tools/kb-eval/poc1_inference_benchmark.py --quick   # 仅 1k 档
-python tools/kb-eval/poc1_inference_benchmark.py --smoke   # 2k 三元组冒烟自检
+python services/tools/kb-eval/poc1_inference_benchmark.py
+python services/tools/kb-eval/poc1_inference_benchmark.py --quick   # 仅 1k 档
+python services/tools/kb-eval/poc1_inference_benchmark.py --smoke   # 2k 三元组冒烟自检
 
 # PoC2：抽取链落地 + 端点配置后（本次只交付未执行）
-python tools/kb-eval/poc2_calibration.py --limit 2         # 冒烟
-python tools/kb-eval/poc2_calibration.py --docs d04 d06    # 指定文档前缀
+python services/tools/kb-eval/poc2_calibration.py --limit 2         # 冒烟
+python services/tools/kb-eval/poc2_calibration.py --docs d04 d06    # 指定文档前缀
 
 # PoC3：分块 + 嵌入 + LLM 抽取实测 + 外推（本批实测约 3 分钟）
-python tools/kb-eval/poc3_index_cost.py
-python tools/kb-eval/poc3_index_cost.py --skip-llm         # 跳过 LLM 实测
+python services/tools/kb-eval/poc3_index_cost.py
+python services/tools/kb-eval/poc3_index_cost.py --skip-llm         # 跳过 LLM 实测
 ```
 
 ## 数据约定

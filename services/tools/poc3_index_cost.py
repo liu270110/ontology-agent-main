@@ -17,11 +17,11 @@
 - LLM 实测样本经预热调用后采集（模型加载/首 token 抖动不计入样本）。
 
 用法：
-  python tools/poc3_index_cost.py                # 全量（嵌入+LLM 样本实测）
-  python tools/poc3_index_cost.py --no-llm       # 跳过 LLM 样本（全部走模板估算）
-  python tools/poc3_index_cost.py --no-embed     # 跳过嵌入实测（按基线吞吐外推）
+  python services/tools/poc3_index_cost.py                # 全量（嵌入+LLM 样本实测）
+  python services/tools/poc3_index_cost.py --no-llm       # 跳过 LLM 样本（全部走模板估算）
+  python services/tools/poc3_index_cost.py --no-embed     # 跳过嵌入实测（按基线吞吐外推）
 
-结果写 stdout（markdown 矩阵）与 tools/poc3_results.json。
+结果写 stdout（markdown 矩阵）与 services/tools/poc3_results.json。
 """
 
 from __future__ import annotations
@@ -818,15 +818,15 @@ def main(argv: list[str] | None = None) -> int:
 
 def _resolve_llm_config() -> tuple[str, str, str | None, str]:
     try:
-        repo_root = str(Path(__file__).resolve().parent.parent)
+        repo_root = str(Path(__file__).resolve().parent.parent.parent)
         if repo_root not in sys.path:
-            sys.path.insert(0, repo_root)  # 脚本直跑时 sys.path 只有 tools/，需显式补仓库根
+            sys.path.insert(0, repo_root)  # 脚本直跑时 sys.path 只有 services/tools/，需显式补仓库根
         from services.platform.config import get_settings
 
         s = get_settings()
         return (s.llm_base_url or "", s.llm_model, s.llm_api_key, "services.platform.config")
     except Exception:  # noqa: BLE001 — tools 场景：任何 import/加载失败都走 .env 回退
-        env_path = Path(__file__).resolve().parent.parent / ".env"
+        env_path = Path(__file__).resolve().parent.parent.parent / ".env"
         values: dict[str, str] = {}
         if env_path.exists():
             for line in env_path.read_text(encoding="utf-8", errors="replace").splitlines():

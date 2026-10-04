@@ -26,18 +26,18 @@
   历史全部重跑。
 
 用法（仓库根目录）：
-  python tools/kb-eval/poc2_calibration.py                       # 全量 18 篇（自动续跑）
-  python tools/kb-eval/poc2_calibration.py --docs d04 d06        # 指定文档 stem 前缀
-  python tools/kb-eval/poc2_calibration.py --force               # 忽略历史全量重跑
-  python tools/kb-eval/poc2_calibration.py --limit 2             # 只跑前 2 篇冒烟
+  python services/tools/kb-eval/poc2_calibration.py                       # 全量 18 篇（自动续跑）
+  python services/tools/kb-eval/poc2_calibration.py --docs d04 d06        # 指定文档 stem 前缀
+  python services/tools/kb-eval/poc2_calibration.py --force               # 忽略历史全量重跑
+  python services/tools/kb-eval/poc2_calibration.py --limit 2             # 只跑前 2 篇冒烟
 
 环境覆盖（工具层允许 OA_ 变量）：
   OA_LLM_CHAT_TIMEOUT_SECONDS（默认 120；思考型模型大文档建议 1800）
   OA_LLM_CHAT_MAX_TOKENS（默认 4096；大台账文档建议 12288——预算不足=JSON 未闭合三连败）
 
 输出：
-  - tools/kb-eval/poc2_calibration.json（双口径分桶 + ECE + 逐文档明细与召回）；
-  - tools/kb-eval/poc2_candidates.jsonl（逐文档候选明细，断点续跑底账）；
+  - services/tools/kb-eval/poc2_calibration.json（双口径分桶 + ECE + 逐文档明细与召回）；
+  - services/tools/kb-eval/poc2_candidates.jsonl（逐文档候选明细，断点续跑底账）；
   - stdout markdown 校准表（回填 docs/OntRAG/poc/PoC2-置信度校准.md）。
 
 失败行为：模型端点未配置/不可达 → 打印前置条件提示，退出码 2，不产生半截结果文件。
@@ -55,7 +55,7 @@ import unicodedata
 from pathlib import Path
 from typing import Any, Final
 
-REPO_ROOT: Final = Path(__file__).resolve().parents[2]
+REPO_ROOT: Final = Path(__file__).resolve().parents[3]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 

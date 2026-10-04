@@ -9,8 +9,8 @@
 
 用法::
 
-    python tools/orsi/run_g0.py --demo [--store-dir DIR] [--threshold 5] [--window-days 30] [--report FILE]
-    python tools/orsi/run_g0.py --live --tenant-id <UUID> [--limit 200] [--store-dir DIR] …（同上）
+    python services/tools/orsi/run_g0.py --demo [--store-dir DIR] [--threshold 5] [--window-days 30] [--report FILE]
+    python services/tools/orsi/run_g0.py --live --tenant-id <UUID> [--limit 200] [--store-dir DIR] …（同上）
 
 报告内容：簇指纹/规模/处置、生成的 proposal id 列表、建议起草路径（G1 三级降路径提示，
 本批不执行——LLM 起草是 G1 后续批次）。事件与工单留痕落 ``GapStore``（JSONL，可审计可复现）。
@@ -27,9 +27,9 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
-_REPO_ROOT = Path(__file__).resolve().parents[2]
+_REPO_ROOT = Path(__file__).resolve().parents[3]
 if str(_REPO_ROOT) not in sys.path:
-    sys.path.insert(0, str(_REPO_ROOT))  # 直跑脚本（python tools/orsi/run_g0.py）的 services 导入位
+    sys.path.insert(0, str(_REPO_ROOT))  # 直跑脚本（python services/tools/orsi/run_g0.py）的 services 导入位
 
 from services.rsi.audit import LoggingAuditTrail  # noqa: E402
 from services.rsi.gap import GapCollector, GapEvent, GapKind, GapStore, JsonlGapStore  # noqa: E402

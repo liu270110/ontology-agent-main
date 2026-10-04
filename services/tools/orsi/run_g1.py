@@ -16,8 +16,8 @@ G0 留痕目录复用其事件/工单文件（同指纹未闭合工单仍按去�
 
 用法::
 
-    python tools/orsi/run_g1.py --demo [--store-dir DIR] [--report FILE] [--no-demo-market]
-    python tools/orsi/run_g1.py --live --tenant-id <UUID> [--limit 200] [--store-dir DIR] …
+    python services/tools/orsi/run_g1.py --demo [--store-dir DIR] [--report FILE] [--no-demo-market]
+    python services/tools/orsi/run_g1.py --live --tenant-id <UUID> [--limit 200] [--store-dir DIR] …
 
 红线：G1 只写 ``envelope["draft_artifact"]`` 不迁状态（全部工单保持 draft；G2 门禁/G3
 转正本批不做）；L2 只产候选包引用（安装走既有审核）；L3 零幻觉上架（确定性校验 +
@@ -36,9 +36,9 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
-_REPO_ROOT = Path(__file__).resolve().parents[2]
+_REPO_ROOT = Path(__file__).resolve().parents[3]
 if str(_REPO_ROOT) not in sys.path:
-    sys.path.insert(0, str(_REPO_ROOT))  # 直跑脚本（python tools/orsi/run_g1.py）的 services 导入位
+    sys.path.insert(0, str(_REPO_ROOT))  # 直跑脚本（python services/tools/orsi/run_g1.py）的 services 导入位
 
 from services.rsi.audit import LoggingAuditTrail  # noqa: E402
 from services.rsi.drafter import (  # noqa: E402

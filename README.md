@@ -20,7 +20,7 @@
 
 - **每个目录必须有 `README.md`**：文档目录 README = 索引；**代码目录 README = 模块 spec 六段式**（职责边界/目录结构/核心机制/接口契约/数据模型/开发指南与验收标准）。
 - 架构变更先改 `docs/architecture/01` 锚点；契约变更先改对应权威篇（端点登记册=docs/api/01）。
-- 分支（2026-09-27 起 worktree 工作流，hooks 强制）：主工作区=develop 集成区禁直提；`sh tools/git/wt new <域>-<简述>` 开功能分支，`wt finish` 串行合入；详见 [docs/standards/02](docs/standards/02-git多Agent协作与Worktree规范.md)；commit 中文 conventional。
+- 分支（2026-09-27 起 worktree 工作流，hooks 强制）：主工作区=develop 集成区禁直提；`sh services/tools/git/wt new <域>-<简述>` 开功能分支，`wt finish` 串行合入；详见 [docs/standards/02](docs/standards/02-git多Agent协作与Worktree规范.md)；commit 中文 conventional。
 
 ## 快速开始
 
@@ -40,10 +40,11 @@ python -m services.main           # 统一入口；或 uvicorn services.gateway.
 .
 ├── frontend/            # 前端（design-system 样式库；React 工程随 M5 搭建）
 ├── services/             # L2~L7 后端模块化单体（gateway/business/domain/semantic/data/infra；统一入口 services/main.py）
-│   └── cli/             # 平台 CLI（onto 命令；后端含 CLI 一律在 services/ 内）
+│   ├── cli/             # 平台 CLI（onto 命令；后端含 CLI 一律在 services/ 内）
+│   ├── tools/           # 研究性工具（PoC 脚本/kb-eval/orsi/onto-train/openapi 快照/git 工作流）
+│   └── skills/          # 前端开发技能（SKILL.md，与平台 Skills 服务同构）
 ├── deploy/              # docker-compose（lite/full 双档）与初始化脚本
 ├── docs/                # 全部文档（architecture=后端权威；架构设计=前端视觉权威；详见 docs/README）
-├── skills/              # 前端开发技能（SKILL.md，与平台 Skills 服务同构）
-├── tools/ resrch-pj/    # 研究性工具与项目
+├── resrch-pj/           # 参考项目区（只读研究）
 └── tests/               # 跨层集成测试
 ```

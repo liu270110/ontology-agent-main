@@ -8,9 +8,9 @@
 4. 消融三组：bm25-only / vector-only / RRF 混合（同 top_k=8，hit@8/MRR）；
 5. 引用率：30 例检索 citations 非空占比（§10 条款 50 问为初始规模示例值，本批 30 例集口径）；
 6. 增量索引计时：单文档（d00）内容变更 → 重分片+重嵌耗时（验收 ≤5 分钟）；
-7. 结果落 tools/kb-eval/kbe1_results.json（冻结依据回填 OntRAG §10）。
+7. 结果落 services/tools/kb-eval/kbe1_results.json（冻结依据回填 OntRAG §10）。
 
-用法：python tools/kb-eval/kbe1_eval_freeze.py [--tei http://127.0.0.1:18002]
+用法：python services/tools/kb-eval/kbe1_eval_freeze.py [--tei http://127.0.0.1:18002]
 """
 from __future__ import annotations
 
@@ -26,7 +26,7 @@ from datetime import UTC, datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-REPO = Path(__file__).resolve().parents[2]
+REPO = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(REPO))
 
 asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())

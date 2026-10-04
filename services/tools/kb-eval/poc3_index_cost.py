@@ -10,11 +10,11 @@
      用可载入的 qwen 模型（优先 qwen3:8b，内存不足降级 qwen3:0.6b）实测 3 次真实抽取调用取
      单次延迟/token 均值再外推——报告必须区分【实测】与【外推/估算】。
 
-输出：stdout markdown 对比表 + tools/kb-eval/poc3_results.json。
+输出：stdout markdown 对比表 + services/tools/kb-eval/poc3_results.json。
 
 用法（仓库根目录）：
-  python tools/kb-eval/poc3_index_cost.py            # 全量实测 + 外推
-  python tools/kb-eval/poc3_index_cost.py --skip-llm # 跳过 LLM 实测（仅分块+嵌入）
+  python services/tools/kb-eval/poc3_index_cost.py            # 全量实测 + 外推
+  python services/tools/kb-eval/poc3_index_cost.py --skip-llm # 跳过 LLM 实测（仅分块+嵌入）
 """
 
 from __future__ import annotations
@@ -30,7 +30,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Final
 
-REPO_ROOT: Final = Path(__file__).resolve().parents[2]
+REPO_ROOT: Final = Path(__file__).resolve().parents[3]
 if str(REPO_ROOT) not in sys.path:  # 工具层脚本：引导仓库根以复用 services.*
     sys.path.insert(0, str(REPO_ROOT))
 

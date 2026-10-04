@@ -17,12 +17,12 @@
 指标（对自造真值）：三态判定=first_pass（首次解析+校验双过）/ retry_pass（重试一次后过）/
 fail（重试后仍不过或调用失败）；schema 通过率（首次/重试后）/ 字段级 F1（解析成功样例）/
 延迟（仅首次尝试口径，本地格与云端格不可直接互比）。冻结产出：fallback 模型名单 + 推荐输出
-模式组合 → 报告 docs/architecture/PoC⑤-结构化输出兼容矩阵报告.md；明细落 tools/poc5_results.json。
+模式组合 → 报告 docs/architecture/PoC⑤-结构化输出兼容矩阵报告.md；明细落 services/tools/poc5_results.json。
 
 用法：
-  python tools/poc5_structured_output.py                # 全矩阵（本地 + 云 fallback）
-  python tools/poc5_structured_output.py --no-cloud     # 只跑本地模型
-  python tools/poc5_structured_output.py --limit 2      # 每格只跑前 2 条样例（自检）
+  python services/tools/poc5_structured_output.py                # 全矩阵（本地 + 云 fallback）
+  python services/tools/poc5_structured_output.py --no-cloud     # 只跑本地模型
+  python services/tools/poc5_structured_output.py --limit 2      # 每格只跑前 2 条样例（自检）
 """
 
 from __future__ import annotations
@@ -43,8 +43,8 @@ from typing import Any, Final
 import httpx
 from jsonschema import Draft202012Validator
 
-REPO_ROOT: Final = Path(__file__).resolve().parent.parent
-DEFAULT_OUTPUT: Final = REPO_ROOT / "tools" / "poc5_results.json"
+REPO_ROOT: Final = Path(__file__).resolve().parent.parent.parent
+DEFAULT_OUTPUT: Final = REPO_ROOT / "services" / "tools" / "poc5_results.json"
 HTTP_TIMEOUT_S: Final = 150.0
 PROBE_TIMEOUT_S: Final = 6.0
 MAX_TOKENS_LOCAL: Final = 900  # 本地 vLLM 无思考损耗，短输出足够
@@ -229,7 +229,7 @@ def load_s1_samples() -> list[ExtractSample]:
     """S1 样例 = 复用 poc2 语料 12 篇（金标三元组映射为候选；rdf:type→实体惯例）+ 增补 8 篇 = 20 篇。"""
     samples: list[ExtractSample] = []
     try:
-        sys.path.insert(0, str(REPO_ROOT / "tools"))
+        sys.path.insert(0, str(REPO_ROOT / "services" / "tools"))
         import poc2_confidence_calibration as poc2
     except ImportError:
         print("[警告] poc2 语料导入失败，S1 仅用增补 8 篇（样例数不足 20，结果需标注）", flush=True)

@@ -1,7 +1,7 @@
 /**
  * 前端性能实测探针：首屏加载指标 + 各页导航开销 + 长任务 + 交互延迟。
  * 前置：
- *   1) tools/ui-audit 目录内 `npm install`（playwright）+ `npx playwright install chromium`；
+ *   1) services/tools/ui-audit 目录内 `npm install`（playwright）+ `npx playwright install chromium`；
  *   2) preview 服务器已起（默认 http://localhost:4173，VITE_ENABLE_MOCK=1 构建）。
  * 用法：node perf.mjs [--base http://localhost:4174]（登录凭据可用 AUDIT_EMAIL/AUDIT_PASSWORD 覆盖）。
  * 产物：out/perf/report-perf.json + 控制台摘要。

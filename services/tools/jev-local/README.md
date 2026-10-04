@@ -29,7 +29,7 @@ pip install torch --index-url https://download.pytorch.org/whl/cu128
 
 ## 训练自己领域的判定模型
 
-> ⚠ 2026-09-26 更新：训练工程已独立落地到 [`tools/onto-train/`](../onto-train/README.md)
+> ⚠ 2026-09-26 更新：训练工程已独立落地到 [`services/tools/onto-train/`](../onto-train/README.md)
 > （03 决议：**不用 clone 官方仓库**，gliner 0.2.29 pip 包自带 Trainer；LoRA r=16 冒烟
 > 峰值 1.60 GiB）。本目录保留零样本演示与 Jev 背景，训练一律去 onto-train。
 

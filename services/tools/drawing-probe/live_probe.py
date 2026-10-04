@@ -24,7 +24,7 @@ from pathlib import Path
 
 import httpx
 
-ROOT = Path(__file__).resolve().parents[2]
+ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT))
 
 from services.platform.config import get_settings  # noqa: E402

@@ -33,6 +33,9 @@
                                               按 subject 分组聚合——计数/最旧 created_at/样本 ≤3）
     POST /kb/review-queue/batch-decide        按 subject 全组批量裁决（authoritative/rejected，
                                               逐行留痕；主文档 §11 待办聚合复核交互面）
+    GET  /kb/conflicts                        冲突工单列表（§8.1 T2；resolution 过滤 + 分页，
+                                              A1 接线 2026-10-04）
+    GET  /kb/conflicts/{id}                   冲突工单详情（并排双方事实与出处 + 裁决留痕）
 
 scope：kb:write（写路径）/ kb:read（检索与进度），deny-by-default（08 §2.5）；
 终审工作台三端点持 review:read / review:approve（契约 §5.4 行；候选非成品门禁的裁决面）。
@@ -48,15 +51,17 @@ AclPushdown（开关 OA_KB_ACL_FILTER_ENABLED + 标签面双条件激活）→ �
 from __future__ import annotations
 
 import hashlib
+import json
 import logging
 import time
 import uuid
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Annotated, Any
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Query, Request, status
-from sqlalchemy import func, or_, select, text
+from sqlalchemy import bindparam, func, or_, select, text
+from sqlalchemy.dialects.postgresql import UUID as PgUuid
 from sqlalchemy.exc import IntegrityError
 
 from services.kb.api.schemas.kb import (
@@ -71,6 +76,11 @@ from services.kb.api.schemas.kb import (
     CollectionCreateIn,
     CollectionListOut,
     CollectionOut,
+    ConflictDetailOut,
+    ConflictFactSideOut,
+    ConflictPageOut,
+    ConflictResolutionFilter,
+    ConflictTicketOut,
     DocumentCreateIn,
     DocumentDeleteCascade,
     DocumentDeleteData,
@@ -115,6 +125,12 @@ from services.kb.api.schemas.kb import (
     ui_status_of,
 )
 from services.kb.business.agentic import run_agentic_search
+from services.kb.business.conflict_triage import (
+    DECISION_WINNER_A,
+    DECISION_WINNER_B,
+    TARGET_TYPE_CONFLICT,
+    apply_decision,
+)
 from services.kb.business.kb_pipeline import (
     M2_FULL_STEPS,
     PipelineError,
@@ -1272,6 +1288,67 @@ async def _append_decision_trail(
     await tickets.merge_payload(tenant_id=tenant_id, ticket_id=ticket["id"], payload=payload)
 
 
+async def _settle_conflict_ticket(
+    session: AsyncSession,
+    tickets: Any,
+    *,
+    tenant_id: uuid.UUID,
+    candidate_id: uuid.UUID,
+    action: str,
+    approver_id: uuid.UUID,
+) -> None:
+    """终审分流（§8.1 T2 裁决；A1 接线 2026-10-04）：候选 accept/reject 联动其 open 冲突工单。
+
+    冲突工单（target_type=conflict，run_validate 分诊尾调生成）target_id=候选（信封 fact_a）：
+    accept=候选胜出 → 工单 approved + conflict_triage.apply_decision(winner_a)；reject=候选落败
+    → 工单 rejected（必附理由）+ apply_decision(winner_b)。裁决执行落库版口径：败者封口
+    （meta conflict_triage.state=outranked + valid_to + needs_review 标注）+ outranked_by 边，
+    payload_patch 回填工单信封 conflict_decision 留痕（merge_payload 整体重赋值）。
+    顺序：工单状态先推进（approved/rejected），裁决随后执行（§8.1 联动生效口径）；
+    best-effort：分流失败不回滚已生效终审（同 _append_decision_trail 纪律，审计缺口走日志）。
+    """
+    if action not in ("accept", "reject"):
+        return  # edit_accept=修订重入审，不触发裁决
+    try:
+        ticket = await tickets.get_latest_ticket(
+            tenant_id=tenant_id, target_type=TARGET_TYPE_CONFLICT, target_id=candidate_id
+        )
+        if ticket is None or ticket["status"] not in _TICKET_OPEN_STATUSES:
+            return  # 无冲突单 / 单已终态（审批链已裁决）：终审不重复分流
+        if action == "accept":
+            await tickets.approve(
+                tenant_id=tenant_id,
+                ticket_id=ticket["id"],
+                reviewer_id=approver_id,
+                decision_note="终审 accept：候选方（fact_a）胜出",
+            )
+            resolution = DECISION_WINNER_A
+        else:
+            await tickets.reject(
+                tenant_id=tenant_id,
+                ticket_id=ticket["id"],
+                reviewer_id=approver_id,
+                decision_note="终审 reject：既有权威方（fact_b）胜出",
+            )
+            resolution = DECISION_WINNER_B
+        report = await apply_decision(
+            session,
+            tenant_id,
+            ticket=ticket,
+            decision={
+                "resolution": resolution,
+                "resolved_by": approver_id,
+                "comment": f"终审 {action} 分流（§8.1 T2 裁决）",
+            },
+        )
+        await session.commit()  # 败者封口/边随终审同请求持久（apply_decision 只 flush 不 commit）
+        merged = dict(ticket["payload"] or {})
+        merged["conflict_decision"] = report.payload_patch
+        await tickets.merge_payload(tenant_id=tenant_id, ticket_id=ticket["id"], payload=merged)
+    except Exception:  # noqa: BLE001 分流失败不阻断终审返回（宁可缺痕不产生幽灵痕）
+        logger.warning("conflict ticket settle failed: candidate_id=%s action=%s", candidate_id, action, exc_info=True)
+
+
 @router.post(
     "/review/candidates/{candidate_id}/decision",
     status_code=status.HTTP_202_ACCEPTED,
@@ -1296,6 +1373,14 @@ async def decide_candidate(
     ticket = await _precheck_ticket(tickets, tenant_id=principal.tenant_id, candidate_id=candidate_id)
     new_status = _apply_decision(fact, body.action, body.edit)
     await session.commit()  # 事实翻转先持久（ocr 评审 high：留痕先于翻转=中途失败产生幽灵审计）
+    await _settle_conflict_ticket(  # A1 终审分流：候选牵涉冲突工单 → 裁决联动（best-effort）
+        session,
+        tickets,
+        tenant_id=principal.tenant_id,
+        candidate_id=candidate_id,
+        action=body.action,
+        approver_id=principal.user_id,
+    )
     trail_recorded = False
     if ticket is not None:  # 留痕后置 best-effort：失败不回滚已生效裁决（宁可缺痕不产生幽灵痕）
         try:
@@ -1345,6 +1430,14 @@ async def batch_decide_candidates(
             ticket = await _precheck_ticket(tickets, tenant_id=principal.tenant_id, candidate_id=item.candidate_id)
             new_status = _apply_decision(fact, item.action, item.edit)
             await session.commit()  # 逐条独立持久（ocr 评审 medium：一条 DB 异常不回滚整批已 ok 项）
+            await _settle_conflict_ticket(  # A1 终审分流：同单条口径（内部 best-effort 逐条隔离）
+                session,
+                tickets,
+                tenant_id=principal.tenant_id,
+                candidate_id=item.candidate_id,
+                action=item.action,
+                approver_id=principal.user_id,
+            )
             if ticket is not None:  # 留痕后置 best-effort（同单条口径：不产生幽灵审计）
                 try:
                     await _append_decision_trail(
@@ -1443,4 +1536,163 @@ async def review_queue_batch_decide(
         decision=outcome.decision,
         decided=outcome.decided,
         trail_recorded=outcome.trail_recorded,
+    )
+
+
+# ---------------------------------------------------------------- 冲突工单只读面（§8.1 T2；A1 接线 2026-10-04）
+#
+# 工单行经 run_validate 分诊尾调生成（conflict_triage T2 真矛盾 → review_tickets，
+# target_type=conflict，review 域枚举已扩）；裁决动作面=终审决策端点分流
+# （_settle_conflict_ticket → conflict_triage.apply_decision）。本组端点只读透出：
+# 查询走 text() 原生 SQL（review/api/admin.py 同款先例；review.data 模块私有契约六，
+# 本文件零 review 静态 import），payload 列按 PG/SQLite 返回形归一后 Python 解析信封。
+
+_CONFLICT_LIST_SQL = (
+    "SELECT id, target_id, status, payload, created_at FROM review_tickets "
+    "WHERE tenant_id = :tenant_id AND target_type = :target_type"
+)
+_CONFLICT_OPEN_STATUSES = ("draft", "pending_review")  # uk_review_one_open 同口径（未裁决=工单 open）
+
+
+def _payload_of(raw: Any) -> dict[str, Any]:
+    """review_tickets.payload 列返回形归一：PG JSONB→dict / SQLite TEXT→json.loads（其余空信封）。"""
+    if isinstance(raw, dict):
+        return dict(raw)
+    if isinstance(raw, (str, bytes)):
+        try:
+            loaded = json.loads(raw)
+        except ValueError:
+            return {}
+        return dict(loaded) if isinstance(loaded, dict) else {}
+    return {}
+
+
+def _resolution_of(payload: Mapping[str, Any]) -> str:
+    """工单裁决态解析：信封 conflict_decision.resolution（终审分流回填）；无则 pending（open 单）。"""
+    decision = payload.get("conflict_decision")
+    if isinstance(decision, Mapping) and decision.get("resolution"):
+        return str(decision["resolution"])
+    return "pending"
+
+
+def _conflict_ticket_out(row: Any) -> ConflictTicketOut:
+    payload = _payload_of(row.payload)
+    inner = payload.get("payload") if isinstance(payload.get("payload"), Mapping) else {}
+    return ConflictTicketOut(
+        id=row.id,
+        status=str(row.status),
+        resolution=_resolution_of(payload),
+        target_id=row.target_id,
+        conflict_type=str(inner["conflict_type"]) if inner.get("conflict_type") else None,
+        created_at=row.created_at,
+    )
+
+
+def _conflict_side(fact_id: uuid.UUID, digest: Any, row: KbFact | None) -> ConflictFactSideOut:
+    """并排单侧事实（§8.1「两条事实+各自原文出处」）：建单信封 digest 快照 + 实时行态 status。"""
+    d = digest if isinstance(digest, Mapping) else {}
+    span = d.get("span")
+    return ConflictFactSideOut(
+        fact_id=fact_id,
+        fact_type=d.get("fact_type"),
+        subject=d.get("subject"),
+        predicate=d.get("predicate"),
+        object=d.get("object"),
+        status=row.status if row is not None else None,
+        confidence=float(d["confidence"]) if isinstance(d.get("confidence"), (int, float)) else None,
+        scope=dict(d.get("scope") or {}) if isinstance(d.get("scope"), Mapping) else {},
+        source_ref=dict(d.get("source_ref") or {}) if isinstance(d.get("source_ref"), Mapping) else {},
+        quote=d.get("quote"),
+        span=[int(v) for v in span] if isinstance(span, list) else None,
+    )
+
+
+@router.get("/conflicts", summary="冲突工单列表（§8.1 T2 裁决队列；resolution 过滤 + 分页，review:read）")
+async def list_conflicts(
+    principal: ReviewReadDep,
+    session: SessionDep,
+    resolution: Annotated[ConflictResolutionFilter | None, Query()] = None,
+    page: Annotated[int, Query(ge=1)] = 1,
+    page_size: Annotated[int, Query(ge=1, le=200)] = 50,
+) -> ConflictPageOut:
+    """冲突工单分页列表（api/01 §3.1 信封；新单优先）。
+
+    resolution=pending → 工单 open 态（draft/pending_review，未裁决）；winner_a/winner_b/
+    t3_coexist → 终审分流已回填 conflict_decision 的单（SQL status 预过滤 + 信封精过滤）；
+    缺省=全部。工单量级=人工裁决面（lite 档内存分页，total 全量精确）。
+    """
+    params: dict[str, Any] = {"tenant_id": principal.tenant_id, "target_type": TARGET_TYPE_CONFLICT}
+    order_by = " ORDER BY created_at DESC, id"  # 新单优先（对齐 review 工作台口径）
+    if resolution == "pending":
+        # text() 元组展开须显式 expanding bindparam（SQLAlchemy text() 无 ORM 自动展开）
+        stmt = text(_CONFLICT_LIST_SQL + " AND status IN :open_statuses" + order_by).bindparams(
+            bindparam("open_statuses", expanding=True),
+            bindparam("tenant_id", type_=PgUuid(as_uuid=True)),  # 裸 text() 无类型引擎：sqlite 降 str
+        )
+        params["open_statuses"] = list(_CONFLICT_OPEN_STATUSES)
+    else:
+        stmt = text(_CONFLICT_LIST_SQL + order_by).bindparams(bindparam("tenant_id", type_=PgUuid(as_uuid=True)))
+    rows = (await session.execute(stmt, params)).all()
+    items = [_conflict_ticket_out(row) for row in rows]
+    if resolution is not None and resolution != "pending":  # 已裁决单：信封 conflict_decision 精过滤
+        items = [i for i in items if i.resolution == resolution]
+    total = len(items)
+    offset = (page - 1) * page_size
+    return ConflictPageOut(
+        data=items[offset : offset + page_size],
+        meta=PageMeta(page=page, page_size=page_size, total=total),
+    )
+
+
+@router.get("/conflicts/{ticket_id}", summary="冲突工单详情（并排双方事实与出处 + 裁决留痕，review:read）")
+async def get_conflict(
+    ticket_id: uuid.UUID,
+    principal: ReviewReadDep,
+    session: SessionDep,
+) -> ConflictDetailOut:
+    """单张冲突工单详情：信封并排两事实 digest（subject/predicate/object/scope/quote/span/source_ref）
+    + kb_facts 实时行态（status）+ decision_options 裁决选项面 + conflict_decision 留痕。
+
+    非本租户 / 非 conflict 工单 / 不存在 → 404（deny-by-default 同域口径）。
+    """
+    row = (
+        (
+            await session.execute(
+                text(_CONFLICT_LIST_SQL + " AND id = :ticket_id").bindparams(
+                    bindparam("tenant_id", type_=PgUuid(as_uuid=True)),  # 裸 text() 无类型引擎：sqlite 降 str
+                    bindparam("ticket_id", type_=PgUuid(as_uuid=True)),
+                ),
+                {"tenant_id": principal.tenant_id, "target_type": TARGET_TYPE_CONFLICT, "ticket_id": ticket_id},
+            )
+        )
+        .first()
+    )
+    if row is None:
+        raise GatewayError(404, "冲突工单不存在", status_code=404)
+    payload = _payload_of(row.payload)
+    inner = payload.get("payload") if isinstance(payload.get("payload"), Mapping) else {}
+    try:
+        fact_a_id = uuid.UUID(str(inner["fact_a_id"]))
+        fact_b_id = uuid.UUID(str(inner["fact_b_id"]))
+    except (KeyError, ValueError) as exc:
+        raise GatewayError(404, "工单信封缺冲突事实对（非 T2 分诊产物）", status_code=404) from exc
+    fact_a_row = await session.get(KbFact, fact_a_id)
+    fact_b_row = await session.get(KbFact, fact_b_id)
+
+    def _tenant_row(row_: KbFact | None) -> KbFact | None:  # 跨租户事实行不透出（deny-by-default）
+        return row_ if row_ is not None and row_.tenant_id == principal.tenant_id else None
+
+    decision = payload.get("conflict_decision")
+    return ConflictDetailOut(
+        id=row.id,
+        status=str(row.status),
+        resolution=_resolution_of(payload),
+        target_id=row.target_id,
+        conflict_type=str(inner["conflict_type"]) if inner.get("conflict_type") else None,
+        decision_options=[str(o) for o in inner.get("decision_options") or []]
+        or [str(o) for o in payload.get("decision_options") or []],
+        fact_a=_conflict_side(fact_a_id, inner.get("fact_a"), _tenant_row(fact_a_row)),
+        fact_b=_conflict_side(fact_b_id, inner.get("fact_b"), _tenant_row(fact_b_row)),
+        decision=dict(decision) if isinstance(decision, Mapping) else None,
+        created_at=row.created_at,
     )

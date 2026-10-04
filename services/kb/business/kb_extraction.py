@@ -46,6 +46,7 @@ from rdflib import Graph, Literal, URIRef
 from rdflib.namespace import OWL, RDF, RDFS
 from sqlalchemy import false, select
 
+from services.kb.business.conflict_triage import triage_conflicts
 from services.kb.business.pipeline_base import PipelineError, StepContext
 from services.kb.business.prompts import extract_v2, get_prompt, get_system_prompt
 from services.kb.data.orm import Document, DocumentChunk, KbFact
@@ -689,6 +690,8 @@ async def run_validate(ctx: StepContext) -> None:
     违例 = 确定性规则（evidence_not_in_chunk）+ SHACL 结论，合并回写 kb_facts.violations 与
     审核单 gate_result；任一违例 → status=rejected（kb_facts.status 枚举内取值）；单据保持
     pending_review 留人工终审，任何路径不写 authoritative（底线 4 / 宪法第 3 条）。
+    门禁回写后追加 §8.1 冲突分诊尾调（A1 接线，2026-10-04）：仅合规候选（status=candidate）
+    与既有权威事实比对，T1/T4/T3 落标注与边、T2 建冲突工单（target_type=conflict）。
     """
     catalog = await asyncio.to_thread(load_seed_catalog)
     async with ctx.session_factory() as session:  # 短事务：读 candidate 态事实快照 + chunk 原文（引语复核面）
@@ -741,6 +744,38 @@ async def run_validate(ctx: StepContext) -> None:
         await _persist_gate_result(ctx, cand.id, report, rule_violations)
     if candidates:
         logger.info("kb_validate done: document_id=%s candidates=%d", ctx.document_id, len(candidates))
+    await _triage_after_validate(ctx)  # A1 接线：§8.1 冲突分诊（合规候选 vs 既有权威事实）
+
+
+async def _triage_after_validate(ctx: StepContext) -> None:
+    """门禁后冲突分诊尾调（§8.1；A1 接线 2026-10-04）：triage_conflicts 落库版唯一生产入口。
+
+    - 比对面 = 当前文档合规候选（status=candidate；rejected 已被门禁拒，不入分诊池）×
+      全租户既有权威事实（_load_pool 同主谓取数），doc_id 形态（候选已持久化）；
+    - 处置：T1 版本承接/T4 佐证合并/T3 限定共存落 meta 标注与 kb_fact_relations 边（无工单，
+      §8.1 落库版口径——T3 双保留非裁决面）；T2 真矛盾建冲突工单（target_type=conflict，
+      review 域枚举已扩），经 ctx.review（CandidateReviewPort.submit_candidate）复用既有通道；
+    - 事务：独立短事务、调用方持有（conflict_triage 模块纪律）；幂等（已分诊候选跳过 +
+      工单 uk_review_one_open），步级重试/断点续跑重放安全；
+    - 失败语义：端口缺失 409 响亮（同 _persist_gate_result 纪律），数据异常走步级重试。
+    """
+    if ctx.review is None:
+        raise PipelineError("409 候选审核端口未装配（T2 冲突工单建单必需）")
+    async with ctx.session_factory() as session, session.begin():
+        report = await triage_conflicts(
+            session,
+            ctx.tenant_id,
+            doc_id=ctx.document_id,
+            tickets=ctx.review,
+            trace_id=f"kb-validate:{ctx.document_id}",
+        )
+    if report.outcomes:
+        logger.info(
+            "kb_triage done: document_id=%s outcomes=%d tickets_opened=%d",
+            ctx.document_id,
+            len(report.outcomes),
+            report.tickets_opened,
+        )
 
 
 async def _persist_gate_result(

@@ -1,12 +1,16 @@
 import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
+import { ApiError } from '@/api/client'
+import { ErrorState } from '@/components/states'
 import { getPreferences, putPreferences } from '../api'
 
 /** IX-SET 记忆偏好 Tab（宿主 p-settings「记忆」卡；S-AD 切片）：记忆总开关 +
  *  群聊对话写入 L1 + 清除记忆走失效边（墓碑式软删可追溯）三 toggle，统一存
  *  /me/preferences 扩展字段（memory_enabled / memory_group_l1_write /
  *  memory_clear_via_invalidate）。开关样式与 mcp ServerDetailSheet role=switch 同构。
- *  清除动作本身留在记忆管理页（此处只管偏好，不触发删除）。 */
+ *  清除动作本身留在记忆管理页（此处只管偏好，不触发删除）。
+ *  43 号验收 P2-7：读降级（404/501 → 本地默认值）时 fhint 明示「未同步」，
+ *  不再静默按默认值假装已同步；其余读异常（网络/5xx）走 ErrorState 错误态。 */
 
 interface MemoryPrefs {
   memory_enabled: boolean
@@ -24,16 +28,40 @@ export function MemoryPrefsTab() {
   const [prefs, setPrefs] = useState<MemoryPrefs | null>(null)
   const [dirty, setDirty] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [degraded, setDegraded] = useState(false)
+  const [loadError, setLoadError] = useState<unknown>(null)
+  const [reloadTick, setReloadTick] = useState(0)
 
   useEffect(() => {
+    // 404/501 降级默认值带 degraded 标记 → fhint 明示；其余异常走 ErrorState（可重试）
+    setDegraded(false)
+    setLoadError(null)
     void getPreferences()
-      .then(p => setPrefs({
-        memory_enabled: p.memory_enabled ?? true,
-        memory_group_l1_write: p.memory_group_l1_write ?? false,
-        memory_clear_via_invalidate: p.memory_clear_via_invalidate ?? true,
-      }))
-      .catch(() => setPrefs({ memory_enabled: true, memory_group_l1_write: false, memory_clear_via_invalidate: true }))
-  }, [])
+      .then(p => {
+        setPrefs({
+          memory_enabled: p.memory_enabled ?? true,
+          memory_group_l1_write: p.memory_group_l1_write ?? false,
+          memory_clear_via_invalidate: p.memory_clear_via_invalidate ?? true,
+        })
+        setDegraded(!!p.degraded)
+      })
+      .catch(e => setLoadError(e))
+  }, [reloadTick])
+
+  if (loadError != null && !prefs) {
+    return (
+      <div>
+        <b className="text-sm">记忆</b>
+        <div className="mt-3">
+          <ErrorState
+            message={loadError instanceof Error ? loadError.message : undefined}
+            code={loadError instanceof ApiError ? loadError.code : undefined}
+            onRetry={() => setReloadTick(t => t + 1)}
+          />
+        </div>
+      </div>
+    )
+  }
 
   if (!prefs) return <div className="empty"><div className="t">加载中…</div></div>
 
@@ -63,6 +91,11 @@ export function MemoryPrefsTab() {
           {prefs.memory_enabled ? '已开启' : '已关闭'}
         </span>
       </div>
+      {degraded && (
+        <div className="fhint mt-2" data-testid="set-memory-degraded-hint">
+          偏好服务未接入（功能建设中），当前展示为本地默认值，尚未与服务端同步。
+        </div>
+      )}
       <div className="card mt-3 !p-4" data-testid="set-memory-prefs">
         {ROWS.map((r, i) => (
           <div

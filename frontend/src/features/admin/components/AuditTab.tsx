@@ -36,6 +36,18 @@ export function AuditTab() {
     return items
   }, [data, action])
 
+  // 43 号验收 P2-2：操作者选项不再写死人名——由审计数据派生（独立无过滤查询，避免被
+  // 当前 operator 筛选收窄）；列表端点不可用（404/失败）时仅剩「全部操作者」，不造假选项
+  const { data: opData } = useQuery({
+    queryKey: ['admin', 'audit', 'operators'],
+    queryFn: () => listAuditLogs({}),
+  })
+  const operators = useMemo(() => {
+    const seen: string[] = []
+    for (const r of opData?.data ?? []) if (!seen.includes(r.operator)) seen.push(r.operator)
+    return seen
+  }, [opData])
+
   const filters = { operator, action, range }
 
   return (
@@ -43,11 +55,9 @@ export function AuditTab() {
       <div className="flex flex-wrap items-center gap-2">
         <Select aria-label="操作者筛选" className="input h-8 w-36 text-xs" value={operator} onChange={e => setOperator(e.target.value)}>
           <option value="all">全部操作者</option>
-          <option value="刘以在">刘以在</option>
-          <option value="王工">王工</option>
-          <option value="陈晨">陈晨</option>
-          <option value="Agent · 原生">Agent · 原生</option>
-          <option value="系统">系统</option>
+          {operators.map(o => (
+            <option key={o} value={o}>{o}</option>
+          ))}
         </Select>
         <Select aria-label="动作筛选" className="input h-8 w-44 text-xs" value={action} onChange={e => setAction(e.target.value)}>
           <option value="all">全部动作</option>

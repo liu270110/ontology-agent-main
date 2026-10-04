@@ -6,9 +6,19 @@ import { api } from '@/api/client'
  *  queryKey 共享缓存，进出子页不重复请求），DTO 只声明计数所需最小字段、与各域 api
  *  手写 DTO 对齐（同 agents/api RegistryTool「域间不互引——各自声明」先例）。 */
 
-/** GET /plugins（api/01 §5.6）——市场插件计数（已装 N · 共 M） */
+/** GET /plugins（api/01 §5.6）——市场插件（总览计数「已装 N · 共 M」+ 43 号 P2-1
+ *  精选插件行取前三；字段为最小展示集，与 market/api MarketPlugin 手写 DTO 对齐） */
+export interface PluginOverviewItem {
+  id: string
+  name: string
+  summary: string
+  category: string
+  certified: boolean
+  installed: boolean
+  versions: { version: string; latest: boolean }[]
+}
 export function listPluginOverview() {
-  return api.get<{ items: { installed: boolean }[] }>('/plugins')
+  return api.get<{ items: PluginOverviewItem[] }>('/plugins')
 }
 
 /** GET /tools（api/01 §5.6）——工具目录计数 */

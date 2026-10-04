@@ -1,12 +1,12 @@
 import { useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { ArrowRight, Bot, Plug, Puzzle, Sparkles, Wrench, type LucideIcon } from 'lucide-react'
-import { toast } from 'sonner'
-import { listPluginOverview, listToolOverview, listSkillOverview, listMcpServerOverview, listAgentOverview } from '@/lib/platform-overview'
+import { listPluginOverview, listToolOverview, listSkillOverview, listMcpServerOverview, listAgentOverview, type PluginOverviewItem } from '@/lib/platform-overview'
 
 /** 平台能力总览（四区 IA 2026-10-01，画板 p-platform）：用户浏览与获取平台能力的统一入口——
  *  ① 四能力入口卡（插件市场/工具与技能/MCP 接入/Agent 目录，计数复用各域既有 queryKey 取数，
- *  拿不到不显示）+ ② 精选插件行（静态三张，获取/接入 → toast 走审核流演示）+
+ *  拿不到不显示）+ ② 精选插件行（live GET /plugins 前三；列表不可用/为空时整排隐藏，
+ *  获取动作跳市场页走真实安装向导——43 号验收 P2-1：静态三卡与「M4 前端演示」toast 退役）+
  *  ③ 四区边界说明卡（本页只做浏览与获取：运行管理在主页、治理在控制台、个性化在设置）。
  *  安装/接入/注册一律走审核流（设计宪法 3：候选非成品，人工终审才生效）。 */
 
@@ -43,6 +43,10 @@ export function PlatformPage() {
   // fe3 信封收口：agents 查询（listAgentOverview）改 api.list 归一（{data,meta}）——be2 后
   // 旧 .items.length 直接 'reading length' 崩溃；market/tools/skills/mcp 端点未改不动
   const agentsCount = agents.data ? `实例 ${agents.data.data.length}` : undefined
+
+  // 精选插件（43 号 P2-1 演示残留收口）：live GET /plugins 取前三（与市场页同源缓存，
+  // queryKey ['market','list']）；加载中/失败/空列表一律整排隐藏，不渲染空壳
+  const featured = (market.data?.items ?? []).slice(0, 3)
 
   const capabilities: Capability[] = [
     {
@@ -101,39 +105,28 @@ export function PlatformPage() {
         ))}
       </div>
 
-      {/* ② 精选插件行（静态三张；获取/接入 → toast 演示审核流） */}
-      <div className="mt-6 flex flex-wrap items-center gap-2.5">
-        <b className="text-[13px]">精选插件</b>
-        <span className="text-2xs text-label-3">获取流程：安装申请 → 治理审核 → 终审生效（候选非成品）</span>
-        <button
-          type="button"
-          data-testid="platform-goto-market"
-          onClick={() => navigate('/platform/market')}
-          className="ml-auto text-xs text-accent hover:underline"
-        >
-          进入市场 →
-        </button>
-      </div>
-      <div className="mt-2.5 grid grid-cols-1 gap-3 sm:grid-cols-3">
-        <FeaturedCard
-          testKey="ledger-connector"
-          name="台账写入连接器" badge="官方" badgeClass="badge b-green"
-          desc="营销台账系统双向写入：工单下发/回执同步，高危动作走审批。"
-          metas={['v2.1', 'scope: write']} action="获取"
-        />
-        <FeaturedCard
-          testKey="grid-shacl"
-          name="电网本体校验包" badge="社区" badgeClass="badge b-blue"
-          desc="GB/T 国标条款 SHACL 形状包：术语唯一/规则人工把关两条底线内建。"
-          metas={['v1.4', 'shape ×38']} action="获取"
-        />
-        <FeaturedCard
-          testKey="scada-mcp"
-          name="SCADA 网关 MCP" badge="官方" badgeClass="badge b-green"
-          desc="SCADA 实时数据 MCP Server：只读遥测白名单，写操作全部走审批链。"
-          metas={['v0.9', 'tools ×6']} action="接入"
-        />
-      </div>
+      {/* ② 精选插件行（live GET /plugins 前三；空/不可用整排隐藏——43 号 P2-1） */}
+      {featured.length > 0 && (
+        <>
+          <div className="mt-6 flex flex-wrap items-center gap-2.5">
+            <b className="text-[13px]">精选插件</b>
+            <span className="text-2xs text-label-3">获取流程：安装申请 → 治理审核 → 终审生效（候选非成品）</span>
+            <button
+              type="button"
+              data-testid="platform-goto-market"
+              onClick={() => navigate('/platform/market')}
+              className="ml-auto text-xs text-accent hover:underline"
+            >
+              进入市场 →
+            </button>
+          </div>
+          <div className="mt-2.5 grid grid-cols-1 gap-3 sm:grid-cols-3">
+            {featured.map(p => (
+              <FeaturedCard key={p.id} plugin={p} />
+            ))}
+          </div>
+        </>
+      )}
 
       {/* ③ 四区边界说明卡（画板 p-platform 底部提示） */}
       <div className="card mt-4 flex items-start gap-3 !bg-surface-2 p-3.5" data-testid="platform-boundary">
@@ -148,34 +141,30 @@ export function PlatformPage() {
   )
 }
 
-/** 精选卡（静态展示；获取动作仅 toast 演示——真实安装流程在插件市场页，走安装向导 + scope 授权） */
-function FeaturedCard({ testKey, name, badge, badgeClass, desc, metas, action }: {
-  testKey: string
-  name: string
-  badge: string
-  badgeClass: string
-  desc: string
-  metas: string[]
-  action: string
-}) {
+/** 精选卡（live 插件数据；获取/管理动作跳插件市场页——真实安装流程在市场页，
+ *  走安装向导 + scope 授权；「M4 前端演示」假 toast 已退役，见 43 号 P2-1） */
+function FeaturedCard({ plugin }: { plugin: PluginOverviewItem }) {
+  const navigate = useNavigate()
+  const version = plugin.versions.find(v => v.latest)?.version ?? plugin.versions[0]?.version
   return (
-    <div className="card p-3.5" data-testid={`platform-featured-${testKey}`}>
+    <div className="card p-3.5" data-testid={`platform-featured-${plugin.id}`}>
       <div className="flex items-center gap-2">
-        <b className="min-w-0 truncate text-xs">{name}</b>
-        <span className={`${badgeClass} flex-none text-2xs`}>{badge}</span>
+        <b className="min-w-0 truncate text-xs">{plugin.name}</b>
+        <span className={`flex-none text-2xs ${plugin.certified ? 'badge b-green' : 'badge b-blue'}`}>
+          {plugin.certified ? '官方认证' : '社区'}
+        </span>
       </div>
-      <p className="mt-1.5 text-[11px] leading-5 text-label-2">{desc}</p>
+      <p className="mt-1.5 line-clamp-2 text-[11px] leading-5 text-label-2">{plugin.summary}</p>
       <div className="mt-2.5 flex items-center gap-1.5">
-        {metas.map(m => (
-          <span key={m} className="badge b-gray text-2xs">{m}</span>
-        ))}
+        {version && <span className="badge b-gray text-2xs">{version}</span>}
+        <span className="badge b-gray text-2xs">{plugin.category}</span>
         <button
           type="button"
           data-testid="platform-featured-get"
-          onClick={() => toast.success('获取申请已提交，走审核流（M4 前端演示）')}
+          onClick={() => navigate('/platform/market')}
           className="btn btn-s btn-sm ml-auto"
         >
-          {action}
+          {plugin.installed ? '管理' : '获取'}
         </button>
       </div>
     </div>

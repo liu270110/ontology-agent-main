@@ -3,11 +3,15 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Copy, Plus } from 'lucide-react'
 import { toast } from 'sonner'
 import { Modal } from '@/components/modal'
+import { ApiError } from '@/api/client'
+import { EmptyState, ErrorState, SkeletonRows } from '@/components/states'
 import { createApiKey, listApiKeys, revokeApiKey, type ApiKey } from '../api'
 
 /** IX-SET-03 API Key 管理（26 篇 §3）：Key 列表（名称/前缀/创建/最后使用/状态）+
  *  「新建 Key」弹窗 → 成功态只显示完整 Key 一次（复制 + 警示 + 已保存勾选）+
- *  吊销危险确认。端点=api/01 §5.8 admin api-keys 四行（已登记）。 */
+ *  吊销危险确认。端点=api/01 §5.8 admin api-keys 四行（已登记）。
+ *  43 号验收 P1-1：补 isError → ErrorState（code=1004 自动特化「功能建设中」，
+ *  不再静默空白）+ isPending 骨架行 + 成功空列表 EmptyState。 */
 
 const SCOPE_OPTIONS = [
   { key: 'session:write', label: '会话读写（sessions:write）' },
@@ -19,7 +23,7 @@ export function KeysTab() {
   const qc = useQueryClient()
   const [createOpen, setCreateOpen] = useState(false)
   const [revoking, setRevoking] = useState<ApiKey | null>(null)
-  const { data, isLoading } = useQuery({ queryKey: ['settings', 'api-keys'], queryFn: listApiKeys })
+  const { data, isPending, isError, error, refetch } = useQuery({ queryKey: ['settings', 'api-keys'], queryFn: listApiKeys })
   const keys = useMemo(() => data?.items ?? [], [data])
 
   return (
@@ -50,7 +54,17 @@ export function KeysTab() {
             )}
           </div>
         ))}
-        {isLoading && <div className="empty"><div className="t">加载中…</div></div>}
+        {isPending && <div className="px-4 py-3"><SkeletonRows rows={3} rowHeight={40} /></div>}
+        {isError && (
+          <ErrorState
+            message={error instanceof Error ? error.message : undefined}
+            code={error instanceof ApiError ? error.code : undefined}
+            onRetry={() => void refetch()}
+          />
+        )}
+        {!isPending && !isError && keys.length === 0 && (
+          <EmptyState compact title="还没有 API Key" desc="新建 Key 用于程序化接入平台 API（scope ⊆ 本人权限）。" />
+        )}
       </div>
 
       {createOpen && (

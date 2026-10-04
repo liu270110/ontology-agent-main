@@ -50,8 +50,12 @@ class StepStatus(StrEnum):
 _TERMINAL_STEP_STATUSES = frozenset({StepStatus.VALIDATED, StepStatus.FAILED, StepStatus.CANCELLED})
 
 # 迁移表（04 §3 状态图代码化；cancelled 入口=02 §2.4 取消完整性，非终态皆可入）
+# M4.5-A 增补（docs/Agent/12-M4.5运行中输入面与模型韧性设计（主仓本地）§1.3）：planned→validated
+# 为 **resume 计划对账特批迁移**——仅内核对账路径可走（前序 Run 的 step_validated 锚点
+# (seq,action_iri,param_hash) 全等且 execution_mode=READ），非执行旁路：终态可追溯性由
+# kernel.step_resumed_validated 审计事件（resumed=true）承载。
 _VALID_STEP_TRANSITIONS: dict[StepStatus, frozenset[StepStatus]] = {
-    StepStatus.PLANNED: frozenset({StepStatus.GATED, StepStatus.CANCELLED}),
+    StepStatus.PLANNED: frozenset({StepStatus.GATED, StepStatus.VALIDATED, StepStatus.CANCELLED}),
     StepStatus.GATED: frozenset({StepStatus.EXECUTING, StepStatus.FAILED, StepStatus.CANCELLED}),
     StepStatus.EXECUTING: frozenset(
         {StepStatus.WAITING_APPROVAL, StepStatus.VALIDATED, StepStatus.FAILED, StepStatus.CANCELLED}

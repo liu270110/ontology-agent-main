@@ -149,6 +149,7 @@ def get_or_build_chat_orchestrator(state: Any) -> Any:
     组合内容：双适配器（builtin=ModelPort，claude=直连无 key 5002）+ 上下文组装器
     （kb 检索服务在 chat_context 工厂内装配）+ 结果汇（PG 短事务 UoW#2）。
     供端点请求（request.app.state）与 gateway lifespan（TaskRunWorker）共用同一装配面。
+    M4.5-A：运行注册表 + estop 探针工厂随编排器装配（spawn 注册/终态注销；惰性单例）。
     """
     cached = getattr(state, "chat_orchestrator", None)
     if cached is not None:
@@ -158,6 +159,9 @@ def get_or_build_chat_orchestrator(state: Any) -> Any:
     if l1_store is None:
         l1_store = build_l1_store(get_redis(settings), ttl_seconds=settings.memory_l1_ttl_seconds)
         state.l1_store = l1_store
+    from services.agent.api.control import get_or_build_estop_store, get_or_build_run_registry
+
+    estop_store = get_or_build_estop_store(state, redis=get_redis(settings))  # Redis 优先、不可用内存兜底
     orchestrator = build_chat_orchestrator(
         model_port=getattr(state, "model_port", None),
         l1_store=l1_store,
@@ -166,6 +170,8 @@ def get_or_build_chat_orchestrator(state: Any) -> Any:
         result_sink=build_chat_result_sink(state.uow),  # lifespan 装配于 app.state（06 §1）
         kernel_ledger_sink_factory=build_kernel_ledger_sink_factory(state.uow),  # C1 锚点投影（2026-09-27 批）
         spill_store=_build_spill_store(settings),  # spill（02 §11.2-11）：未配置目录=关闭
+        run_registry=get_or_build_run_registry(state),  # M4.5-A：运行中输入面注册表
+        estop_probe_factory=estop_store.probe,  # M4.5-A：estop 步边界闸门探针工厂
     )
     state.chat_orchestrator = orchestrator
     return orchestrator

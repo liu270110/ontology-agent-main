@@ -21,10 +21,18 @@ def _state(status: StepStatus) -> StepState:
     return StepState(run_id=uuid.uuid4(), seq=1, stage=LoopStage.PLANNING, status=status)
 
 
-def test_非法迁移_planned直达validated被拒_必经门禁与执行():
+def test_特批迁移_planned直达validated_仅限内核resume对账路径():
+    """M4.5-A（docs/Agent/12 §1.3）：planned→validated 增特批白名单——**仅**内核 resume
+    计划对账路径（锚点三元组全等且 READ，kernel.step_resumed_validated 审计承载）；
+    非对账场景仍必经门禁与执行（执行旁路不存在，迁移本身不留旁路漏洞）。"""
     state = _state(StepStatus.PLANNED)
+    state.transition(StepStatus.VALIDATED, stage=LoopStage.PLANNING)  # 特批迁移（对账命中步）
+    assert state.is_terminal
+
+    # gated 仍不得回退/跨迁 waiting_approval（既有负向面保持不变）
+    gated = _state(StepStatus.GATED)
     with pytest.raises(StepStateError):
-        state.transition(StepStatus.VALIDATED)
+        gated.transition(StepStatus.WAITING_APPROVAL)
 
 
 def test_非法迁移_gated直达waiting_approval被拒():

@@ -36,6 +36,7 @@ from services.agent.business.chat_events import (
 )
 from services.agent.business.kernel.budget import Budget
 from services.agent.business.kernel.dispatcher import ExtensionDispatcher
+from services.agent.business.kernel.inbox import KernelInbox
 from services.agent.business.kernel.loop import AgentKernel
 from services.agent.domain.model.kernel_context import KernelEvent, TaskRef, TenantContext
 from services.agent.domain.model.task import RunStatus
@@ -109,6 +110,8 @@ class ChatOrchestrator:
         kernel_ledger_sink_factory: Callable[[UUID, UUID], Callable[[KernelEvent], Awaitable[None]]] | None = None,
         spill_store: Any | None = None,  # SpillStore（02 §11.2-11：超大结果→有界预览+locator）
         extra_tool_bindings: tuple = (),  # 能力层 P0（docs/Agent/06）：fs/web 等工具绑定，经 B1 门禁链注册
+        run_registry: Any | None = None,  # M4.5-A：RunRegistry（进程内 run_id→inbox/probe；None=不注册）
+        estop_probe_factory: Callable[[UUID], Callable[[], str | None]] | None = None,  # M4.5-A：estop 探针工厂
     ) -> None:
         self._extra_tool_bindings = tuple(extra_tool_bindings)
         self._adapters = dict(adapters)
@@ -129,6 +132,10 @@ class ChatOrchestrator:
         # None=不投影（内存账本兜底）。落点=PG task_events（组合根经 sessions.build_kernel_ledger_sink_factory）。
         self._ledger_sink_factory = kernel_ledger_sink_factory
         self._spill_store = spill_store
+        # M4.5-A 运行中输入面（docs/Agent/12 §1.1/§1.2）：spawn 注册 inbox+estop 探针、
+        # 终态注销（_execute_turn finally 面）；两者缺省 None=零行为变化（直跑形态）。
+        self._run_registry = run_registry
+        self._estop_probe_factory = estop_probe_factory
 
     async def stream_chat(self, command: ChatCommand) -> AsyncIterator[ChatEvent]:
         """执行一次对话，产出主干波事件流（消费方取消 → 内核取消清单收敛后重抛）。"""
@@ -305,14 +312,28 @@ class ChatOrchestrator:
             duration_s=self._policy.total_budget_s,
             max_tokens=None,
         )
-        return await kernel.run(
-            task,
-            ctx,
-            budget=budget,
-            ledger_sink=ledger_sink,
-            spill_store=self._spill_store,
-            approvals=tuple(command.approvals or ()),  # H-0b：运行中审批票随重放并入内核（B5 回执核验）
-        )
+        # M4.5-A：spawn 注册（worker 与 SSE 内联同经本编排器 → 两路径都可运行中 inbox/estop）
+        inbox: KernelInbox | None = None
+        control_probe: Callable[[], str | None] | None = None
+        if self._run_registry is not None:
+            inbox = KernelInbox()
+            control_probe = self._estop_probe_factory(command.tenant_id) if self._estop_probe_factory else None
+            self._run_registry.register(command.run_id, inbox=inbox, control_probe=control_probe)
+        try:
+            return await kernel.run(
+                task,
+                ctx,
+                budget=budget,
+                ledger_sink=ledger_sink,
+                spill_store=self._spill_store,
+                approvals=tuple(command.approvals or ()),  # H-0b：运行中审批票随重放并入内核（B5 回执核验）
+                inbox=inbox,  # M4.5-A：段边界 steering/inject 拼接（§1.1）
+                control_gate=control_probe,  # M4.5-A：段边界 estop 闸门（§1.2，只挡新工作）
+                resumed_validated=tuple(command.resumed_validated or ()),  # M4.5-A：P-4 计划对账锚点（§1.3）
+            )
+        finally:
+            if self._run_registry is not None:  # 终态注销（显式 remove 防泄漏；异常路径同收）
+                self._run_registry.unregister(command.run_id)
 
     # ── 收尾与映射 ────────────────────────────────────────────────────────
     @staticmethod
@@ -398,6 +419,8 @@ def build_chat_orchestrator(
     kernel_ledger_sink_factory: Callable[[UUID, UUID], Callable[[KernelEvent], Awaitable[None]]] | None = None,
     spill_store: Any | None = None,
     extra_tool_bindings: tuple = (),
+    run_registry: Any | None = None,  # M4.5-A：进程内运行注册表（None=不注册，inbox/estop 面关闭）
+    estop_probe_factory: Callable[[UUID], Callable[[], str | None]] | None = None,  # M4.5-A：estop 探针工厂
 ) -> ChatOrchestrator:
     """组合根工厂：装配双适配器 + 上下文组装器（gateway/app.py 最小接线的唯一入口）。
 
@@ -487,4 +510,6 @@ def build_chat_orchestrator(
         kernel_ledger_sink_factory=kernel_ledger_sink_factory,
         spill_store=spill_store,
         extra_tool_bindings=extra_tool_bindings,
+        run_registry=run_registry,
+        estop_probe_factory=estop_probe_factory,
     )

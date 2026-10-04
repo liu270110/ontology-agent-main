@@ -29,13 +29,14 @@ from services.agent.business.kernel.errors import BudgetExhaustedError, KernelCo
 from services.agent.business.kernel.execution import ExecutionStage
 from services.agent.business.kernel.gate_baseline import BaselineGate, canonical_param_hash
 from services.agent.business.kernel.grounding import ContextAssemblyStage
+from services.agent.business.kernel.inbox import InboxItem, KernelInbox
 from services.agent.business.kernel.ledger import KernelLedger, LedgerSink
 from services.agent.business.kernel.run_context import RunContext
 from services.agent.business.kernel.spill import SpillStore
 from services.agent.business.kernel.subagent import ParentBindable
 from services.agent.business.kernel.tool_dispatch import ToolGroupDispatcher, segment_steps
 from services.agent.domain.model.kernel_actions import ActionDecision, ApprovalTicket, ExecutionMode
-from services.agent.domain.model.kernel_context import ContextBlock, KernelEvent, TaskRef, TenantContext
+from services.agent.domain.model.kernel_context import ContextBlock, KernelEvent, TaskRef, TenantContext, TrustLevel
 from services.agent.domain.model.kernel_gates import GateFinding, GateReport, GateVerdict, RunOutcome
 from services.agent.domain.model.kernel_planning import PlanCandidate, PlanStep
 from services.agent.domain.model.step_state import LoopStage, StepState, StepStatus
@@ -92,6 +93,7 @@ class AgentKernel:
             tool_parallelism if tool_parallelism is not None else get_settings().kernel_tool_parallelism
         )
         self._last_ledger: KernelLedger | None = None
+        self._last_run_context: RunContext | None = None  # M4.5-A：验收/验收测试取组装面（验收口径=账本事件）
         # 阶段执行器（内核私有；依赖注入同一分发器，禁直连能力实现）
         self._context_stage = ContextAssemblyStage(dispatcher, self._emit)
         # B-③ 批（docs/Agent/10 §8.2）：tool_timeout_s 直传执行阶段——显式注入优先
@@ -111,6 +113,11 @@ class AgentKernel:
     def last_ledger(self) -> KernelLedger | None:
         """最近一次运行的账本（C2 v1 内存形态；M4 切 PG 台账，取消/审计验收取数口）。"""
         return self._last_ledger
+
+    @property
+    def last_run_context(self) -> RunContext | None:
+        """最近一次运行的执行上下文（M4.5-A：运行中输入面组装面 rc.context_blocks 的取数口）。"""
+        return self._last_run_context
 
     # ── 配置层解析（B-③ 批，docs/Agent/10 §8.2：规划/门禁/事件汇+排水无显式构造参数，
     # 运行期统一读 Settings；数值默认=原模块级常量 10/1/5 逐位一致）───────────────
@@ -133,11 +140,32 @@ class AgentKernel:
         approvals: tuple[ApprovalTicket, ...] = (),
         ledger_sink: LedgerSink | None = None,
         spill_store: SpillStore | None = None,
+        inbox: KernelInbox | None = None,
+        control_gate: Callable[[], str | None] | None = None,
+        resumed_validated: tuple[dict[str, Any], ...] = (),
     ) -> RunOutcome:
         """执行一次 Run（七阶段）。取消传播下状态一致：终态经账本可追溯后重抛取消。
 
         ``ledger_sink``（C1 PG 台账投影，组合根注入）：内核锚点事件在入账同时异步投影
         到持久层，终态前排水（先落库后终态的可追溯口径）；投影失败不阻断运行。
+
+        M4.5-A 运行中输入面（docs/Agent/12-M4.5运行中输入面与模型韧性设计（主仓本地）§1）：
+
+        - ``inbox``（每 Run 一个 KernelInbox，组合根经运行注册表挂入）：B-① 分段驱动的
+          **段边界**先 drain_steerable()——steer/inject 文本包装为 ContextBlock（B3 标界
+          agent_attested）追加进运行组装面（rc.context_blocks），followup 留存步中不生效、
+          终态后由编排器 take_followups()；每笔 submit/drain 落账本事件
+          kernel.inbox_spliced / kernel.inbox_drained（payload：kind/source/seq/text）。
+        - ``control_gate``（紧急停止闸门探针，同步 callable）：**段边界**先于 drain 查询，
+          返回非 None（=激活原因）即走 :meth:`_finalize_interrupted` 优雅中断
+          （reason_code=4104 ESTOP_ACTIVE，``run_checklist=False``）。
+          **estop 与 cancel 语义区别（钉死）**：cancel=杀在途（取消清单 4 步：子 Run 级联/
+          在途工具中止/租约强制释放/工作区标记）；estop=**闸门**——只挡新段调度，不打断
+          任何在途调用，在途工具自然收敛后运行落终态（A-7「只挡新工作」）。
+        - ``resumed_validated``（P-4 resume 计划对账锚点：seq/action_iri/param_hash 全等
+          匹配且 execution_mode=READ 才跳过）：规划完成后对账，命中步走 planned→validated
+          特批迁移（kernel.step_resumed_validated，resumed=true，不产生消息行）；存在偏差
+          （计划变更/不匹配）则**全量重放**并落 kernel.resume_mismatch 审计事件。
         """
         if not ctx.trace_id:
             raise KernelContractError("TenantContext.trace_id 为空，拒绝运行（C2 可追溯底线）")
@@ -150,7 +178,14 @@ class AgentKernel:
             self._emit(rc.ledger, ctx, task.run_id, "kernel.budget_anchor", payload)
 
         rc.tracker.anchor_sink = emit_budget_anchor  # 锚定事件接线（真实 usage 到达时由记账器上抛）
+        self._last_run_context = rc
         self._execution_stage.spill_store = spill_store  # per-run spill 注入（02 §11.2-11）
+        if inbox is not None:  # M4.5-A：splice 审计挂账本发射口（注册窗口内 submit 由 attach 补记）
+
+            def _inbox_auditor(event_type: str, payload: dict[str, Any], _rc: RunContext = rc) -> None:
+                self._emit(_rc.ledger, _rc.ctx, _rc.task.run_id, event_type, payload)
+
+            inbox.attach_auditor(_inbox_auditor)
         slot = self._dispatcher.agent_slot()  # agent.slots（02 §4.2）：可绑定实现挂父作用域（分账+级联）
         if isinstance(slot, ParentBindable):
             slot.bind_parent(task.run_id, rc.tracker, rc.coordinator)
@@ -159,6 +194,7 @@ class AgentKernel:
             hard_cap = budget.duration_s if budget.duration_s is not None else 86_400.0
             async with asyncio.timeout(hard_cap):
                 blocks = await self._context_stage.run(rc)
+                rc.context_blocks = blocks  # M4.5-A：组装面回填（段边界 steer/inject 追加于此）
                 candidate = await self._stage_planning(rc, blocks)
                 rc.states = {
                     step.seq: StepState(
@@ -173,7 +209,24 @@ class AgentKernel:
                 }
                 for state in rc.states.values():
                     rc.ledger.record_step(state)  # 每阶段产出 StepState：计划态入账
-                for group in segment_steps(candidate.steps, parallelism=self._tool_parallelism):
+                # P-4 resume 计划对账（§1.3）：规划完成后、段循环前——命中 READ 步特批迁移，
+                # 存在偏差则全量重放（对账后的执行集=未 validated 步）
+                if resumed_validated:
+                    self._reconcile_resumed_anchors(rc, candidate, resumed_validated)
+                execution_steps = [s for s in candidate.steps if rc.states[s.seq].status is not StepStatus.VALIDATED]
+                for group in segment_steps(execution_steps, parallelism=self._tool_parallelism):
+                    # M4.5-A 段边界控制面（先 estop 闸门、后 steering 拼接，次序即优先级）：
+                    stop_reason = control_gate() if control_gate is not None else None
+                    if stop_reason is not None:
+                        return await self._finalize_interrupted(
+                            rc,
+                            status=RunStatus.CANCELLED,
+                            reason_code=int(ErrorCode.ESTOP_ACTIVE),
+                            reason=f"紧急停止生效（estop: {stop_reason}），段边界优雅中断（A-7 只挡新工作，在途不杀）",
+                            run_checklist=False,  # estop≠cancel：不进取消清单，在途工具自然收敛
+                        )
+                    if inbox is not None:
+                        self._splice_inbox_blocks(rc, inbox)
                     if len(group) == 1:  # 单步段=完全现状串行路径（B-① 零行为差异面）
                         step = group[0]
                         rc.tracker.check()  # A4 检查点：步前预算断言（超限优雅终止）
@@ -270,6 +323,93 @@ class AgentKernel:
             },
         )
         return candidate
+
+    # ── M4.5-A：P-4 resume 计划对账（docs/Agent/12 §1.3）──────────────────
+    def _reconcile_resumed_anchors(
+        self, rc: RunContext, candidate: PlanCandidate, anchors: tuple[dict[str, Any], ...]
+    ) -> None:
+        """规划完成后对账：锚点 (seq, action_iri, param_hash) 全等且 execution_mode=READ
+        的步走 planned→validated 特批迁移（A2 迁移表白名单条目，kernel.step_resumed_validated
+        落账、resumed=true，**不产生消息行**——会话历史不变式不变）。
+
+        偏差口径（任一命中即**全量重放**并落 kernel.resume_mismatch 审计事件）：
+        锚点 seq 在新计划不存在 / action_iri 不等 / param_hash 不等（含锚点缺 hash 的
+        存量事件形态——无法核验即不核验，安全侧退化）。EXTERNAL_WRITE/CODE 步即使
+        三元组全等也**恒不跳**（幂等安全门），但不记偏差（正常重放走既有门禁/审批链）。
+        """
+        by_seq = {s.seq: s for s in candidate.steps}
+        skips: list[PlanStep] = []
+        deviations: list[dict[str, Any]] = []
+        for anchor in anchors:
+            seq = anchor.get("seq", anchor.get("step_seq"))  # 兼容 worker step_seq 形态
+            step = by_seq.get(seq) if isinstance(seq, int) else None
+            anchor_iri = anchor.get("action_iri")
+            anchor_hash = anchor.get("param_hash")
+            if (
+                step is None
+                or not isinstance(anchor_iri, str)
+                or step.action_iri != anchor_iri
+                or not isinstance(anchor_hash, str)
+                or anchor_hash != canonical_param_hash(step.parameters)
+            ):
+                deviations.append({"seq": seq, "action_iri": anchor_iri, "param_hash": anchor_hash})
+                continue
+            if step.execution_mode is not ExecutionMode.READ:  # 幂等安全门：恒不跳、非偏差
+                continue
+            skips.append(step)
+        if deviations:  # 计划变更/不匹配 → 全量重放（现状），审计事件记偏差步
+            self._emit(
+                rc.ledger,
+                rc.ctx,
+                rc.task.run_id,
+                "kernel.resume_mismatch",
+                {"deviations": deviations, "replay": "full", "stage": str(LoopStage.PLANNING)},
+            )
+            return
+        for step in skips:
+            state = rc.states[step.seq]
+            state.transition(StepStatus.VALIDATED, stage=LoopStage.PLANNING)  # 特批迁移（白名单条目）
+            state.resumable = True  # 对账续跑锚点口径一致（C1）
+            rc.ledger.record_step(state)
+            self._emit(
+                rc.ledger,
+                rc.ctx,
+                rc.task.run_id,
+                "kernel.step_resumed_validated",
+                {
+                    "step_seq": step.seq,
+                    "action_iri": step.action_iri,
+                    "param_hash": canonical_param_hash(step.parameters),
+                    "resumed": True,
+                    "stage": str(LoopStage.PLANNING),
+                },
+            )
+
+    # ── M4.5-A：段边界 steering/inject 拼接（docs/Agent/12 §1.1）───────────
+    def _splice_inbox_blocks(self, rc: RunContext, inbox: KernelInbox) -> None:
+        """段边界 drain（steer+inject 全取、followup 留存）：文本包装为 ContextBlock
+        （source="user_steer"，B3 标界 agent_attested，tier=3 易变尾）追加进运行组装面
+        （rc.context_blocks，grounding 供给器通道就近接入）；每笔落 kernel.inbox_drained
+        （payload：kind/source/seq/text——审计必需内容，非工具正文）。
+        """
+        drained: tuple[InboxItem, ...] = inbox.drain_steerable()
+        if not drained:
+            return
+        blocks: list[ContextBlock] = list(rc.context_blocks)
+        for item in drained:
+            # B3：用户 steer 文本同为不可信外部输入，信任级由内核标界 agent_attested；
+            # tokens 记 0（零成本留痕口径，成本锚定随 M4.5-B token 锚定批收编）。
+            blocks.append(
+                ContextBlock(source="user_steer", content=item.text, tokens=0, trust_level=TrustLevel.AGENT_ATTESTED)
+            )
+            self._emit(
+                rc.ledger,
+                rc.ctx,
+                rc.task.run_id,
+                "kernel.inbox_drained",
+                {"kind": item.kind, "source": item.source, "seq": item.seq, "text": item.text},
+            )
+        rc.context_blocks = tuple(blocks)
 
     def _candidate_from_model(self, raw: dict[str, Any]) -> PlanCandidate:
         """模型结构化产物 → 计划候选（值不经采样：逐字段确定性收窄，非法字段丢弃）。"""
@@ -442,6 +582,10 @@ class AgentKernel:
             {
                 "step_seq": state.seq,
                 "action_iri": step.action_iri,
+                # M4.5-A additive（docs/Agent/12 §1.3）：P-4 resume 计划对账锚点三元组之
+                # param_hash（canonical JSON sha256，B5 同源函数）——重试/续跑 spawn 据此
+                # 与新计划步做全等匹配，匹配且 READ 才可特批跳过。
+                "param_hash": canonical_param_hash(step.parameters),
                 "trust_level": tool_result.trust_level.value if tool_result else None,
                 "claimed_trust_level": (
                     tool_result.claimed_trust_level.value if tool_result and tool_result.claimed_trust_level else None

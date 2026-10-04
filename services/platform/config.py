@@ -108,6 +108,12 @@ class Settings(BaseSettings):
     kernel_gate_timeout_s: float = Field(default=1.0, gt=0)
     kernel_sink_timeout_s: float = Field(default=5.0, gt=0)
 
+    # M4.5-A 运行中输入面（docs/Agent/12-M4.5运行中输入面与模型韧性设计（主仓本地）§1.1/§1.2）：
+    # kernel_inbox_max_per_run=KernelInbox 每 Run 待处理条目容量上限（三队列合计；
+    # 超限 4203 INBOX_CAPACITY 结构化拒绝）；estop_ttl_seconds=紧急停止键 TTL（§1.2 定稿 24h）。
+    kernel_inbox_max_per_run: int = Field(default=8, ge=1, le=32)
+    estop_ttl_seconds: int = Field(default=86_400, gt=0)
+
     # 记忆域（06 篇 §4/§5.2/§5.5；计划 1 仅 L1 与检索参数）
     memory_l1_ttl_seconds: int = 24 * 3600  # L1 会话记忆块 TTL（会话活跃期）
     memory_search_top_k: int = 8  # 检索注入条数上限

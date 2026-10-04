@@ -106,6 +106,7 @@ class TaskRunWorker:
         orphan_sweep_interval_s: float | None = None,  # None=取 Settings（组合根未传时的回填）
         orphan_running_timeout_s: float | None = None,
         rng: Callable[[], float] = random.random,
+        estop_store: Any | None = None,  # M4.5-A：EStopStore（None=不做 estop 前检，直跑形态）
     ) -> None:
         if policy is None:
             from services.agent.domain.model.task import RunRetryPolicy
@@ -130,6 +131,7 @@ class TaskRunWorker:
         self._orphan_sweep_interval_s = float(orphan_sweep_interval_s)
         self._orphan_running_timeout_s = float(orphan_running_timeout_s)
         self._rng = rng
+        self._estop_store = estop_store  # M4.5-A：submit 前 estop 前检（§1.2 生效点①）
         self._backoff_s = 0.0  # 重试退避节流（排空后 sleep，防止新 Run 早于退避到期被执行）
 
     async def run(self, stop: asyncio.Event) -> None:
@@ -312,6 +314,12 @@ class TaskRunWorker:
         return len(synthetic)
 
     # ── 认领执行 ──────────────────────────────────────────────────────────
+    async def _estop_reason(self, tenant_id: uuid.UUID) -> str | None:
+        """紧急停止激活原因查询（M4.5-A 生效点①；store 未装配恒 None）。"""
+        if self._estop_store is None:
+            return None
+        return await self._estop_store.active_reason(tenant_id)
+
     async def _execute_claimed(self, claim: Any) -> bool:
         """queued Run：认领（queued→running）→ 重放触发消息 → 经编排器执行。"""
         async with self._uow.for_tenant(claim.tenant_id) as tx:
@@ -321,6 +329,32 @@ class TaskRunWorker:
             run = next((r for r in task.runs if r.id == claim.run_id), None)
             if run is None or run.status.value != "queued":
                 return False  # 已被其他执行方认领（幂等护栏）
+            # M4.5-A 生效点①（docs/Agent/12 §1.2）：estop 激活 → 拒新 Run（4104，A-7 只挡新
+            # 工作）——queued→cancelled（无资源、无清单语义）+ task 终局，run.error 结构化留痕。
+            estop_reason = await self._estop_reason(claim.tenant_id)
+            if estop_reason is not None:
+                run.cancel()
+                run.error = {
+                    "code": int(ErrorCode.ESTOP_ACTIVE),
+                    "message": f"紧急停止生效（estop: {estop_reason}），拒绝执行新 Run（A-7 只挡新工作）",
+                    "retryable": False,
+                }
+                task.fail()
+                await tx.tasks.save(task)
+                await tx.tasks.append_event(
+                    task.id,
+                    TaskEvent(
+                        task_id=task.id,
+                        event_type="run.estop_rejected",
+                        data={
+                            "run_id": str(run.id),
+                            "code": int(ErrorCode.ESTOP_ACTIVE),
+                            "reason": estop_reason,
+                            "retryable": False,
+                        },
+                    ),
+                )
+                return True
             run.start()  # 聚合断言：queued→running（04 §3）
             session = await tx.sessions.get(task.session_id) if task.session_id else None
             if session is None:
@@ -348,6 +382,13 @@ class TaskRunWorker:
                     "resumable_anchors": {"run_id": str(run.id), "steps": anchors},
                 }
             await tx.tasks.save(task)
+            # M4.5-A P-4：可核验锚点（携 param_hash）→ 内核对账三元组（seq 键名归一）；
+            # 无 hash 的存量锚点不进对账（安全侧退化=注记续跑现状）。
+            resumed = tuple(
+                {"seq": a["step_seq"], "action_iri": a["action_iri"], "param_hash": a["param_hash"]}
+                for a in anchors
+                if isinstance(a.get("param_hash"), str) and a["param_hash"]
+            )
 
         command = ChatCommand(
             tenant_id=claim.tenant_id,
@@ -359,6 +400,7 @@ class TaskRunWorker:
             message=message_content,
             trace_id=f"worker-{run.id}",
             adapter="builtin",
+            resumed_validated=resumed,
         )
         await self._drain_orchestrator(command)
         return True
@@ -421,6 +463,11 @@ class TaskRunWorker:
                 if anchors:
                     message_content = f"{message_content}\n\n{_continuation_note(anchors)}"
                 await tx.tasks.save(task)
+                resumed = tuple(  # M4.5-A P-4：同 queued 认领口径（携 hash 锚点才进对账）
+                    {"seq": a["step_seq"], "action_iri": a["action_iri"], "param_hash": a["param_hash"]}
+                    for a in anchors
+                    if isinstance(a.get("param_hash"), str) and a["param_hash"]
+                )
             else:
                 # 全部过期：视同无回执（B5 默认拒绝）
                 run.fail({"code": 2001, "message": "运行中审批票已过期（视同无回执，B5）", "retryable": False})
@@ -446,6 +493,7 @@ class TaskRunWorker:
             trace_id=f"worker-resume-{run.id}",
             adapter="builtin",
             approvals=tickets,
+            resumed_validated=resumed,
         )
         await self._drain_orchestrator(command)
         return True
@@ -478,7 +526,14 @@ class TaskRunWorker:
             if key in seen:
                 continue
             seen.add(key)
-            anchors.append({"step_seq": step_seq, "action_iri": action_iri})
+            # M4.5-A additive（docs/Agent/12 §1.3）：param_hash 进锚点（P-4 计划对账三元组）；
+            # 存量事件无 hash → 锚点该键缺失，下游重建 resumed_validated 时剔除（无法核验
+            # 即不核验，安全侧退化为注记续跑=现状）。
+            param_hash = data.get("param_hash")
+            anchor: dict[str, Any] = {"step_seq": step_seq, "action_iri": action_iri}
+            if isinstance(param_hash, str) and param_hash:
+                anchor["param_hash"] = param_hash
+            anchors.append(anchor)
         anchors.sort(key=lambda a: a["step_seq"])
         return anchors[:_CONTINUATION_MAX_STEPS]
 
@@ -510,11 +565,35 @@ class TaskRunWorker:
 
     # ── 重试监督 ──────────────────────────────────────────────────────────
     async def _supervise_retry(self, claim: Any) -> bool:
-        """到期重试：退避后建新 Run 重放；attempt 耗尽 → task.failed + 5005 落事件。"""
+        """到期重试：退避后建新 Run 重放；attempt 耗尽 → task.failed + 5005 落事件。
+
+        M4.5-A：estop 激活时重试 spawn 同属「新工作」——task 终局 + 4104 落事件
+        （A-7 只挡新工作：不建重试 Run，退避预算不再消耗）。
+        """
         async with self._uow.for_tenant(claim.tenant_id) as tx:
             task = await tx.tasks.get(claim.task_id)
             if task is None or task.status is not TaskStatus.RUNNING:
                 return False  # 已被取消/终态：跳过
+            estop_reason = await self._estop_reason(claim.tenant_id)
+            if estop_reason is not None:
+                task.fail()  # running→failed（重试 spawn 被闸门拒绝，终局）
+                await tx.tasks.save(task)
+                await tx.tasks.append_event(
+                    task.id,
+                    TaskEvent(
+                        task_id=task.id,
+                        event_type="run.estop_rejected",
+                        data={
+                            "run_id": str(claim.run_id),
+                            "code": int(ErrorCode.ESTOP_ACTIVE),
+                            "reason": estop_reason,
+                            "retryable": False,
+                            "suppressed": "retry_spawn",
+                        },
+                    ),
+                )
+                logger.warning("task=%s 重试 spawn 被 estop 拒绝（4104），task 终局", task.id)
+                return True
             if task.attempt_count >= _MAX_ATTEMPTS:
                 task.fail()  # running→failed（04 §3「Run failed 且重试耗尽」）
                 await tx.tasks.save(task)

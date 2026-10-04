@@ -86,6 +86,14 @@ class CredentialPool:
         now = self._clock()
         return [entry.key for entry in self._entries if entry.cooldown_until > now]
 
+    def registered(self, name: str) -> bool:
+        """按名只读查询（批 K5 门 2 消费侧，docs/Agent/13 §10）：name 是否已在池内登记。
+
+        只读——不推进 RR 指针、不触连败/冷却状态（轮换与冷却语义零变化）；
+        适配 skills.domain.repo.secrets_query.SecretsQuery 协议形状。
+        """
+        return name in self._by_key
+
     @property
     def size(self) -> int:
         """池内凭证总数（含冷却中）。"""

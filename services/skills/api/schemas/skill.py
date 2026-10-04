@@ -17,7 +17,11 @@ from services.skills.domain.model.skill import SkillEntry
 
 
 class SkillOut(BaseModel):
-    """技能登记项投影（详情元数据口径：body 只回长度不回正文，14 §3）。"""
+    """技能登记项投影（详情元数据口径：body 只回长度不回正文，14 §3）。
+
+    required_secrets/missing_secrets/unprovisioned=K5 门 1/2 透出（docs/Agent/13 §10）：
+    声明名集 + 登记时点缺失快照；unprovisioned=缺失快照非空（不阻断 listed，消费方可感知）。
+    """
 
     model_config = ConfigDict(extra="forbid")
 
@@ -29,6 +33,9 @@ class SkillOut(BaseModel):
     status: str
     body_bytes: int
     origin: str
+    required_secrets: list[str] = Field(default_factory=list)
+    missing_secrets: list[str] = Field(default_factory=list)
+    unprovisioned: bool = False
     created_at: datetime | None = None
     updated_at: datetime | None = None
 
@@ -43,6 +50,9 @@ class SkillOut(BaseModel):
             status=entry.status.value,
             body_bytes=entry.body_bytes,
             origin=entry.origin.value,
+            required_secrets=list(entry.required_secrets),
+            missing_secrets=list(entry.missing_secrets),
+            unprovisioned=bool(entry.missing_secrets),
             created_at=entry.created_at,
             updated_at=entry.updated_at,
         )

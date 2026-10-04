@@ -330,14 +330,17 @@ class TaskRunWorker:
             if run is None or run.status.value != "queued":
                 return False  # 已被其他执行方认领（幂等护栏）
             # M4.5-A 生效点①（docs/Agent/12 §1.2）：estop 激活 → 拒新 Run（4104，A-7 只挡新
-            # 工作）——queued→cancelled（无资源、无清单语义）+ task 终局，run.error 结构化留痕。
+            # 工作）——暂停闸而非删除：认领处拒绝（零执行，queued→cancelled、无清单语义），
+            # attempt 计失败（task 落 failed）；run.error 结构化留痕且 retryable=true——
+            # 解除后经既有重试面（任务重试 API/监督）自然恢复（2026-10-04 真 vLLM 实测裁决：
+            # attempt 2 succeeded；cancel 才是杀在途）。
             estop_reason = await self._estop_reason(claim.tenant_id)
             if estop_reason is not None:
                 run.cancel()
                 run.error = {
                     "code": int(ErrorCode.ESTOP_ACTIVE),
                     "message": f"紧急停止生效（estop: {estop_reason}），拒绝执行新 Run（A-7 只挡新工作）",
-                    "retryable": False,
+                    "retryable": True,
                 }
                 task.fail()
                 await tx.tasks.save(task)
@@ -350,7 +353,7 @@ class TaskRunWorker:
                             "run_id": str(run.id),
                             "code": int(ErrorCode.ESTOP_ACTIVE),
                             "reason": estop_reason,
-                            "retryable": False,
+                            "retryable": True,
                         },
                     ),
                 )
@@ -567,8 +570,9 @@ class TaskRunWorker:
     async def _supervise_retry(self, claim: Any) -> bool:
         """到期重试：退避后建新 Run 重放；attempt 耗尽 → task.failed + 5005 落事件。
 
-        M4.5-A：estop 激活时重试 spawn 同属「新工作」——task 终局 + 4104 落事件
-        （A-7 只挡新工作：不建重试 Run，退避预算不再消耗）。
+        M4.5-A：estop 激活时重试 spawn 同属「新工作」——暂停闸拒绝 spawn（不建重试 Run，
+        退避预算不再消耗）+ 4104 落事件；task 落 failed 但语义 retryable=true，解除后经
+        既有重试面恢复（attempt 预算允许时；2026-10-04 真 vLLM 实测裁决）。
         """
         async with self._uow.for_tenant(claim.tenant_id) as tx:
             task = await tx.tasks.get(claim.task_id)
@@ -576,7 +580,7 @@ class TaskRunWorker:
                 return False  # 已被取消/终态：跳过
             estop_reason = await self._estop_reason(claim.tenant_id)
             if estop_reason is not None:
-                task.fail()  # running→failed（重试 spawn 被闸门拒绝，终局）
+                task.fail()  # running→failed（重试 spawn 被闸门拒绝：暂停闸非删除，解除后可经重试面恢复）
                 await tx.tasks.save(task)
                 await tx.tasks.append_event(
                     task.id,
@@ -587,12 +591,12 @@ class TaskRunWorker:
                             "run_id": str(claim.run_id),
                             "code": int(ErrorCode.ESTOP_ACTIVE),
                             "reason": estop_reason,
-                            "retryable": False,
+                            "retryable": True,
                             "suppressed": "retry_spawn",
                         },
                     ),
                 )
-                logger.warning("task=%s 重试 spawn 被 estop 拒绝（4104），task 终局", task.id)
+                logger.warning("task=%s 重试 spawn 被 estop 拒绝（4104）：暂停闸拒绝新工作，解除后可恢复", task.id)
                 return True
             if task.attempt_count >= _MAX_ATTEMPTS:
                 task.fail()  # running→failed（04 §3「Run failed 且重试耗尽」）

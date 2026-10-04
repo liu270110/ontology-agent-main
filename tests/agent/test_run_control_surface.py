@@ -3,8 +3,10 @@
 
 覆盖：
 - RunRegistry：注册/查询/终态注销（显式 remove 防泄漏）、重复注册拒绝；
-- worker estop 前检（生效点①）：激活→拒新 Run（4104，queued→cancelled + task 终局 +
-  run.estop_rejected 审计行）、重试 spawn 同拒；DELETE 后恢复执行；
+- worker estop 前检（生效点①）：**暂停闸语义（docs/Agent/12 §1.2 + 2026-10-04 真 vLLM
+  实测裁决）**——激活→新 Run 于认领处被 4104 拒绝（零执行，queued→cancelled、run.error
+  retryable=true、attempt 计失败、run.estop_rejected 审计行）、重试 spawn 同拒；解除后
+  retryable 的任务经既有重试面自然恢复（cancel 才是杀在途，estop 不是任务删除）；
 - inbox 端点：会话归属校验（404/活跃 Run 绑定）、注册表未命中 4105、受理 202+seq、
   容量超限 429+4203、INBOX_SPLICED 回执发布；
 - admin estop 三端点：激活/状态/解除信封与幂等。
@@ -98,6 +100,9 @@ class FakeTx:
     def __init__(self, uow: FakeUow) -> None:
         self.tasks = uow.task_repo
         self.sessions = uow.session_repo
+
+    def enqueue_projection(self, *_a: Any, **_k: Any) -> None:
+        return None  # 投影出队为 PG 形态面；Fake 直跑形态空操作（retry 端点消费面）
 
     async def __aenter__(self) -> FakeTx:
         return self
@@ -203,6 +208,8 @@ def _worker(
 
 
 async def test_worker_estop激活_拒新Run_4104_解除后恢复执行():
+    """暂停闸语义（docs/Agent/12 §1.2 + 2026-10-04 真 vLLM 实测裁决）：激活期新 Run 于认领处
+    被 4104 拒绝（零执行，attempt 计失败），不是任务删除；解除后新 Run 正常受理执行。"""
     # Arrange：queued Run + estop 激活
     uow = FakeUow()
     env = _RunningTaskEnv(uow)
@@ -212,16 +219,17 @@ async def test_worker_estop激活_拒新Run_4104_解除后恢复执行():
     worker = _worker(uow, store, orchestrator, env.task.id, env.run.id)
     # Act：认领（estop 前检命中）
     assert await worker.poll_once() is True
-    # Assert ①：queued→cancelled + 4104 结构化 error；task 终局 failed；审计行 run.estop_rejected
+    # Assert ①：暂停闸拒绝——queued→cancelled + 4104 结构化 error（retryable=true，零执行）；
+    # attempt 计失败（task 落 failed，非删除）；审计行 run.estop_rejected
     run = next(r for r in uow.task_repo.tasks[env.task.id].runs if r.id == env.run.id)
     assert run.status is RunStatus.CANCELLED
     assert run.error["code"] == int(ErrorCode.ESTOP_ACTIVE) and "演练停机" in run.error["message"]
-    assert run.error["retryable"] is False
+    assert run.error["retryable"] is True
     assert uow.task_repo.tasks[env.task.id].status is TaskStatus.FAILED
     rejected = [e for e in uow.task_repo.events[env.task.id] if e.event_type == "run.estop_rejected"]
     assert len(rejected) == 1 and rejected[0].data["code"] == int(ErrorCode.ESTOP_ACTIVE)
-    assert orchestrator.commands == []  # 编排器未被触达（拒新工作）
-    # Act ②：DELETE 后恢复——重建 queued Run 再认领，正常进入编排器
+    assert orchestrator.commands == []  # 编排器未被触达（零执行）
+    # Act ②：解除后恢复——新 Run 直接受理再认领，正常进入编排器
     await store.deactivate(_TENANT)
     task2 = Task(tenant_id=_TENANT, type="chat", session_id=env.session.id, payload={"message_seq": 1})
     run2 = task2.start_run()
@@ -231,6 +239,41 @@ async def test_worker_estop激活_拒新Run_4104_解除后恢复执行():
     # Assert ②：恢复执行（编排器收到命令；run 无 4104）
     assert len(orchestrator.commands) == 1 and orchestrator.commands[0].run_id == run2.id
     assert uow.task_repo.tasks[task2.id].status is TaskStatus.RUNNING
+
+
+async def test_estop拒绝_run_error_retryable_解除后经重试面恢复全链():
+    """全链恢复断言（②，docs/Agent/12 §1.2 + 2026-10-04 真 vLLM 实测裁决）：estop 拒绝的
+    run.error 为 retryable=true——解除后经既有重试面（POST /tasks/{id}/retry 的同一聚合路径
+    start_retry_run）重建 Run（attempt 2）并被 worker 认领执行；cancel 才是杀在途，
+    estop 拒绝非任务终局删除。"""
+    from services.agent.api.schemas.task import TaskRetryIn
+    from services.agent.api.tasks import retry_task
+
+    # Arrange：queued Run + estop 激活 → 认领被闸门拒绝
+    uow = FakeUow()
+    env = _RunningTaskEnv(uow)
+    store = build_estop_store(None)
+    await store.activate(_TENANT, reason="演练停机", by=_USER)
+    orchestrator = CaptureOrchestrator()
+    worker = _worker(uow, store, orchestrator, env.task.id, env.run.id)
+    assert await worker.poll_once() is True
+    # Assert ①：run.error retryable=true（暂停闸语义——解除后可被重试面恢复）
+    run = next(r for r in uow.task_repo.tasks[env.task.id].runs if r.id == env.run.id)
+    assert run.error["retryable"] is True
+    # Act ②：解除 → 既有重试面重建 Run（attempt 2）
+    await store.deactivate(_TENANT)
+    out = await retry_task(env.task.id, TaskRetryIn(scope="all"), principal=_principal("session:write"), uow=uow)
+    task = uow.task_repo.tasks[env.task.id]
+    # Assert ②：202 queued + attempt=2 + 任务回 running（04 §3 重试期间保持 RUNNING）
+    assert out.status == "queued" and out.id == env.task.id
+    assert task.attempt_count == 2 and task.status is TaskStatus.RUNNING
+    retry_run = next(r for r in task.runs if r.id == out.run_id)
+    assert retry_run.status is RunStatus.QUEUED
+    # Act ③：worker 认领重试 Run（既有重试监督链）
+    worker2 = _worker(uow, store, orchestrator, env.task.id, retry_run.id)
+    assert await worker2.poll_once() is True
+    # Assert ③：恢复执行——编排器收到 attempt 2 命令（实测裁决：解除后重试成功）
+    assert len(orchestrator.commands) == 1 and orchestrator.commands[0].run_id == retry_run.id
 
 
 async def test_worker_未装配estop_store_零行为变化():

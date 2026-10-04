@@ -160,10 +160,10 @@ async def test_GET_memory_layer_l2_分页与过滤(mem_seed):
             status_filter=FactStatus.ACTIVE,
             category=FactCategory.PREFERENCE,
         )
-        assert [i.fact_id for i in page.items] == [f2.id]
-        # Act / Assert：全量分页形状
+        assert [i.fact_id for i in page.data] == [f2.id]
+        # Act / Assert：全量分页形状（信封 {data, meta:{page,page_size,total}}，M4.6-D3）
         all_page = await read_memory(principal=mem_seed.principal, db=db, l1=_store(mem_seed))
-        assert all_page.limit == 20 and {i.fact_id for i in all_page.items} == {f1.id, f2.id}
+        assert all_page.meta.page_size == 20 and {i.fact_id for i in all_page.data} == {f1.id, f2.id}
 
 
 async def test_GET_memory_跨用户403_授权矩阵(mem_seed):
@@ -344,9 +344,9 @@ async def test_GET_memory_facts_分页过滤_跨用户403(mem_seed):
         page = await list_facts(
             principal=mem_seed.principal, db=db, status_filter=FactStatus.ACTIVE, category=FactCategory.PREFERENCE
         )
-        assert [i.fact_id for i in page.items] == [f2.id] and page.offset == 0
+        assert [i.fact_id for i in page.data] == [f2.id] and page.meta.page == 1
         one = await list_facts(principal=mem_seed.principal, db=db, limit=1)
-        assert one.limit == 1 and len(one.items) == 1
+        assert one.meta.page_size == 1 and len(one.data) == 1
         # Act / Assert：显式他人 user_id → 403+2002（授权矩阵）
         from services.platform.errors import GatewayError
 
@@ -443,9 +443,9 @@ async def test_GET_memory_promotions_登记行投影(mem_seed):
         await db.commit()
         # Act：★ 记录面（M5 前占位：audit_logs 登记行投影）
         page = await list_promotions(principal=mem_seed.principal, db=db)
-        # Assert：登记行 → 契约形状
-        assert page.limit == 20 and len(page.items) == 1
-        rec = page.items[0]
+        # Assert：登记行 → 契约形状（信封 {data, meta}，M4.6-D3；total=len(data) v1 口径）
+        assert page.meta.page_size == 20 and page.meta.total == 1 and len(page.data) == 1
+        rec = page.data[0]
         assert rec.promotion_id == out.promotion_id
         assert rec.fact_id == written.fact_id and rec.status == "registered"
         assert rec.reason == "审计回放依据" and rec.session_id == mem_seed.session_id
@@ -469,9 +469,9 @@ async def test_GET_memory_audit_升级单回放_会话过滤_跨用户403(mem_se
         await db.commit()
         # Act：按 session 回放（digest 携 session_id）
         page = await memory_audit(principal=mem_seed.principal, db=db, session_id=mem_seed.session_id)
-        # Assert：memory.* 动作可见（升级单登记行）
-        assert len(page.items) == 1
-        entry = page.items[0]
+        # Assert：memory.* 动作可见（升级单登记行；信封 {data, meta}，M4.6-D3）
+        assert len(page.data) == 1
+        entry = page.data[0]
         assert entry.action == "memory.promotion" and entry.resource_id == str(written.fact_id)
         assert entry.result == "success" and entry.actor_id == mem_seed.user_id
         # Act / Assert：跨用户回放 → 403+2002

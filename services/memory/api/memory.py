@@ -70,12 +70,19 @@ from services.memory.api.schemas.memory import (
 )
 from services.memory.api.schemas.records import (
     BlockPutRequest,
+    BlockWriteEnvelope,
     PromotionCreateRequest,
     RecordCreateRequest,
+    RecordDetailEnvelope,
     RecordResponse,
+    RecordSearchEnvelope,
+    RecordWriteEnvelope,
     ReviewItemResponse,
     SearchHitResponse,
     SearchRequest,
+    SessionBlocksEnvelope,
+    SettleData,
+    SettleEnvelope,
     SettleRequest,
 )
 from services.memory.business.consolidation import consolidate_session
@@ -104,6 +111,7 @@ from services.memory.domain.repo.review_port import PromotionDecisionPort, Promo
 from services.platform.deps import Principal, SessionDep, get_redis, require_scope
 from services.platform.errors import ErrorCode, GatewayError
 from services.platform.kernel import DomainError
+from services.platform.schemas import PageMeta
 
 if TYPE_CHECKING:  # 仅类型注解（运行时零 import——app.py 同款纪律）
     from sqlalchemy.ext.asyncio import AsyncSession
@@ -340,6 +348,16 @@ async def memory_context(
 # ---------------------------------------------------------------- ★ 端点（api/01 §5.5 登记册补齐）
 
 
+def _page_meta(offset: int, limit: int, total: int) -> PageMeta:
+    """offset/limit 请求参数 → PageMeta（api/01 §3.1：page≥1）。
+
+    v1 口径（M4.6-D3）：memory 域仓储面（list_for_user/query_promotions/query_memory_audit/
+    L1 SCAN 聚合）均无全量 count 能力，调用方以 len(当前页 data) 作 total（DTO 注释同步）；
+    count 能力补齐前 page=offset//limit+1（请求参数换算，非全量页号）。
+    """
+    return PageMeta(page=offset // limit + 1, page_size=limit, total=total)
+
+
 @router.get("/l1", summary="列出当前租户活跃 L1 会话工作记忆（容量卡计数 + TTL 倒计时）")
 async def list_l1_sessions(
     principal: MemoryReadDep,
@@ -349,9 +367,11 @@ async def list_l1_sessions(
     """活跃 L1 会话列表（★ GET /memory/l1，B8-WB 断头补齐 2026-10-04；前端 listL1 消费方）：
     数据源=L1 Redis 三键空间 SCAN 聚合（与 GET /memory/l1/{session_id} 同源 RedisL1Store，
     会话维聚合，见 data.l1.list_sessions）；title 为块级代理（会话权威标题归 agent sessions 表，
-    read_l1_snapshot 同款分期口径）；Redis 降级 → items=[]（容量卡空态，不阻塞页面）。"""
+    read_l1_snapshot 同款分期口径）；Redis 降级 → data=[]（容量卡空态，不阻塞页面）。
+    信封 {data, meta:{page,page_size,total}}（api/01 §3.1，B1 批统一）；total=len(data)（v1 口径）。"""
     sessions = await l1.list_sessions(principal.tenant_id, limit=limit)
-    return L1SessionListOut(items=[L1SessionOut.from_summary(s) for s in sessions])
+    items = [L1SessionOut.from_summary(s) for s in sessions]
+    return L1SessionListOut(data=items, meta=_page_meta(0, limit, len(items)))
 
 
 @router.get("/l1/{session_id}", summary="读 L1 工作记忆（blocks / window / state，memory §5.1）")
@@ -377,7 +397,9 @@ async def list_facts(
     facts = await _repo(db, principal.tenant_id).list_for_user(
         uid, status=status_filter, category=category, offset=offset, limit=limit
     )
-    return FactPageOut(items=[FactOut.from_domain(f) for f in facts], offset=offset, limit=limit)
+    items = [FactOut.from_domain(f) for f in facts]
+    # 信封 {data, meta}（api/01 §3.1，B1 批统一）；total=len(data)（仓储无 count，v1 口径）
+    return FactPageOut(data=items, meta=_page_meta(offset, limit, len(items)))
 
 
 @router.get("/facts/{fact_id}/timeline", summary="事实变更时间线（产生 / 升级 / 失效全程留痕，FR-MEM-06）")
@@ -436,7 +458,9 @@ async def list_promotions(
     用户缺省仅本人登记；他人 user_id → 403（audit 同款授权矩阵）。"""
     uid = _resolve_user(principal, user_id)
     rows = await query_promotions(db, tenant_id=principal.tenant_id, user_id=uid, offset=offset, limit=limit)
-    return PromotionPageOut(items=[_promotion_record_out(r) for r in rows], offset=offset, limit=limit)
+    items = [_promotion_record_out(r) for r in rows]
+    # 信封 {data, meta}（api/01 §3.1，B1 批统一）；total=len(data)（登记行投影无 count，v1 口径）
+    return PromotionPageOut(data=items, meta=_page_meta(offset, limit, len(items)))
 
 
 @router.get("/audit", summary="记忆审计查询（按 user/session 回放；管理员全租户，用户仅本人）")
@@ -458,7 +482,9 @@ async def memory_audit(
     rows = await query_memory_audit(
         db, tenant_id=principal.tenant_id, user_id=actor, session_id=session_id, offset=offset, limit=limit
     )
-    return AuditPageOut(items=[AuditEntryOut(**r) for r in rows], offset=offset, limit=limit)
+    items = [AuditEntryOut(**r) for r in rows]
+    # 信封 {data, meta}（api/01 §3.1，B1 批统一）；total=len(data)（审计回放无 count，v1 口径）
+    return AuditPageOut(data=items, meta=_page_meta(offset, limit, len(items)))
 
 
 # ---------------------------------------------------------------- 内部
@@ -560,64 +586,68 @@ def _rec_fields(rec) -> dict:
     }
 
 
-@router.post("/records", response_model=dict)
-async def create_record(body: RecordCreateRequest, svc: Svc, tid: Tid) -> dict:
+@router.post("/records", response_model=RecordWriteEnvelope)
+async def create_record(body: RecordCreateRequest, svc: Svc, tid: Tid) -> RecordWriteEnvelope:
     try:
         rec = await svc.upsert_record(RecordUpsert(**{**body.model_dump(), "tenant_id": tid}), now=datetime.now(UTC))
     except ObservationOriginError as e:
         raise HTTPException(status_code=422, detail=str(e)) from e
-    return {"code": 0, "message": "ok", "data": RecordResponse(**_rec_fields(rec)).model_dump(mode="json")}
+    # 写入信封 {data}（api/01 §3.1，M4.6-D3 旧 {code,message,data} 信封废止）
+    return RecordWriteEnvelope(data=RecordResponse(**_rec_fields(rec)))
 
 
-@router.get("/records/{record_id}", response_model=dict)
-async def get_record(record_id: uuid.UUID, svc: Svc, tid: Tid) -> dict:
+@router.get("/records/{record_id}", response_model=RecordDetailEnvelope)
+async def get_record(record_id: uuid.UUID, svc: Svc, tid: Tid) -> RecordDetailEnvelope:
     rec = await svc.get_record(tid, record_id)
     if rec is None:
         raise HTTPException(status_code=404, detail="record not found")
-    return {"code": 0, "message": "ok", "data": RecordResponse(**_rec_fields(rec)).model_dump(mode="json")}
+    # 详情信封 {data, meta:{}}（对齐 kb 详情模式；M4.6-D3 旧信封废止）
+    return RecordDetailEnvelope(data=RecordResponse(**_rec_fields(rec)))
 
 
-@router.post("/records/search", response_model=dict)
-async def search_records(body: SearchRequest, svc: Svc, tid: Tid) -> dict:
+@router.post("/records/search", response_model=RecordSearchEnvelope)
+async def search_records(body: SearchRequest, svc: Svc, tid: Tid) -> RecordSearchEnvelope:
     hits = await svc.search(SearchQuery(tenant_id=tid, **body.model_dump()), now=datetime.now(UTC))
-    data = [
-        SearchHitResponse(
-            record_id=h.record_id,
-            score=round(h.score, 6),
-            content=h.record.content,
-            record_type=str(h.record.record_type),
-            subject_iri=h.record.subject_iri,
-        ).model_dump(mode="json")
-        for h in hits
-    ]
-    return {"code": 0, "message": "ok", "data": data}
+    return RecordSearchEnvelope(
+        data=[
+            SearchHitResponse(
+                record_id=h.record_id,
+                score=round(h.score, 6),
+                content=h.record.content,
+                record_type=str(h.record.record_type),
+                subject_iri=h.record.subject_iri,
+            )
+            for h in hits
+        ]
+    )
 
 
-@router.get("/sessions/{session_id}/blocks", response_model=dict)
-async def get_blocks(session_id: uuid.UUID, svc: Svc, tid: Tid) -> dict:
+@router.get("/sessions/{session_id}/blocks", response_model=SessionBlocksEnvelope)
+async def get_blocks(session_id: uuid.UUID, svc: Svc, tid: Tid) -> SessionBlocksEnvelope:
     # TODO(M1)：校验 session 归属租户（服务签名加 tenant 维度属任务 7 范围，届时接线）
-    return {"code": 0, "message": "ok", "data": await svc.get_l1(session_id)}
+    return SessionBlocksEnvelope(data=await svc.get_l1(session_id))
 
 
-@router.put("/sessions/{session_id}/blocks/{block}", response_model=dict)
-async def put_block(session_id: uuid.UUID, block: str, body: BlockPutRequest, svc: Svc, tid: Tid) -> dict:
+@router.put("/sessions/{session_id}/blocks/{block}", response_model=BlockWriteEnvelope)
+async def put_block(session_id: uuid.UUID, block: str, body: BlockPutRequest, svc: Svc, tid: Tid) -> BlockWriteEnvelope:
     # TODO(M1)：校验 session 归属租户（服务签名加 tenant 维度属任务 7 范围，届时接线）
     await svc.write_l1(session_id, block, body.content)
-    return {"code": 0, "message": "ok", "data": None}
+    return BlockWriteEnvelope()  # 写面 {data:null}（v1 无回执体）
 
 
-@router.post("/sessions/{session_id}/settle", response_model=dict)
+@router.post("/sessions/{session_id}/settle", response_model=SettleEnvelope, response_model_exclude_none=True)
 async def settle_session(
     session_id: uuid.UUID,
     body: SettleRequest,
     pipe: Pipe,
     tid: Tid,
     x_user_id: str | None = Header(default=None, alias="X-User-Id"),
-) -> dict:
+) -> SettleEnvelope:
     """手动沉淀（在线路径，不过 IdleGate——§5.5.2 空闲调度只管后台自动沉淀）。
 
     幂等：确定性键 manual:{session_id}:{sha256(transcript)} 走登记闸门（与计划"组装走 settle_session_task"同语义），
-    重复提交短路返回 skipped，不重复调管线。
+    重复提交短路返回 skipped，不重复调管线。信封写面 {data}（M4.6-D3 旧信封废止；
+    exclude_none：成功面无 skipped 键，幂等面才有）。
     """
     pipeline, repo = pipe
     owner_user_id = _parse_optional_uuid(x_user_id)  # 归属用户（dev 头；非法值已静默忽略）
@@ -630,11 +660,7 @@ async def settle_session(
         "owner_user_id": str(owner_user_id) if owner_user_id else None,
     }
     if not await repo.register_task(tid, key, payload=payload):
-        return {
-            "code": 0,
-            "message": "ok",
-            "data": {"added": 0, "duplicates": 0, "to_review": 0, "skipped": "idempotent"},
-        }
+        return SettleEnvelope(data=SettleData(added=0, duplicates=0, to_review=0, skipped="idempotent"))
     result = await pipeline.settle_session(
         tenant_id=tid,
         session_id=session_id,
@@ -642,11 +668,7 @@ async def settle_session(
         now=datetime.now(UTC),
         owner_user_id=owner_user_id,
     )
-    return {
-        "code": 0,
-        "message": "ok",
-        "data": {"added": result.added, "duplicates": result.duplicates, "to_review": result.to_review},
-    }
+    return SettleEnvelope(data=SettleData(added=result.added, duplicates=result.duplicates, to_review=result.to_review))
 
 
 @router.get("/profile/{user_id}", summary="画像聚合视图（按 mem: 类型分组 top 置信事实，§5.2）")

@@ -61,11 +61,13 @@ async def test_GET_memory_l1_两会话聚合_条目字段与前端L1Session逐�
     await store.write_blocks(tenant, sid_b, [MemoryBlock(key="draft", title="草稿", content="step-2")])
     # Act
     out = await list_l1_sessions(principal=_principal(tenant), l1=store)
-    # Assert：两条目聚合
-    assert out.items is not None and len(out.items) == 2
-    assert {s.session_id for s in out.items} == {sid_a, sid_b}
+    # Assert：两条目聚合（信封 {data, meta:{page,page_size,total}}，M4.6-D3 B1 批统一；
+    # L1 SCAN 聚合无全量 count → total=len(data) v1 口径）
+    assert len(out.data) == 2 and out.meta.total == 2
+    assert out.meta.page == 1 and out.meta.page_size == 50
+    assert {s.session_id for s in out.data} == {sid_a, sid_b}
     # Assert：条目键集=前端 L1Session 逐字段（api.ts 契约面）
-    by_id = {s.session_id: s for s in out.items}
+    by_id = {s.session_id: s for s in out.data}
     item = by_id[sid_a]
     assert set(item.model_dump()) == {"session_id", "title", "ttl_total_s", "ttl_remaining_s", "blocks"}
     assert set(item.blocks[0].model_dump()) == {"key", "value", "masked"}
@@ -84,13 +86,13 @@ async def test_GET_memory_l1_两会话聚合_条目字段与前端L1Session逐�
 async def test_GET_memory_l1_空存储_空数组():
     empty_store = _store(fakeredis_aio.FakeRedis(decode_responses=True))
     out = await list_l1_sessions(principal=_principal(uuid4()), l1=empty_store)
-    assert out.items == []  # 契约形状：无活跃会话 → items=[]（非 404/非 null）
+    assert out.data == [] and out.meta.total == 0  # 契约形状：无活跃会话 → data=[]（非 404/非 null）
 
 
 async def test_GET_memory_l1_Redis降级_空数组不阻塞():
     store = _store(_BrokenRedis())
     out = await list_l1_sessions(principal=_principal(uuid4()), l1=store)
-    assert out.items == [] and store.degraded is True  # 降级契约：空列表 + 观测位（容量卡空态）
+    assert out.data == [] and store.degraded is True  # 降级契约：空列表 + 观测位（容量卡空态）
 
 
 async def test_GET_memory_l1_仅window会话不漏_租户隔离():
@@ -101,9 +103,9 @@ async def test_GET_memory_l1_仅window会话不漏_租户隔离():
     await store.write_blocks(uuid4(), uuid4(), [MemoryBlock(key="x", content="他租户噪声")])
     # Act / Assert：三键任一存在即活跃（仅 window 会话入列）；他租户键不入列
     out = await list_l1_sessions(principal=_principal(tenant), l1=store)
-    assert [s.session_id for s in out.items] == [sid_win]
-    assert out.items[0].blocks == [] and out.items[0].title == ""  # 无 blocks：空块行 + 空 title
-    assert out.items[0].ttl_remaining_s > 0  # TTL 取三键最大值（window 键续期生效）
+    assert [s.session_id for s in out.data] == [sid_win]
+    assert out.data[0].blocks == [] and out.data[0].title == ""  # 无 blocks：空块行 + 空 title
+    assert out.data[0].ttl_remaining_s > 0  # TTL 取三键最大值（window 键续期生效）
 
 
 async def test_GET_memory_l1_limit截断_TTL剩余降序():
@@ -114,8 +116,8 @@ async def test_GET_memory_l1_limit截断_TTL剩余降序():
         await store.write_blocks(tenant, sid, [MemoryBlock(key=f"k{i}", content=f"v{i}")])
     out = await list_l1_sessions(principal=_principal(tenant), l1=store, limit=2)
     # Assert：limit 截断；TTL 同值并列按 session_id 稳定序（可重放）
-    assert len(out.items) == 2
-    ttls = [s.ttl_remaining_s for s in out.items]
+    assert len(out.data) == 2 and out.meta.total == 2  # total=len(data)（SCAN 聚合无 count，v1 口径）
+    ttls = [s.ttl_remaining_s for s in out.data]
     assert ttls == sorted(ttls, reverse=True)
-    ids = [str(s.session_id) for s in out.items]
+    ids = [str(s.session_id) for s in out.data]
     assert ids == sorted(ids)

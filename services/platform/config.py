@@ -198,6 +198,11 @@ class Settings(BaseSettings):
     sandbox_snapshot_retain_hours: int = 72  # 快照保留期（Sandbox §5.5）
     sandbox_max_active: int = 11  # 16G lite 档小档并发上限（含池；v1 不超卖）
 
+    # 技能集市（模块 12；docs/Agent/14 §6 S2）：仓库资产扫描根——空串=缺省用模块定位
+    # （services/skills 资产目录原位即数据源，14 §1 裁决）；部署形态资产外置时以
+    # 绝对路径覆盖（OA_SKILLS_REPO_ROOT）。
+    skills_repo_root: str = ""
+
     @property
     def pg_dsn(self) -> str:
         return f"postgresql+psycopg://{self.pg_user}:{self.pg_password}@{self.pg_host}:{self.pg_port}/{self.pg_db}"

@@ -1,6 +1,6 @@
 import '@testing-library/jest-dom/vitest'
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
-import { afterEach, beforeAll, afterAll, describe, expect, it } from 'vitest'
+import { afterEach, beforeAll, describe, expect, it } from 'vitest'
 import { delay, http, HttpResponse } from 'msw'
 import { App } from '@/app/App'
 import { server } from '@/mocks/node'
@@ -24,27 +24,11 @@ beforeAll(() => {
     }
   }
   ;(globalThis as unknown as { DOMMatrixReadOnly: unknown }).DOMMatrixReadOnly ??= DOMMatrixReadOnlyMock
-  // MSW 启停兼容两种基建形态：全局 setupFile（src/mocks/node-setup.ts）已接管时文件内再
-  // listen 会触发「cannot configure an already enabled network」——捕获后交由全局生命周期
-  try {
-    server.listen({ onUnhandledRequest: 'bypass' })
-  } catch {
-    /* 已由全局 setupFile 启用 */
-  }
 })
 afterEach(() => {
-  server.resetHandlers()
   cleanup()
   localStorage.clear()
   useAuthStore.getState().clearSession()
-})
-afterAll(() => {
-  // 全局 setupFile 先注册的 afterAll 已关闭时，文件内重复 close 不再抛错
-  try {
-    server.close()
-  } catch {
-    /* 已由全局 setupFile 关闭 */
-  }
 })
 
 /** S8 状态切片 · 工作流域（s8-states）：MSW 注入延迟（不动 src/mocks/handlers.ts）。

@@ -1,4 +1,5 @@
 import { memo, useCallback, useEffect, useMemo, useState } from 'react'
+import { motion } from 'framer-motion'
 import {
   Background,
   Controls,
@@ -52,10 +53,16 @@ export interface GraphNodeBiz {
   kind: GraphNodeKind
   /** 分类色键（四色分类：object/device/fault/event/workorder/area/rule/constraint…） */
   category?: string
-  /** 类型徽标文案 */
-  badge?: string
+  /** 类型徽标文案（文本如「抽象」；实例数徽标传数字，gcount 口径 41 篇 V2） */
+  badge?: string | number
   iri?: string
   hit?: boolean
+  /** pending 层标记（本体工作台本地候选：新建类未提交评审前合成上图） */
+  pending?: boolean
+  /** 入场动画标记（pending 新建/引用上屏节点置 true，仅该类节点播入场动画） */
+  entering?: boolean
+  /** 草稿级标删（pendingDeletes）：虚线 + 降透明呈现，评审通过后才真删 */
+  deleted?: boolean
   /** 缺省位置走内置确定性分层布局 */
   position?: { x: number; y: number }
 }
@@ -102,6 +109,10 @@ export interface GraphCanvasProps {
   onNodeContextMenu?: (nodeId: string, pos: { x: number; y: number }) => void
   /** 画布空白区（pane）右键回调（pos 同上） */
   onPaneContextMenu?: (pos: { x: number; y: number }) => void
+  /** 拖放落点回调（HTML5 DnD，opt-in）：封装层 screenToFlowPosition 换算业务坐标后
+   *  透出，页面零 xyflow 概念。事件原样透传——自定义 dataTransfer 数据仅 drop 阶段
+   *  可读（dragover 期只能读 types 探测类型），由页面在回调内消费。 */
+  onDropAt?: (biz: { x: number; y: number }, e: DragEvent) => void
   /** 拖拽框选多选（opt-in，默认 false）：开启后左键拖拽=框选，左上提示「拖拽框选」。
    *  平移限定中键：xyflow v12 中 selectionOnDrag 与 panOnDrag=true 互斥（FlowRenderer
    *  `_selectionOnDrag = selectionOnDrag && panOnDrag !== true`，dist/esm/index.js:2121），
@@ -148,13 +159,17 @@ interface OntoNodeData extends Record<string, unknown> {
   sub?: string
   kind: GraphNodeKind
   category?: string
-  badge?: string
+  badge?: string | number
   iri?: string
   hit?: boolean
   /** highlightIds 驱动的视觉描边（与 xyflow selected 语义解耦） */
   highlighted?: boolean
   /** dimUnhighlight：命中集外弱化（gc-dim；恒为 boolean 保持 data 键集稳定） */
   dimmed?: boolean
+  /** 草稿级标删视觉（gc-deleted：虚线+降透明；恒为 boolean 保持 data 键集稳定） */
+  deleted?: boolean
+  /** 入场动画标记（OntoNodeCard 内部消费，仅 entering 节点播一次） */
+  entering?: boolean
   flashing?: boolean
   pulsing?: boolean
 }
@@ -179,14 +194,18 @@ function nodePropsEqual(a: NodeProps, b: NodeProps): boolean {
   )
 }
 
-/** 类/实体节点卡（画板 .gnode 形态：分类色左缘 + 名称 + 类型徽标 + IRI 副行） */
+/** 类/实体节点卡（画板 .gnode 形态：分类色左缘 + 名称 + 类型徽标 + IRI 副行）。
+ *  entering 节点包 framer-motion 入场（opacity 0→1 + scale 0.92→1，240ms ease-out），
+ *  只包内层卡不碰 xyflow wrapper 的 transform；动画只播一次（动画完落回普通卡——
+ *  onlyRenderVisibleElements 虚拟化滚动出入会重挂载，无一次性守卫会反复重播）。 */
 const OntoNodeCard = memo(function OntoNodeCard({ data, selected }: NodeProps) {
   const d = data as OntoNodeData
   const color = categoryColor(d.category)
   const active = d.hit || d.highlighted || selected
-  return (
+  const [entered, setEntered] = useState(false)
+  const card = (
     <div
-      className={`gc-node rounded-xl border bg-surface px-3 py-2 ${d.flashing ? 'gc-flash' : ''} ${d.pulsing ? 'pulse-ring' : ''} ${d.dimmed ? 'gc-dim' : ''}`}
+      className={`gc-node rounded-xl border bg-surface px-3 py-2 ${d.flashing ? 'gc-flash' : ''} ${d.pulsing ? 'pulse-ring' : ''} ${d.dimmed ? 'gc-dim' : ''} ${d.deleted ? 'gc-deleted' : ''}`}
       data-flashing={d.flashing ? 'true' : undefined}
       style={{
         borderColor: active ? 'var(--accent)' : 'var(--separator)',
@@ -201,12 +220,25 @@ const OntoNodeCard = memo(function OntoNodeCard({ data, selected }: NodeProps) {
       <div className="flex items-center gap-1.5">
         <span className="dot flex-none" style={{ background: color, width: 7, height: 7 }} aria-hidden />
         <b className="truncate text-xs leading-4">{d.label}</b>
-        {d.badge && <span className="badge b-gray ml-auto flex-none">{d.badge}</span>}
+        {d.badge !== undefined && d.badge !== '' && <span className="badge b-gray ml-auto flex-none">{d.badge}</span>}
       </div>
       {d.sub && <div className="mono mt-0.5 truncate text-2xs leading-3.5 text-label-3">{d.sub}</div>}
       <Handle type="source" position={Position.Right} style={{ opacity: 0 }} isConnectableEnd={false} />
     </div>
   )
+  if (d.entering && !entered) {
+    return (
+      <motion.div
+        initial={{ opacity: 0, scale: 0.92 }}
+        animate={{ opacity: 1, scale: 1 }}
+        transition={{ duration: 0.24, ease: 'easeOut' }}
+        onAnimationComplete={() => setEntered(true)}
+      >
+        {card}
+      </motion.div>
+    )
+  }
+  return card
 }, nodePropsEqual)
 
 /** 约束节点（SHACL shape = 菱形；短标签居中） */
@@ -279,6 +311,8 @@ const GC_CSS = `
 .gc-flash{animation:gc-flash .9s var(--ease) 3}
 .gc-node{transition:border-color var(--dur-1) var(--ease),box-shadow var(--dur-1) var(--ease),opacity var(--dur-1) var(--ease)}
 .gc-dim{opacity:.35}
+/* 草稿级标删（pendingDeletes）：虚线 + 降透明（提交评审通过后才真删，26 篇 IX-ON 画布右键） */
+.gc-deleted{opacity:.4;border-style:dashed}
 .react-flow__edge{transition:opacity var(--dur-1) var(--ease)}
 .react-flow__controls{border:1px solid var(--separator);border-radius:10px;overflow:hidden;box-shadow:var(--sh-card)}
 .react-flow__controls-button{background:var(--surface);border-bottom:1px solid var(--separator);width:26px;height:26px}
@@ -292,11 +326,36 @@ function InnerCanvas(props: GraphCanvasProps) {
     nodes, edges, profile, focusId, highlightIds, flashIds, pulseIds,
     onNodeClick, onNodeDoubleClick, onConnect, onSelectionChange: onSelectionChangeProp, nodeTypes,
     onNodeContextMenu: onNodeContextMenuProp, onPaneContextMenu: onPaneContextMenuProp,
+    onDropAt: onDropAtProp,
     boxSelection, dimUnhighlight,
     showMiniMap, showControls, zoomOnScroll, preventScrolling, fitKey, onReady,
     className, testId,
   } = props
   const rf = useReactFlow()
+
+  // 拖放落点（onDropAt opt-in）：dragover preventDefault 才允许 drop（HTML5 DnD 规范）；
+  // drop 时 screenToFlowPosition 换算业务坐标后透出（React 合成事件断言为原生 DragEvent——
+  // dataTransfer 形状一致，页面只读 getData/types）
+  const handleDragOver = useCallback(
+    (e: React.DragEvent<HTMLDivElement>) => {
+      if (!onDropAtProp) return
+      e.preventDefault()
+      e.dataTransfer.dropEffect = 'copy'
+    },
+    [onDropAtProp],
+  )
+  const handleDrop = useCallback(
+    (e: React.DragEvent<HTMLDivElement>) => {
+      if (!onDropAtProp) return
+      e.preventDefault()
+      const p = rf.screenToFlowPosition({ x: e.clientX, y: e.clientY })
+      // 有限性守卫：视口未初始化时换算可能产生 NaN（jsdom 实测），NaN 落位会毒化节点
+      // transform——不可换算就不透出回调（真实浏览器 transform 恒有限，不触发）
+      if (!Number.isFinite(p.x) || !Number.isFinite(p.y)) return
+      onDropAtProp({ x: Math.round(p.x), y: Math.round(p.y) }, e as unknown as DragEvent)
+    },
+    [onDropAtProp, rf],
+  )
 
   // 闪烁/脉冲自动熄灭：tick 到点后置空集合（重渲关闭动画）
   const [flashOff, setFlashOff] = useState(false)
@@ -401,6 +460,7 @@ function InnerCanvas(props: GraphCanvasProps) {
         label: n.label, sub: n.sub, kind: n.kind, category: n.category,
         badge: n.badge, iri: n.iri, hit: n.hit,
         highlighted: hl.has(n.id), dimmed: !!hitNodeIds && !hitNodeIds.has(n.id),
+        deleted: !!n.deleted, entering: !!n.entering,
         flashing: fl.has(n.id), pulsing: pu.has(n.id),
       },
     }))
@@ -478,7 +538,12 @@ function InnerCanvas(props: GraphCanvasProps) {
   const isOntostudio = profile === 'ontostudio'
 
   return (
-    <div className={`h-full w-full ${className ?? ''}`} data-testid={testId}>
+    <div
+      className={`h-full w-full ${className ?? ''}`}
+      data-testid={testId}
+      onDragOver={handleDragOver}
+      onDrop={handleDrop}
+    >
       <style>{GC_CSS}</style>
       <ReactFlow
         nodes={flowNodes}

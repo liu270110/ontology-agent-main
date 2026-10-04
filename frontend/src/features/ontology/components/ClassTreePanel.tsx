@@ -18,6 +18,9 @@ export const TREE_TABS: { key: TreeTab; label: string }[] = [
   { key: 'rules', label: '规则' },
 ]
 
+/** 类树拖入画布的 HTML5 DnD MIME（消费方 CanvasPane.onDropAt） */
+export const DRAG_MIME_CLASS = 'application/x-onto-class'
+
 interface ArborClass {
   id: string
   name: string
@@ -70,8 +73,15 @@ function ClassRow({ node, style, isSelected, onFocus }: NodeRendererProps<ArborC
       onClick={() => node.select()}
     >
       <span
-        className="flex-none cursor-grab text-label-3 opacity-0 transition-opacity group-hover:opacity-100"
-        title="拖拽把手：拖入画布建节点"
+        draggable
+        onDragStart={e => {
+          // 把手拖拽 ≠ arborist 行拖拽：stopPropagation 阻断行级重排语义（41 篇 V1 拖入上屏）
+          e.stopPropagation()
+          e.dataTransfer.setData(DRAG_MIME_CLASS, data.iri)
+          e.dataTransfer.effectAllowed = 'copy'
+        }}
+        className="flex-none cursor-grab text-label-3 opacity-0 transition-opacity group-hover:opacity-100 active:cursor-grabbing"
+        title="拖拽把手：拖入画布上屏引用"
       >
         <GripVertical size={11} aria-hidden />
       </span>
@@ -136,7 +146,14 @@ export function ClassTreePanel({
 
   const classes = classesQ.data?.items ?? []
   const treeData = toArbor(classes)
-  const counts = { classes: classes.length, properties: propsQ.data?.items.length ?? 32, axioms: axiomsQ.data?.items.length ?? 6, rules: rulesQ.data?.items.length ?? 9 }
+  // 38 号对账 L 组：计数只吃真实查询结果——查询未返回（tab 懒加载/加载中）不渲染数字，
+  // 不再回退 32/6/9 假数据（不造假数字；返回空数组则如实显示 0）
+  const counts: Record<TreeTab, number | null> = {
+    classes: classesQ.data ? classes.length : null,
+    properties: propsQ.data ? propsQ.data.items.length : null,
+    axioms: axiomsQ.data ? axiomsQ.data.items.length : null,
+    rules: rulesQ.data ? rulesQ.data.items.length : null,
+  }
 
   const props = propsQ.data?.items ?? []
   const domains = [...new Set(props.map(p => p.domain_label))]
@@ -155,7 +172,8 @@ export function ClassTreePanel({
               tab === t.key ? 'bg-accent-soft font-semibold text-accent' : 'text-label-2 hover:bg-surface-2'
             }`}
           >
-            {t.label} <span className="mono text-2xs text-label-3">{counts[t.key]}</span>
+            {t.label}
+            {counts[t.key] != null && <span className="mono text-2xs text-label-3">{counts[t.key]}</span>}
           </button>
         ))}
         <button

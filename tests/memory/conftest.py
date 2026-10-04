@@ -136,10 +136,14 @@ async def mem_seed() -> AsyncIterator[MemorySeed]:
     yield seed
     async with factory() as db, db.begin():
         from services.memory.data.orm import MemoryL2Fact as MemoryL2FactORM
+        from services.memory.data.orm import MemoryL2FactInvalidation as MemoryL2FactInvalidationORM
 
         await db.execute(
             text("DELETE FROM audit_logs WHERE tenant_id = CAST(:tid AS uuid)"), {"tid": str(tenant_id)}
         )  # ★ 端点副作用（promotions 登记行）先于租户清理（FK 逆序，standards/01 §2.9）
+        await db.execute(
+            delete(MemoryL2FactInvalidationORM).where(MemoryL2FactInvalidationORM.tenant_id == tenant_id)
+        )  # K2-a 影子行（无 FK，先于主表清理防跨用例残留）
         await db.execute(delete(MemoryL2FactORM).where(MemoryL2FactORM.tenant_id == tenant_id))
         await db.execute(delete(SessionORM).where(SessionORM.tenant_id == tenant_id))
         await db.execute(delete(AgentORM).where(AgentORM.id == agent.id))

@@ -50,10 +50,19 @@ def test_事实构造期自动计算指纹_且随内容赋值重算():
 
 def test_invalidate_墓碑_置状态并写valid_to_终态不可再迁移():
     fact = _fact()
-    fact.invalidate(NOW)
+    fact.invalidate(NOW, reason="信息过期")  # K2-a：reason 必填（§11.1）
     assert fact.status is FactStatus.INVALIDATED and fact.valid_to == NOW
     with pytest.raises(FactStateError):
         fact.supersede(uuid4(), NOW)  # invalidated 为终态（不物理删除、不可再变）
+
+
+def test_invalidate_reason必填_空缺与空白一律ValueError():
+    fact = _fact()
+    with pytest.raises(ValueError, match="reason"):
+        fact.invalidate(NOW, reason="")  # 缺失拒绝（§11.1 无 reason 拒绝失效）
+    with pytest.raises(ValueError, match="reason"):
+        fact.invalidate(NOW, reason="   ")  # 纯空白等价缺失（领域层 fail-closed）
+    assert fact.status is FactStatus.ACTIVE and fact.valid_to is None  # 拒绝即无副作用
 
 
 def test_supersede_版本链_旧事实指向新事实():

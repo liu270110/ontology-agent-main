@@ -340,7 +340,10 @@ class MemoryCapabilityProvider:
             ),
             CapabilityDescriptor(
                 name="memory.invalidate",
-                description="失效标记（墓碑式软删：置 invalidated 并写 valid_to，不物理删除；重复失效返回原状态）",
+                description=(
+                    "失效标记（墓碑式软删：置 invalidated 并写 valid_to，不物理删除；reason 必填；"
+                    "重复失效返回原状态；影子表归档随 K2-a）"
+                ),
                 required_scopes=("memory:write",),
                 annotations={"readOnlyHint": False, "destructiveHint": True, "idempotentHint": True},
                 semantic={"x-ontology": {"irreversible": "tombstone", "physical_delete": False}},
@@ -457,12 +460,19 @@ class MemoryCapabilityProvider:
         from datetime import UTC, datetime
 
         fact_id = _parse_uuid(params.get("fact_id"), "fact_id")
+        # K2-a §11.1：reason 必填（与 memory api 同一领域红线，无 reason 拒绝失效）
+        reason = str(params.get("reason") or "").strip()
+        if not reason:
+            raise CapabilityError(3001, "reason 必填（无 reason 拒绝失效，memory §11.1）")
         async with self._l2_for(ctx, commit=True) as repo:
             fact = await repo.get(fact_id)
             if fact is None:  # 未命中或跨租户一律不存在（不泄露存在性，memory api 同款口径）
                 raise CapabilityError(3001, "记忆事实不存在")
             if fact.status.value != "invalidated":  # 幂等：已失效重复提交原样返回
-                fact.invalidate(datetime.now(UTC))
+                now = datetime.now(UTC)
+                fact.invalidate(now, reason=reason)
+                # 失效即归档：影子行与 save_state 同事务（§11.1 断链防线，api 层同款）
+                await repo.archive_invalidated(fact, reason=reason, invalidated_at=now)
                 await repo.save_state(fact)
         valid_to = fact.valid_to.isoformat() if fact.valid_to else None
         return {"fact_id": str(fact.id), "status": "invalidated", "valid_to": valid_to}

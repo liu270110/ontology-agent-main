@@ -95,7 +95,7 @@ async def test_L2_invalidate墓碑_状态置invalidated且写valid_to_未命中4
         # Act：invalidate（聚合方法 + save_state）
         loaded = await repo.get(fact.id)
         assert loaded is not None
-        loaded.invalidate(NOW)
+        loaded.invalidate(NOW, reason="信息过期")  # K2-a：reason 必填（§11.1）
         await repo.save_state(loaded)
         await db.commit()
         # Assert：墓碑留痕可审计查询（不物理删除）
@@ -112,7 +112,7 @@ async def test_L2_列表过滤_status_category(mem_seed):
     f1 = _fact(mem_seed, "事实甲", category=FactCategory.FACT)
     f2 = _fact(mem_seed, "偏好乙", category=FactCategory.PREFERENCE)
     f3 = _fact(mem_seed, "失效丙", category=FactCategory.FACT)
-    f3.invalidate(NOW)
+    f3.invalidate(NOW, reason="信息过期")  # K2-a：reason 必填（§11.1）
     async with mem_seed.factory() as db:
         repo = mem_seed.repo(db)
         await repo.add(f1)

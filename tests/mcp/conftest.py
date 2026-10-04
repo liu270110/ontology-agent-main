@@ -36,6 +36,7 @@ class FakeL2Repo:
     def __init__(self) -> None:
         self.facts: dict[uuid.UUID, L2Fact] = {}
         self.save_calls = 0
+        self.invalidations: dict[uuid.UUID, dict] = {}  # K2-a：fact_id → 影子行（reason/invalidated_at/restored_at）
 
     async def get(self, fact_id: uuid.UUID) -> L2Fact | None:
         return self.facts.get(fact_id)
@@ -49,6 +50,29 @@ class FakeL2Repo:
     async def save_state(self, fact: L2Fact) -> None:
         self.facts[fact.id] = fact
         self.save_calls += 1
+
+    async def archive_invalidated(self, fact: L2Fact, *, reason: str, invalidated_at) -> None:
+        """K2-a 失效即归档（内存影子行；与 PG 版同契约：reason 必填、restored_at 置空）。"""
+        if not (reason and reason.strip()):
+            raise ValueError("失效影子行 reason 必填（§11.1）")
+        self.invalidations[fact.id] = {
+            "fact_id": fact.id,
+            "content": fact.content,
+            "reason": reason,
+            "invalidated_at": invalidated_at,
+            "restored_at": None,
+        }
+
+    async def list_invalidated(self, user_id: uuid.UUID, *, active_only=True, offset=0, limit=50):
+        rows = [r for r in self.invalidations.values() if not active_only or r["restored_at"] is None]
+        return rows[offset : offset + limit]
+
+    async def restore(self, fact_id: uuid.UUID, *, now) -> dict | None:
+        row = self.invalidations.get(fact_id)
+        if row is None or row["restored_at"] is not None:
+            return None
+        row["restored_at"] = now
+        return row
 
     async def list_for_user(self, user_id: uuid.UUID, *, status=None, category=None, offset=0, limit=20):
         return list(self.facts.values())[offset : offset + limit]

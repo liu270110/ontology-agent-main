@@ -265,6 +265,10 @@ async function apiFetchEnvelope<T>(path: string, init?: RequestInit): Promise<T>
   if (res.status === 429) {
     throw new ApiError(1005, '请求过于频繁', 429, Number(res.headers.get('Retry-After') ?? 0))
   }
+  // 204 No Content（live DELETE /sessions/{id}/members/{mid} 等）：成功无体 → {data:null} 放行。
+  // 原实现走 res.json()=null → 「!body」误判为失败抛 HTTP 204——live 实测 2026-10-05 契约
+  // （oa_openapi DELETE members 仅 204 响应），成功态不得当错误抛（fe-exec-ui 接真批）。
+  if (res.status === 204) return { data: null } as T
   const body = (await res.json().catch(() => null)) as (Envelope<unknown> & { meta?: unknown }) | null
   if (!res.ok || !body) {
     throw new ApiError(body?.code ?? -1, body?.message ?? `HTTP ${res.status}`, res.status)

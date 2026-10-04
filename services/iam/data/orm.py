@@ -1,9 +1,12 @@
-"""iam 模块 ORM：identity 5 表 + audit_logs（08 §3 只追加审计）+ admin 域 4 表。
+"""iam 模块 ORM：identity 5 表 + audit_logs（08 §3 只追加审计）+ admin 域 4 表 + me 域 4 表。
 
 DDL 权威：database/01 §3.1/§3.9；admin 域 4 表（user_groups / role_permission_matrix /
 model_channels / permission_requests）= 2026-10-05 admin 域批补录（迁移
 20261005_c5e9a1d3b7f5，契约源=frontend mock admin-handlers.ts + api/01 §5.8/§5.10 预登记行，
-database/01 表格补录随文档批）。"""
+database/01 表格补录随文档批）。
+me 域 4 表（user_preferences / device_sessions / totp_credentials / totp_backup_codes）=
+2026-10-05 me 域批补录（契约源=mock admin-handlers.ts 个人设置段 + platform-handlers.ts
+me/export 段 + api/01 §5.9 totp/§5.13 me/§5.15 ★ 行）。"""
 
 from __future__ import annotations
 
@@ -188,4 +191,74 @@ class PermissionRequest(Base, PkMixin, TenantMixin, TimestampMixin):
     __table_args__ = (
         CheckConstraint("status IN ('pending','approved','rejected')", name="ck_permission_requests_status"),
         Index("ix_permission_requests_tenant_status", "tenant_id", "status"),
+    )
+
+
+# ================================================================
+# me 域 4 表（2026-10-05 批；契约源=mock admin-handlers.ts 个人设置段 + platform-handlers.ts
+# me/export 段 + api/01 §5.9 totp / §5.13 me / §5.15 ★ 预登记行）
+# ================================================================
+
+
+class UserPreferences(Base, PkMixin, TenantMixin, TimestampMixin):
+    """个人偏好（api/01 §5.13 GET/PUT /me/preferences；mock PREFS 契约面）。
+
+    prefs=PUT 合并后的全量偏好 JSONB（language/timezone/department/notifications + S-AD
+    扩展字段 onboarding_done/chat_*/group_routing_*/memory_*——platform-handlers.ts 注记
+    「Object.assign 透传合并」同语义）；display_name 落 users.display_name（IX-SET-01 过渡
+    契约：§5.9 无用户自更新端点，偏好 PUT 兼写本人资料列）、email/totp_enabled 读时投影
+    （users.email / totp_credentials.enabled，不落本表防双源漂移）。"""
+
+    __tablename__ = "user_preferences"
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False)
+    prefs: Mapped[dict] = mapped_column(JSONB, default=dict, nullable=False)
+    __table_args__ = (UniqueConstraint("tenant_id", "user_id", name="uk_user_preferences_tenant_id_user_id"),)
+
+
+class DeviceSession(Base, PkMixin, TenantMixin, TimestampMixin):
+    """设备会话（api/01 §5.13 GET /me/sessions + §5.15 POST /me/sessions/{id}/revoke）。
+
+    login 签发令牌时落行（§5.9 MFA 注记「联动 §5.8 设备会话列表」的存储面）；
+    access_jti/refresh_jti=登录时那对令牌的 jti（吊销即拉黑两件，refresh 轮换后的覆盖
+    缺口随 08 §10 令牌族会话化收口）；revoked_at 非空=已下线（列表不回，审计留痕）。"""
+
+    __tablename__ = "device_sessions"
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False)
+    name: Mapped[str] = mapped_column(String(128), nullable=False)  # UA 摘要（mock 'Chrome · macOS' 同形）
+    location: Mapped[str] = mapped_column(String(128), nullable=False, default="未知")  # M1 无 geo 探测，占位
+    access_jti: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    refresh_jti: Mapped[str] = mapped_column(String(64), nullable=False)
+    last_active_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    __table_args__ = (Index("ix_device_sessions_tenant_user", "tenant_id", "user_id"),)
+
+
+class TotpCredential(Base, PkMixin, TenantMixin, TimestampMixin):
+    """TOTP 凭据（api/01 §5.9 setup/enable/disable + §5.15 backup-codes）。
+
+    secret=base32（RFC 6238）；两步式：setup 落行 enabled=false（pending），enable 校验
+    6 位码通过后置 true。secret 明文落库为 M1 已知缺口（静态加密随密钥管理批收口，
+    08 §2.0 密钥红线以「不回传、不日志」为界，同 api-keys 先例）。"""
+
+    __tablename__ = "totp_credentials"
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False)
+    secret: Mapped[str] = mapped_column(String(64), nullable=False)  # base32 无填充
+    enabled: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    enabled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    __table_args__ = (UniqueConstraint("tenant_id", "user_id", name="uk_totp_credentials_tenant_id_user_id"),)
+
+
+class TotpBackupCode(Base, PkMixin, TenantMixin):  # 只追加消费（used_at 一次性核销）
+    """TOTP 备份码（§5.9 enable 签发 / §5.15 backup-codes 重生成：旧集作废）。
+
+    安全红线（32 篇 invite token 同款）：库只存 sha256(code) hex，明文仅在签发响应
+    出现一次；used_at 非空=已消费（disable 时全集作废随 enabled=false 语义）。"""
+
+    __tablename__ = "totp_backup_codes"
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False)
+    code_hash: Mapped[str] = mapped_column(String(64), nullable=False)  # sha256 hex
+    used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    __table_args__ = (
+        UniqueConstraint("user_id", "code_hash", name="uk_totp_backup_codes_user_id_code_hash"),
+        Index("ix_totp_backup_codes_tenant_user", "tenant_id", "user_id"),
     )

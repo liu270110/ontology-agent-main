@@ -7,10 +7,13 @@
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass, field
 from typing import Any, Protocol, runtime_checkable
 
 from services.sandbox.runtime.types import Scenario, TrustLevel
+
+logger = logging.getLogger(__name__)
 
 
 class SandboxRuntimeError(Exception):
@@ -23,6 +26,45 @@ class BackendUnavailableError(SandboxRuntimeError):
 
 class ExecLimitError(SandboxRuntimeError):
     """执行超限（超时 / 输出配额 / pids）——超限即终止并留痕（Sandbox §7.1）。"""
+
+
+# 宿主 env 刷洗表（K5 门 3，方案依据=docs/Agent/13 §10；上游参照 prime-agent #3345 env
+# 剥离表 + deer-flow 宿主刷洗 §7）：沙箱是不可信执行面，宿主凭证族变量直灌即泄漏面——
+# GIT_ASKPASS/GIT_SSH* 可劫持 git 凭证助手与传输，SSH_AUTH_SOCK 可借宿主 agent 签名，
+# *_TOKEN/*_API_KEY/*_SECRET 是云与 LLM 供应商凭证族；命中即剥离并告警（先于容器组装）。
+HOST_ENV_DENYLIST: frozenset[str] = frozenset(
+    {
+        "GIT_ASKPASS",
+        "GIT_SSH",
+        "GIT_SSH_COMMAND",
+        "GIT_HTTP_LOW_SPEED_LIMIT",
+        "GIT_HTTP_LOW_SPEED_TIME",
+        "SSH_AUTH_SOCK",
+        "GITHUB_TOKEN",
+        "GH_TOKEN",
+        "AWS_ACCESS_KEY_ID",
+        "AWS_SECRET_ACCESS_KEY",
+        "AWS_SESSION_TOKEN",
+        "AZURE_CLIENT_SECRET",
+        "GOOGLE_APPLICATION_CREDENTIALS",
+        "OPENAI_API_KEY",
+        "ANTHROPIC_API_KEY",
+        "DEEPSEEK_API_KEY",
+        "HF_TOKEN",
+    }
+)
+
+
+def sanitize_env(env: dict[str, str]) -> tuple[dict[str, str], tuple[str, ...]]:
+    """宿主 env 刷洗（纯函数；K5 门 3）：命中 HOST_ENV_DENYLIST 即剥离并返回剥离清单。
+
+    不改入参（防御拷贝）；返回 (剥离后 env, 剥离变量名元组按命中序)。env 组装点
+    （docker_backend.create 容器直灌、spec_from_mapping 反序列化边界）统一先过本函数。
+    """
+    stripped = tuple(name for name in env if name in HOST_ENV_DENYLIST)
+    if not stripped:
+        return dict(env), ()
+    return {name: value for name, value in env.items() if name not in HOST_ENV_DENYLIST}, stripped
 
 
 @dataclass(frozen=True)
@@ -104,7 +146,16 @@ def assert_supported(backend: SandboxBackend, spec: ProvisionSpec) -> None:
 
 
 def spec_from_mapping(data: dict[str, Any]) -> ProvisionSpec:
-    """从 profile/配置字典构造（daemon 侧反序列化入口）。"""
+    """从 profile/配置字典构造（daemon 侧反序列化入口）。
+
+    env 可选透传（缺省空 dict 与既有调用零差），并在反序列化边界先过 K5 门 3 刷洗表
+    （命中剥离 + warning 告警）——入口拒绝严于容器组装点兜底。
+    """
+    env, stripped = sanitize_env({str(k): str(v) for k, v in (data.get("env") or {}).items()})
+    if stripped:
+        logger.warning(
+            "沙箱 spec 反序列化剥离宿主敏感 env: %s (instance=%s)", ",".join(stripped), data.get("instance_id")
+        )
     return ProvisionSpec(
         instance_id=str(data["instance_id"]),
         base_image=str(data.get("base_image", "docker.m.daocloud.io/library/python:3.12-slim")),
@@ -114,4 +165,5 @@ def spec_from_mapping(data: dict[str, Any]) -> ProvisionSpec:
         tmpfs_size_mb=int(data.get("tmpfs_size_mb", 64)),
         scenario=Scenario(str(data.get("scenario", "S0"))),
         trust_level=TrustLevel(str(data.get("trust_level", "T2"))),
+        env=env,
     )

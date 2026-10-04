@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import asyncio
 import io
+import logging
 import tarfile
 import time
 from collections.abc import Callable
@@ -31,7 +32,10 @@ from .backend import (
     ProvisionSpec,
     SandboxHandle,
     SnapshotRef,
+    sanitize_env,
 )
+
+logger = logging.getLogger(__name__)
 
 _OUTPUT_LIMIT = 64 * 1024  # 单命令输出截断（Sandbox §7.1）
 
@@ -77,6 +81,12 @@ class DockerBackend:
 
     async def create(self, spec: ProvisionSpec) -> SandboxHandle:
         await asyncio.to_thread(self._ensure_network)
+        # K5 门 3：宿主 env 直灌容器前过刷洗表（命中剥离+告警，docs/Agent/13 §10）
+        env, stripped = sanitize_env(spec.env)
+        if stripped:
+            logger.warning(
+                "沙箱 env 刷洗剥离宿主敏感变量: %s (instance=%s)", ",".join(stripped), spec.instance_id
+            )
         name, volume = f"oa-sbx-{spec.instance_id}", f"oa-sbx-ws-{spec.instance_id}"
         await asyncio.to_thread(self._remove_stale_container, name)
         await asyncio.to_thread(self._remove_stale_volume, volume)
@@ -96,7 +106,7 @@ class DockerBackend:
             security_opt=["no-new-privileges"],
             tmpfs={"/tmp": f"rw,size={spec.tmpfs_size_mb}m"},  # 显式 size（PoC 发现：tmpfs 不计 cgroup OOM）
             volumes={volume: {"bind": "/workspace", "mode": "rw"}},
-            environment=dict(spec.env),
+            environment=env,  # 已过 K5 门 3 刷洗表（HOST_ENV_DENYLIST）
             labels={"oa.sandbox": spec.instance_id, "oa.trust": spec.trust_level.value},
             log_config=LogConfig(type=LogConfig.types.JSON, config={"max-size": "10m", "max-file": "1"}),
         )

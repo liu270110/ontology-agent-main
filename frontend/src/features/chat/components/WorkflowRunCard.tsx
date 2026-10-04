@@ -1,16 +1,62 @@
 import { useState } from 'react'
-import { ChevronDown, ChevronUp, Workflow } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
+import { Ban, Check, Clock, Hourglass, Loader2, SkipForward, Workflow, X } from 'lucide-react'
 import type { RunInfo, WorkflowNodeState } from '@/stores/session-store'
-import { WF_NODE_STATUS_UI, WF_NODE_TYPE_TEXT, fmtDuration, sortWfNodesRecent } from '../lib/exec-display'
+import { WF_NODE_TYPE_TEXT, fmtDuration, sortWfNodesRecent } from '../lib/exec-display'
 
-/** 工作流运行卡（40 篇 §5.2 WorkflowRunCard，N2）：头部=状态点+「工作流运行」+{done}/{total}
- *  节点+耗时；节点行=最近节点列表进行中置顶，>5 行折叠；waiting_approval 预留行样式（复用
- *  既有审批队列语义，不新造审批通道）。数据=W1a workflowRuns slice（runId → nodes 扁平
- *  Record）——n/m 由节点表派生（非 running/waiting_approval 计 done）；X16 前后端不发射，
- *  本卡自然不出现（空态纪律，不报错）。根 run 终态后折叠为一行摘要+深链。 */
+/** 工作流运行卡（40 篇 §5.2 N2 + 42 篇 W1b-4 合并版：v1 事件驱动，X16 前无 mock 依赖）。
+ *  props {runId, nodes, runStatus}：nodes=store.workflowRuns[runId].nodes（W1a 扁平 Record 的
+ *  行数组，exec-selectors.buildWfRunViews 派生），runId=workflow_run_id（/tasks?job= 深链必携），
+ *  runStatus=根 run 态（store runs[runId]）。
+ *  - 头部「工作流 · n/m 节点 · 耗时」：n=终态节点数（succeeded/failed/skipped/cancelled），
+ *    waiting_approval 属挂起不计完成；耗时=Σ节点 duration_ms（v1 无 run 级墙钟，诚实口径求和）；
+ *  - 节点行 = title+类型徽标（27 篇八类中文）+六态徽章（running/succeeded/failed/skipped/
+ *    waiting_approval/cancelled 全覆盖）+ attempt 次标 + 错误行内截断；active（running/
+ *    waiting_approval）置顶（sortWfNodesRecent）、余保开始次序；>5 折叠（40 篇）；
+ *  - waiting_approval=琥珀（令牌族无 amber，按最近近似 --orange 令牌）+「前往审批 →」链接
+ *    （复用审批卡处理入口，路由 /approvals）+ 卡尾等待提示（SLA 内未决将默认拒绝）；
+ *  - 根 run 终态（或全部节点到终态的缺帧兜底）→ 整卡折叠为一行摘要 +「查看执行」；
+ *  - 三按钮：查看运行 → /tasks?job={runId}；在画布中打开（X16 前占位 disabled）；
+ *    存为工作流（G8 裁决：disabled+title「随批次 C 开放」，42 篇 §4/§5）。
+ *  视觉：与 ToolCallCard/ChatArtifactCard 同语言（border-separator 卡 + 状态点 + text-2xs 元数据）。 */
 
-/** >5 行折叠阈值（§5.2「>5 行折叠」） */
-const MAX_VISIBLE_NODES = 5
+const COLLAPSED_VISIBLE = 5
+
+/** 节点排序用活跃集（waiting_approval 为挂起态，随 running 置顶；与 sortWfNodesRecent 同秩） */
+const NODE_ACTIVE: ReadonlySet<WorkflowNodeState['status']> = new Set(['running', 'waiting_approval'])
+
+/** 活跃/终态判定（n/m 的 m 分母=非活跃节点数） */
+const isNodeActive = (n: WorkflowNodeState) => NODE_ACTIVE.has(n.status)
+
+const NODE_BADGE: Record<WorkflowNodeState['status'], { text: string; cls: string; icon: typeof Check }> = {
+  running: { text: '运行中', cls: 'badge b-blue', icon: Loader2 },
+  succeeded: { text: '成功', cls: 'badge b-green', icon: Check },
+  failed: { text: '失败', cls: 'badge b-red', icon: X },
+  skipped: { text: '跳过', cls: 'badge b-gray', icon: SkipForward },
+  waiting_approval: { text: '待审批', cls: 'badge b-orange', icon: Hourglass },
+  cancelled: { text: '已取消', cls: 'badge b-gray', icon: Ban },
+}
+
+/** 节点状态点色（语义色走令牌类，亮暗自动跟随；琥珀位=--orange） */
+const NODE_DOT: Record<WorkflowNodeState['status'], string> = {
+  running: 'bg-accent animate-pulse',
+  succeeded: 'bg-green',
+  failed: 'bg-red',
+  skipped: 'bg-label-3',
+  waiting_approval: 'bg-orange animate-pulse',
+  cancelled: 'bg-label-3',
+}
+
+function NodeBadge({ status }: { status: WorkflowNodeState['status'] }) {
+  const b = NODE_BADGE[status]
+  const Icon = b.icon
+  return (
+    <span className={`${b.cls} flex-none`}>
+      <Icon size={9} aria-hidden className={status === 'running' ? 'animate-spin' : undefined} />
+      {b.text}
+    </span>
+  )
+}
 
 export function WorkflowRunCard({
   runId,
@@ -24,36 +70,37 @@ export function WorkflowRunCard({
   nodes: WorkflowNodeState[]
   /** 根 run 态（store runs[runId]，task_type=workflow_run 的根 run）：终态 → 折叠一行 */
   runStatus?: RunInfo['status']
-  /** 「查看执行」深链（宿主切右栏执行页签 TRACING 视图） */
+  /** 「查看执行」深链（宿主切右栏执行页签） */
   onOpenExecution?: () => void
 }) {
   if (nodes.length === 0) return null
-  return <WorkflowRunCardInner key={runId} nodes={nodes} runStatus={runStatus} onOpenExecution={onOpenExecution} />
+  return <WorkflowRunCardInner key={runId} runId={runId} nodes={nodes} runStatus={runStatus} onOpenExecution={onOpenExecution} />
 }
 
 function WorkflowRunCardInner({
+  runId,
   nodes,
   runStatus,
   onOpenExecution,
 }: {
+  runId: string
   nodes: WorkflowNodeState[]
   runStatus?: RunInfo['status']
   onOpenExecution?: () => void
 }) {
+  const navigate = useNavigate()
   const [expanded, setExpanded] = useState(false)
   const running = !runStatus || runStatus === 'running'
-  // n/m 由节点表派生：非 running/waiting_approval 计 done（终态口径，与卡片折叠一致）
   const total = nodes.length
-  const done = nodes.filter(n => n.status !== 'running' && n.status !== 'waiting_approval').length
+  const done = nodes.filter(n => !isNodeActive(n)).length
   // 全部节点到终态且根 run 无 running 态 → 视为完成（RUN_FINISHED 缺帧时的兜底折叠）
   const collapsed = !running || done === total
-  const headDot = !running
-    ? runStatus === 'failed' ? 'bg-red-500' : 'bg-green-500'
-    : 'bg-orange-400 animate-pulse'
+  const headDot = !running ? (runStatus === 'failed' ? 'bg-red' : 'bg-green') : 'bg-accent animate-pulse'
   const headState = !running ? (runStatus === 'failed' ? '失败' : '已完成') : '运行中'
+  // v1 无 run 级墙钟（WORKFLOW_NODE_* 无 run 时间字段）：Σ节点已报耗时，未报不显
   const totalMs = nodes.reduce((acc, n) => acc + (n.duration_ms ?? 0), 0)
-  const elapsedText = fmtDuration(totalMs)
-  const hasFailure = nodes.some(n => n.status === 'failed')
+  const totalLabel = fmtDuration(totalMs)
+  const waitingNode = nodes.find(n => n.status === 'waiting_approval')
 
   if (collapsed) {
     return (
@@ -61,14 +108,14 @@ function WorkflowRunCardInner({
         <div className="flex items-center gap-2">
           <span className={`h-2 w-2 flex-none rounded-full ${headDot}`} aria-hidden />
           <Workflow size={12} className="flex-none text-accent" aria-hidden />
-          <span className="truncate font-semibold">工作流运行</span>
-          <span data-testid="wf-run-summary" className={`flex-none font-mono text-label-3 ${hasFailure ? 'text-red' : ''}`}>
-            {headState} · {done}/{total} 节点{elapsedText ? ` · ${elapsedText}` : ''}
+          <span className="truncate font-semibold">工作流</span>
+          <span data-testid="wf-run-summary" className="flex-none font-mono text-label-3">
+            {headState} · {done}/{total} 节点{totalLabel ? ` · ${totalLabel}` : ''}
           </span>
           <button
             type="button"
             data-testid="wf-open-panel"
-            onClick={() => onOpenExecution?.()}
+            onClick={() => (onOpenExecution ? onOpenExecution() : navigate(`/tasks?job=${encodeURIComponent(runId)}`))}
             className="ml-auto flex-none text-2xs text-accent hover:underline"
           >
             查看执行 →
@@ -78,62 +125,100 @@ function WorkflowRunCardInner({
     )
   }
 
-  // 节点行：进行中置顶（sortWfNodesRecent），>5 折叠
+  // active（running/waiting_approval）置顶，其余保开始次序（sortWfNodesRecent 稳定排序）
   const ordered = sortWfNodesRecent(nodes)
-  const visible = expanded || ordered.length <= MAX_VISIBLE_NODES ? ordered : ordered.slice(0, MAX_VISIBLE_NODES)
+  const visible = expanded ? ordered : ordered.slice(0, COLLAPSED_VISIBLE)
   const hiddenCount = ordered.length - visible.length
 
   return (
     <div data-testid="wf-run-card" className="mb-2 rounded-lg border border-separator bg-surface-2 px-3 py-2 text-xs">
+      {/* 头部：状态点 + 「工作流 · n/m 节点 · 耗时」 */}
       <div className="flex items-center gap-2">
-        <span className={`h-2 w-2 flex-none rounded-full ${headDot}`} aria-hidden />
-        <Workflow size={12} className="flex-none text-accent" aria-hidden />
-        <span className="truncate font-semibold">工作流运行</span>
+        <Workflow size={12} aria-hidden className="flex-none text-accent" />
+        <span className="font-semibold text-label">工作流</span>
+        <span aria-hidden className={`h-2 w-2 flex-none rounded-full ${headDot}`} />
         <span data-testid="wf-run-state" className="flex-none text-label-3">{headState}</span>
-        <span data-testid="wf-run-progress" className="flex-none font-mono text-label-3">{done}/{total} 节点</span>
-        {elapsedText && <span className="flex-none font-mono text-label-3">{elapsedText}</span>}
+        <span data-testid="wf-run-progress" className="font-mono text-2xs text-label-3">
+          {done}/{total} 节点
+        </span>
+        {totalLabel && <span className="font-mono text-2xs text-label-3">耗时 {totalLabel}</span>}
       </div>
-      <div className="mt-1.5 flex flex-col">
+
+      <ul className="mt-1.5">
         {visible.map(n => (
-          <WfNodeRow key={n.node_id} node={n} />
+          <li key={n.node_id} data-testid={`wf-node-${n.node_id}`} className="py-0.5">
+            <div data-testid="wf-node-row" className="flex items-center gap-2">
+              <span aria-hidden className={`h-2 w-2 flex-none rounded-full ${NODE_DOT[n.status]}`} />
+              <span className="min-w-0 max-w-[40%] flex-none truncate font-medium text-label" title={n.node_id}>
+                {n.title ?? n.node_id}
+              </span>
+              {n.node_type && <span className="badge b-gray flex-none">{WF_NODE_TYPE_TEXT[n.node_type]}</span>}
+              {n.attempt != null && n.attempt > 1 && (
+                <span className="flex-none font-mono text-2xs text-label-3">r{n.attempt}</span>
+              )}
+              <NodeBadge status={n.status} />
+              {n.error && (
+                <span className="min-w-0 flex-1 truncate text-2xs text-red" title={n.error}>
+                  {n.error}
+                </span>
+              )}
+              {!n.error && <span className="min-w-0 flex-1" />}
+              {n.duration_ms != null && (
+                <span className="flex-none font-mono text-2xs text-label-3">{fmtDuration(n.duration_ms)}</span>
+              )}
+              {n.status === 'waiting_approval' && (
+                // G9（42 篇 §4）：waiting_approval 节点行挂审批入口——复用对话内审批卡处理文案，
+                // 深链审批中心（/approvals 路由已登记，App.tsx）
+                <button
+                  type="button"
+                  data-testid="wf-node-approval-link"
+                  title="对话内审批卡待处理；转人工工单在审批中心"
+                  onClick={() => navigate('/approvals')}
+                  className="flex-none text-2xs text-accent hover:underline"
+                >
+                  前往审批 →
+                </button>
+              )}
+            </div>
+          </li>
         ))}
-      </div>
+      </ul>
+      {waitingNode && (
+        <div className="mt-1 flex items-center gap-1 text-2xs text-orange">
+          <Clock size={9} aria-hidden />
+          节点 {waitingNode.title ?? waitingNode.node_id} 等待审批（SLA 内未决将默认拒绝）
+        </div>
+      )}
+
       {hiddenCount > 0 && (
         <button
           type="button"
-          data-testid="wf-run-expand"
-          onClick={() => setExpanded(true)}
-          className="mt-1 text-2xs text-label-3 hover:text-accent"
+          data-testid="wf-toggle"
+          onClick={() => setExpanded(v => !v)}
+          className="mt-1 text-2xs text-accent hover:underline"
         >
-          … 还有 {hiddenCount} 个节点（展开） <ChevronDown size={10} className="inline" aria-hidden />
+          … 还有 {hiddenCount} 个节点（{expanded ? '收起' : '展开'}）
         </button>
       )}
-      {expanded && ordered.length > MAX_VISIBLE_NODES && (
+
+      {/* 三按钮（40 篇 §5.2）：查看运行实链；画布/存为工作流为批次 C 占位（G8/X16） */}
+      <div className="mt-2 flex items-center gap-2 border-t border-separator pt-2">
         <button
           type="button"
-          data-testid="wf-run-collapse"
-          onClick={() => setExpanded(false)}
-          className="mt-1 text-2xs text-label-3 hover:text-accent"
+          data-testid="wf-open-tasks"
+          className="btn btn-g btn-sm"
+          title={`在任务中心查看本次运行（job=${runId}）`}
+          onClick={() => navigate(`/tasks?job=${encodeURIComponent(runId)}`)}
         >
-          收起 <ChevronUp size={10} className="inline" aria-hidden />
+          查看运行
         </button>
-      )}
-    </div>
-  )
-}
-
-/** 节点行：状态点+标题+类型徽标+重试次数+耗时；waiting_approval 待审批橙标（预留样式） */
-function WfNodeRow({ node }: { node: WorkflowNodeState }) {
-  const ui = WF_NODE_STATUS_UI[node.status]
-  const elapsed = fmtDuration(node.duration_ms)
-  return (
-    <div data-testid="wf-node-row" className="flex items-center gap-2 border-b border-separator/60 py-1 last:border-b-0">
-      <span className={`h-1.5 w-1.5 flex-none rounded-full ${ui.dot}`} aria-hidden />
-      <span className={`min-w-0 flex-none truncate font-medium ${ui.row ?? ''}`}>{node.title || node.node_id}</span>
-      <span className={`badge flex-none px-[6px] py-0 text-2xs ${ui.badge}`}>{ui.text}</span>
-      {node.node_type && <span className="badge b-gray flex-none px-[6px] py-0 text-2xs">{WF_NODE_TYPE_TEXT[node.node_type]}</span>}
-      {node.attempt != null && node.attempt > 1 && <span className="flex-none font-mono text-2xs text-label-3">重试 ×{node.attempt}</span>}
-      {elapsed && <span className="ml-auto flex-none font-mono text-2xs text-label-3">{elapsed}</span>}
+        <button type="button" data-testid="wf-open-canvas" className="btn btn-g btn-sm" disabled title="随批次 C 开放">
+          在画布中打开
+        </button>
+        <button type="button" data-testid="wf-save-template" className="btn btn-g btn-sm" disabled title="随批次 C 开放">
+          存为工作流
+        </button>
+      </div>
     </div>
   )
 }

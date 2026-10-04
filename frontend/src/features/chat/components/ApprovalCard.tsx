@@ -115,6 +115,18 @@ export function ApprovalCard({ runId }: { runId: string }) {
         const v = extractPending(d)
         // action=null（无待审批锚点，run 正常推进中）：静默等下一轮
         if (!v || stopped) return
+        // await 往返窗口内 SSE 主源可能已建卡（含 step_seq 等轮询载荷没有的字段）——
+        // 写前复检，已存在则仅并非空字段合并，不整卡覆盖（评审 P2-2 双写竞态守卫）
+        const existing = useSessionStore.getState().approvalPends?.[runId]
+        if (existing) {
+          useSessionStore.setState(s => ({
+            approvalPends: {
+              ...(s.approvalPends ?? {}),
+              [runId]: { ...existing, ...Object.fromEntries(Object.entries({ action_iri: v.action_iri, param_hash: v.param_hash, execution_mode: v.execution_mode, summary: v.summary, waiting_since: v.waiting_since }).filter(([, x]) => x != null)) },
+            },
+          }))
+          return
+        }
         useSessionStore.setState(s => ({
           approvalPends: {
             ...(s.approvalPends ?? {}),

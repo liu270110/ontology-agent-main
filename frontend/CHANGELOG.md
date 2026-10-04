@@ -10,6 +10,12 @@
 
 ### 新增
 
+- **四区信息架构（用户裁决）**：主页 `/`（功能交互）+ 平台页 `/platform`（浏览获取能力：四能力入口卡/精选插件/边界说明，PlatformShell 独立壳）+ 管理控制台 `/console`（收缩为治理+观测：审批中心/系统管理/审计）+ 用户设置 `/settings`；主导航增「独立页面」分组；market/tools/mcp/agents 迁 `/platform/*`（五条旧路径 redirect 查询串透传）；⌘K 自动收录
+- **设计稿 p-chat 重写为真单聊画框**（修复画框内容张冠李戴/高度截断/双 input-bar/压缩钮贴边四项）+ 新增 p-platform 画框 + p-admin/p-dashboard 侧栏四区化（docs/设计稿，仅本地）
+- **对话页对齐设计稿（S-B）**：输入栏五件套（附件/挂载禁用态/思考档位/模型 chip）+ 助手消息头（名称/模型/角色/时间+左缘来源色）+ Artifact 产物卡（artifact.created 事件贯通）+ 压缩钮常显分档
+- **主页与设置对齐（S-AD）**：主页页头快捷动作+新手三步引导卡（全完成写偏好隐藏）；设置 9 项（新增外观语言/对话偏好/记忆偏好/数据导出/账号 Danger Zone）
+- **五域对齐（S-EF）**：群聊高风险卡拒绝/转人工+成员分组+过滤接线；本体验证报告 Sheet+子类徽标；记忆容量卡+失效开关；任务计数 chips；KB 日志深链+向量口径
+
 - **工作流画布 Dify 式全幅改造（B5-C，用户裁决）**：ReactFlow `absolute inset-0` 占满编辑区（画布占宽比 0.97→0.99）；节点库改悬浮薄栏（48px 收起/280px 展开，原「八类节点」过滤条迁入面板 chips）；检查器改右上浮层卡（选中才渲染/可关闭/未选中画布全敞）；聚焦模式（编辑器挂载自动收起主侧栏、卸载恢复，header 增「← 返回」）；空画布引导浮层；测试基建双形态兼容（全局 setupFile 与文件内 listen try/catch 守卫）
 
 - **通知铃铛转实（B5-S）**：顶栏铃铛接轮询聚合（30s）——待审批计数（审批角色）+失败任务数双源徽标（>9 显示 9+）、下拉面板两分组（待审批 top3 深链 /console/approvals?id=、任务动态失败置顶深链 /tasks?taskId=）、Esc/外点关闭；member 仅任务动态
@@ -25,6 +31,12 @@
 
 - **双区信息架构（用户裁决）**：主页 `/` 重构为常用功能启动台（时段问候 + 对话/群聊/工作流/任务/本体/知识库/记忆 七大玻璃卡带真实指标 + 最近会话/任务 top3）；新增 `/console` 管理控制台独立布局（治理/能力配置/观测三分组窄导航 + 返回主页），审批中心/系统管理/MCP/插件市场/工具与技能收进控制台；旧路径（/approvals 等 6 条）redirect 兼容且查询串透传；主侧边栏收敛为 7 常用项 + sb-foot 控制台入口
 - **桌面端双窗口**：Electron 主进程新增控制台独立窗口（1120×760，同安全基线）+ preload `openConsole()` 桥 + IPC `oa:openConsole`；主页控制台入口在桌面环境开真窗口、Web 降级路由跳转；QA 钩子 `DESKTOP_CONSOLE_SHOT`（主进程侧直开控制台窗口截图退出）
+
+### 修复（性能关键路径批，已随 e897068 合入）
+
+- **首屏 JS 关键路径 -45%（manualChunks 误伤修复）**：按 `id.includes()` 分 vendor 组致 rollup 把 react/react-dom 吞进 vendor-markdown/vendor-xyflow，入口被迫静态加载 311KB 图谱库+162KB Markdown 渲染器（首屏 734KB/230KB gzip）；移除 manualChunks 交 rollup 自然分包后首屏 403KB/126KB gzip，react 系归位主包、重库各自成异步共享 chunk
+- **ChatPage 首包 198KB→64KB（-68%）**：AgenticTracePanel（全仓唯一 framer-motion 使用点）改 React.lazy+Suspense 异步挂载（证据首到预热+chunk 失败工厂兜底防白屏），degraded 横幅拆 AgenticDegradedBanner.tsx 保持静态首载；渲染行为零变化
+- **依赖整理**：echarts 全仓零引用移除、msw 归位 devDependencies；性能实测探针 perf.mjs 入库 tools/ui-audit（首载字节/逐页 FCP/长任务/堆内存/交互延迟）
 
 ### 变更
 

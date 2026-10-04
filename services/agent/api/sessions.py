@@ -320,6 +320,57 @@ def build_exec_event_dual_write(
     return dual_write
 
 
+def _build_mcp_tool_bindings(state: Any) -> tuple:
+    """能力通道竖线①（2026-10-05 批）：MCP registry → 内核工具绑定桥组装点。
+
+    方案依据：docs/Agent/02 四通道权威（L0 MCP 工具）+ docs/Agent/07 边界契约 +
+    docs/Skills §3.4；机制审计底稿 dwfrun-a1582cc6；本批设计（主会话 2026-10-05 定）。
+    落点事实偏差（相对批设计「gateway/app.py build_*_bindings 旁」）：fs/web 先例
+    （gateway/app.py `_build_capability_bindings` 定义后全仓零调用）证明绑定只落在 app.py
+    是死代码——真实消费点=本工厂 build_chat_orchestrator(extra_tool_bindings)，且 agent.api
+    禁 import gateway（import-linter 契约二），故组装点收本处；gateway 仍为 registry 装配点
+    （lifespan app.state.mcp_registry）。开关走统一配置层（platform/config.py
+    mcp_bridge_enabled，缺省开；getattr 兜底旧测试桩）；registry 缺位=空元组不阻塞
+    （fail-soft 同 memory/worker 装配先例）。
+    """
+    if not getattr(state.settings, "mcp_bridge_enabled", True):
+        return ()
+    registry = getattr(state, "mcp_registry", None)
+    if registry is None:
+        return ()
+    from services.agent.business.capabilities.mcp_bridge import build_mcp_tool_bindings
+
+    return build_mcp_tool_bindings(registry)
+
+
+def _build_skills_catalog_segment(settings: Any) -> str:
+    """能力通道竖线②（2026-10-05 批）：SKILL.md 目录式装载（L1 纯提示层）组装点。
+
+    方案依据：docs/Skills §3.3（frontmatter name/description 必填）+ §3.4 四通道（L1=程序性
+    知识、纯提示层）+「渐进式加载」节（元数据层常驻进系统提示、正文不整篇注入）+ docs/
+    Agent/02 四通道权威；机制审计底稿 dwfrun-a1582cc6。**锚点快照（M3 Profile 落地前最小
+    竖线）**：Profile/skills ref 未实装（Agent config 白名单仅 model/temperature/
+    tool_whitelist/num_ctx），装载来源锚点=config（skills_catalog_dir/include/exclude）而非
+    Profile，Profile 落地后按 ref 收口。目录进程内一次装载（编排器单例缓存），坏文件跳过
+    留痕不阻塞；任一异常降级空串（fail-soft 同 memory/worker 装配先例），会话不带目录继续。
+    """
+    root = getattr(settings, "skills_catalog_dir", None)
+    if not root:
+        return ""
+    include = tuple(s.strip() for s in getattr(settings, "skills_catalog_include", "").split(",") if s.strip())
+    exclude = tuple(s.strip() for s in getattr(settings, "skills_catalog_exclude", "").split(",") if s.strip())
+    try:
+        from services.agent.business.prompts.skills_catalog import load_skill_catalog, render_skill_catalog_segment
+
+        entries = load_skill_catalog(root, include=include, exclude=exclude)
+        if not entries:
+            return ""
+        return render_skill_catalog_segment(entries)
+    except Exception:  # noqa: BLE001 ——装载/渲染任一失败均不阻塞会话启动（fail-soft，留痕）
+        logger.exception("skills catalog 装配失败（以无技能目录继续）: root=%s", root)
+        return ""
+
+
 def get_or_build_chat_orchestrator(state: Any) -> Any:
     """取/建对话编排器（模块级组合模式，同 kb.py get_model_port 先例；app.state 单例缓存）。
 
@@ -327,6 +378,8 @@ def get_or_build_chat_orchestrator(state: Any) -> Any:
     （kb 检索服务在 chat_context 工厂内装配）+ 结果汇（PG 短事务 UoW#2）。
     供端点请求（request.app.state）与 gateway lifespan（TaskRunWorker）共用同一装配面。
     M4.5-A：运行注册表 + estop 探针工厂随编排器装配（spawn 注册/终态注销；惰性单例）。
+    竖线①（2026-10-05 批）：MCP registry 工具经 extra_tool_bindings 进每轮分发器——
+    chat 模板规划器当前只规划 chat 行动类，模型可调随逐轮 tool-calling 批（注册面就绪）。
     """
     cached = getattr(state, "chat_orchestrator", None)
     if cached is not None:
@@ -352,6 +405,8 @@ def get_or_build_chat_orchestrator(state: Any) -> Any:
         spill_store=_build_spill_store(settings),  # spill（02 §11.2-11）：未配置目录=关闭
         run_registry=get_or_build_run_registry(state),  # M4.5-A：运行中输入面注册表
         estop_probe_factory=estop_store.probe,  # M4.5-A：estop 步边界闸门探针工厂
+        extra_tool_bindings=_build_mcp_tool_bindings(state),  # 竖线①：MCP registry→内核绑定桥
+        skills_catalog=_build_skills_catalog_segment(settings),  # 竖线②：SKILL.md 目录式注入（L1）
     )
     state.chat_orchestrator = orchestrator
     return orchestrator

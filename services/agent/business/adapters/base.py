@@ -66,6 +66,8 @@ class ChatTurn(BaseModel):
     message: str  # 本条用户消息
     history: tuple[tuple[str, str], ...] = ()  # 近窗 (role, content)，新→旧
     context_text: str = ""  # 已标界的记忆+证据上下文（B3 标界在组装器落）
+    skills_catalog: str = ""  # 技能目录段（竖线② L1：进程级稳定前缀，name+description 元数据
+    # 层；空=未启用。渲染与装载面见 business/prompts/skills_catalog.py，正文不随提示注入）
     system_prompt: str | None = None  # 成员人格（27 篇群聊成员 system_prompt；None=平台缺省）
     num_ctx: int | None = None  # 上下文窗口注入（ModelPort 可选参，端点不支持时忽略）
 

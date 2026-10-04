@@ -118,8 +118,10 @@ class ChatOrchestrator:
         estop_probe_factory: Callable[[UUID], Callable[[], str | None]] | None = None,  # M4.5-A：estop 探针工厂
         # E-4 K1-c（docs/Agent/13 §2）：CriterionProjection 端口实现；None=判据仅回执匹配
         criterion_projection: Any | None = None,
+        skills_catalog: str = "",  # 竖线② L1：技能目录段（进程级稳定前缀；空=未启用，渲染见 prompts/skills_catalog.py）
     ) -> None:
         self._extra_tool_bindings = tuple(extra_tool_bindings)
+        self._skills_catalog = skills_catalog
         self._adapters = dict(adapters)
         self._assembler = assembler
         self._policy = policy or ChatPolicy()
@@ -308,6 +310,7 @@ class ChatOrchestrator:
             message=command.message,
             history=tuple((m.role, m.content) for m in window[1:7]),  # window[0]=本条消息
             context_text=context.context_text,
+            skills_catalog=self._skills_catalog,  # 竖线②：技能目录段（L1 元数据层，进程级稳定）
             system_prompt=command.member_system_prompt,
         )
         dispatcher = ExtensionDispatcher()
@@ -464,6 +467,7 @@ def build_chat_orchestrator(
     extra_tool_bindings: tuple = (),
     run_registry: Any | None = None,  # M4.5-A：进程内运行注册表（None=不注册，inbox/estop 面关闭）
     estop_probe_factory: Callable[[UUID], Callable[[], str | None]] | None = None,  # M4.5-A：estop 探针工厂
+    skills_catalog: str = "",  # 竖线② L1：技能目录段（组装点= sessions._build_skills_catalog_segment）
 ) -> ChatOrchestrator:
     """组合根工厂：装配双适配器 + 上下文组装器（gateway/app.py 最小接线的唯一入口）。
 
@@ -558,4 +562,5 @@ def build_chat_orchestrator(
         extra_tool_bindings=extra_tool_bindings,
         run_registry=run_registry,
         estop_probe_factory=estop_probe_factory,
+        skills_catalog=skills_catalog,
     )

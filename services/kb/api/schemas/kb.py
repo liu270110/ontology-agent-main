@@ -386,12 +386,16 @@ class KbGraphQueryOut(BaseModel):
     """图三查统一响应（lite=类级图，retrieval/graph.py 纯函数）：节点/边列表。
 
     空结果非失败（OntRAG §4）：未知类 IRI / 无路径 → 200 空 nodes/rels，404 仅用于资源不存在。
+    items：实体条目消费面（M4.6-D3 联调收口补齐，实体卡片直读 {iri,name,type}）——
+    契约注记：items 为规范键，与 nodes 同源逐项映射（_graph_query_out 单点生成）；
+    nodes/rels 向后兼容保留（fe1 前端已双形态），不废止。
     """
 
     model_config = ConfigDict(extra="forbid")
 
     nodes: list[KbGraphNodeOut] = Field(default_factory=list)
     rels: list[KbGraphRelOut] = Field(default_factory=list)
+    items: list[KbGraphNodeOut] = Field(default_factory=list)
 
 
 # ---------------------------------------------------------------- agentic 检索 trace（§8.1 冻结契约）

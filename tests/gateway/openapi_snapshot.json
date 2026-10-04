@@ -1120,6 +1120,33 @@
         "title": "BlockPutRequest",
         "type": "object"
       },
+      "Body_create_document_file_api_v1_kb_documents_file_post": {
+        "properties": {
+          "collection_id": {
+            "format": "uuid",
+            "title": "Collection Id",
+            "type": "string"
+          },
+          "file": {
+            "contentMediaType": "application/octet-stream",
+            "title": "File",
+            "type": "string"
+          },
+          "title": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "collection_id",
+          "title",
+          "file"
+        ],
+        "title": "Body_create_document_file_api_v1_kb_documents_file_post",
+        "type": "object"
+      },
       "CandidateDecisionIn": {
         "additionalProperties": false,
         "description": "单条终审决策请求（api/01 §5.4 ★ POST /kb/review/candidates/{cid}/decision）。\n\naction=accept|reject|edit_accept；edit_accept 必附编辑载荷（契约原文「修订后入审」），\naccept/reject 拒带编辑载荷（防呆：编辑语义只属 edit_accept）。DTO 校验失败 → 3001 统一错误体。",
@@ -9548,6 +9575,48 @@
           }
         },
         "summary": "上传文档（M2 JSON 内容直传；checksum 幂等；文本类 mime 白名单 + NUL 拒收）",
+        "tags": [
+          "knowledge-base"
+        ]
+      }
+    },
+    "/api/v1/kb/documents/file": {
+      "post": {
+        "description": "v1.5 文件通道（api/01 kb 行 POST /kb/documents/file）：multipart 字段 collection_id/title/file。\n\n- 仅收 application/pdf（含别名 x-pdf；缺 mime/通用二进制按 .pdf 后缀兜底放行），\n  其余 415/3004：文案提示文本走 JSON 通道、图片随 v2；\n- 大小上限 Settings.kb_file_upload_max_bytes（缺省 50MB，OA_KB_FILE_UPLOAD_MAX_BYTES 可调），\n  超限 413/3001（02 §7 既有段内就近码，无专用 413 码——新增码须先回 02 §7 登记）；\n- 幂等与 JSON 通道同契约（§8.0 同源检测①）：同 checksum（sha256 字节）既有有效文档\n  直接幂等返回（created=false），不重复落对象；\n- 落盘顺序：MinIO put 成功才落库（无半截 DB 行；DB 落库失败的孤儿对象无害——对象按\n  doc_id 寻址且 doc_id 不复用，重传产生新 id 新对象）；minio_key 形态对齐既有契约\n  raw-docs/{tenant}/{collection}/{doc}/source.pdf（首段=桶名，documents.minio_key 同款）；\n- 落库行：minio_key 写入、status=uploaded、meta 不存 content（内容源抽象见\n  kb_pipeline._run_preprocess：preprocess 拉对象解析），mime_type 恒 application/pdf。\n存储异常 → 5004/503（STORAGE_UNAVAILABLE，既有段）。",
+        "operationId": "create_document_file_api_v1_kb_documents_file_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_create_document_file_api_v1_kb_documents_file_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "文件直传通道（multipart 仅收 application/pdf；原件落 MinIO raw-docs，checksum 幂等）",
         "tags": [
           "knowledge-base"
         ]

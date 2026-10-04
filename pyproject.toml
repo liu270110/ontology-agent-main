@@ -19,6 +19,17 @@ dependencies = [
   # M2 知识库批次（D）：httpx（Ollama embeddings 客户端，semantic/knowledge/embed）+
   # pgvector（document_chunks.embedding vector(1024) 列类型；迁移 add_kb_vector_embedding）
   "httpx>=0.27", "pgvector>=0.3",
+  # kb 文件直传通道（v1.5 wedge，feature/kb-file-parse）：minio SDK（Apache-2.0，对象存储
+  # 薄封装 services/platform/db/clients/minio_client.py；gateway/health.py 此前按可选依赖
+  # 懒加载，依赖进册后 readyz minio 探活自动启用）；python-multipart 为 FastAPI
+  # multipart/form-data（UploadFile/Form）解析后端，此前仅作 fastmcp 传递依赖在锁内，现
+  # 升显式主依赖（路由面直接依赖必须显式声明）。
+  "minio>=7.2", "python-multipart>=0.0.9",
+  # kb 解析引擎链（v1.5 wedge，feature/kb-file-parse）：pypdfium2 = 默认 PDF 引擎
+  # （OA_KB_PARSER=pdfium）——零模型、确定性、纯文本层直抽，故入主依赖；docling（可选
+  # 重模型引擎）与 pdfplumber（兜底引擎）均懒加载可选，不进主依赖与 uv.lock（缺库自动
+  # 降级 pdfium 并登记 meta.degraded=["parser"]，见 services/kb/business/parsers.py）。
+  "pypdfium2>=4",
 ]
 [dependency-groups]
 dev = ["pytest>=7.0", "ruff>=0.6", "mypy>=1.10", "fakeredis>=2.23", "pytest-asyncio>=0.23", "httpx>=0.27"]

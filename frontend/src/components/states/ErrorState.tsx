@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { AlertTriangle, RotateCcw } from 'lucide-react'
+import { AlertTriangle, Construction, RotateCcw } from 'lucide-react'
 
 /** 面板内嵌紧凑错误态（列表页 catch 分支统一宿主）：复用 patterns.css 的
  *  `.empty` 骨架（.t 标题 / .d 描述 / .acts 动作），红调只点缀图标（--red 令牌），
@@ -29,6 +29,19 @@ export function ErrorState({
   secondaryAction,
   className,
 }: ErrorStateProps) {
+  // 企业级未实装语义（40 号 §1）：网关 1004=路由不存在=端点待交付——不是错误而是
+  // 「功能建设中」优雅态：中性图标、固定文案、无错误码、无重试按钮（重试必 404 无意义）。
+  // 消费方零改动：api 层 1004 映射后 message 已定向，此处按 code 特化渲染。
+  if (code === 1004) {
+    return (
+      <div role="status" data-testid="unimplemented-state" className={`empty ${className ?? ''}`}>
+        <Construction size={28} aria-hidden style={{ color: 'var(--label-3)' }} />
+        <div className="t">功能建设中</div>
+        <div className="d">该功能的后端服务尚未上线，交付后此处将自动展示真实数据。</div>
+        {secondaryAction && <div className="acts">{secondaryAction}</div>}
+      </div>
+    )
+  }
   return (
     <div role="alert" data-testid="error-state" className={`empty ${className ?? ''}`}>
       <AlertTriangle size={28} aria-hidden style={{ color: 'var(--red)' }} />

@@ -143,6 +143,13 @@ class AgentKernel:
             raise KernelContractError("TenantContext.trace_id 为空，拒绝运行（C2 可追溯底线）")
         rc = RunContext(task, ctx, budget, clock=self._clock, approvals=approvals, ledger_sink=ledger_sink)
         self._last_ledger = rc.ledger
+
+        def emit_budget_anchor(payload: dict[str, Any]) -> None:
+            # M4.5-B（docs/Agent/12 §2 批次 B）：锚定系数首立/显著变化 → 账本
+            # kernel.budget_anchor（ratio/estimated/real）；统一走 _emit（账本+钩子广播同源）。
+            self._emit(rc.ledger, ctx, task.run_id, "kernel.budget_anchor", payload)
+
+        rc.tracker.anchor_sink = emit_budget_anchor  # 锚定事件接线（真实 usage 到达时由记账器上抛）
         self._execution_stage.spill_store = spill_store  # per-run spill 注入（02 §11.2-11）
         slot = self._dispatcher.agent_slot()  # agent.slots（02 §4.2）：可绑定实现挂父作用域（分账+级联）
         if isinstance(slot, ParentBindable):

@@ -93,6 +93,12 @@ class Settings(BaseSettings):
     context_budget_tokens: int = Field(default=4_000, gt=0)
     context_compaction_threshold: float = Field(default=0.8, ge=0.0, le=1.0)
 
+    # M4.5-B token 锚定（docs/Agent/12 §2 批次 B）：锚定系数显著变化阈值——真实 usage
+    # 到达校准 ratio=real_total/estimated_total 后，相对前值漂移超此比例才落
+    # kernel.budget_anchor 事件（首锚恒落，小抖动静默不刷事件）。内核构造参数显式注入
+    # 优先（BudgetTracker.anchor_drift_threshold），缺省运行期读此值（D2 纪律同上）。
+    budget_anchor_drift_threshold: float = Field(default=0.2, gt=0.0, le=1.0)
+
     # 内核四维超时（B-③ 批，docs/Agent/10 §8.2）：原 kernel/loop.py 与 execution.py 的
     # 模块级常量（_TOOL_TIMEOUT_S/_PLANNING_TIMEOUT_S/_GATE_TIMEOUT_S/_SINK_TIMEOUT_S，
     # 30/10/1/5）收编于此——内核不藏数值策略，D2/F-4 同款纪律；默认值=原常量逐位一致。

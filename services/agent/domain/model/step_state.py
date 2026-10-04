@@ -68,6 +68,10 @@ class BudgetWatermark(BaseModel):
 
     tokens_used/steps_done 单调累计；duration_elapsed_s 由内核时钟回填；三预算口径
     token/步数/时长（成本归因 C2 随 M4 台账接入）。
+
+    M4.5-B（docs/Agent/12 §2 批次 B）增 ``estimated`` 标注（additive，缺省 False 零行为
+    变化）：True=该水位的 token 口径含未锚定估算（真实 usage 回执缺位，预算检查按
+    组装估算计入）——水位消费方据此区分实测/估算（口径标注，非计量值变更）。
     """
 
     model_config = ConfigDict(frozen=True)
@@ -75,6 +79,7 @@ class BudgetWatermark(BaseModel):
     tokens_used: int = 0
     steps_done: int = 0
     duration_elapsed_s: float = 0.0
+    estimated: bool = False  # M4.5-B：token 口径含未锚定估算时为 True（见类注释）
 
     def merged(self, *, tokens: int, steps: int, elapsed_s: float) -> BudgetWatermark:
         """返回累计后的新水位（frozen 值对象不可原地改，替换式更新）。"""

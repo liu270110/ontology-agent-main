@@ -50,6 +50,7 @@ AclPushdown（开关 OA_KB_ACL_FILTER_ENABLED + 标签面双条件激活）→ �
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
 import logging
@@ -139,6 +140,7 @@ from services.kb.business.kb_pipeline import (
 )
 from services.kb.business.review_queue import ReviewQueueService
 from services.kb.business.search_service import rerank_hits_by_source_context
+from services.kb.business.usage_service import UsageStore
 from services.kb.data.orm import Document, DocumentChunk, KbCollection, KbFact, KbPipelineStep
 from services.kb.retrieval.embed import AclPushdown, OllamaEmbedder, bm25_search, vector_ready, vector_search
 from services.kb.retrieval.graph import (
@@ -814,6 +816,60 @@ async def _class_hierarchy(
     return hierarchy
 
 
+def _usage_store(request: Request) -> UsageStore:
+    """知识活性埋点 store（多源接入 §6.1 v1；app.state 即席装配进程内复用，_review_queue_service 同款）。
+
+    会话工厂注入（get_session_factory 统一配置引擎）；埋点走独立短会话，绝不复用请求事务。
+    """
+    cached = getattr(request.app.state, "_kb_usage_store", None)
+    if cached is None:
+        cached = UsageStore(get_session_factory(request.app.state.settings))  # type: ignore[arg-type]
+        request.app.state._kb_usage_store = cached
+    return cached
+
+
+def _schedule_kb_usage_record(
+    request: Request, *, tenant_id: uuid.UUID, kb_id: uuid.UUID | None, chunk_ids: Sequence[uuid.UUID]
+) -> None:
+    """REST 检索埋点调度（多源接入 §6.1 v1）：citations 落定后 fire-and-forget 计数。
+
+    - kb_id 缺省（跨库检索无法零成本归因）或零命中 → 零动作（search_service 同口径）；
+    - 统计失败绝不影响检索主链路：store 即席构造与任务调度的同步段异常同样吞掉 + DEBUG
+      留痕（不升级不打扰，search_service._schedule_usage_record 同款纪律——埋点是旁路
+      增强，构造环境缺失=本轮零埋点，绝不外溢到检索调用方）；
+    - 任务引用挂 app.state 防 GC（search_service._usage_tasks 同款）。
+    """
+    if kb_id is None or not chunk_ids:
+        return
+    tasks: set[asyncio.Task[None]] = getattr(request.app.state, "_kb_usage_tasks", None) or set()
+    request.app.state._kb_usage_tasks = tasks
+
+    async def _guarded() -> None:
+        try:
+            await store.record_search_hits(
+                tenant_id=tenant_id,
+                kb_collection_id=kb_id,
+                chunk_ids=list(dict.fromkeys(chunk_ids)),  # 批内去重（保序）：多路召回同 chunk 只计一次
+            )
+        except Exception:  # noqa: BLE001 —— 吞掉是设计意图（埋点旁路，绝不外溢到检索调用方）
+            logger.debug(
+                "usage 埋点失败（不影响检索主链路）: tenant=%s kb=%s chunks=%d",
+                tenant_id,
+                kb_id,
+                len(chunk_ids),
+                exc_info=True,
+            )
+
+    try:
+        store = _usage_store(request)
+        task = asyncio.get_running_loop().create_task(_guarded())
+    except Exception:  # noqa: BLE001 —— 同步段守卫：构造/调度环境缺失不伤检索主链路
+        logger.debug("usage 埋点调度失败（不影响检索主链路）: kb=%s", kb_id, exc_info=True)
+        return
+    tasks.add(task)
+    task.add_done_callback(tasks.discard)
+
+
 @router.post(
     "/search",
     summary="knowledge.search lite（bm25+向量+图三路 RRF；图=LazyGraphRAG lite 查询时扩展）",
@@ -937,6 +993,11 @@ async def search(body: KbSearchIn, principal: KbReadDep, request: Request, sessi
     # 非空=按文档 meta.source_system 加权重排（不剔除）。
     final_hits = await rerank_hits_by_source_context(session, hits, source_context=body.source_context)
     latency_ms = int((time.perf_counter() - started) * 1000)
+    # 知识活性埋点（多源接入 §6.1 v1，A3 激活）：citations 落定后 fire-and-forget 计数
+    # （kb_id 非 None 才记；hits 与 citations 同源 final_hits 投影，chunk_id 一致）。
+    _schedule_kb_usage_record(
+        request, tenant_id=principal.tenant_id, kb_id=body.kb_id, chunk_ids=[hit.chunk_id for hit in final_hits]
+    )
     return KbSearchOut(
         query=result_query,
         mode=result_mode,

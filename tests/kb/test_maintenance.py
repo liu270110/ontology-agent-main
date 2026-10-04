@@ -43,6 +43,7 @@ from services.kb.business.maintenance import (
 from services.kb.data.orm import Document as DocumentORM
 from services.kb.data.orm import DocumentChunk as DocumentChunkORM
 from services.kb.data.orm import KbFact as KbFactORM
+from services.kb.data.usage_orm import KbUsageCounter  # ④ 零引用清理候选扫描面（A3 激活批新增键）
 from services.platform.db.base import Base
 
 if sys.platform == "win32":
@@ -184,7 +185,13 @@ async def kb_factory() -> AsyncIterator[async_sessionmaker[AsyncSession]]:
     async with engine.begin() as conn:
         await conn.run_sync(
             lambda c: Base.metadata.create_all(
-                c, tables=[KbFactORM.__table__, DocumentORM.__table__, DocumentChunkORM.__table__]
+                c,
+                tables=[
+                    KbFactORM.__table__,
+                    DocumentORM.__table__,
+                    DocumentChunkORM.__table__,
+                    KbUsageCounter.__table__,  # ④ 零引用清理候选（A3 激活批）：观测面在库，计数走正常路径
+                ],
             )
         )
     factory = async_sessionmaker(engine, expire_on_commit=False)
@@ -445,6 +452,7 @@ async def test_report_stats记账_混合场景全键(kb_factory: async_sessionma
         "actions_used",
         "issues_missing_document",
         "issues_missing_chunk",
+        "zero_ref_candidates",  # ④ 零引用清理候选（A3 激活批；本用例无 chunk → 0，只报告不动数据）
     }
     assert report.stats == {
         "candidates_scanned": 4,  # 新鲜 + 催办带 + 归档带 + 悬空者（先于归档翻转的总量）
@@ -455,6 +463,7 @@ async def test_report_stats记账_混合场景全键(kb_factory: async_sessionma
         "actions_used": 1,
         "issues_missing_document": 1,
         "issues_missing_chunk": 0,
+        "zero_ref_candidates": 0,
     }
     assert report.stats["archived"] == report.stats["actions_used"] and report.budget_triggered is False
 

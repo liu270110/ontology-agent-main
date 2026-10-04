@@ -649,3 +649,74 @@ class ReviewQueueBatchDecideOut(BaseModel):
     decision: str
     decided: int
     trail_recorded: int
+
+
+# ---------------------------------------------------------------- 冲突工单只读面（§8.1 T2 裁决；A1 接线 2026-10-04）
+#
+# 工单行（review_tickets，target_type=conflict）经 run_validate 尾调分诊生成（T2 真矛盾），
+# 终审分流（candidate decision accept/reject → conflict_triage.apply_decision）执行裁决；
+# 本组 DTO 只读透出（列表/详情），裁决动作面=既有终审决策端点（§5.4 review:approve）。
+
+
+ConflictResolutionFilter = Literal[
+    "pending",  # 未裁决（工单 open：draft/pending_review，信封无 conflict_decision）
+    "winner_a",  # 点选 fact_a（候选新方）胜出
+    "winner_b",  # 点选 fact_b（既有权威方）胜出
+    "t3_coexist",  # 人工判定限定共存
+]  # conflict_triage.DECISION_OPTIONS 同源（§8.1 v1 裁决选项；缺省=全部）
+
+
+class ConflictFactSideOut(BaseModel):
+    """冲突并排单侧事实（§8.1「两条事实+各自原文出处」；digest=建单快照 + status=实时行态）。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    fact_id: uuid.UUID
+    fact_type: str | None = None
+    subject: str | None = None
+    predicate: str | None = None
+    object: str | None = None
+    status: str | None = None  # kb_facts 实时行态（authoritative/rejected/candidate；行缺=None）
+    confidence: float | None = None
+    scope: dict[str, Any] = Field(default_factory=dict)  # meta.scope（T3 人工填 scope 落点）
+    source_ref: dict[str, Any] = Field(default_factory=dict)  # evidence.source_ref 四元组
+    quote: str | None = None  # evidence 逐字引语（出处）
+    span: list[int] | None = None  # evidence 原文定位
+
+
+class ConflictTicketOut(BaseModel):
+    """冲突工单列表项（api/01 §3.1 信封 data 项；resolution 缺省 pending=未裁决）。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    id: uuid.UUID
+    status: str  # review_tickets 六态（draft/pending_review/approved/published/rejected/cancelled）
+    resolution: str = "pending"  # 信封 conflict_decision.resolution；无则 pending（open 单）
+    target_id: uuid.UUID  # 冲突候选方事实 id（fact_a）
+    conflict_type: str | None = None  # 信封 payload.conflict_type（T2）
+    created_at: datetime
+
+
+class ConflictPageOut(BaseModel):
+    """冲突工单列表（api/01 §3.1 信封：{data, meta:{page,page_size,total}}）。"""
+
+    model_config = ConfigDict(extra="forbid")
+    data: list[ConflictTicketOut]
+    meta: PageMeta
+
+
+class ConflictDetailOut(BaseModel):
+    """冲突工单详情（并排双方事实与出处 + 裁决留痕；终审工作台 T2 裁决数据面）。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    id: uuid.UUID
+    status: str
+    resolution: str = "pending"
+    target_id: uuid.UUID
+    conflict_type: str | None = None
+    decision_options: list[str] = Field(default_factory=list)  # 信封 decision_options（裁决选项面）
+    fact_a: ConflictFactSideOut  # 候选新方（target_id 同侧）
+    fact_b: ConflictFactSideOut  # 既有权威方
+    decision: dict[str, Any] | None = None  # conflict_decision 留痕补丁（resolution/resolved_by/comment/decided_at）
+    created_at: datetime

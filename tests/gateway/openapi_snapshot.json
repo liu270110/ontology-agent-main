@@ -1392,6 +1392,270 @@
         "title": "Conclusion",
         "type": "object"
       },
+      "ConflictDetailOut": {
+        "additionalProperties": false,
+        "description": "冲突工单详情（并排双方事实与出处 + 裁决留痕；终审工作台 T2 裁决数据面）。",
+        "properties": {
+          "conflict_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Conflict Type"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "decision": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decision"
+          },
+          "decision_options": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Decision Options",
+            "type": "array"
+          },
+          "fact_a": {
+            "$ref": "#/components/schemas/ConflictFactSideOut"
+          },
+          "fact_b": {
+            "$ref": "#/components/schemas/ConflictFactSideOut"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "resolution": {
+            "default": "pending",
+            "title": "Resolution",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "target_id": {
+            "format": "uuid",
+            "title": "Target Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "status",
+          "target_id",
+          "fact_a",
+          "fact_b",
+          "created_at"
+        ],
+        "title": "ConflictDetailOut",
+        "type": "object"
+      },
+      "ConflictFactSideOut": {
+        "additionalProperties": false,
+        "description": "冲突并排单侧事实（§8.1「两条事实+各自原文出处」；digest=建单快照 + status=实时行态）。",
+        "properties": {
+          "confidence": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confidence"
+          },
+          "fact_id": {
+            "format": "uuid",
+            "title": "Fact Id",
+            "type": "string"
+          },
+          "fact_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fact Type"
+          },
+          "object": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Object"
+          },
+          "predicate": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Predicate"
+          },
+          "quote": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quote"
+          },
+          "scope": {
+            "additionalProperties": true,
+            "title": "Scope",
+            "type": "object"
+          },
+          "source_ref": {
+            "additionalProperties": true,
+            "title": "Source Ref",
+            "type": "object"
+          },
+          "span": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "integer"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Span"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          },
+          "subject": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Subject"
+          }
+        },
+        "required": [
+          "fact_id"
+        ],
+        "title": "ConflictFactSideOut",
+        "type": "object"
+      },
+      "ConflictPageOut": {
+        "additionalProperties": false,
+        "description": "冲突工单列表（api/01 §3.1 信封：{data, meta:{page,page_size,total}}）。",
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/ConflictTicketOut"
+            },
+            "title": "Data",
+            "type": "array"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/PageMeta"
+          }
+        },
+        "required": [
+          "data",
+          "meta"
+        ],
+        "title": "ConflictPageOut",
+        "type": "object"
+      },
+      "ConflictTicketOut": {
+        "additionalProperties": false,
+        "description": "冲突工单列表项（api/01 §3.1 信封 data 项；resolution 缺省 pending=未裁决）。",
+        "properties": {
+          "conflict_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Conflict Type"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "resolution": {
+            "default": "pending",
+            "title": "Resolution",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "target_id": {
+            "format": "uuid",
+            "title": "Target Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "status",
+          "target_id",
+          "created_at"
+        ],
+        "title": "ConflictTicketOut",
+        "type": "object"
+      },
       "ConsolidateIn": {
         "description": "POST /memory/consolidate：触发指定会话 L1→L2 沉淀（202 受理，后台执行）。",
         "properties": {
@@ -8459,6 +8723,129 @@
           }
         },
         "summary": "创建知识库集合",
+        "tags": [
+          "knowledge-base"
+        ]
+      }
+    },
+    "/api/v1/kb/conflicts": {
+      "get": {
+        "description": "冲突工单分页列表（api/01 §3.1 信封；新单优先）。\n\nresolution=pending → 工单 open 态（draft/pending_review，未裁决）；winner_a/winner_b/\nt3_coexist → 终审分流已回填 conflict_decision 的单（SQL status 预过滤 + 信封精过滤）；\n缺省=全部。工单量级=人工裁决面（lite 档内存分页，total 全量精确）。",
+        "operationId": "list_conflicts_api_v1_kb_conflicts_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "resolution",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "pending",
+                    "winner_a",
+                    "winner_b",
+                    "t3_coexist"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Resolution"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Page",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page_size",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Page Size",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConflictPageOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "冲突工单列表（§8.1 T2 裁决队列；resolution 过滤 + 分页，review:read）",
+        "tags": [
+          "knowledge-base"
+        ]
+      }
+    },
+    "/api/v1/kb/conflicts/{ticket_id}": {
+      "get": {
+        "description": "单张冲突工单详情：信封并排两事实 digest（subject/predicate/object/scope/quote/span/source_ref）\n+ kb_facts 实时行态（status）+ decision_options 裁决选项面 + conflict_decision 留痕。\n\n非本租户 / 非 conflict 工单 / 不存在 → 404（deny-by-default 同域口径）。",
+        "operationId": "get_conflict_api_v1_kb_conflicts__ticket_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "ticket_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Ticket Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConflictDetailOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "冲突工单详情（并排双方事实与出处 + 裁决留痕，review:read）",
         "tags": [
           "knowledge-base"
         ]

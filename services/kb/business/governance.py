@@ -1,5 +1,10 @@
 """知识治理主干 v1：冲突分诊 + 文档版本承接判定 + 落库（OntRAG 知识库GraphRAG设计 §8.0/§8.1/§8.2 lite 落位）。
 
+【已收编：生产口径以 conflict_triage.py 为准（A1 接线裁决 2026-10-04）；本文件 lite 纯函数
+保留供单测】生产链路（run_validate 尾调分诊 + 终审分流 apply_decision + /kb/conflicts 两端点）
+一律走 business/conflict_triage.py（§8.1 落库版，口径更全）；本模块不再新增接线，改动仅限
+既有 lite 纯函数与其单测（双实现归一，防未来误接线 lite 版）。
+
 职责与口径：
 - detect_conflicts（§8.1 冲突分诊）：候选 × 既有权威事实，比对键 = subject + predicate，
   固定顺序 T1→T4→T3→T2（先廉价确定性判定、后语义判定）；纯函数不触库。

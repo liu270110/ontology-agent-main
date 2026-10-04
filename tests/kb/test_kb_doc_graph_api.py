@@ -52,14 +52,18 @@ from services.kb.api.kb import (
     get_document,
     list_collections,
     list_document_chunks,
+    list_documents,
     retry_pipeline,
     search_graph_entities,
 )
 from services.kb.api.schemas.kb import DocumentCreateIn, KbGraphQueryOut, doc_type_of
+from services.kb.business.kb_pipeline import run_pipeline
 from services.kb.data.orm import Document as DocumentORM
 from services.kb.data.orm import DocumentChunk as DocumentChunkORM
 from services.kb.data.orm import KbCollection as KbCollectionORM
 from services.kb.data.orm import KbFact as KbFactORM
+from services.kb.data.orm import KbPipelineStep as KbPipelineStepORM
+from services.kb.retrieval.embed import EmbeddingUnavailableError, OllamaEmbedder
 from services.kb.retrieval.graph import (
     GraphRel,
     authoritative_relations,
@@ -417,6 +421,64 @@ def _request(env: dict) -> StarletteRequest:
 # ---------------------------------------------------------------- 详情（GET /kb/documents/{id}）
 
 
+@pytest.fixture
+async def degraded_doc(kb_pg: async_sessionmaker[AsyncSession]) -> AsyncIterator[dict]:
+    """软降级文档环境：独立租户/集合/uploaded 文档（内联 markdown），结束 FK 逆序清理。"""
+    content = (
+        "# 停电处置手册\n"
+        "故障定位先看馈线开关与保护动作记录，再核对抢修工单。\n"
+        "\n"
+        "## 抢修工单要点\n"
+        "工单须记录停电时间、影响台区与恢复送电时间。\n"
+    )
+    async with kb_pg() as db, db.begin():
+        tenant = TenantORM(name="degraded-it-租户", slug=f"degraded-it-{uuid.uuid4().hex[:12]}")
+        db.add(tenant)
+        await db.flush()
+        collection = KbCollectionORM(tenant_id=tenant.id, name="degraded-it-库", embedding_model="bge-m3")
+        db.add(collection)
+        await db.flush()
+        doc = DocumentORM(
+            tenant_id=tenant.id,
+            kb_collection_id=collection.id,
+            title="停电处置手册",
+            source_type="upload",
+            size_bytes=len(content.encode()),
+            minio_key=f"raw-docs/{tenant.id}/{collection.id}/{uuid.uuid4()}/source.md",
+            checksum_sha256=hashlib.sha256(content.encode()).hexdigest(),
+            meta={"content": content},
+            status="uploaded",
+        )
+        db.add(doc)
+    env: dict[str, Any] = {
+        "settings": Settings(),
+        "tenant_id": tenant.id,
+        "collection_id": collection.id,
+        "document_id": doc.id,
+    }
+    yield env
+    async with kb_pg() as db, db.begin():  # FK 逆序清理
+        for stmt in (
+            delete(DocumentChunkORM).where(DocumentChunkORM.tenant_id == env["tenant_id"]),
+            delete(KbPipelineStepORM).where(KbPipelineStepORM.tenant_id == env["tenant_id"]),
+            delete(DocumentORM).where(DocumentORM.tenant_id == env["tenant_id"]),
+            delete(KbCollectionORM).where(KbCollectionORM.id == env["collection_id"]),
+            delete(TenantORM).where(TenantORM.id == env["tenant_id"]),
+        ):
+            await db.execute(stmt)
+
+
+def _unreachable_embedder() -> OllamaEmbedder:
+    """嵌入服务不可达桩：调用必抛 EmbeddingUnavailableError（软降级真值路径，同 test_kb 口径）。"""
+    embedder = OllamaEmbedder("http://localhost:9", timeout=0.1)
+
+    async def _raise(texts):  # noqa: ANN001
+        raise EmbeddingUnavailableError("嵌入服务不可达桩")
+
+    embedder.embed = _raise  # type: ignore[method-assign]
+    return embedder
+
+
 @pytest.mark.integration
 async def test_GET_document_详情_happy与404(doc_env, kb_pg):
     env = doc_env
@@ -428,6 +490,33 @@ async def test_GET_document_详情_happy与404(doc_env, kb_pg):
         with pytest.raises(GatewayError) as exc:
             await get_document(uuid.uuid4(), _principal(env), db)
     assert exc.value.status_code == 404
+
+
+@pytest.mark.integration
+async def test_GET_document_详情_degraded透出_嵌入软降级(degraded_doc, kb_pg):
+    """docs/Agent/09 §2.1 遗留项①：embed 步软降级（meta["degraded"]=["embed"]）后，详情/列表
+    DTO degraded 如实透出——修复前该字段在 DTO 中缺失，详情恒无降级信息（流水线进度端点
+    早已读取同键，kb/api/kb.py PipelineProgressOut 口径）。"""
+    env = degraded_doc
+
+    async def instant_backoff(attempt: int) -> None:  # 测试不等待真实退避（30s 起）
+        return None
+
+    # Arrange：嵌入服务不可达桩跑通流水线 → embed 步耗尽软降级，BM25-only 照常 indexed
+    report = await run_pipeline(
+        kb_pg,
+        tenant_id=env["tenant_id"],
+        document_id=env["document_id"],
+        embedder=_unreachable_embedder(),
+        backoff=instant_backoff,
+    )
+    assert report.degraded is True and report.document_status == "indexed"
+    # Act + Assert：详情 DTO degraded==["embed"]；列表 DTO 同投影同修
+    async with kb_pg() as db:
+        detail = await get_document(env["document_id"], _principal(env), db)
+        assert detail.data.degraded == ["embed"]
+        listing = await list_documents(_principal(env), db)
+        assert [item.degraded for item in listing.data if item.id == env["document_id"]] == [["embed"]]
 
 
 # ---------------------------------------------------------------- 墓碑式软删（DELETE /kb/documents/{id}）

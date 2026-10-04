@@ -2,9 +2,13 @@
 
 - 三路召回：bm25（PG tsvector+ts_rank）/ vector（pgvector 余弦）/ graph（LazyGraphRAG lite
   查询时图遍历——命中 chunk → 关联权威事实类 IRI → 同类 chunk 邻接扩展，见 retrieval/graph.py，
-  2026-09-27 任务 2.3 落地，替换原 TODO(M2.5) 占位）；
+  2026-09-27 任务 2.3 落地，替换原 TODO(M2.5) 占位）+ 第 4 路 glossary（K4 术语层，docs/Agent/13
+  §9：查询词面/别名 → gloss:target 关联本体实体的精确命中集，由调用方经 ``glossary`` 回调供给
+  ——retrieval 层不依赖 kb.business 的种子目录，分层与 graph 回调同款）；
 - 融合：RRF，score(d) = Σ_s w_s / (k + rank_s(d))，k=60；图路命中后 w = 图 0.6 / 向量 0.4 / bm25 0.4
   （§4.2 建议值 + bm25 对齐向量档，示例值/待实测，PoC ③ 冻结）；图路无命中维持 bm25/vector 各 0.5；
+  glossary 权重量级对齐既有通道（两路表 0.5 / 含图表 0.4，示例值/待实测），空命中不进通道集
+  ——不影响其余路（K4-d 约束）；
 - 降级：vector 路抛 EmbeddingUnavailableError（模型离线 / pgvector 列缺失）→ BM25-only 且
   degraded=true（在线四率，不阻断检索）；mode=global/drift 默认档无社区摘要索引 → 降级 local
   并 degraded=true（§4.0，drift/完整档二期）；bm25/graph 路失败属存储故障，向上抛错；
@@ -27,12 +31,17 @@ from services.kb.retrieval.embed import EmbeddingUnavailableError
 
 RRF_K = 60  # §4.2 平滑常数（初始建议值/待实测，PoC ③ 冻结）
 RECALL_POOL = 50  # §4.2：各路召回 top 50 → 融合 → 输出 top_k（初始建议值/待实测）
-CHANNEL_WEIGHTS: Mapping[str, float] = {"bm25": 0.5, "vector": 0.5}  # 图路无命中时的两路均分基线
+CHANNEL_WEIGHTS: Mapping[str, float] = {
+    "bm25": 0.5,
+    "vector": 0.5,
+    "glossary": 0.5,
+}  # 图路无命中时的基线（glossary=K4 第 4 路，量级对齐既有通道；示例值/待实测）
 CHANNEL_WEIGHTS_GRAPH: Mapping[str, float] = {
     "bm25": 0.4,
     "vector": 0.4,
     "graph": 0.6,
-}  # §4.2 图 0.6/向量 0.4 建议值 + bm25 对齐向量档（示例值/待实测，PoC ③ 冻结）
+    "glossary": 0.4,
+}  # §4.2 图 0.6/向量 0.4 建议值 + bm25 对齐向量档 + glossary 对齐 bm25/vector 档（示例值/待实测，PoC ③ 冻结）
 ANSWER_MAX_HITS = 3  # 抽取式摘要取前 N 个命中（示例值）
 ANSWER_MAX_SENTENCES = 3  # 摘要句数上限（示例值）
 _SENTENCE_SPLIT = re.compile(r"(?<=[。！？!?；;\n])")  # 句界（标点后切，保原文逐字）
@@ -221,17 +230,22 @@ async def hybrid_search(
     bm25: RankFn,
     vector: RankFn | None = None,
     graph: GraphExpander | None = None,
+    glossary: RankFn | None = None,
     top_k: int = 8,
     mode: str = "local",
     entity_type_filter: Sequence[str] | None = None,
     k: int = RRF_K,
     weights: Mapping[str, float] | None = None,
 ) -> HybridSearchResult:
-    """混合检索编排：bm25/vector 召回（池=RECALL_POOL）→ 图路锚定扩展 → RRF 融合 → top_k。
+    """混合检索编排：bm25/vector 召回（池=RECALL_POOL）→ 图路锚定扩展 → glossary 术语路 → RRF 融合 → top_k。
 
     - vector 路抛 EmbeddingUnavailableError → 降级（degraded=true，BM25-only）；
       vector=None 表示明确不启用该路（不标记降级）；bm25/graph 路失败属存储故障，向上抛错；
     - graph 路以 bm25+vector 命中为种子查询时扩展（LazyGraphRAG lite，graph.py）；无种子跳过；
+    - glossary 路（K4-d，docs/Agent/13 §9）：``glossary`` 回调（query, pool → hits，与 bm25/vector
+      同形）供给「查询词面/术语别名 → gloss:target 关联本体实体的精确命中集」；None=不启用该路，
+      空命中=不进通道集（不影响其余路的通道、权重与归一满分）；召回失败同 bm25 口径向上抛错
+      （目录装载属部署态故障，静默降级会掩盖资产损坏）；
     - entity_type_filter：本体类 IRI 过滤——保留「关联权威事实命中过滤闭包」的 chunk
       （先过滤后排序语义在图路内下推，此处对融合结果做类成员校验兜底）；
       图路不可用而过滤条件给出时返回空结果（不可校验即不返回，防过滤静默失效）；
@@ -265,6 +279,12 @@ async def hybrid_search(
         if expansion.hits:
             ranked["graph"] = expansion.hits
             channels.append("graph")
+
+    if glossary is not None:  # K4 第 4 路：术语精确命中集（空命中不进通道集，不干扰其余路）
+        glossary_hits = await glossary(query, pool)
+        if glossary_hits:
+            ranked["glossary"] = glossary_hits
+            channels.append("glossary")
 
     mode_used, mode_reason = resolve_mode(mode)
     if mode_reason is not None:

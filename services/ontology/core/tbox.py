@@ -13,6 +13,10 @@ from rdflib.namespace import OWL, RDF, RDFS, SH, SKOS, XSD
 
 OB2 = Namespace("https://ontology-agent.dev/ns/ob2#")  # 平台顶类命名空间（§4.1：ob2:Object/Action/Event/Rule）
 TASK = Namespace("https://ontology-agent.dev/ns/task#")  # 任务本体九类（§2 平台标准本体模块，对 MCP 只读）
+# 业务术语层命名空间（K4 Glossary，docs/Agent/13 §9；上游依据=tis@18 §10.1 三字段模型 term/aliases/target）：
+# gloss:Term=业务术语类（rdfs:label=规范术语 + skos:altLabel=别名 + gloss:target=指向本体类/属性 IRI），
+# 作为 TBox 的 SKOS 面随本体版本化发布（复用 changeset 双签，不建 PG 表）。
+GLOSS = Namespace("https://ontology-agent.dev/ns/gloss#")
 
 # W3C 标准命名空间：R1/R2 规则与元数据声明落点（owl/rdfs/rdf/xsd/skos/shaql）
 STANDARD_NAMESPACES: tuple[str, ...] = (str(RDF), str(RDFS), str(OWL), str(XSD), str(SKOS), str(SH))
@@ -32,6 +36,7 @@ def load_turtle(content: str | bytes) -> Graph:
         raise ValueError(f"Turtle 解析失败: {exc}") from exc
     graph.bind("ob2", OB2)
     graph.bind("task", TASK)
+    graph.bind("gloss", GLOSS)
     return graph
 
 

@@ -21,7 +21,7 @@ from __future__ import annotations
 import uuid
 
 from sqlalchemy import BOOLEAN, CheckConstraint, ForeignKey, Index, Numeric, String, Text, UniqueConstraint
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from services.platform.db.base import Base, PkMixin, TenantMixin, TimestampMixin
@@ -41,8 +41,8 @@ class KbRuleCandidate(Base, PkMixin, TenantMixin, TimestampMixin):  # 只追加�
     """
 
     __tablename__ = "kb_rule_candidates"
-    document_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("documents.id"), nullable=False)
-    chunk_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("document_chunks.id"))
+    document_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("documents.id"), nullable=False)
+    chunk_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("document_chunks.id"))
     rule_id: Mapped[str] = mapped_column(String(64), nullable=False)  # 模板 id（RD-001 式，人读坐标）
     rule_key: Mapped[str] = mapped_column(String(64), nullable=False)  # 幂等去重键（uk 半边）
     kind: Mapped[str] = mapped_column(String(16), nullable=False)  # invariant|precondition|exclusion|state_transition

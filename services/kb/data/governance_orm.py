@@ -15,7 +15,7 @@ from __future__ import annotations
 import uuid
 
 from sqlalchemy import CheckConstraint, ForeignKey, Index, Numeric, String, Text, UniqueConstraint
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from services.platform.db.base import Base, PkMixin, TenantMixin, TimestampMixin
@@ -31,8 +31,9 @@ class KbFactRelation(Base, PkMixin, TenantMixin, TimestampMixin):
     """
 
     __tablename__ = "kb_fact_relations"
-    from_fact_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("kb_facts.id"), nullable=False)  # 失效方
-    to_fact_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("kb_facts.id"), nullable=False)  # 接任方
+    # from=失效方 → to=接任方（三边语义见类 docstring 与模块头 §8.2）
+    from_fact_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("kb_facts.id"), nullable=False)
+    to_fact_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("kb_facts.id"), nullable=False)
     relation: Mapped[str] = mapped_column(String(32), nullable=False)
     evidence: Mapped[dict] = mapped_column(JSONB, default=dict, nullable=False)
     __table_args__ = (
@@ -59,12 +60,12 @@ class KbConflict(Base, PkMixin, TenantMixin, TimestampMixin):
 
     __tablename__ = "kb_conflicts"
     conflict_type: Mapped[str] = mapped_column(String(2), nullable=False)
-    fact_a_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("kb_facts.id"), nullable=False)
-    fact_b_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("kb_facts.id"), nullable=False)
+    fact_a_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("kb_facts.id"), nullable=False)
+    fact_b_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("kb_facts.id"), nullable=False)
     score_a: Mapped[float] = mapped_column(Numeric(4, 3), nullable=False)  # 参考分（standards §5.3 同款口径）
     score_b: Mapped[float] = mapped_column(Numeric(4, 3), nullable=False)
     resolution: Mapped[str] = mapped_column(String(16), default="pending", nullable=False)
-    resolved_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"))  # 人工裁决人
+    resolved_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"))  # 人工裁决人
     comment: Mapped[str | None] = mapped_column(Text)  # 裁决说明（可审计，宪法 5）
     __table_args__ = (
         CheckConstraint("conflict_type IN ('T2','T3')", name="ck_kb_conflicts_conflict_type"),

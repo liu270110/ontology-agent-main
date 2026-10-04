@@ -62,6 +62,13 @@ class SessionRepository(Protocol):
         """按角色计数（群聊 round_robin 游标：assistant 数 % speakers，零新增状态）。"""
         ...
 
+    async def delete_cascade(self, session_id: UUID) -> None:
+        """删除会话及其消息与群成员（api/01 §5.2 DELETE 级联；硬删，FK 无 ondelete 故逐表逆序删）。
+
+        任务面（tasks/runs/task_events）由 TaskRepository.delete_by_session 承担——两聚合
+        分属两仓储，路由层按 task→session 顺序调用。"""
+        ...
+
 
 @runtime_checkable
 class TaskRepository(Protocol):
@@ -83,6 +90,14 @@ class TaskRepository(Protocol):
 
     async def find_running_by_agent(self, agent_id: UUID) -> Task | None:
         """agent 级运行中任务查询（api/01 §5.1 DELETE /agents 存在 running task 时 409）。"""
+        ...
+
+    async def find_by_run(self, run_id: UUID) -> Task | None:
+        """按 Run 反查所属任务（POST /sessions/{id}/cancel 定位 run 载体；runs 全量随载）。"""
+        ...
+
+    async def delete_by_session(self, session_id: UUID) -> None:
+        """删除会话关联任务及其 Run/事件时间线（DELETE /sessions 级联；FK 逆序 task_events→runs→tasks）。"""
         ...
 
     async def list_events(self, task_id: UUID, *, after_seq: int | None = None, limit: int = 100) -> list[TaskEvent]:

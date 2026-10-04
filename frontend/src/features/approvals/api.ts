@@ -72,7 +72,9 @@ export interface Approval {
  *  2026-10-04；= services/review/api/schemas/admin.py AdminReviewOut）。
  *  枚举权威：status ∈ draft/pending_review/approved/rejected/published/cancelled（ORM CheckConstraint）；
  *  target_type ∈ ontology_candidate/knowledge_instance/memory_l2_upgrade/plugin_listing/
- *  writeback_incident/conflict。前端富形状字段（title/summary/payload/chain…）后端不返回，一律可选。 */
+ *  writeback_incident/conflict。前端富形状字段（title/summary/payload/chain…）后端不返回，一律可选。
+ *  W2 契约冻结（2026-10-04，api/01 §5.8 ☆ 详情/批量两行）：created_at 为提交时间权威字段名
+ *  （AdminReviewOut 实名）；submitted_at 仅为 mock 富形状过渡遗留，@deprecated 勿再新增使用。 */
 export interface ReviewTicketRaw {
   id: string
   target_type: string
@@ -83,13 +85,14 @@ export interface ReviewTicketRaw {
   decision_note?: string | null
   sla_deadline?: string | null
   created_at: string
-  /** mock 富形状透传（mocks/admin-handlers.ts REVIEWS 仍是富形状，归一化时原样保留） */
+  /** @deprecated mock 富形状遗留（§5.8 契约冻结后仅 created_at 为权威）；normalizeReview 兜底链保留读取 */
+  submitted_at?: string
+  /** 详情端点富扩展（§5.8 ☆ 契约卡冻结；列表端点不返回，normalizeReview 原样透传） */
   type?: ApprovalType
   title?: string
   summary?: string
   applicant?: string
   department?: string
-  submitted_at?: string
   high_risk?: boolean
   payload?: Approval['payload']
   chain?: ApprovalChainStep[]
@@ -164,8 +167,18 @@ export function decideReview(id: string, action: 'approve' | 'reject', note?: st
   })
 }
 
-/** 批量审批（预登记端点，IX-APR-02；仅同类型非高危）。fe1 ocr 发现4：body 仍发 reason
- *  为有意保留——批量端点后端未实装，字段名以后端落地时为准，暂不随 decision 改名。 */
-export function batchReviews(ids: string[], action: 'approve' | 'reject', reason?: string) {
-  return api.post<{ updated: number; ids: string[] }>('/admin/reviews/batch', { ids, action, reason })
+/** 批量审批（§5.8 ☆ W2 契约冻结端点，IX-APR-02；W1 已按卡追认实装 2026-10-04）。
+ *  fe1 ocr 发现4 收口：意见字段名定稿=note——与 live DecisionIn {action, note}（services/
+ *  review/api/schemas/admin.py）同词汇，旧 reason 键废止；驳回必附 note（live 422）。
+ *  响应=W1 BatchDecisionOut：succeeded/failed 为冻结口径（高危类服务端逐单落 failed，
+ *  不整批 409），updated/ids 为兼容镜像（恒=succeeded）——前端 UI 已先行禁批灰态，
+ *  failed 分支仅服务端防御面。 */
+export interface BatchDecisionResult {
+  succeeded: string[]
+  failed: { id: string; reason: string }[]
+  updated: number
+  ids: string[]
+}
+export function batchReviews(ids: string[], action: 'approve' | 'reject', note?: string) {
+  return api.post<BatchDecisionResult>('/admin/reviews/batch', { ids, action, note })
 }

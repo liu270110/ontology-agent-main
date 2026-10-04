@@ -25,6 +25,10 @@ from services.agent.api.schemas.task import (
     TaskEventOut,
     TaskEventPageOut,
     TaskListOut,
+    TaskLogOut,
+    TaskLogPageOut,
+    TaskRetryIn,
+    TaskRetryOut,
     task_detail_from_domain,
     task_from_domain,
 )
@@ -189,3 +193,92 @@ async def _task_event_stream(
             yield b": ping\n\n"
             last_frame_at = time.monotonic()
         await asyncio.sleep(poll_interval)
+
+
+# ── W1 缺口补齐批（2026-10-04）：logs 行视图 + retry（api/01 §5.2/§5.15 登记行实装）──────
+
+_LOG_ERROR_MARKS = ("ERROR", "FAIL")  # event_type 关键词 → level 收敛（logs 行视图口径）
+_LOG_WARN_MARKS = ("WARN",)
+
+
+def _log_level(event_type: str) -> str:
+    upper = event_type.upper()
+    if any(mark in upper for mark in _LOG_ERROR_MARKS):
+        return "error"
+    if any(mark in upper for mark in _LOG_WARN_MARKS):
+        return "warn"
+    return "info"
+
+
+def _log_line(event: TaskEvent) -> str:
+    """事件 → 单行日志文案：event_type 打头 + 紧凑 data JSON（无 data 则仅 event_type）。"""
+    data = event.data or {}
+    payload = json.dumps(data, ensure_ascii=False, separators=(",", ":")) if data else ""
+    return f"{event.event_type} {payload}".strip()
+
+
+@router.get("/{task_id}/logs", summary="run 日志行视图（task_events 投影 ts/level/line；区别于 /events 事件流）")
+async def list_task_logs(
+    task_id: uuid.UUID,
+    principal: SessionReadDep,
+    uow: UowDep,
+    after_seq: Annotated[int | None, Query(ge=0)] = None,
+    limit: Annotated[int, Query(ge=1, le=500)] = 200,
+) -> TaskLogPageOut:
+    """api/01 §5.15 登记行 + 契约冻结 2026-10-04 ③（前端 tasks/api.ts listTaskLogs：
+    `{items:[{ts,level,line}], next_cursor}`，items 为冻结口径）。数据源=task_events 只读
+    投影（与 /events 同源不同视图）；next_cursor=after_seq 续读游标（字符串），取尽为 null。"""
+    async with uow.for_tenant(principal.tenant_id) as tx:
+        if await tx.tasks.get(task_id) is None:
+            raise GatewayError(404, "任务不存在", status_code=404)
+        rows = await tx.tasks.list_events(task_id, after_seq=after_seq, limit=limit + 1)
+    has_more = len(rows) > limit
+    page = rows[:limit]
+    return TaskLogPageOut(
+        items=[
+            TaskLogOut(ts=row.created_at, level=_log_level(row.event_type), line=_log_line(row)) for row in page
+        ],
+        next_cursor=str(page[-1].seq) if has_more and page else None,
+    )
+
+
+@router.post(
+    "/{task_id}/retry",
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="重试（失败任务重建 Run：attempt_count+1、新 Run queued 交 worker 认领）",
+)
+async def retry_task(task_id: uuid.UUID, body: TaskRetryIn, principal: SessionWriteDep, uow: UowDep) -> TaskRetryOut:
+    """api/01 §5.15 登记行 + 契约冻结 2026-10-04 ④（202 受理，`{id, status:"queued", scope}`）。
+
+    重试=编排器主权动作的 REST 面（04 §3）：经聚合方法 start_retry_run 重建 Run——
+    attempt_count+1、新 Run queued（TaskRunWorker 秒级认领）、任务行落 running（04 §3
+    「重试期间 task 保持 RUNNING」，持久层任务五态无 queued，响应 status=queued 指重建
+    Run 已入队，终态真值以 GET /tasks/{id} 轮询为准）。非失败/非重试任务拒绝：
+
+    - 任务不存在 → 404；succeeded/cancelled 等非 running/failed 态 → 4102 → 409；
+    - 活跃 Run 未终态 → 4102 TASK_ALREADY_RUNNING → 409；
+    - 最近失败 retryable=false（RunRetryPolicy 口径：cancelled/判据满足/预算耗尽类）→ 409；
+    - attempt_count 已达 3（含首次）→ 聚合内断言 4102 → 409。
+    """
+    try:
+        async with uow.for_tenant(principal.tenant_id) as tx:
+            task = await tx.tasks.get(task_id)
+            if task is None:
+                raise GatewayError(404, "任务不存在", status_code=404)
+            last = task.runs[-1] if task.runs else None
+            if last is not None and last.error is not None and last.error.get("retryable") is False:
+                raise TaskError("4102 TASK_NOT_RETRYABLE: 最近一次失败 retryable=false（RunRetryPolicy 口径，04 §3）")
+            run = task.start_retry_run()  # 聚合方法：仅 running/failed；attempt≤3 断言在内
+            await tx.tasks.save(task)  # 级联保存新 Run（queued）
+            await tx.tasks.append_event(
+                task.id,
+                TaskEvent(
+                    task_id=task.id,
+                    event_type="task.retry_queued",
+                    data={"run_id": str(run.id), "scope": body.scope},
+                ),
+            )
+            tx.enqueue_projection("task.retry_queued", task.id, {"task_id": str(task.id), "run_id": str(run.id)})
+    except TaskError as exc:
+        raise domain_error(exc, fallback_code=4102) from exc
+    return TaskRetryOut(id=task.id, status="queued", scope=body.scope, run_id=run.id)

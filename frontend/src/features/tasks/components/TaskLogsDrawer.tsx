@@ -16,7 +16,10 @@ export function TaskLogsDrawer({ task, onClose }: { task: Task; onClose: () => v
   const [q, setQ] = useState('')
   const bottomRef = useRef<HTMLDivElement>(null)
 
-  const { data } = useQuery({ queryKey: ['tasks', task.id, 'logs'], queryFn: () => listTaskLogs(task.id) })
+  // W3 加固：logs 端点 404/失败（isError）与「零日志」落「暂无日志」空态，
+  // 与「有日志但级别/关键字过滤后无匹配」（暂无匹配日志）区分，不混同误报
+  const { data, isError } = useQuery({ queryKey: ['tasks', task.id, 'logs'], queryFn: () => listTaskLogs(task.id) })
+  const total = data?.items.length ?? 0
   const logs = useMemo(() => {
     let items = data?.items ?? []
     if (level !== 'all') items = items.filter(l => l.level === level)
@@ -77,7 +80,11 @@ export function TaskLogsDrawer({ task, onClose }: { task: Task; onClose: () => v
               <span className="whitespace-pre-wrap break-all text-label-2">{l.line}</span>
             </div>
           ))}
-          {logs.length === 0 && <div className="py-6 text-center text-[11px] text-label-3">暂无匹配日志</div>}
+          {logs.length === 0 && (
+            <div className="py-6 text-center text-[11px] text-label-3" data-testid="tsk-logs-empty">
+              {isError || total === 0 ? '暂无日志' : '暂无匹配日志'}
+            </div>
+          )}
           <div ref={bottomRef} />
         </div>
       </div>

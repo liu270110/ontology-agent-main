@@ -59,7 +59,17 @@ export function listTasks(params?: { status?: string; type?: string }) {
   return api.list<Task>(`/tasks?${qs.toString()}`)
 }
 export const getTask = (id: string) => api.get<Task>(`/tasks/${id}`)
-export const listTaskLogs = (id: string) => api.get<{ items: TaskLog[]; next_cursor: null }>(`/tasks/${id}/logs`)
+/** 任务日志行视图（契约冻结注记=api/01 §5.2 2026-10-04，契约源=前端 mock）。形状双兼容（W3）：
+ *  前端 mock = `{items:[{ts,level,line}],next_cursor}`；后端 W1 按 `{lines:[…]}` 实现——
+ *  api 层归一（items 优先、lines 兜底；字符串行补 ts=''·level='info'），消费方只认 TaskLog[]。 */
+export async function listTaskLogs(id: string): Promise<{ items: TaskLog[]; next_cursor: null }> {
+  const raw = await api.get<{ items?: (TaskLog | string)[]; lines?: (TaskLog | string)[] }>(`/tasks/${id}/logs`)
+  const rows = raw.items ?? raw.lines ?? []
+  return {
+    items: rows.map(r => (typeof r === 'string' ? { ts: '', level: 'info' as const, line: r } : r)),
+    next_cursor: null,
+  }
+}
 /** 取消（理由必填，契约 §5.2 cancel + 26 篇 IX-TSK-04） */
 export function cancelTask(id: string, reason: string) {
   return api.post<{ id: string; status: string }>(`/tasks/${id}/cancel`, { reason })

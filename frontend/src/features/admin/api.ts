@@ -262,3 +262,49 @@ export interface AnalyticsOverview {
   }
 }
 export const getAnalyticsOverview = () => api.get<AnalyticsOverview>('/admin/analytics/overview')
+
+// ---- 回写台账（§5.8 ★ writeback 三端点已登记且后端 live：services/writeback/api/ledger.py；
+//      DTO=services/writeback/api/schemas/ledger.py WritebackLedgerOut（extra=forbid），W2 2026-10-04
+//      按真实契约消费——前端此前零消费的「白捡」面。注意：§6.5 示例中的 `id` 字段名已过时，
+//      实装 DTO 主键=ledger_id。处置语义权威=业务回写设计 §2.5/§3.3。 ----
+/** 台账状态机（业务回写设计 §2.5，只前进不回退；succeeded/compensated 为终态） */
+export type LedgerStatus = 'pending' | 'accepted' | 'succeeded' | 'failed' | 'compensated' | 'unknown'
+/** 人工处置三动作（业务回写设计 §3.3）：redispatch=同幂等键新 attempt 重发 / mark_compensated=标记冲正 / close=关闭 */
+export type LedgerDisposeAction = 'redispatch' | 'mark_compensated' | 'close'
+
+export interface WritebackLedgerRow {
+  ledger_id: string
+  /** 幂等键（{tenant_id}:{action_instance_id}，§2.1 键式唯一） */
+  idempotency_key: string
+  status: LedgerStatus
+  /** 业务受理凭证（受理号+时间戳+键回显；accepted 起必非空；人工标记冲正 receipt.manual=true） */
+  receipt: Record<string, unknown> | null
+  action_instance_id: string
+  attempts: number
+  needs_human: boolean
+  /** 唯一自由文本审计位（失败原因 + REDISPATCH:/CLOSED: 人工注记追加式留痕） */
+  last_error: string | null
+  updated_at: string | null
+}
+
+/** 台账分页查询（status/needs_human 过滤，updated_at 倒序；§3.3 人工队列经 needs_human=true）。
+ *  live 响应=WritebackLedgerPageOut {items,total,offset,limit}（裸分页体，api.list 三形态归一）。 */
+export function listWritebackLedger(params: { status?: LedgerStatus; needs_human?: boolean; offset?: number; limit?: number }) {
+  const qs = new URLSearchParams()
+  if (params.status) qs.set('status', params.status)
+  if (params.needs_human !== undefined) qs.set('needs_human', String(params.needs_human))
+  qs.set('offset', String(params.offset ?? 0))
+  qs.set('limit', String(params.limit ?? 50))
+  return api.list<WritebackLedgerRow>(`/admin/writeback/ledger?${qs.toString()}`)
+}
+
+/** 台账单条详情（writeback.status 的 REST 对应，与列表行同形投影） */
+export const getWritebackLedger = (id: string) =>
+  api.get<WritebackLedgerRow>(`/admin/writeback/ledger/${id}`)
+
+/** 人工处置（202=受理即返；响应体=落库后重取的最新投影）。守卫（违者 3003→409）：
+ *  redispatch 仅 unknown/failed/pending+needs_human；close 终态不可；mark_compensated 终态
+ *  compensated 不可。note：close 必填；无凭证 mark_compensated 必填（3001→422）。 */
+export function disposeWritebackLedger(id: string, body: { action: LedgerDisposeAction; note?: string }) {
+  return api.post<WritebackLedgerRow>(`/admin/writeback/ledger/${id}/dispose`, body)
+}

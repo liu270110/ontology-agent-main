@@ -30,6 +30,7 @@ from services.agent.api.schemas.session import (
     MemberUpdateIn,
     MessagePageOut,
     SendMessageIn,
+    SessionCancelIn,
     SessionCreateIn,
     SessionListOut,
     SessionOut,
@@ -45,7 +46,7 @@ from services.agent.business.chat_orchestrator import build_chat_orchestrator
 from services.agent.domain.model.agent import AgentError
 from services.agent.domain.model.kernel_context import KernelEvent
 from services.agent.domain.model.session import MemberRole, Message, RoutingMode, SessionError
-from services.agent.domain.model.task import Task, TaskError, TaskEvent
+from services.agent.domain.model.task import Task, TaskError, TaskEvent, TaskStatus
 from services.memory.business.runtime import build_l1_store  # memory 公开装配面（memory.data 模块私有，P2-2 收口）
 from services.platform.db.uow import AsyncUnitOfWork
 from services.platform.deps import get_redis, get_session_factory
@@ -335,6 +336,89 @@ async def patch_session(
     except SessionError as exc:
         raise domain_error(exc, fallback_code=4103) from exc
     return from_domain(session)
+
+
+@router.delete(
+    "/{session_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="删除会话（硬删级联：消息/成员/任务/Run/事件；W1 缺口批追认前端）",
+)
+async def delete_session(session_id: uuid.UUID, principal: SessionWriteDep, uow: UowDep) -> None:
+    """删除会话及其从属数据（契约源=SessionList.tsx DELETE + mocks/handlers 204；契约冻结
+    2026-10-04 ①「级联删除会话消息与证据引用」）：
+
+    - 级联面（本批不动表结构，FK 无 ondelete 逐表逆序删）：task_events → runs → tasks →
+      messages（证据引用 citations/ag_ui_events 内嵌其中，随行清除）→ session_members → sessions；
+    - 范围注记：outbox 投影行（enqueue_projection 已落库者）与本地 spill 文件不随删——前者
+      为审计/投影留痕（04 §6.1 消费方处理），后者随 M4 MinIO spill 清理批；
+    - 权限：会话所有者本人（user_id 比对，非所有者一律 404 防存在性探测）；幂等性无——
+      二次删除 404（前端 deleteSession 对 204 空体按成功放行，见 SessionList 注释）。
+    """
+    async with uow.for_tenant(principal.tenant_id) as tx:
+        session = await tx.sessions.get(session_id)
+        if session is None or session.user_id != principal.user_id:
+            raise GatewayError(404, "会话不存在", status_code=404)
+        await tx.tasks.delete_by_session(session_id)  # FK 逆序：task_events→runs→tasks
+        await tx.sessions.delete_cascade(session_id)  # messages→session_members→sessions
+        # session.deleted 消费方=审计/检索下线（04 §6.1）；进程内缓冲，M4 起 outbox 同事务落库
+        tx.enqueue_projection("session.deleted", session_id, {"session_id": str(session_id)})
+
+
+@router.post(
+    "/{session_id}/cancel",
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="停止生成（标记 run 终态 cancelled；幂等——已终态同样 202；W1 缺口批追认前端）",
+)
+async def cancel_session_run(
+    session_id: uuid.UUID, body: SessionCancelIn, principal: SessionWriteDep, uow: UowDep
+) -> dict:
+    """IX-CHT-06 停止生成（契约源=ChatPage.handleStop body {run_id} → 202；契约冻结 2026-10-04 ②）。
+
+    语义=定位 run 并标记终态 cancelled（幂等：已终态/无活跃 run 同样 202，前端 .catch 兜底
+    不依赖响应体）；无 run_manager 实例——进程内编排器中断（CancellationCoordinator 清单化
+    传播）归执行编排 M3+（04 §3 cancelled 注记，同 tasks/cancel 端点口径），本端点只做
+    聚合状态迁移与级联保存，worker 侧对已 cancelled 的 run 不再认领。
+
+    定位：run_id 给定→按 run 反查任务（跨会话 404）；缺省→会话活跃任务（find_running_by_session）。
+    """
+    try:
+        async with uow.for_tenant(principal.tenant_id) as tx:
+            if await tx.sessions.get(session_id) is None:
+                raise GatewayError(404, "会话不存在", status_code=404)
+            task = (
+                await tx.tasks.find_by_run(body.run_id)
+                if body.run_id is not None
+                else await tx.tasks.find_running_by_session(session_id)
+            )
+            if task is not None and task.session_id != session_id:
+                raise GatewayError(404, "run 不属于该会话", status_code=404)
+            run = None
+            if task is not None:
+                if body.run_id is not None:
+                    run = next((r for r in task.runs if r.id == body.run_id), None)
+                else:
+                    run = await tx.tasks.find_active_run(task.id)
+                if run is not None and run.is_active:
+                    if task.status is TaskStatus.RUNNING and task.active_run_id == run.id:
+                        task.cancel()  # 聚合方法：活跃 Run cancelled + task cancelled（04 §3）
+                    else:
+                        run.cancel()
+                    await tx.tasks.save(task)  # 级联保存 Run 终态
+                    await tx.tasks.append_event(
+                        task.id,
+                        TaskEvent(
+                            task_id=task.id,
+                            event_type="run.cancelled",
+                            data={"run_id": str(run.id), "source": "session.cancel"},
+                        ),
+                    )
+                    tx.enqueue_projection(
+                        "run.cancelled", task.id, {"task_id": str(task.id), "run_id": str(run.id)}
+                    )
+            effective_run_id = run.id if run is not None else body.run_id
+    except TaskError as exc:
+        raise domain_error(exc, fallback_code=4102) from exc
+    return {"run_id": str(effective_run_id) if effective_run_id is not None else None, "status": "cancelled"}
 
 
 @router.post(

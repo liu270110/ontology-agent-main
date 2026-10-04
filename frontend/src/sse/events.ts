@@ -1,6 +1,7 @@
 import type { EvidenceChunk } from '@/stores/session-store'
 
-/** SSE 事件清单（api/02 §3 事件总表）。M3 主干波 11 事件 + M4+ 已知扩展；
+/** SSE 事件清单（协议出处：docs/api/02 §3 事件总表 + docs/架构设计/42 对话执行可视化）。
+ *  M3 主干波 11 事件 + M4+ 已知扩展 + 执行可视化五组登记（api/02 §3 2026-10-05 五组登记）；
  *  未知事件一律忽略（向前兼容裁决）。 */
 
 export const KNOWN_EVENTS = [
@@ -16,6 +17,19 @@ export const KNOWN_EVENTS = [
   'run.usage',
   // Agent 产物卡（S2 设计稿对齐切片追加：画框03 .artifact，载荷挂 message_id + artifact）
   'artifact.created',
+  // 执行结构波（api/02 §3 ☆；契约权威=40 篇 §4：PLAN_UPDATED / SUBRUN_*×3 / WORKFLOW_NODE_*×2）
+  'PLAN_UPDATED', 'SUBRUN_STARTED', 'SUBRUN_UPDATED', 'SUBRUN_FINISHED',
+  'WORKFLOW_NODE_STARTED', 'WORKFLOW_NODE_FINISHED',
+  // 思考波（api/02 §3 ◆ 2026-10-05 登记：THINKING_* 三事件，ReasoningBlock 数据源，24 篇 §3.6）
+  'THINKING_START', 'THINKING_CONTENT', 'THINKING_END',
+  // 审批波（api/02 §3 ◆：kernel.approval_pending 转译上 wire，H-0b；对话内审批卡 42 篇 §3）
+  'APPROVAL_REQUIRED', 'APPROVAL_RESOLVED',
+  // 输入面波（api/02 §3 ★ M4.5-A 已实现已发射补登记：运行中输入插队受理回执）
+  'INBOX_SPLICED',
+  // 群聊波（api/02 §3 ★ 27 篇 X15 已实现已发射补登记：群聊编排器路由决议，group 域另有消费）
+  'ROUTING_DECISION',
+  // 控制面波（api/02 §3 ◆：estop 激活/解除 hub 广播，全局横幅）
+  'CONTROL_STATE',
 ] as const
 
 export type SseEventName = (typeof KNOWN_EVENTS)[number] | (string & {})

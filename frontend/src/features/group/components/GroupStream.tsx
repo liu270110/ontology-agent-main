@@ -1,7 +1,7 @@
 import { Fragment, useEffect, useMemo, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
-import { AlertTriangle, ArrowRight, Check, ChevronDown, Copy, Database, Search, ShieldAlert, Star, X, Zap } from 'lucide-react'
+import { AlertTriangle, ArrowRight, Check, ChevronDown, Copy, Search, ShieldAlert, Star, X, Zap } from 'lucide-react'
 import { useGroupStreamStore, type GroupMessage } from '../group-store'
 import type { GroupMember } from '../api'
 import { AgentAvatar, ModelChip } from './shared'
@@ -232,9 +232,8 @@ export function GroupStream({ members }: { members: GroupMember[] }) {
                     <span className="tn">{c.tool}</span>
                     <span>· {c.summary ?? '运行中'}</span>
                     {c.costMs != null && <span>· {(c.costMs / 1000).toFixed(1)}s</span>}
-                    <span className="ml-auto flex items-center gap-1">
-                      <Database size={10} aria-hidden />trace 8e21c4
-                    </span>
+                    {/* trace_id 行已删（ui-audit「假数据」）：group-store GroupToolCall 无 trace_id 字段
+                        （TOOL_CALL_RESULT 群聊域未归约该载荷键）→ 行直接隐藏，禁止显示假值（宪法 5）。 */}
                   </div>
                 ))}
                 {m.pending_action && (

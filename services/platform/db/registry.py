@@ -68,6 +68,7 @@ from services.plugin.data.orm import (  # noqa: F401
     ToolORM,
 )
 from services.review.data.orm import ReviewTicket  # noqa: F401
+from services.rsi.data.orm import OrsiCapabilityORM  # noqa: F401  ORSI 原子能力注册表（docs/Agent/14 §4，M4.6-S3）
 from services.sandbox.data.orm import (  # noqa: F401
     EgressPolicy,
     SandboxEvent,

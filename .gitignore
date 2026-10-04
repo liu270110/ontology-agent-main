@@ -57,8 +57,11 @@ _patch_*.py
 .orsi-g1/
 .scratch-g1/
 
-# 客户样图目录（含图纸 PDF），永不入库
+# 客户样图目录（含图纸 PDF），永不入库（锚定注释保留原语义；模块轴 data 层反豁免见下）
 data/
+# 模块轴裁决（2026-09-27）：每模块 data/=仓储层（services/<m>/data）必须入库——
+# 反豁免模块 data 层（M4.6-S3 起 services/rsi/data 即将被误伤的实例；plugin/kb 先行落库未中招）
+!services/*/data/
 
 # 旧 tools/ 路径本地残留（已迁 services/devtools/）：训练运行产物不入库
 tools/onto-train/runs/

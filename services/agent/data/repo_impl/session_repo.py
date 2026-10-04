@@ -3,6 +3,8 @@
 - 强制租户过滤：tenant_id 构造期绑定（`uow.for_tenant()`，04 §4），全部查询/写入携带；
 - typed SQLAlchemy 2.0（standards/01 §4），无裸 SQL 字符串；
 - `get` 未命中返回 None；只追加实体（Message、TaskEvent）走专用 append；
+- 子 Run 行（runs.parent_run_id 非空，40 篇 R1）走独立写入口 create_subrun /
+  update_subrun_status——聚合 save/_load_runs 只见根 Run（防并行子 Run 互相丢更新）；
 - next_seq / 事件 seq 均由存储重建或分配（唯一约束 uk_messages_session_id_seq /
   uk_task_events_task_id_seq 兜底），不新增列（迁移只增不改）。
 """
@@ -11,6 +13,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import UTC, datetime
+from typing import Any
 
 from sqlalchemy import delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -88,6 +91,10 @@ def _run_to_domain(row: RunORM) -> Run:
         task_id=row.task_id,
         seq_start=row.seq_start,
         status=RunStatus(row.status),
+        parent_run_id=row.parent_run_id,
+        label=row.label,
+        goal=row.goal,
+        depth=row.depth,
         usage=row.usage or {},
         error=row.error,
         started_at=row.started_at,
@@ -362,7 +369,11 @@ class PgTaskRepository:
         row.payload = task.payload
         row.result = task.result
         row.error = task.error
+        # 40 篇 R1：聚合 save 只写根 Run——子 Run 行走独立写入口（create_subrun/
+        # update_subrun_status），防并行子 Run 互相丢更新（防御性跳过手工注入的子 Run）。
         for run in task.runs:
+            if run.parent_run_id is not None:
+                continue
             await self._save_run(run)
         await self._db.flush()
 
@@ -391,6 +402,62 @@ class PgTaskRepository:
         await self._db.flush()
         return seq
 
+    async def create_subrun(self, run: Run) -> None:
+        """子 Run 独立写入口（40 篇 R1）：轻量 INSERT，不经聚合 save——
+
+        并行子 Run 各走各的写路径互不丢更新；根 Run 断言（start_run 的 PENDING+活跃
+        互斥）不适用于子 Run。parent_run_id 为空即调用方误用（根 Run 须走聚合 save），
+        结构化拒绝防根 Run 绕过断言静默落库。
+        """
+        if run.parent_run_id is None:
+            raise ValueError("create_subrun 仅接收子 Run（parent_run_id 必填）；根 Run 走聚合 start_run/save")
+        if run.tenant_id != self._tenant_id:  # 防御：禁止跨租户写（save 同口径）
+            raise ValueError("租户不匹配：拒绝写入他租户子 Run 行")
+        self._db.add(
+            RunORM(
+                id=run.id,
+                tenant_id=self._tenant_id,
+                task_id=run.task_id,
+                seq_start=run.seq_start,
+                status=run.status.value,
+                parent_run_id=run.parent_run_id,
+                label=run.label,
+                goal=run.goal,
+                depth=run.depth,
+                usage=run.usage,
+                error=run.error,
+                started_at=run.started_at,
+                ended_at=run.ended_at,
+            )
+        )
+        await self._db.flush()
+
+    async def update_subrun_status(
+        self,
+        run_id: uuid.UUID,
+        status: RunStatus,
+        *,
+        usage: dict[str, Any] | None = None,
+        error: dict[str, Any] | None = None,
+    ) -> bool:
+        """子 Run 定向状态更新（40 篇 R1）：只 UPDATE 目标行——
+
+        并行子 Run 行级隔离（同表不同行），互不覆写；终态自动兜底回填 ended_at
+        （与聚合 _save_run 同口径）。返回 False=行不存在或跨租户（防御，403/404 归调用方）。
+        """
+        row = await self._db.get(RunORM, run_id)
+        if row is None or row.tenant_id != self._tenant_id:
+            return False
+        row.status = status.value
+        if usage is not None:
+            row.usage = usage
+        if error is not None:
+            row.error = error
+        if status.value in _TERMINAL_RUN_STATES and row.ended_at is None:
+            row.ended_at = _now()  # 终态时间由仓储兜底回填（持久化细节，非业务规则）
+        await self._db.flush()
+        return True
+
     async def list_events(
         self, task_id: uuid.UUID, *, after_seq: int | None = None, limit: int = 100
     ) -> list[TaskEvent]:
@@ -418,6 +485,9 @@ class PgTaskRepository:
                 RunORM.task_id == task_id,
                 RunORM.tenant_id == self._tenant_id,
                 RunORM.status.in_(_ACTIVE_RUN_STATES),
+                # 40 篇 R1：活跃 Run 预检只认根 Run（与 uk_runs_one_active 收窄后 WHERE 同口径）——
+                # 否则并行子 Run 的活跃行会误触 4102 预检
+                RunORM.parent_run_id.is_(None),
             )
             .order_by(RunORM.created_at.desc())
             .limit(1)
@@ -504,7 +574,13 @@ class PgTaskRepository:
     async def _load_runs(self, task_id: uuid.UUID) -> list[Run]:
         stmt = (
             select(RunORM)
-            .where(RunORM.task_id == task_id, RunORM.tenant_id == self._tenant_id)
+            .where(
+                RunORM.task_id == task_id,
+                RunORM.tenant_id == self._tenant_id,
+                # 40 篇 R1 聚合加载隔离：只载根 Run——子 Run 行独立落库（create_subrun），
+                # 不入聚合（防 save 全量覆写路径覆写并行子 Run 互相丢更新）
+                RunORM.parent_run_id.is_(None),
+            )
             .order_by(RunORM.created_at, RunORM.id)
         )
         rows = (await self._db.execute(stmt)).scalars().all()

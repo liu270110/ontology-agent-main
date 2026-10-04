@@ -8,11 +8,11 @@ add/list_messages/list 等为创建与回放用例定制的方法（04 §4「查
 
 from __future__ import annotations
 
-from typing import Protocol, runtime_checkable
+from typing import Any, Protocol, runtime_checkable
 from uuid import UUID
 
 from services.agent.domain.model.session import Message, Session
-from services.agent.domain.model.task import Run, Task, TaskEvent
+from services.agent.domain.model.task import Run, RunStatus, Task, TaskEvent
 
 
 @runtime_checkable
@@ -80,6 +80,28 @@ class TaskRepository(Protocol):
 
     async def append_event(self, task_id: UUID, event: TaskEvent) -> int:
         """只追加事件，返回仓储分配的递增 seq（04 §2：先落库后推送）。"""
+        ...
+
+    async def create_subrun(self, run: Run) -> None:
+        """子 Run 独立写入口（40 篇 R1）：轻量 INSERT，不经聚合 save 全量覆写——
+
+        并行子 Run 各走各的写路径，互不丢更新；根 Run 仍走 save（聚合加载已按
+        ``parent_run_id IS NULL`` 隔离子 Run 行）。仅接收 parent_run_id 非空的 Run。
+        """
+        ...
+
+    async def update_subrun_status(
+        self,
+        run_id: UUID,
+        status: RunStatus,
+        *,
+        usage: dict[str, Any] | None = None,
+        error: dict[str, Any] | None = None,
+    ) -> bool:
+        """子 Run 定向状态更新（40 篇 R1）：只 UPDATE 目标行（终态自动回填 ended_at）。
+
+        返回 False=行不存在或跨租户。不经聚合 save，防并行子 Run 互相丢更新。
+        """
         ...
 
     async def find_active_run(self, task_id: UUID) -> Run | None: ...

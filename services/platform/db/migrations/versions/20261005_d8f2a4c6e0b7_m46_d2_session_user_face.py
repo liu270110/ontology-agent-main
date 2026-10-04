@@ -18,23 +18,22 @@ Create Date: 2026-10-05
 - 存量不回填：search_text 只在新消息追加后滚动生成（docs/Agent/13 §2.2 明确不做回填），
   DEFAULT '' 即存量行的合法空检索面。
 
-downgrade 完整可逆（依赖序）：先撤两索引（表达式引用列），再撤 messages/sessions 新列，
-最后撤 pg_trgm 扩展（本批唯一使用方）。
+downgrade 撤本批自有对象（依赖序）：先撤两索引（表达式引用列），再撤 messages/sessions
+新列。pg_trgm 扩展不回收——upgrade 以 IF NOT EXISTS 落地不记录创建权（可能已由旁路
+预装），扩展属共享基础设施无条件 DROP 会殃及旁路使用方。
 
 ORM parity: services/agent/data/orm.py Session/Message。
 Contract: docs/architecture/06 §2.2；docs/database/01 §3.2（文档批回填）。
 """
 
-from typing import Sequence, Union
+from collections.abc import Sequence
 
 from alembic import op
-import sqlalchemy as sa
-
 
 revision: str = "d8f2a4c6e0b7"
-down_revision: Union[str, None] = "b835a095ffe4"
-branch_labels: Union[str, Sequence[str], None] = None
-depends_on: Union[str, Sequence[str], None] = None
+down_revision: str | None = "b835a095ffe4"
+branch_labels: str | Sequence[str] | None = None
+depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
@@ -81,4 +80,5 @@ def downgrade() -> None:
     op.execute("ALTER TABLE sessions DROP COLUMN IF EXISTS deleted_at")
     op.execute("ALTER TABLE sessions DROP COLUMN IF EXISTS title_generated")
     op.execute("ALTER TABLE sessions DROP COLUMN IF EXISTS search_text")
-    op.execute("DROP EXTENSION IF EXISTS pg_trgm")  # 本批唯一使用方（依赖序：索引列撤净后）
+    # pg_trgm 扩展不回收：upgrade 以 IF NOT EXISTS 落地不记录创建权（可能已由旁路预装），
+    # 扩展属共享基础设施，无条件 DROP 会殃及旁路使用方

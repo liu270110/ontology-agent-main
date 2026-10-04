@@ -5,7 +5,7 @@
 上架状态机（14 §2 统一「市场件」生命周期，v1 最小）：
 
     draft → in_review（提交人工审核，v1 预留）
-    draft → listed（v1 直通边：清单校验+静态扫描两项门禁先行即上架）
+    draft → listed（v1 直通边：清单校验门禁先行即上架；静态扫描门禁随后续批次交付）
     in_review → listed（终审通过）/ → draft（驳回修改）
     listed → deprecated（废弃下架）/ → revoked（违规撤销）
     deprecated → listed（恢复上架）/ → revoked（撤销）

@@ -1,5 +1,5 @@
 # tests/rsi/test_g0_run_demo.py
-"""run_g0 demo 模式端到端用例（subprocess 真跑 services/tools/orsi/run_g0.py --demo）。
+"""run_g0 demo 模式端到端用例（subprocess 真跑 services/devtools/orsi/run_g0.py --demo）。
 
 断言目标：退出码 0；报告含簇明细（主簇 opened / 对照簇 below_threshold）与 proposal id；
 工单留痕 JSONL 落盘且 surface=O1；demo 标注在场（合成数据非真实信号）。
@@ -23,7 +23,7 @@ def test_run_g0_demo端到端(tmp_path: Path) -> None:
     proc = subprocess.run(
         [
             sys.executable,
-            str(REPO_ROOT / "services" / "tools" / "orsi" / "run_g0.py"),
+            str(REPO_ROOT / "services" / "devtools" / "orsi" / "run_g0.py"),
             "--demo",
             "--store-dir",
             str(store_dir),
@@ -62,7 +62,7 @@ def test_run_g0_demo端到端(tmp_path: Path) -> None:
 
 def test_run_g0_参数校验_双模式互斥_live须租户() -> None:
     env = {**os.environ, "PYTHONUTF8": "1", "PYTHONIOENCODING": "utf-8"}
-    base = [sys.executable, str(REPO_ROOT / "services" / "tools" / "orsi" / "run_g0.py")]
+    base = [sys.executable, str(REPO_ROOT / "services" / "devtools" / "orsi" / "run_g0.py")]
     for args in (
         ["--demo", "--live"],  # 互斥
         [],  # 必选其一

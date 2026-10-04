@@ -28,7 +28,7 @@ M5+ 启动（权威=architecture/09）。
   `UnboundActionSink`（dispatcher resolve-miss→unbound_action，经
   `ActionDispatcher(gap_sink=…)` 可选注入，默认 None 零侵入）；
   unmapped_intent/manual_fallback 仅定义采集接口留内核线上报（不接假信号）；
-- 运行入口 `services/tools/orsi/run_g0.py`（`--demo` 合成事件 / `--live` PG 台账，Markdown 报告；
+- 运行入口 `services/devtools/orsi/run_g0.py`（`--demo` 合成事件 / `--live` PG 台账，Markdown 报告；
   首跑实录=docs/rsi/G0-首次运行-2026-09-29.md，本地文档）；
 - `TriggerTrack` 增 `GAP` 枚举位（三轨，09 §13.4）；触发注册面对 GAP 显式拒绝
   （缺口检测器=聚合巡检非注册制）；候选生命周期迁移仍必经 `Proposal.transition`。
@@ -48,6 +48,6 @@ M5+ 启动（权威=architecture/09）。
   迁移唯一入口仍为 RsiService/Proposal.transition（G2/G3 本批不做不 stub）；
 - 种子行动类装载 `load_seed_actions`（services/seeds/power_seed.ttl 的 ob2:Action 子类闭包，
   复用 ontology.core.tbox 装载器，只读）；
-- 运行入口 `services/tools/orsi/run_g1.py`（`--demo` 合成两簇演示三级命中/降级 / `--live` OA_
+- 运行入口 `services/devtools/orsi/run_g1.py`（`--demo` 合成两簇演示三级命中/降级 / `--live` OA_
   配置骨架；Markdown 报告含逐级尝试留痕；首跑实录=docs/rsi/G1-首次运行-2026-09-29.md，
   本地文档；store 口径：G0=.orsi-g0、G1=.orsi-g1，同一 GapStore JSONL 格式）。

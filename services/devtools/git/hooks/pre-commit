@@ -1,0 +1,19 @@
+#!/bin/sh
+# 分支保护门禁：develop/master 禁止直接提交（合并提交放行）
+# 规范：docs/standards/02-git多Agent协作与Worktree规范.md
+branch=$(git symbolic-ref --quiet --short HEAD 2>/dev/null || echo DETACHED)
+gitdir=$(git rev-parse --absolute-git-dir)
+case "$branch" in
+  master)
+    echo "✗ [git-workflow] 禁止在 master 直接提交：master 只接受 develop 的合入（发布线）" >&2
+    exit 1
+    ;;
+  develop)
+    if [ ! -f "$gitdir/MERGE_HEAD" ]; then
+      echo "✗ [git-workflow] 禁止在 develop 直接提交——develop 是集成分支，只接受 --no-ff 合并" >&2
+      echo "  正确姿势: sh services/devtools/git/wt new <域>-<简述>  开功能分支后在工作分支提交，完成后 wt finish 合入" >&2
+      exit 1
+    fi
+    ;;
+esac
+exit 0

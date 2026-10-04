@@ -65,6 +65,12 @@ class ErrorCode(IntEnum):
     # 2026-10-05 K1 批登记（内核循环检测两段式：同签名连续重复达阈值硬终止，A-1 上游
     # gemini-cli；依据 docs/Agent/13 §2 K1-a；02 §7 表格回填随文档批）
     EXEC_LOOP_DETECTED = 5008
+    # 2026-10-05 S1 批登记（docs/Agent/14-集市平台核心模块与ORSI原子能力设计（主仓本地）§2/§3：
+    # 工具集市 46xx 段三码；02 §7 表格回填随文档批）——4601=注册清单校验拒绝（缺语义标注等，
+    # 可修复）；4602=同租户同名工具已登记；4603=生命周期非法状态迁移（硬编码迁移表拒绝）。
+    TOOL_LISTING_INVALID = 4601
+    TOOL_NAME_TAKEN = 4602
+    TOOL_ILLEGAL_TRANSITION = 4603
     INTERNAL_ERROR = 5999
 
 

@@ -75,6 +75,7 @@ from services.sandbox.data.orm import (  # noqa: F401
     SandboxProfile,
     SandboxSnapshot,
 )
+from services.tools.data.orm import ToolRegistryORM  # noqa: F401  工具集市登记表（docs/Agent/14 §5）
 from services.writeback.data.orm import (  # noqa: F401
     OutboxEventORM,
     WritebackLedgerORM,

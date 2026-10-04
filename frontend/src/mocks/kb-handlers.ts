@@ -311,8 +311,15 @@ export const kbHandlers = [
     }),
   ),
 
-  // 知识库集合（S8 live 对账补齐：live POST /kb/collections → 201 裸 CollectionOut，同名 409；
-  // 后端无 GET 列表端点（R53），前端 ensureCollectionId 按名创建+缓存 → mock 按名稳定发号）
+  // 知识库集合（S8 live 对账补齐：live POST /kb/collections → 201 裸 CollectionOut，同名 409。
+  // 接真批 2026-10-05：GET 列表端点 live 已实装且为 {data,meta} 强信封（openapi CollectionListOut，
+  // 旧 {code,message,data} 信封废止）——mock 同形态镜像，供 ensureCollectionId「先 GET 查重再 POST」）
+  http.get('*/api/v1/kb/collections', () => {
+    const data = Object.entries(COLLECTION_IDS).map(([name, id]) => ({
+      id, name, description: null, embedding_model: 'bge-m3', status: 'active', created_at: new Date().toISOString(),
+    }))
+    return HttpResponse.json({ data, meta: { page: 1, page_size: 200, total: data.length } })
+  }),
   http.post('*/api/v1/kb/collections', async ({ request }) => {
     const body = (await request.json()) as { name?: string }
     const name = body.name?.trim() || '未命名知识库'

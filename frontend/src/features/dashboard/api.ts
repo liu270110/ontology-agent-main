@@ -30,14 +30,17 @@ export interface DashTask {
 }
 
 /** 最近会话（工作台右栏入口列表，limit=5）。fe3 信封收口：/sessions 已改 {data,meta}
- *  信封（be2 B1 批），改走 api.list 三形态归一（fe2 F0），消费方读 .data。 */
+ *  信封（be2 B1 批），改走 api.list 三形态归一（fe2 F0），消费方读 .data。
+ *  接真批 2026-10-05：GET /sessions 分页参数=page/page_size（openapi 实测，无 limit）——
+ *  原 ?limit=N 被后端静默忽略恒回 page_size 默认 20 条，改传 page_size 让服务端真实截断。 */
 export function listRecentSessions(limit = 5) {
-  return api.list<DashSession>(`/sessions?limit=${limit}`)
+  return api.list<DashSession>(`/sessions?page_size=${limit}`)
 }
 
-/** 最近任务（任务中心入口列表，limit=5）。fe3 信封收口同上（/tasks 已改 {data,meta}）。 */
+/** 最近任务（任务中心入口列表，limit=5）。fe3 信封收口同上（/tasks 已改 {data,meta}）；
+ *  接真批 2026-10-05：?limit= → ?page_size=（同 /sessions，参数名对齐 openapi）。 */
 export function listRecentTasks(limit = 5) {
-  return api.list<DashTask>(`/tasks?limit=${limit}`)
+  return api.list<DashTask>(`/tasks?page_size=${limit}`)
 }
 
 /** 待审批计数（审批中心 open 队列）。fe3 信封收口：/admin/reviews 已改 {data,meta:{total}}
@@ -54,18 +57,28 @@ export async function countOntologies() {
   return r.items.length
 }
 
+/** 运行中任务计数（副行「N 个任务运行中」）。接真批 2026-10-05：/tasks 支持 status 过滤 +
+ *  {data,meta:{total}} 信封——live 取 meta.total 服务端真值；mock 无 total 回退首页客户端过滤
+ *  （此前取入口列表前 3 条里数 running，数值随分页漂移）。 */
+export async function countRunningTasks() {
+  const r = await api.list<{ status?: string }>('/tasks?status=running&page_size=50')
+  return r.meta.total ?? r.data.filter(t => t.status === 'running').length
+}
+
 /** 知识文档非空判定（新手引导第③步，S-AD 切片）：只拉 1 条判存在即可，不取全量；
  *  live /kb/documents 曾挂起（api.ts 头注）→ 引导卡第③步保持未完成态，不阻塞其余两步。
- *  fe3 信封收口：/kb/documents 已改 {data,meta} 信封（be2 B1 批），改走 api.list。 */
+ *  fe3 信封收口：/kb/documents 已改 {data,meta} 信封（be2 B1 批），改走 api.list。
+ *  接真批 2026-10-05：?limit=1 → ?page_size=1（/kb/documents 分页=page/page_size）。 */
 export async function countKbDocuments() {
-  const r = await api.list<unknown>('/kb/documents?limit=1')
+  const r = await api.list<unknown>('/kb/documents?page_size=1')
   return r.data.length
 }
 
 /** 今日会话计数：created_at 在今天的会话数（≤100 首页近似）；TODO(R5x): 后端统计端点交付后切换。
- *  fe3 信封收口：/sessions 已改 {data,meta} 信封，改走 api.list。 */
+ *  fe3 信封收口：/sessions 已改 {data,meta} 信封，改走 api.list。
+ *  接真批 2026-10-05：?limit=100 → ?page_size=100（原参数被忽略恒回 20 条，今日计数偏低）。 */
 export async function countTodaySessions() {
-  const r = await api.list<DashSession>('/sessions?limit=100')
+  const r = await api.list<DashSession>('/sessions?page_size=100')
   const start = new Date()
   start.setHours(0, 0, 0, 0)
   const startMs = start.getTime()

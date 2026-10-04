@@ -9,6 +9,7 @@ import { api, ApiError } from '@/api/client'
 import { EmptyState, ErrorState, SkeletonRows } from '@/components/states'
 import { BASELINE } from '@/lib/toast-templates'
 import { ToolCallCard } from './ToolCallCard'
+import { ExecInlineCards } from './ExecCards'
 import { AgenticDegradedBanner } from './AgenticDegradedBanner'
 import type { EvidenceFocus } from './EvidenceSheet'
 
@@ -393,6 +394,7 @@ export function ChatStream({
   sessionId,
   onOpenEvidence,
   onOpenWorkspace,
+  onOpenExecution,
   baselineError = null,
   baselineDegraded = false,
   onBaselineReload,
@@ -403,6 +405,8 @@ export function ChatStream({
   onOpenEvidence: (f: EvidenceFocus) => void
   /** 产物卡「在工作区查看」→ 宿主切右栏工作区页签（ChatPage rightTab 最小接线） */
   onOpenWorkspace?: () => void
+  /** 执行卡「查看执行」→ 宿主切右栏执行页签（40 篇 §5.2/§5.3 深链） */
+  onOpenExecution?: () => void
   /** 消息基线失败态（36 §B，宿主 ChatPage 持有）：非空 → 错误态/警示条（与空态互斥） */
   baselineError?: unknown | null
   /** 已点「仍要继续对话」降级 → 顶部警示条形态 */
@@ -554,6 +558,9 @@ export function ChatStream({
               <AssistantMsgHead m={m} />
               {/* 直播期工具卡只挂末条助手消息（对齐 GroupStream 归属模式；原全量×每条重复渲染） */}
               {m.id === lastAssistantId && Object.entries(toolCalls).map(([id, c]) => <ToolCallCard key={id} id={id} call={c} />)}
+              {/* 执行结构卡组（40 篇 §5.2 形态①，挂载位复用工具卡行）：计划卡+协作任务卡+运行卡，
+                  store 三投影同源、全空不渲染（空态纪律） */}
+              {m.id === lastAssistantId && <ExecInlineCards onOpenExecution={onOpenExecution} />}
               {/* 气泡左缘 3px 来源分类色（--src-system=indigo，tokens.css 来源分类变量） */}
               <div
                 data-testid={`bubble-${m.id}`}

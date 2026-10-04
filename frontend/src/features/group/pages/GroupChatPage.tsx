@@ -176,12 +176,16 @@ export function GroupChatPage() {
             >
               <div className="flex items-center gap-1.5">
                 <span className="truncate text-[13px] font-medium">{s.title}</span>
-                {/* 字阶刻度归一：内联 fontSize 9px → text-2xs（10px，六阶键）；密度内联保留 */}
-                <span className="badge b-purple text-2xs" style={{ padding: '1px 6px' }}>群 · {s.member_count}</span>
+                {/* 字阶刻度归一：内联 fontSize 9px → text-2xs（10px，六阶键）；密度内联保留。
+                    live SessionOut 无 member_count（接真批 2026-10-05）→ 缺省不渲染计数徽标 */}
+                {s.member_count != null && (
+                  <span className="badge b-purple text-2xs" style={{ padding: '1px 6px' }}>群 · {s.member_count}</span>
+                )}
               </div>
               <div className="mt-0.5 flex items-center gap-1.5 text-[11px] text-label-3">
                 <span className={`dot ${running && s.id === sessionId ? 'd-green' : 'd-blue'}`} style={{ width: 6, height: 6 }} />
-                {ROUTING_SHORT[s.routing]} · {LIST_TIME_FMT.format(new Date(s.updated_at))}
+                {/* live 无 updated_at → api 层回退 created_at（可能为空串，防御 Invalid Date） */}
+                {ROUTING_SHORT[s.routing]}{s.updated_at ? ` · ${LIST_TIME_FMT.format(new Date(s.updated_at))}` : ''}
               </div>
             </button>
           ))}

@@ -139,11 +139,16 @@ export function MemberPanel({
                 <div className="text-[11px] text-label-2">{target.model} · {ROLE_LABEL[target.routing_role]}</div>
               </div>
             </div>
-            <button type="button" className="menu-i w-full" data-testid="grp-menu-pause" onClick={() => void act(() => patchMember(sessionId, target.id, { paused: !target.paused }))}>
-              {target.paused ? <Play size={14} aria-hidden /> : <Pause size={14} aria-hidden />}
-              {target.paused ? '恢复接收新轮' : '暂停接收新轮'}
-              <span className="menu-k">可恢复</span>
-            </button>
+            {/* 暂停接收新轮：后端 MemberUpdateIn 无 paused 字段（X15 openapi 逐字段核对
+                2026-10-05，additionalProperties=false 直发 422）→ 诚实禁用而非假成功（同
+                GroupStream 分享钮「未实装诚实禁用」模式；title 挂外层 span——disabled 不收指针事件） */}
+            <span title="暂停成员（后端 X15 未实装：成员更新仅支持角色 / 显示名 / 模型 / 提示词）">
+              <button type="button" className="menu-i w-full btn-dis" disabled aria-label="暂停成员（即将开放）">
+                <Pause size={14} aria-hidden />
+                暂停接收新轮
+                <span className="menu-k">即将开放</span>
+              </button>
+            </span>
             {(['observer', 'speaker', 'coordinator'] as MemberRole[])
               .filter(r => r !== target.routing_role)
               .map(r => (
@@ -222,11 +227,12 @@ function MemberRow({
       </div>
       {!m.human && <RoleBadge role={m.routing_role} />}
       {m.paused && <span className="badge b-orange">已暂停</span>}
-      {/* 缺陷修复：d-gray 类全站无定义（空闲点透明不可见）→ 令牌内联兜底（--label-3，暗色成对自动跟随） */}
+      {/* 缺陷修复：d-gray 类全站无定义（空闲点透明不可见）→ 令牌内联兜底（--label-3，暗色成对自动跟随）；
+          状态点双口径：mock running/idle/stopped ∪ live enabled/disabled（接真批 2026-10-05） */}
       <span
         className="dot"
-        style={{ width: 6, height: 6, background: m.status === 'running' ? 'var(--green)' : 'var(--label-3)' }}
-        title={m.human ? '在线' : m.status === 'running' ? '运行中' : '空闲'}
+        style={{ width: 6, height: 6, background: m.status === 'running' || m.status === 'enabled' ? 'var(--green)' : 'var(--label-3)' }}
+        title={m.human ? '在线' : m.status === 'running' || m.status === 'enabled' ? '运行中' : '空闲'}
       />
       {!m.human && (
         <button

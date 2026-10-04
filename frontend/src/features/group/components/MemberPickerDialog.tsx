@@ -31,6 +31,14 @@ const STATUS_BADGE: Record<GroupAgentSlot['status'], { txt: string; cls: string 
   running: { txt: '运行中', cls: 'b-green' },
   idle: { txt: '空闲', cls: 'b-gray' },
   stopped: { txt: '已停止', cls: 'b-gray' },
+  // live /agents 口径（接真批 2026-10-05，与 agents 域双口径收敛同款）
+  enabled: { txt: '已启用', cls: 'b-green' },
+  disabled: { txt: '已停用', cls: 'b-gray' },
+}
+
+/** 状态点·可用语义（双口径）：mock running/idle/stopped ∪ live enabled/disabled */
+function slotActive(s: GroupAgentSlot): boolean {
+  return s.status === 'running' || s.status === 'enabled'
 }
 
 export function MemberPickerDialog({
@@ -86,13 +94,15 @@ export function MemberPickerDialog({
           type: 'group',
           title: title.trim() || '未命名群聊',
           routing: 'mention',
-          members: picked.map(p => ({ slot_id: p.slot.id, routing_role: p.role })),
+          // X15 GroupMemberIn 逐字段（接真批 2026-10-05）：agent_id/display_name 必填，
+          // 旧 slot_id 载荷后端 additionalProperties=false 直发 422
+          members: picked.map(p => ({ agent_id: p.slot.id, display_name: p.slot.name, routing_role: p.role })),
         })
         onClose()
         navigate(`/chat/group/${created.id}`)
       } else {
         for (const p of picked) {
-          await addMember(session!.id, { slot_id: p.slot.id, routing_role: p.role })
+          await addMember(session!.id, { agent_id: p.slot.id, display_name: p.slot.name, routing_role: p.role })
         }
         onClose()
         onAdded?.()
@@ -159,7 +169,7 @@ export function MemberPickerDialog({
                   ) : (
                     <span className={`badge ${STATUS_BADGE[s.status].cls}`}>
                       {/* 缺陷修复：d-gray 类无定义 → 令牌内联兜底（同 MemberPanel 状态点） */}
-                      <span className="dot" style={{ width: 6, height: 6, background: s.status === 'running' ? 'var(--green)' : 'var(--label-3)' }} />
+                      <span className="dot" style={{ width: 6, height: 6, background: slotActive(s) ? 'var(--green)' : 'var(--label-3)' }} />
                       {STATUS_BADGE[s.status].txt}
                     </span>
                   )}

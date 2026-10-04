@@ -6,7 +6,9 @@ import { useAuthStore } from '@/stores/auth-store'
  *  2026-09-26 裁决：全程不物理删除、可审计回放是平台底线）。 */
 
 export type FactLayer = 'L1' | 'L2' | 'L3' | 'L4'
-export type FactStatus = 'candidate' | 'active' | 'invalidated'
+/** 状态枚举双口径：mock candidate/active/invalidated ∪ live FactStatus（openapi 2026-10-05）
+ *  active/superseded/invalidated（memory §7 无物理删除，superseded=墓碑留痕）。 */
+export type FactStatus = 'candidate' | 'active' | 'superseded' | 'invalidated'
 
 export const LAYER_META: Record<FactLayer, { label: string; desc: string }> = {
   L1: { label: 'L1 会话', desc: '工作记忆：会话内临时块 / 滑动窗口 / 任务草稿' },
@@ -16,7 +18,7 @@ export const LAYER_META: Record<FactLayer, { label: string; desc: string }> = {
 }
 
 export const FACT_STATUS_LABEL: Record<FactStatus, string> = {
-  candidate: '候选', active: '生效中', invalidated: '已失效',
+  candidate: '候选', active: '生效中', superseded: '已被取代', invalidated: '已失效',
 }
 
 export interface MemoryFact {
@@ -35,14 +37,69 @@ export interface MemoryFact {
   updated_at: string
 }
 
+/** live FactOut（openapi 2026-10-05 逐字段：fact_id/user_id/content/category/confidence/
+ *  decay_score/status/source_session_id?/supersedes_id?/valid_from?/valid_to?/created_at/
+ *  updated_at；无 title/layer/reuse_count/source_session 对象/proposed_by）。 */
+interface FactRow {
+  id?: string
+  fact_id?: string
+  content?: string
+  title?: string
+  category?: string
+  confidence?: number
+  status?: FactStatus | string
+  layer?: string
+  reuse_count?: number
+  source_session?: { id: string; title: string }
+  source_session_id?: string | null
+  proposed_by?: string
+  approved_by?: string | null
+  created_at?: string
+  updated_at?: string
+  /* mock 富形状其余字段直通不必列全 */
+  [k: string]: unknown
+}
+
+/** FactOut → MemoryFact 视图模型归一（接真批 2026-10-05）：缺省字段按诚实口径派生——
+ *  title=内容首行截断（live 无标题字段的展示兜底）；layer 缺省 L2（live /memory/facts 即
+ *  L2 事实域，升级 L3 由决策端点回写）；reuse_count 缺省 0；来源会话仅 id（live 无标题）。 */
+function toFact(r: FactRow): MemoryFact {
+  const content = r.content ?? ''
+  return {
+    id: r.fact_id ?? r.id ?? '',
+    layer: (r.layer as MemoryFact['layer']) ?? 'L2',
+    title: r.title ?? (content.length > 24 ? `${content.slice(0, 24)}…` : content),
+    content,
+    category: r.category ?? 'fact',
+    status: (r.status as FactStatus) ?? 'active',
+    confidence: r.confidence ?? 0,
+    reuse_count: r.reuse_count ?? 0,
+    source_session: r.source_session ?? { id: r.source_session_id ?? '—', title: '' },
+    proposed_by: r.proposed_by ?? '—',
+    approved_by: r.approved_by ?? null,
+    created_at: r.created_at ?? '',
+    updated_at: r.updated_at ?? r.created_at ?? '',
+  }
+}
+
 export interface TimelineEvent {
   seq: number
-  type: 'created' | 'promoted' | 'invalidated' | 'current'
+  type: 'created' | 'promoted' | 'superseded' | 'invalidated' | 'current'
   label: string
   detail?: string
   at: string
   invalid_edge?: boolean
   danger?: boolean
+}
+
+/** live FactTimelineEventOut（openapi 2026-10-05：type created|superseded|invalidated、
+ *  at、fact_id、superseded_by?、note；无 seq/label——seq=序号派生、label=类型话术+note）。 */
+interface LiveTimelineEventRow {
+  type?: string
+  at?: string
+  fact_id?: string
+  superseded_by?: string | null
+  note?: string
 }
 
 export interface FactReference {
@@ -89,23 +146,70 @@ export interface MemoryPromotion {
   reject_reason?: string
 }
 
-/** GET /memory/facts —— 查询用户事实（§5.5：status / layer 过滤） */
-export function listFacts(params: { layer?: string; status?: string }) {
+/** live PromotionRecordOut（openapi 2026-10-05：promotion_id/fact_id/status(const 'registered')/
+ *  requested_by?/reason/session_id?/created_at；M5 审批工作流接入前为占位登记态）。 */
+interface PromotionRow {
+  id?: string
+  promotion_id?: string
+  fact_id?: string
+  status?: string
+  proposed_by?: string
+  requested_by?: string | null
+  created_at?: string
+  source_dialog?: { speaker: string; text: string; highlight?: string }[]
+  reject_reason?: string
+}
+
+/** GET /memory/facts —— 查询用户事实（§5.5）。接真批 2026-10-05：live 分页=offset/limit、
+ *  过滤=status/category（openapi 逐字段，无 layer 参数——layer 过滤由 mock 支持、live 忽略，
+ *  列表全量为 L2 事实域）；行归一 toFact 双形态（mock 富形状直通 / live FactOut 派生）。 */
+export async function listFacts(params: { layer?: string; status?: string }) {
   const q = new URLSearchParams()
   if (params.layer) q.set('layer', params.layer)
   if (params.status) q.set('status', params.status)
   const qs = q.toString()
-  return api.get<{ items: MemoryFact[] }>(`/memory/facts${qs ? `?${qs}` : ''}`)
+  const raw = await api.get<{ items?: FactRow[] }>(`/memory/facts${qs ? `?${qs}` : ''}`)
+  return { items: (raw.items ?? []).map(toFact) }
 }
 
-/** GET /memory/facts/{id}/timeline —— 事实变更时间线（产生/升级/失效全程留痕，FR-MEM-06） */
-export function getFactTimeline(id: string) {
-  return api.get<{ items: TimelineEvent[]; references: FactReference[] }>(`/memory/facts/${id}/timeline`)
+/** GET /memory/facts/{id}/timeline —— 事实变更时间线（产生/升级/失效全程留痕，FR-MEM-06）。
+ *  双形态归一（接真批 2026-10-05）：mock {items: TimelineEvent[]} 直通；live FactTimelineOut
+ *  {fact_id, chain, events: FactTimelineEventOut[]} → seq=序号、label=类型话术+note、
+ *  invalidated 挂失效边与 danger。回答引用（references）live 无端点 → 恒 []（空态诚实）。 */
+export async function getFactTimeline(id: string) {
+  const raw = await api.get<{
+    items?: TimelineEvent[]
+    references?: FactReference[]
+    chain?: string[]
+    events?: LiveTimelineEventRow[]
+  }>(`/memory/facts/${id}/timeline`)
+  if (raw.items) return { items: raw.items, references: raw.references ?? [] }
+  const TYPED_LABEL: Record<string, string> = {
+    created: '事实产生（会话沉淀）',
+    superseded: '已被新版本取代（墓碑留痕）',
+    invalidated: '人工失效标记（墓碑式软删）',
+  }
+  const items: TimelineEvent[] = (raw.events ?? []).map((e, i) => {
+    const type = (e.type ?? 'created') as TimelineEvent['type']
+    const invalidated = type === 'invalidated'
+    return {
+      seq: i + 1,
+      type,
+      label: TYPED_LABEL[type] ?? type,
+      detail: e.note || (e.superseded_by ? `superseded_by ${e.superseded_by}` : undefined),
+      at: e.at ?? '',
+      invalid_edge: invalidated,
+      danger: invalidated,
+    }
+  })
+  return { items, references: [] as FactReference[] }
 }
 
-/** POST /memory/facts/{id}/invalidate —— 失效标记（202；理由必填） */
-export function invalidateFact(id: string, reason: string) {
-  return api.post<{ id: string; status: string }>(`/memory/facts/${id}/invalidate`, { reason })
+/** POST /memory/facts/{id}/invalidate —— 失效标记（202；live 无请求体——reason 由 UI 必填
+ *  收集但契约未承载，留痕随审计批补；返回 202 FactOut → 归一 {id,status} 双形态）。 */
+export async function invalidateFact(id: string, reason: string) {
+  const raw = await api.post<FactRow & { id?: string }>(`/memory/facts/${id}/invalidate`, { reason })
+  return { id: raw.fact_id ?? raw.id ?? id, status: String(raw.status ?? 'invalidated') }
 }
 
 /** GET /memory/l1?limit= —— L1 会话列表（B8-WB 实装、B8-WC 契约卡终对齐 2026-10-04，
@@ -121,14 +225,31 @@ export function getL1BySession(sessionId: string) {
   return api.get<L1Snapshot>(`/memory/l1/${sessionId}`)
 }
 
-/** GET /memory/promotions —— L2→L3 升级审核队列（R 预登记，见 R 清单） */
-export function listPromotions() {
-  return api.get<{ items: MemoryPromotion[] }>('/memory/promotions')
+/** GET /memory/promotions —— L2→L3 升级审核队列。接真批 2026-10-05：live PromotionPageOut
+ *  {items: PromotionRecordOut[], offset, limit}（status 恒 'registered'=占位登记态，M5 前）→
+ *  归一为审核队列视图（registered→pending 可终审；decision 端点 live 已实装可决策）；
+ *  mock 富形状（source_dialog 等）直通。 */
+export async function listPromotions() {
+  const raw = await api.get<{ items?: PromotionRow[] }>('/memory/promotions')
+  const items: MemoryPromotion[] = (raw.items ?? []).map(r => ({
+    id: r.promotion_id ?? r.id ?? '',
+    fact_id: r.fact_id ?? '',
+    // live 'registered'（M5 前占位登记态）→ 队列可终审视图 pending；approved/rejected 原样
+    status: r.status === 'approved' || r.status === 'rejected' ? r.status : 'pending',
+    proposed_by: r.proposed_by ?? r.requested_by ?? '—',
+    created_at: r.created_at ?? '',
+    source_dialog: r.source_dialog ?? [],
+    reject_reason: r.reject_reason,
+  }))
+  return { items }
 }
 
-/** POST /memory/promotions —— 发起 L2→L3 升级申请单（§5.5，202） */
-export function createPromotion(factId: string) {
-  return api.post<{ pm_id: string; status: string }>('/memory/promotions', { fact_id: factId })
+/** POST /memory/promotions —— 发起 L2→L3 升级申请单（PromotionIn 逐字段：fact_id 必填 +
+ *  reason?/session_id?；202 PromotionOut）——响应归一 {pm_id,status} 双形态
+ *  （live promotion_id / mock pm_id）。 */
+export async function createPromotion(factId: string) {
+  const raw = await api.post<{ pm_id?: string; promotion_id?: string; status?: string }>('/memory/promotions', { fact_id: factId })
+  return { pm_id: raw.pm_id ?? raw.promotion_id ?? '', status: raw.status ?? 'registered' }
 }
 
 /** POST /memory/promotions/{id}/decision —— 审核决策（B8-WB 实装、B8-WC 契约卡终对齐

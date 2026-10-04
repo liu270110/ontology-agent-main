@@ -426,21 +426,24 @@ export const groupHandlers = [
     return ok({ items: GROUP_SLOTS, next_cursor: null })
   }),
 
-  // ---- 建群（GRP-01：POST /sessions body.type=group + members + routing；X15） ----
+  // ---- 建群（GRP-01：POST /sessions body.type=group + members + routing；X15 已实装。
+  //      接真批 2026-10-05：成员载荷对齐 live SessionCreateIn/GroupMemberIn 逐字段——
+  //      {agent_id, display_name, routing_role}（旧 slot_id 已废止，additionalProperties=false）；
+  //      顶层 agent_id 必填（会话属主 Agent 兼容字段）→ 取协调者、缺省首成员） ----
   http.post('*/api/v1/sessions', async ({ request }) => {
     // clone 读：重叠链路（handlers.ts F5 单会话 POST /sessions 注册于本 handler 之后）——
     // Request 体一次性流，不 clone 会让后续 handler 读到已消费的空体（实测 3001 agent_id 必填误报）
     const body = (await request.clone().json().catch(() => ({}))) as {
       type?: string; title?: string
       routing?: RoutingMode
-      members?: { slot_id: string; routing_role: MemberRole }[]
+      members?: { agent_id?: string; slot_id?: string; display_name?: string; routing_role?: MemberRole }[]
     }
     if (body.type !== 'group') return undefined
     const id = `g-${Math.floor(1000 + Math.random() * 9000)}`
     const members: GroupMember[] = [{ ...USER_MEMBER }]
     ;(body.members ?? []).forEach((m, i) => {
-      const slot = GROUP_SLOTS.find(s => s.id === m.slot_id)
-      if (slot) members.push({ ...memberOf(slot.id, m.routing_role, `m-${i + 1}`) })
+      const slot = GROUP_SLOTS.find(s => s.id === (m.agent_id ?? m.slot_id))
+      if (slot) members.push({ ...memberOf(slot.id, m.routing_role ?? 'speaker', `m-${i + 1}`) })
     })
     MEMBERS[id] = members
     SESSIONS[id] = {
@@ -450,6 +453,15 @@ export const groupHandlers = [
     }
     HISTORY[id] = []
     return ok({ ...SESSIONS[id] }, 201)
+  }),
+
+  // ---- 群成员列表（X15 GET /sessions/{id}/members；live MemberListOut {items}——
+  //      供 api.getGroupSession live 形态（详情不含 members）二段拉取） ----
+  http.get('*/api/v1/sessions/:id/members', ({ params }) => {
+    const id = String(params.id)
+    if (!id.startsWith('g-')) return undefined
+    if (!SESSIONS[id]) return err(2001, '会话不存在', 404)
+    return ok({ items: MEMBERS[id] ?? [] })
   }),
 
   // ---- 群会话详情（含成员 + 路由；新端点，无重叠） ----
@@ -477,24 +489,29 @@ export const groupHandlers = [
     return ok({ items: HISTORY[id] ?? [], next_cursor: null })
   }),
 
-  // ---- 成员增（GRP-01 ＋成员 / X15：POST /sessions/{id}/members） ----
+  // ---- 成员增（GRP-01 ＋成员 / X15：POST /sessions/{id}/members 已实装——
+  //      接真批 2026-10-05：载荷/响应对齐 live GroupMemberIn/MemberListOut 逐字段） ----
   http.post('*/api/v1/sessions/:id/members', async ({ params, request }) => {
     const id = String(params.id)
-    const body = (await request.json()) as { slot_id: string; routing_role: MemberRole }
-    const slot = GROUP_SLOTS.find(s => s.id === body.slot_id)
+    const body = (await request.json()) as { agent_id?: string; slot_id?: string; display_name?: string; routing_role?: MemberRole }
+    const slot = GROUP_SLOTS.find(s => s.id === (body.agent_id ?? body.slot_id))
     if (!SESSIONS[id] || !slot) return err(2001, '会话或插槽不存在', 404)
     if ((MEMBERS[id] ?? []).length >= 6) return err(2401, '群成员已达 v1 上限 5（容量核算待定）', 409)
     // enterprise 档跨租户入群 → 转审批占位（观察者，不注入上下文）
-    const role: MemberRole = slot.cross_tenant ? 'observer' : body.routing_role
+    const role: MemberRole = slot.cross_tenant ? 'observer' : body.routing_role ?? 'speaker'
     const m = memberOf(slot.id, role, `m-${Date.now().toString(36)}`)
+    if (body.display_name?.trim()) m.name = body.display_name.trim()
     m.status = 'idle'
     MEMBERS[id] = [...(MEMBERS[id] ?? []), m]
     SESSIONS[id].member_count = MEMBERS[id].length
     SESSIONS[id].updated_at = new Date().toISOString()
-    return ok({ member: m, ...(slot.cross_tenant ? { pending_approval: 'apr-join-1', note: '跨租户入群转审批，审批通过前以观察者占位' } : {}) }, 201)
+    // live 201 MemberListOut {items}（全量成员回执）；跨租户审批附加字段与 items 同级保留
+    return ok({ items: MEMBERS[id], ...(slot.cross_tenant ? { pending_approval: 'apr-join-1', note: '跨租户入群转审批，审批通过前以观察者占位' } : {}) }, 201)
   }),
 
-  // ---- 成员改（GRP-05：暂停 / 角色调整；协调者唯一性=后端校验 409；X15） ----
+  // ---- 成员改（GRP-05：角色调整 / 显示名·模型；协调者唯一性=后端校验 409；X15 已实装。
+  //      接真批 2026-10-05：MemberUpdateIn 无 paused/removed 字段（前端已停止外发）——
+  //      mock 分支保留仅为旧用例宽容；响应对齐 live MemberListOut {items}） ----
   http.patch('*/api/v1/sessions/:id/members/:mid', async ({ params, request }) => {
     const { id, mid } = params as { id: string; mid: string }
     const body = (await request.json()) as { routing_role?: MemberRole; paused?: boolean; removed?: boolean }
@@ -513,7 +530,7 @@ export const groupHandlers = [
     }
     if (body.routing_role) target.routing_role = body.routing_role
     if (typeof body.paused === 'boolean') target.paused = body.paused
-    return ok({ ...target })
+    return ok({ items: members })
   }),
 
   // ---- 成员移除（GRP-05 危险确认；DELETE 行 §5.2 未列——R 单建议登记） ----

@@ -54,7 +54,10 @@ export function GroupInput({
     }
     setBusy(true)
     try {
-      await sendGroupMessage(sessionId, { content, mentions: mentions.length ? mentions : undefined })
+      // 接真批 2026-10-05：SendMessageIn additionalProperties=false 且无 mentions 契约字段——
+      // @点名仅作本地预算提示，外发交 orchestrator 服务端路由（SSE ROUTING_DECISION 回显）；
+      // 直发旧 {mentions} 载荷 live 422
+      await sendGroupMessage(sessionId, { content })
       appendLocal(content)
       setText('')
       setMentions([])

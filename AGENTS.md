@@ -45,6 +45,7 @@
 - 后端语言全栈 Python ≥3.11（ADR-1）；规则引擎 v1 = SPARQL CONSTRUCT + pySHACL + rdflib（owlrl）；TBox = MinIO 版本化 Turtle + rdflib；ABox = Neo4j（只读物化，非推理机）。
 - 平台 LLM/工具调用一律带审计与 trace_id；MCP annotations 不作授权依据。
 - 改表流程：06 篇契约 → database/01 DDL → Alembic 迁移，顺序不可反；种子数据唯一走 Alembic 数据迁移。
+- 批次收尾三件套(经验沉淀/能力沉淀评审/初始化配置核对)=docs/standards/03;develop→master 晋级门禁(五门/窗口制/台账)=docs/standards/02 §10;推送远程脱敏门禁=02 §11——批次验收必过三件套,推送前必过脱敏 grep(2026-10-04 增)。
 
 ## 已知注意事项
 

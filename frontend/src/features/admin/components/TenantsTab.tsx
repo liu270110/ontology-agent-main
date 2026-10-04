@@ -3,10 +3,14 @@ import { useMutation } from '@tanstack/react-query'
 import { Copy, ShieldCheck } from 'lucide-react'
 import { toast } from 'sonner'
 import { Modal } from '@/components/modal'
+import { EmptyState } from '@/components/states'
 import { createTenant, type TenantCreated } from '../api'
 
 /** 租户 Tab（super_admin 可见；26 篇 §10.2）：租户说明 + IX-ADM-03 租户创建
- *  （名称/命名空间/管理员初始账号 → 一次性密码只显示一次 + 治理三档卡）。 */
+ *  （名称/命名空间/管理员初始账号 → 一次性密码只显示一次 + 治理三档卡）。
+ *  43 号验收 P2-4：静态演示卡（「6 名成员 · 3 个本体项目」与 live 矛盾、租户 ID
+ *  短写/全写并存）退役——GET /admin/tenants 未登记（api/01 仅 POST 建租户），
+ *  列表区改 EmptyState 明示端点待交付；建租户流程照旧。 */
 
 const TIERS = [
   { key: 'solo', label: 'solo', desc: '单人档 · 硬门禁保留，不暴露组与 ACL', infer: 'SHACL 基础校验' },
@@ -19,18 +23,17 @@ export function TenantsTab() {
   return (
     <div>
       <div className="flex items-center gap-2">
-        <span className="text-xs text-label-2">平台级租户管理（super_admin）；当前默认租户 t-10000000-0001</span>
+        <span className="text-xs text-label-2">平台级租户管理（super_admin）</span>
         <button type="button" className="btn btn-p btn-sm ml-auto" data-testid="adm-tenant-open" onClick={() => setCreateOpen(true)}>
           新建租户
         </button>
       </div>
       <div className="card mt-3 !p-4">
-        <div className="flex items-center gap-2 text-[13px]">
-          <b>默认租户</b>
-          <span className="mono text-[11px] text-label-3">t-10000000-0000-0000-0000-000000000001</span>
-          <span className="badge b-blue ml-auto">team 档</span>
-        </div>
-        <p className="mt-1 text-xs text-label-2">电力 wedge 演示租户：6 名成员 · 3 个本体项目 · 治理三档中 team 档生效。</p>
+        <EmptyState
+          compact
+          title="租户列表 · 功能建设中"
+          desc="租户列表端点交付后此处将自动展示真实数据；当前仅支持「新建租户」。"
+        />
       </div>
       {createOpen && <CreateTenantModal onClose={() => setCreateOpen(false)} />}
     </div>

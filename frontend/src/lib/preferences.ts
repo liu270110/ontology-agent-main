@@ -29,6 +29,10 @@ export interface Preferences {
   memory_group_l1_write?: boolean
   /** 记忆：清除记忆走失效边（墓碑式软删，可追溯） */
   memory_clear_via_invalidate?: boolean
+  /** 降级标记（43 号验收 P2-5/P2-7）：/me/preferences 不可用（404/501）时 getPreferences
+   *  返回本地默认值并置 true——消费方据此显式提示「未同步」，不再静默假装修好。
+   *  仅降级实例携带；服务端真实响应不携带；消费方 PUT 时用局部字段不回传该标记。 */
+  degraded?: boolean
 }
 
 /** 深隔离默认偏好工厂（ocr 整改 fe2 发现6）：浅拷贝 { ...PREFERENCES_DEFAULTS } 会共享
@@ -61,7 +65,8 @@ export const getPreferences = async (): Promise<Preferences> => {
     // 若仍降级默认值，消费者全量 PUT 会用默认偏好覆盖服务端真实偏好（静默数据丢失链）；
     // 仅对「端点不存在/未实现」降级；鉴权失败（401/1003）与瞬时故障（503 等）照抛不吞
     if (e instanceof ApiError && (e.httpStatus === 404 || e.httpStatus === 501)) {
-      return createDefaultPreferences()
+      // 43 号验收 P2-5/P2-7：降级实例带 degraded 标记（深拷贝隔离，不污染工厂缓存实例）
+      return { ...createDefaultPreferences(), degraded: true }
     }
     throw e
   }

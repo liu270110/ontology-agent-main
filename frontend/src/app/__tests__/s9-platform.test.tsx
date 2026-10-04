@@ -14,7 +14,8 @@ afterEach(() => {
 
 /** S9 四区 IA 改造（2026-10-01 用户裁决）：
  *  ① /platform 总览经 PlatformShell 渲染：四能力入口卡（计数复用各域取数）+ 精选插件行
- *     （获取 → toast 走审核流演示）+ 四区边界说明卡；
+ *     （live GET /plugins 前三；获取 → 跳市场真实安装流——43 号 P2-1 演示 toast 退役）+
+ *     四区边界说明卡；
  *  ② /platform/market 经 PlatformShell 宿主渲染（页面组件零改动迁移）；
  *  ③ 旧路径 /console/market redirect 到 /platform/market（查询串透传）；
  *  ④ 主导航「独立页面」分组：平台能力 / 管理控制台 / 用户设置 三项跨区入口。 */
@@ -28,7 +29,7 @@ async function loginAndGo(path: string) {
 }
 
 describe('S9 平台能力区（四区 IA）', () => {
-  it('① /platform 总览：四能力入口卡 + 精选插件行（获取 toast）+ 边界说明卡', async () => {
+  it('① /platform 总览：四能力入口卡 + 精选插件行（live 前三）+ 边界说明卡', async () => {
     await loginAndGo('/platform')
     // 壳：平台导航 + 返回主页
     const nav = await screen.findByRole('navigation', { name: '平台导航' }, { timeout: 10_000 })
@@ -42,19 +43,25 @@ describe('S9 平台能力区（四区 IA）', () => {
     // 计数复用各域既有取数（admin 全量可见 → 数据可达即显示）
     expect(screen.getByTestId('platform-cap-count-market')).toHaveTextContent(/已装 \d+ · 共 \d+/)
     expect(screen.getByTestId('platform-cap-count-agents')).toHaveTextContent(/实例 \d+/)
-    // 精选插件行：静态三张
+    // 精选插件行：live GET /plugins 前三（43 号 P2-1：静态三卡与演示 toast 退役）
     expect(screen.getByText('精选插件')).toBeInTheDocument()
-    expect(screen.getByTestId('platform-featured-ledger-connector')).toHaveTextContent('台账写入连接器')
-    expect(screen.getByTestId('platform-featured-grid-shacl')).toHaveTextContent('电网本体校验包')
-    expect(screen.getByTestId('platform-featured-scada-mcp')).toHaveTextContent('SCADA 网关 MCP')
+    expect(screen.getByTestId('platform-featured-p_gdticket')).toHaveTextContent('工单系统连接器')
+    expect(screen.getByTestId('platform-featured-p_weather')).toHaveTextContent('气象数据连接器')
+    expect(screen.getByTestId('platform-featured-p_erp-legacy')).toHaveTextContent('ERP 只读适配')
     // 四区边界说明卡
     expect(screen.getByTestId('platform-boundary')).toHaveTextContent('四区边界')
-    // 获取 → toast 走审核流演示
-    fireEvent.click(screen.getAllByTestId('platform-featured-get')[0])
-    expect(await screen.findByText('获取申请已提交，走审核流（M4 前端演示）', {}, { timeout: 5_000 })).toBeInTheDocument()
     // 点卡跳子页
     fireEvent.click(screen.getByTestId('platform-cap-tools'))
     await waitForPath('/platform/tools')
+  }, 30_000)
+
+  it('①b 精选插件「获取」→ 跳插件市场页走真实安装流（43 号 P2-1：演示 toast 退役）', async () => {
+    await loginAndGo('/platform')
+    expect(await screen.findByRole('heading', { name: '平台能力' }, { timeout: 10_000 })).toBeInTheDocument()
+    expect(await screen.findByTestId('platform-featured-p_gdticket', {}, { timeout: 10_000 })).toBeInTheDocument()
+    fireEvent.click(screen.getAllByTestId('platform-featured-get')[0])
+    expect(await screen.findByRole('heading', { name: '插件市场' }, { timeout: 10_000 })).toBeInTheDocument()
+    expect(window.location.pathname).toBe('/platform/market')
   }, 30_000)
 
   it('② /platform/market 经 PlatformShell 渲染：平台导航宿主 + 市场页内容', async () => {

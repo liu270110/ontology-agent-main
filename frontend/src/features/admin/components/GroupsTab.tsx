@@ -3,16 +3,19 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Users } from 'lucide-react'
 import { toast } from 'sonner'
 import { Modal } from '@/components/modal'
-import { EmptyState, SkeletonRows } from '@/components/states'
+import { ApiError } from '@/api/client'
+import { EmptyState, ErrorState, SkeletonRows } from '@/components/states'
 import { ROLE_LABEL, createGroup, listGroups, listUsers, type AdminUser } from '../api'
 import { Select } from '@/components/select'
 
 /** 用户组 Tab（26 篇 §10.2）：组列表 + IX-ADM-09 建组双栏（UserGroupForm +
- *  GroupMemberPicker）。groups CRUD 为 §5.10 预登记（见 R 清单）。 */
+ *  GroupMemberPicker）。groups CRUD 为 §5.10 预登记（见 R 清单）。
+ *  43 号验收 P2-3：补 isError → ErrorState（1004 特化「功能建设中」），404 不再
+ *  静默渲染「共 0 个组」误导为系统中没有组，与角色/模型渠道 Tab 口径对齐。 */
 
 export function GroupsTab() {
   const [createOpen, setCreateOpen] = useState(false)
-  const { data, isLoading } = useQuery({ queryKey: ['admin', 'groups'], queryFn: listGroups })
+  const { data, isLoading, isError, error, refetch } = useQuery({ queryKey: ['admin', 'groups'], queryFn: listGroups })
   // fe3 信封收口：listGroups 改 api.list 归一（{data,meta}），读 .data（下方建组成员候选
   // 同走 listUsers=api.list 归一形态，B8-WC 修复 B8-WA 遗留的 .items 旧读法）
   const groups = useMemo(() => data?.data ?? [], [data])
@@ -20,8 +23,10 @@ export function GroupsTab() {
   return (
     <div>
       <div className="flex items-center gap-2">
-        {/* 状态完备：加载期不显「共 0 个组」假计数 */}
-        <span className="text-xs text-label-2">{isLoading ? '组列表加载中…' : `共 ${groups.length} 个组`}</span>
+        {/* 状态完备：加载期不显「共 0 个组」假计数；错误期同理不显假 0（43 号 P2-3） */}
+        <span className="text-xs text-label-2">
+          {isLoading ? '组列表加载中…' : isError ? '组列表暂不可用' : `共 ${groups.length} 个组`}
+        </span>
         <button type="button" className="btn btn-p btn-sm ml-auto" data-testid="adm-group-open" onClick={() => setCreateOpen(true)}>
           <Users size={13} aria-hidden /> 新建组
         </button>
@@ -45,9 +50,19 @@ export function GroupsTab() {
             </div>
           </div>
         ))}
-        {/* 状态完备：加载走 SkeletonRows 基元（.empty 是空态模式，不用于加载态）；成功空列表给空态+动作 */}
+        {/* 状态完备：加载走 SkeletonRows 基元（.empty 是空态模式，不用于加载态）；
+            错误走 ErrorState（1004 特化「功能建设中」）；成功空列表给空态+动作 */}
         {isLoading && <div className="sm:col-span-2"><SkeletonRows rows={2} rowHeight={72} /></div>}
-        {!isLoading && groups.length === 0 && (
+        {isError && (
+          <div className="sm:col-span-2">
+            <ErrorState
+              message={error instanceof Error ? error.message : undefined}
+              code={error instanceof ApiError ? error.code : undefined}
+              onRetry={() => void refetch()}
+            />
+          </div>
+        )}
+        {!isLoading && !isError && groups.length === 0 && (
           <div className="sm:col-span-2">
             <EmptyState compact title="还没有用户组" desc="新建组后按组内角色模板批量授权。" />
           </div>

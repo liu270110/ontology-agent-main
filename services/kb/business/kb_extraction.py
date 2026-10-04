@@ -9,7 +9,8 @@
   文档/chunk；LLM 另附 evidence 原文逐字引语（模板 v2 起），extract 只保留不裁决，逐字门禁
   在 validate 步执行。幂等：业务键 fact_key（fact_type|subject|predicate|object|chunk_id）落
   meta，跨运行去重（kb_facts 无 uk，应用层保证不重不漏）。
-- align（§2.4 步骤 4，三级）：候选名与种子类对齐——一级=既有规范化精确 + 去空格小写包含；
+- align（§2.4 步骤 4，三级）：候选名与种子类对齐——一级=既有规范化精确 + 术语别名精确（gloss:Term
+  目录，K4-b）+ 去空格小写包含；
   二级=嵌入余弦 ≥ align_embed_threshold（经 StepContext.embedder，不可用整级跳过，降级不失败）；
   三级=LLM 判定（经 ModelPort，输出强制过规则校验：target 只准落在种子类名白名单，越界一律弃，
   锚点 §6.4 推理分级）。命中 → aliases 补类 IRI + subject_type 归一；无着落 → 保留待审；
@@ -43,7 +44,7 @@ from pathlib import Path
 from typing import Any
 
 from rdflib import Graph, Literal, URIRef
-from rdflib.namespace import OWL, RDF, RDFS
+from rdflib.namespace import OWL, RDF, RDFS, SKOS
 from sqlalchemy import false, select
 
 from services.kb.business.conflict_triage import triage_conflicts
@@ -67,13 +68,34 @@ _KB_FACT_NS = "http://ontology-agent.local/kb/fact/"  # ABox 实例命名空间�
 
 
 @dataclass(frozen=True, slots=True)
+class GlossaryTerm:
+    """业务术语条目（gloss:Term 三字段模型：label/altLabel/target，tis@18 §10.1；docs/Agent/13 §9 K4）。
+
+    label=规范术语（skos prefLabel 语义）、aliases=skos:altLabel 别名/口语、
+    target=gloss:target 指向的本体类/属性 IRI。
+    """
+
+    iri: str
+    label: str
+    target: str
+    aliases: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
 class SeedCatalog:
-    """种子本体目录：类/属性的 (iri, label, local_name) 三元组（声明序）+ 全图作 shapes。"""
+    """种子本体目录：类/属性的 (iri, label, local_name) 三元组（声明序）+ 全图作 shapes。
+
+    ``glossary``=业务术语条目（gloss:Term，声明序）；``glossary_alias_index``=别名索引
+    （norm(label)+norm(altLabel) → 条目，冲突按声明序先到先得）——实体链接别名级（K4-b）与
+    检索改写目录（K4-c）共用消费面。两字段带缺省：既有构造点（测试迷你目录等）零改动兼容。
+    """
 
     classes: tuple[tuple[str, str, str], ...]
     class_iris: frozenset[str]
     properties: tuple[tuple[str, str, str], ...]
     shapes_graph: Graph
+    glossary: tuple[GlossaryTerm, ...] = ()
+    glossary_alias_index: dict[str, GlossaryTerm] = field(default_factory=dict)
 
 
 def load_seed_catalog(seed_path: Path | None = None) -> SeedCatalog:
@@ -83,12 +105,61 @@ def load_seed_catalog(seed_path: Path | None = None) -> SeedCatalog:
     classes: list[tuple[str, str, str]] = []
     for term in graph.subjects(RDF.type, OWL.Class):
         iri = str(term)
+        if iri.startswith(str(tbox.GLOSS)):
+            continue  # gloss:Term=术语元类，非实体类型——不入抽取类目录（提示词引导/对齐白名单不受污染）
         classes.append((iri, _label(graph, term) or tbox.local_name(iri), tbox.local_name(iri)))
     properties: list[tuple[str, str, str]] = []
     for term in chain(graph.subjects(RDF.type, OWL.DatatypeProperty), graph.subjects(RDF.type, OWL.ObjectProperty)):
         iri = str(term)
+        if iri.startswith(str(tbox.GLOSS)):
+            continue  # gloss:target=术语定位属性，非业务数据属性——同理不入属性目录
         properties.append((iri, _label(graph, term) or tbox.local_name(iri), tbox.local_name(iri)))
-    return SeedCatalog(tuple(classes), frozenset(iri for iri, _, _ in classes), tuple(properties), graph)
+    glossary = _load_glossary(graph)
+    return SeedCatalog(
+        tuple(classes),
+        frozenset(iri for iri, _, _ in classes),
+        tuple(properties),
+        graph,
+        glossary,
+        _glossary_alias_index(glossary),
+    )
+
+
+def _load_glossary(graph: Graph) -> tuple[GlossaryTerm, ...]:
+    """读 gloss:Term 术语目录（label+altLabel→gloss:target；声明序）。
+
+    label 或 target 缺失的条目不可消费（三字段模型不完整）→ 跳过不炸（种子资产仍可装载，
+    建模残缺由资产门禁侧拦截，读取侧保持宽容——与类目录 label 缺省落 local_name 的口径区分：
+    术语条目三字段缺一即失去链接语义，无缺省可用）。
+    """
+    terms: list[GlossaryTerm] = []
+    for term in graph.subjects(RDF.type, tbox.GLOSS.Term):
+        iri = str(term)
+        label = _label(graph, term)
+        target = graph.value(term, tbox.GLOSS.target)
+        if label is None or target is None:
+            logger.debug("kb_seed: 术语条目缺 label/target，跳过: %s", iri)
+            continue
+        terms.append(
+            GlossaryTerm(
+                iri=iri,
+                label=str(label),
+                target=str(target),
+                aliases=tuple(sorted(str(v) for v in graph.objects(term, SKOS.altLabel))),
+            )
+        )
+    return tuple(terms)
+
+
+def _glossary_alias_index(terms: tuple[GlossaryTerm, ...]) -> dict[str, GlossaryTerm]:
+    """术语别名索引：norm(label)+norm(altLabel) → 条目（_norm 同形归一，冲突声明序先到先得）。"""
+    index: dict[str, GlossaryTerm] = {}
+    for term in terms:
+        for name in (term.label, *term.aliases):
+            key = _norm(name)
+            if key and key not in index:
+                index[key] = term
+    return index
 
 
 def _label(graph: Graph, term: Any) -> str | None:
@@ -102,8 +173,10 @@ def _norm(name: str) -> str:
 
 
 def match_seed_class(name: str, catalog: SeedCatalog) -> tuple[str, str] | None:
-    """术语对齐一级（§2.4 三级策略）：规范化精确 → 去空格小写包含；命中返回 (类 IRI, 规则)。
+    """术语对齐一级（§2.4 三级策略）：规范化精确 → 术语别名精确（K4-b）→ 去空格小写包含；命中返回 (类 IRI, 规则)。
 
+    别名级（gloss:Term 目录）：词面与术语 label/altLabel 归一精确相等 → 返回 (gloss:target, "glossary_alias")；
+    仅当 target 落在种子类 IRI 集内才参与类对齐（属性定位术语不返回，防 ABox 误类型化）。
     未命中返回 None（交二/三级：嵌入余弦 / LLM 判定，见 run_align；仍无着落 → 保留待审）。
     """
     key = _norm(name)
@@ -112,6 +185,9 @@ def match_seed_class(name: str, catalog: SeedCatalog) -> tuple[str, str] | None:
     for iri, label, local in catalog.classes:  # 先精确（相同实体类型唯一归一，底线 2）
         if key in (_norm(label), _norm(local)):
             return iri, "exact"
+    term = catalog.glossary_alias_index.get(key)  # 术语别名精确（K4-b）：高于包含——双签资产的面先于字面猜测
+    if term is not None and term.target in catalog.class_iris:
+        return term.target, "glossary_alias"
     for iri, label, local in catalog.classes:  # 后包含（如「馈线F001」命中「馈线」）
         for other in (_norm(label), _norm(local)):
             if other and (other in key or key in other):
@@ -417,14 +493,14 @@ _TIER_RULE, _TIER_EMBED, _TIER_LLM = 1, 2, 3
 class _AlignDecision:
     """单名对齐决策（§2.4 输出：决策全量可追溯，落候选 meta["align"]）。
 
-    status ∈ aligned | needs_review；tier 1=规则（精确/包含）2=嵌入余弦 3=LLM 判定；
+    status ∈ aligned | needs_review；tier 1=规则（精确/术语别名/包含）2=嵌入余弦 3=LLM 判定；
     iri 仅 aligned 时非空；reason 记录判定依据（余弦得分/越界弃用/不可用降级）。
     """
 
     name: str
     iri: str | None = None
     tier: int | None = None
-    rule: str | None = None  # exact | contains | embed | llm
+    rule: str | None = None  # exact | glossary_alias | contains | embed | llm
     status: str = _ALIGN_NEEDS_REVIEW
     reason: str | None = None
 
@@ -552,7 +628,7 @@ async def _align_decisions(
     decisions = {name: _AlignDecision(name=name) for name in names}
     unresolved: list[str] = []
     for name in names:
-        hit = match_seed_class(name, catalog)  # 一级：既有精确/包含
+        hit = match_seed_class(name, catalog)  # 一级：精确/术语别名（K4-b）/包含
         if hit is not None:
             iri, rule = hit
             decisions[name] = _AlignDecision(name=name, iri=iri, tier=_TIER_RULE, rule=rule, status=_ALIGN_ALIGNED)

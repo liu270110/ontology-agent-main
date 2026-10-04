@@ -7,10 +7,10 @@ v1 范围（方案 §4 分期表 v1 行 + §7 待办「阈值未标定前 LLM �
 - M1 判别（decide）：纯规则词面——寒暄/纯表情 → 跳过检索；工单号模式（OO- 与种子本体
   R004 SHACL pattern 同款 / GD-）→ 确定性任务免判别直查；其余 → 默认检索。
 - M3 评级（grade）：规则先行——命中数 0 / top1 分低于阈值 / 引用 span 全缺 → 判失败。
-- M3 纠错（rewrite + run_agentic_search）：术语归一受限改写（复用 kb_extraction 的
-  种子目录与 match_seed_class 一级对齐，只读 import 不改该文件）→ 改写重查
-  （≤max_rounds 轮，改写依据进 trace）→ 仍失败 → degraded="agentic_exhausted"
-  （§5 场景 4：degraded 理由回传，不编造答案）。
+- M3 纠错（rewrite + run_agentic_search）：术语归一受限改写（零级=gloss:Term 别名目录精确命中
+  （K4-c，docs/Agent/13 §9）；一/二级复用 kb_extraction 的种子目录与 match_seed_class 对齐，
+  只读 import 不改该文件）→ 改写重查（≤max_rounds 轮，改写依据进 trace）→ 仍失败
+  → degraded="agentic_exhausted"（§5 场景 4：degraded 理由回传，不编造答案）。
 
 宪法对齐：推理分级（宪法 2）——本档所有决策点均为确定性规则，零 LLM 调用；trace 全链
 （宪法 5）——每轮 action/query/rewrite_basis/grade/grade_reason 进 AgenticTrace.rounds，
@@ -202,8 +202,10 @@ def grade(
 # ---------------------------------------------------------------- M3 纠错（术语归一受限改写）
 
 # 改写否定词表（v1 示例值）：常见领域泛词是类标签的子串（如「停电」⊂「停电工单」），按包含
-# 归一会把泛词错升为类名。术语表（主文档 §4.3#3 aliases）落地前先以小词表挡住高频误归一；
-# 待术语表正式承载别名后由 aliases 取代本词表。
+# 归一会把泛词错升为类名。K4 术语层落地后（docs/Agent/13 §9 K4-c，原作者预留接缝正式收口）：
+# gloss:Term 别名目录命中在 rewrite 零级直接归一、优先于本词表（双签资产的面取代词表猜测）；
+# 词表保留为兜底而非删除——泛词收敛为目录条目是渐进过程，未收录泛词仍需词表挡住高频误归一，
+# 且目录为空（旧种子/外部目录）时词表维持原档行为（向后兼容红线）。
 _REWRITE_BLOCKLIST = frozenset({"停电", "复电", "故障", "抢修", "工单", "报告", "事件", "任务"})
 
 _TERM_RE = re.compile(r"\w+", re.UNICODE)  # CJK/字母/数字连续段（\w 含 CJK；含 emoji 无影响）
@@ -227,8 +229,12 @@ async def rewrite(query: str, *, catalog: SeedCatalog | None = None) -> tuple[st
     r"""术语归一受限改写（M3 纠错，§3 ⑤；改写不是自由生成——只认种子目录命中）。
 
     规则（v1 受限版）：扫描查询中的 ``\w+`` 连续段（≥2 字符、非纯数字、不在否定词表），逐段
-    两级归一（方向均为「查询词 → 规范标签」，如「配变」→「配电变压器」）：
+    归一（方向均为「查询词 → 规范术语」，如「配变」→「配电变压器」）：
 
+    - 零级（术语别名目录精确命中，K4-c；docs/Agent/13 §9 原作者预留接缝的正式落地）：
+      词段与 gloss:Term 的 label/altLabel 归一精确相等 → 替换该段为规范术语标签。目录条目经
+      ontology_changeset 双签随本体版本发布（宪法 3），**优先于否定词表与下述两级启发式**
+      （aliases 取代词表的既定方向）；词段自命中规范术语面（label 键）→ 该段跳过；
     - 一级（match_seed_class 包含命中，kb_extraction 一级对齐只读复用）：``\w+`` 段与规范标签
       存在字面包含关系且尚未等于规范术语（如「变压」⊂「变压器」）→ 替换该段为规范标签；
       「标签 ⊂ 查询词」（规范术语已在查询中，如「馈线F001」含「馈线」）不改写——避免把含
@@ -239,16 +245,22 @@ async def rewrite(query: str, *, catalog: SeedCatalog | None = None) -> tuple[st
       （如「配变」的 配…变 按序含于「配电变压器」——中文「取首字+特征字」构词的简称）→
       替换该段为规范标签。按类声明序取首个命中（确定性）。
 
-    只取最左一个可归一段（v1 单术语改写）。返回 (改写后查询, 依据="term_alias:<规范标签>")；
+    只取最左一个可归一段（v1 单术语改写）。返回 (改写后查询, 依据="term_alias:<规范术语>")；
     无归一点或改写结果与原查询相同 → None（调用方据此降级，不空转重查同一查询）。
     ``catalog``=注入种子目录（测试/调用方装配用；None=懒加载 services/seeds/power_seed.ttl 进程内单例）。
-    简称启发式为 PoC 档占位——正式别名以术语表（主文档 §4.3#3 aliases）承载后取代。
+    二级按序包含启发式保留为目录未收录简称的 PoC 档兜底（正式别名已由零级术语目录承载）。
     """
     cat = catalog if catalog is not None else await _default_catalog()
     for term in _TERM_RE.findall(query):
+        norm_term = term.lower()  # \w+ 段无空白，lower 即 kb_extraction._norm 语义
+        alias_term = cat.glossary_alias_index.get(norm_term)  # 零级：术语别名目录（K4-c）
+        if alias_term is not None:
+            rewritten = _replace_segment(query, term, alias_term.label)
+            if rewritten is not None and rewritten != query:
+                return rewritten, f"term_alias:{alias_term.label}"
+            continue  # 已是规范术语面（label 自命中）→ 该词段无需归一，亦不落启发式
         if len(term) < 2 or term.isdigit() or term in _REWRITE_BLOCKLIST:
             continue
-        norm_term = term.lower()  # \w+ 段无空白，lower 即 kb_extraction._norm 语义
         seed_hit = match_seed_class(norm_term, cat)  # 一次裁决存变量（一级与 F3 守卫共用）
         target = _containment_target(norm_term, cat, seed_hit)  # 一级：字面包含方向裁决
         if target is None:
@@ -260,16 +272,23 @@ async def rewrite(query: str, *, catalog: SeedCatalog | None = None) -> tuple[st
             target = _subsequence_target(norm_term, cat)  # 二级：别名/简称（字符按序包含）
         if target is None:
             continue
-        # F4：term 源自 _TERM_RE 扫描，裸 str.replace 按子串替换会落在已扫描词段内部
-        # （「配电线路故障，配电」replace「配电」→「配电线路线路故障，配电」）——以首个
-        # 与该词段全等的匹配区间拼接替换。
-        match = next((m for m in _TERM_RE.finditer(query) if m.group() == term), None)
-        if match is None:  # 理论不可达（term 源自同款扫描）；保守跳过该词段，不做子串误替换
-            continue
-        rewritten = query[: match.start()] + target + query[match.end() :]  # 词段级（与扫描序一致）
-        if rewritten != query:  # 红线：改写结果必须与原查询不同才返回
+        rewritten = _replace_segment(query, term, target)  # F4：词段级（与扫描序一致）
+        if rewritten is not None and rewritten != query:  # 红线：改写结果必须与原查询不同才返回
             return rewritten, f"term_alias:{target}"
     return None
+
+
+def _replace_segment(query: str, term: str, target: str) -> str | None:
+    """词段级替换（F4 纪律）：以首个与该词段全等的扫描区间拼接替换，不做子串误替换。
+
+    term 源自 _TERM_RE 扫描，裸 str.replace 按子串替换会落在已扫描词段内部（「配电线路故障，
+    配电」replace「配电」→「配电线路线路故障，配电」）；理论不可达（term 源自同款扫描却找不到
+    全等区间）时返回 None，调用方保守跳过该词段。
+    """
+    match = next((m for m in _TERM_RE.finditer(query) if m.group() == term), None)
+    if match is None:
+        return None
+    return query[: match.start()] + target + query[match.end() :]
 
 
 def _containment_target(

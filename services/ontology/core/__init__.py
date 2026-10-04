@@ -12,6 +12,7 @@ from .query import MAX_QUERY_ROWS, QueryResult, SparqlRejected, execute_readonly
 from .reasoning import ReasonReport, entail
 from .shacl import ValidationReport, ValidationViolation, validate
 from .tbox import (
+    GLOSS,
     OB2,
     TASK,
     default_namespace,
@@ -22,6 +23,7 @@ from .tbox import (
 )
 
 __all__ = [
+    "GLOSS",
     "MAX_QUERY_ROWS",
     "OB2",
     "TASK",

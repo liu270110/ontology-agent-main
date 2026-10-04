@@ -12,6 +12,7 @@
 @prefix ob2:  <https://ontology-agent.dev/ns/ob2#> .
 @prefix pw:   <http://ontology-agent.local/o/t1/power#> .
 @prefix task: <https://ontology-agent.dev/ns/task#> .
+@prefix gloss: <https://ontology-agent.dev/ns/gloss#> .
 @prefix sh:   <http://www.w3.org/ns/shacl#> .
 @prefix owl:  <http://www.w3.org/2002/07/owl#> .
 @prefix rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
@@ -119,6 +120,30 @@ pw:servesCustomer a owl:ObjectProperty ; rdfs:domain pw:Feeder ; rdfs:range pw:C
     rdfs:label "供电客户"@zh .
 pw:restoresOrder a owl:ObjectProperty ; rdfs:domain pw:RepairCompleted ; rdfs:range pw:OutageOrder ;
     rdfs:label "对应工单（抢修完成→工单）"@zh .
+
+# ============================================================ 业务术语（Glossary 业务术语层，K4）
+# 术语表=TBox 的 SKOS 面（docs/Agent/13 §9 K4-a；三字段模型 term/aliases/target=tis@18 §10.1）：
+# rdfs:label=规范术语、skos:altLabel=别名/口语、gloss:target=定位本体类/属性 IRI。
+# 随本体版本化发布（复用 ontology_changeset 双签），不建 PG 表；消费面=实体链接对齐
+# （kb_extraction.match_seed_class 别名级）/检索改写（agentic.rewrite）/检索第 4 路（retrieve.glossary）。
+
+gloss:Term a owl:Class ; rdfs:label "业务术语"@zh ;
+    skos:definition "业务术语条目：label=规范术语，skos:altLabel=别名/口语，gloss:target=指向本体类或属性的定位"@zh .
+gloss:target a owl:ObjectProperty ; rdfs:domain gloss:Term ; rdfs:range rdfs:Resource ;
+    rdfs:label "术语定位（指向本体类/属性 IRI，类/属性皆可指故 range 取 rdfs:Resource，RL 档兼容）"@zh .
+
+gloss:TermOutageCustomers a gloss:Term ; rdfs:label "停电户数"@zh ;
+    skos:altLabel "停户数"@zh, "受影响用户数"@zh, "停运户数"@zh ;
+    gloss:target pw:Customer .
+gloss:TermFaultOrder a gloss:Term ; rdfs:label "故障工单"@zh ;
+    skos:altLabel "报修单"@zh, "故障报修单"@zh, "抢修单"@zh ;
+    gloss:target pw:OutageOrder .
+gloss:TermOutageScope a gloss:Term ; rdfs:label "停电范围"@zh ;
+    skos:altLabel "停电区域"@zh, "停电地段"@zh ;
+    gloss:target pw:Feeder .
+gloss:TermDistributionTransformer a gloss:Term ; rdfs:label "配电变压器"@zh ;
+    skos:altLabel "配变"@zh, "配变台"@zh ;
+    gloss:target pw:Transformer .
 
 # ============================================================ 规则（三路由，同一规则只允许一个路由，§2.3）
 

@@ -14,6 +14,10 @@
 任何块外内容），并留结构化 marker「已压缩 N 条」；只动易变尾（tier=3），稳定前缀
 （tier≤2）不可压缩（07 §3 规律 2：冻结前缀保 KV-cache）。全程确定性：同输入同输出
 （漂移检测重放等价，07 §6.2-4 幂等契约）。
+
+A-8 降级链中间档（2026-10-05 K1 批，docs/Agent/13 §2 K1-b）：注册策略失败 → 先试
+内置提取式策略（零 LLM 生成、逐字提取），产物经 :func:`product_within_target` 复判
+水位达标才收货；仍超水位才落确定性兜底截断（宁截勿编）。
 """
 
 from __future__ import annotations
@@ -99,6 +103,14 @@ class CompactionStrategy(Protocol):
         *,
         timeout_ms: int = 5_000,
     ) -> ContextBlock: ...  # pragma: no cover — Protocol 方法无实现
+
+
+def product_within_target(stable_tokens: int, product: ContextBlock, *, target_tokens: int) -> bool:
+    """压缩产物水位复判（纯函数，A-8 降级链中间档，docs/Agent/13 §2 K1-b）：
+    稳定前缀 + 压缩产物落位后的整体估算 ≤ 目标水位才收货——产物仍超水位=该档无效，
+    调用方继续沿降级链下落（兜底截断）。同输入同输出（确定性，重放等价）。
+    """
+    return stable_tokens + max(product.tokens, 0) <= target_tokens
 
 
 def truncate_volatile_tail(ordered: list[ContextBlock], *, target_tokens: int) -> tuple[list[ContextBlock], int]:

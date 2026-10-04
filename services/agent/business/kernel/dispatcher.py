@@ -26,6 +26,7 @@ from services.agent.business.kernel.errors import KernelContractError
 from services.agent.business.kernel.extensions import (
     AgentSlot,
     ContextProvider,
+    CriterionProjection,
     EventSink,
     ExecutionBackend,
     MemoryPolicy,
@@ -86,6 +87,7 @@ class ExtensionDispatcher:
         self._event_sinks: list[EventSink] = []
         self._execution_backends: dict[str, ExecutionBackend] = {}
         self._agent_slots: dict[str, AgentSlot] = {}
+        self._criterion_projection: CriterionProjection | None = None  # E-4 K1-c：判据投影端口（唯一）
         self._model: ModelPort | None = None
         self._hooks = HookRegistry()  # H-0a 生命周期钩子（observer-only，唯一 block 点=pre_tool_call）
 
@@ -185,6 +187,20 @@ class ExtensionDispatcher:
         _check_loop_versions(loop_versions, extension_name=meta.name)
         self._agent_slots[meta.name] = slot
 
+    def register_criterion_projection(
+        self, projection: CriterionProjection, *, loop_versions: tuple[str, ...] = (LOOP_CONTRACT_VERSION,)
+    ) -> None:
+        """注册判据投影端口（E-4 K1-c，criterion.projections；docs/Agent/13 §2）。
+
+        唯一语义（同 PlanningStrategy 先例：一次求值一个投影引擎，多引擎并存=路由决策
+        未定义）；无注册=判据仅回执匹配（M3 口径不变，零行为变化面）。
+        """
+        meta = _require_meta(projection, point="CriterionProjection")
+        _check_loop_versions(loop_versions, extension_name=meta.name)
+        if self._criterion_projection is not None:
+            raise KernelContractError("CriterionProjection 已注册，禁重复（判据投影求值面唯一）")
+        self._criterion_projection = projection
+
     def register_model(self, model: ModelPort) -> None:
         """L7 模型渠道（ModelPort，锚点 §3.4 倒置口）：预算与 fallback 策略归内核 A4。"""
         if getattr(model, "complete_structured", None) is None:
@@ -218,6 +234,11 @@ class ExtensionDispatcher:
     def compaction_strategy(self) -> CompactionStrategy | None:
         """压缩策略取用面（H-2 D3）：None=内核确定性兜底截断（宁截勿编）。"""
         return self._compaction_strategy
+
+    @property
+    def criterion_projection(self) -> CriterionProjection | None:
+        """判据投影取用面（E-4 K1-c）：None=判据仅回执匹配（M3 口径）。"""
+        return self._criterion_projection
 
     @property
     def context_providers(self) -> list[ContextProvider]:

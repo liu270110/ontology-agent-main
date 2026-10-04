@@ -6,7 +6,8 @@
 - 冻结前缀字节稳定（同输入两次组装一致；尾变化前缀不变——KV-cache 前置契约）；
 - builtin 遮蔽式工具 schema（两轮 schema 定义段字节一致，差异只在遮蔽清单行）；
 - CompactionTrigger 水位纯函数边界（超预算 threshold 比例触发）；
-- 无策略走内核兜底截断（宁截勿编 + 「已压缩 N 条」marker）、策略失败降级；
+- 无策略走内核兜底截断（宁截勿编 + 「已压缩 N 条」marker）、策略失败降级链
+  （A-8 中间档：提取式接管→产物水位复判→仍超才截断，K1 批）；
 - 有策略走 dispatcher 注册面（桩策略捕获易变尾、B3 覆写、tier 归位）；
 - Settings 注入预算与阈值（配置层唯一事实源，D2/F-4 纪律）。
 """
@@ -20,7 +21,9 @@ from services.agent.business.adapters.builtin import build_tools_segment, mask_t
 from services.agent.business.kernel.budget import Budget
 from services.agent.business.kernel.compaction import (
     COMPACTION_MARKER_SOURCE,
+    EXTRACTIVE_SUMMARY_SOURCE,
     CompactionTrigger,
+    product_within_target,
     truncate_volatile_tail,
 )
 from services.agent.business.kernel.dispatcher import ExtensionDispatcher
@@ -290,23 +293,54 @@ async def test_有策略走注册面_桩捕获易变尾_B3覆写与tier归位() 
     assert compacted["strategy"] == "fixture.compactor"
 
 
-async def test_策略失败降级_转内核兜底截断_运行不中断() -> None:
-    # 准备：桩策略必然失败（模拟摘要通道不可用）
+async def test_策略失败降级链中间档_提取式接管_水位达标收货() -> None:
+    # 准备：桩策略必然失败（模拟摘要通道不可用）→ 降级链中间档（A-8，K1-b）先试内置提取式
     strategy = StubCompactionStrategy(fail=True)
     providers = [
         TierProvider("p.const", content="宪法", tokens=300, tier=0),
         TierProvider("p.chat_a", content="旧对话", tokens=400, tier=3),
     ]
 
-    # 执行
+    # 执行：预算 1000/水位 0.5 → 目标 500；提取式按剩余水头（500-300=200）装填，产物落位 300+~20 ≤ 500 达标
     blocks, events = await _assemble_once(providers, budget_tokens=1_000, compaction_threshold=0.5, strategy=strategy)
 
-    # 断言：降级走兜底截断（宁截勿编），事件带失败策略名与转义错误；稳定前缀保留
+    # 断言：中间档提取式收货（mode=fallback_extractive）；产物=内置提取式摘要（宁丢勿编），稳定前缀保留
+    assert [b.source for b in blocks] == ["p.const", EXTRACTIVE_SUMMARY_SOURCE]
+    assert blocks[-1].tier == 3 and blocks[-1].trust_level is TrustLevel.AGENT_ATTESTED
+    compacted = next(data for event_type, data in events if event_type == "kernel.context_compacted")
+    assert compacted["mode"] == "fallback_extractive"
+    assert compacted["strategy"] == "kernel.compaction_extractive"
+    assert compacted["dropped"] == 1  # 易变尾整段被摘要接管
+    assert compacted["error"]  # 原策略失败原因留痕（可追溯）
+    assert compacted["estimated_after"] <= compacted["estimated_before"]  # 压缩只减不增
+
+
+async def test_策略失败_提取式仍超水位_继续落兜底截断() -> None:
+    # 准备：稳定前缀已抵目标水位（500），水头=1 → 提取式产物必然超水位（marker+条目不可压到 1）
+    strategy = StubCompactionStrategy(fail=True)
+    providers = [
+        TierProvider("p.const", content="宪法", tokens=500, tier=0),
+        TierProvider("p.chat_a", content="旧对话", tokens=400, tier=3),
+    ]
+
+    # 执行：预算 1000/水位 0.5 → 目标 500；中间档复判不达标 → 继续降级兜底截断
+    blocks, events = await _assemble_once(providers, budget_tokens=1_000, compaction_threshold=0.5, strategy=strategy)
+
+    # 断言：最终档=内核确定性截断（宁截勿编），易变尾整块淘汰留 marker；原失败原因留痕
     assert [b.source for b in blocks] == ["p.const", COMPACTION_MARKER_SOURCE]
     compacted = next(data for event_type, data in events if event_type == "kernel.context_compacted")
     assert compacted["mode"] == "fallback_truncate"
-    assert compacted["strategy"] == "fixture.compactor"
+    assert compacted["strategy"] == "fixture.compactor"  # 记注册策略（降级起因），非提取式
+    assert compacted["dropped"] == 1
     assert compacted["error"]
+
+
+def test_压缩产物水位复判_纯函数边界() -> None:
+    # product_within_target（K1-b 新增）：稳定前缀+产物 ≤ 目标水位才收货；恰在线上=达标
+    assert product_within_target(60, _block("x", 40, 3), target_tokens=100) is True
+    assert product_within_target(61, _block("x", 40, 3), target_tokens=100) is False
+    assert product_within_target(0, _block("x", 0, 3), target_tokens=100) is True  # 零成本留痕块不推高水位
+    assert product_within_target(0, _block("x", -5, 3), target_tokens=100) is True  # 负自报按 0 口径（防御）
 
 
 async def test_易变尾为空时触发_跳过压缩_冻结前缀不可压缩() -> None:

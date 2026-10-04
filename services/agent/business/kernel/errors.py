@@ -3,6 +3,8 @@
 内核自身不定义新错误码：预算耗尽复用 5005 RETRY_BUDGET_EXHAUSTED（登记表内唯一预算码），
 参数/行动类非法复用 3001 PARAM_INVALID，授权不足复用 2001 SCOPE_INSUFFICIENT，
 工具目标不可用/超时复用 5003 MCP_TARGET_UNAVAILABLE。
+唯一例外（2026-10-05 K1 批，docs/Agent/13 §2 K1-a）：循环检测硬终止段 5008
+EXEC_LOOP_DETECTED（既有族无「同签名连续重复」口径，不复用预算/参数码；02 §7 表格回填随文档批）。
 """
 
 from __future__ import annotations
@@ -39,3 +41,19 @@ class ToolDispatchError(KernelError):
 
     def __init__(self, message: str) -> None:
         super().__init__(ErrorCode.MCP_TARGET_UNAVAILABLE, f"MCP_TARGET_UNAVAILABLE: {message}")
+
+
+class LoopDetectedError(KernelError):
+    """A-1 循环检测两段式·硬终止段（docs/Agent/13 §2 K1-a，上游 gemini-cli）：
+    同签名（action_iri+canonical_param_hash）连续重复达阈值，循环防护终止运行。
+    软警告段（首次重复）为 kernel.loop_nudge 事件，不经本异常。"""
+
+    def __init__(self, *, action_iri: str, signature: str, repeats: int) -> None:
+        super().__init__(
+            ErrorCode.EXEC_LOOP_DETECTED,
+            f"EXEC_LOOP_DETECTED: 动作 {action_iri} 同签名连续重复 {repeats} 次"
+            f"（signature={signature[:16]}…），循环防护硬终止（A-1）",
+        )
+        self.action_iri = action_iri
+        self.signature = signature
+        self.repeats = repeats

@@ -51,11 +51,25 @@ class PlanCandidate(BaseModel):
     success_criteria: tuple[SuccessCriterion, ...] = ()
 
 
+class CriterionProjectionSpec(BaseModel):
+    """投影求值面声明（E-4 K1-c 值对象 frozen，docs/Agent/13 §2）：判据的 SHACL 投影最小求值面。
+
+    shapes_iri=形状集 IRI（端口实现侧据此寻址形状子集/形状库）；回执缺失时判据以
+    focus_iri 作 focus node 经 CriterionProjection 端口求值（回执命中仍优先，M3 口径不变）。
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    shapes_iri: str
+
+
 class SuccessCriterion(BaseModel):
     """成功判据（值对象 frozen）：在任务级投影/台账上 focus-node 求值（B2）。
 
     required_receipt_kind：判据只认该类别的外部回执（M3 简化版 C1：PG 台账行=凭证源）；
     agent_attested 事实不参与求值——agent 自述完成不被采信（02 §2 A4/B2）。
+    projection（E-4 K1-c 可选求值面）：None=仅回执匹配（M3 口径不变）；声明后回执缺失时
+    走投影补充分支（确定性引擎求值，非 agent 自述通道）。
     """
 
     model_config = ConfigDict(frozen=True)
@@ -64,6 +78,7 @@ class SuccessCriterion(BaseModel):
     focus_iri: str  # focus node（任务/实体 IRI）
     required_receipt_kind: str  # 外部回执类别（如 delivery_confirmation）
     description: str = ""
+    projection: CriterionProjectionSpec | None = None  # E-4 K1-c：可选投影求值面（缺省=仅回执）
 
 
 class CriterionReport(BaseModel):
@@ -74,6 +89,21 @@ class CriterionReport(BaseModel):
     criterion_id: str
     satisfied: bool
     blocked_by_trust: bool = False  # True=只缺外部回执，回执到达后转可求值
+    detail: str = ""
+
+
+class ProjectionReport(BaseModel):
+    """投影求值报告（E-4 K1-c 值对象 frozen）：CriterionProjection 端口的确定性结论。
+
+    evaluated=False=端口无法求值（形状集缺失/数据图不可得等）——判据退回 blocked
+    （等回执）：求值不可得绝不等价于求值失败（保守侧，禁把缺口当违例）。
+    实现位在能力层（内核禁直连 pyshacl，A3 依赖倒置 + import 白名单 CI 锁边）。
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    evaluated: bool
+    conforms: bool = False
     detail: str = ""
 
 

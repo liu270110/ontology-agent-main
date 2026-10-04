@@ -11,7 +11,9 @@ H-2 上下文工程批（2026-09-29，研究 07 §6.3 三断点预算表 + §3 �
   从**易变尾向前**淘汰（tier 大先丢，保稳定前缀）；排序与淘汰全程确定性（同输入同
   输出，漂移检测重放等价）。
 - **压缩断点（D3 三层归属）**：组装后按水位触发（阈值=配置层 Settings），有策略走
-  能力层摘要、无策略走内核兜底截断（宁截勿编，见 kernel/compaction.py）。
+  能力层摘要、无策略走内核兜底截断（宁截勿编，见 kernel/compaction.py）；
+  策略失败走 A-8 降级链（2026-10-05 K1 批，docs/Agent/13 §2 K1-b）：先试内置提取式
+  中间档（产物复判水位），仍超水位才落内核截断。
 - 预算与阈值改由 Settings 注入（context_budget_tokens / context_compaction_threshold，
   原 GROUNDING_BUDGET_TOKENS 常量收编，边界契约 D2/F-4 同款纪律：内核不藏数值策略，
   构造参数显式注入优先，未注入运行期读配置层）。
@@ -40,6 +42,8 @@ from services.agent.business.kernel.compaction import (
     COMPACTION_TIMEOUT_S,
     TIER_VOLATILE,
     CompactionTrigger,
+    ExtractiveCompactionStrategy,
+    product_within_target,
     truncate_volatile_tail,
 )
 from services.agent.business.kernel.dispatcher import ExtensionDispatcher
@@ -288,8 +292,36 @@ class ContextAssemblyStage:
             )
         try:
             summary = await asyncio.wait_for(strategy.summarize(tuple(volatile), rc.ctx), timeout=COMPACTION_TIMEOUT_S)
-        except Exception as exc:  # 降级矩阵：策略失败/超时转兜底截断（不中断运行）
-            logger.warning("压缩策略失败降级为内核截断: %s", exc)
+        except Exception as exc:  # 降级矩阵：策略失败/超时 → 降级链（不中断运行）
+            error_note = str(exc)[:200]
+            # A-8 降级链中间档（docs/Agent/13 §2 K1-b）：注册策略失败 → 先试内核内置提取式
+            # 策略（零 LLM 生成、宁丢勿编），预算按剩余水头（目标-稳定前缀）装填；产物落位后
+            # 经 product_within_target 复判水位，达标才收货（mode=fallback_extractive）；
+            # 仍超水位或中间档自身失败 → 继续落确定性兜底截断（宁截勿编，mode=fallback_truncate）。
+            try:
+                headroom = max(1, target - _estimated_tokens(stable))
+                extractive = ExtractiveCompactionStrategy(budget_tokens=headroom)
+                extracted = await extractive.summarize(tuple(volatile), rc.ctx)
+                if product_within_target(_estimated_tokens(stable), extracted, target_tokens=target):
+                    compacted = [*stable, extracted]
+                    logger.warning(
+                        "压缩策略失败，降级链中间档提取式接管（strategy=%s, error=%s）", strategy.meta.name, error_note
+                    )
+                    return compacted, self._compaction_event(
+                        mode="fallback_extractive",
+                        strategy=extractive.meta.name,
+                        before=estimated,
+                        after=_estimated_tokens(compacted),
+                        dropped=len(volatile),
+                        error=error_note,
+                    )
+                logger.warning(
+                    "提取式压缩产物仍超水位（%d > %d），继续降级为内核截断",
+                    _estimated_tokens(stable) + max(extracted.tokens, 0),
+                    target,
+                )
+            except Exception as inner_exc:  # 中间档失败不阻断：继续兜底截断
+                logger.warning("提取式压缩中间档失败，继续降级为内核截断: %s", inner_exc)
             compacted, dropped = truncate_volatile_tail(kept, target_tokens=target)
             return compacted, self._compaction_event(
                 mode="fallback_truncate",
@@ -297,7 +329,7 @@ class ContextAssemblyStage:
                 before=estimated,
                 after=_estimated_tokens(compacted),
                 dropped=dropped,
-                error=str(exc)[:200],
+                error=error_note,
             )
         if summary.trust_level is not TrustLevel.AGENT_ATTESTED:  # B3：策略产物同样不可信
             summary = summary.model_copy(update={"trust_level": TrustLevel.AGENT_ATTESTED})

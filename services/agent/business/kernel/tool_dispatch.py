@@ -23,6 +23,7 @@ import logging
 from collections.abc import Awaitable, Callable, Sequence
 
 from services.agent.business.kernel.execution import ExecutionStage
+from services.agent.business.kernel.loop_guard import LoopGuard, register_step
 from services.agent.business.kernel.plan import KERNEL_PLAN_UPDATED, plan_updated_data
 from services.agent.business.kernel.run_context import Emit, RunContext
 from services.agent.domain.model.kernel_actions import ExecutionMode
@@ -67,10 +68,24 @@ class ToolGroupDispatcher:
         self._observe = observe
 
     async def run_group(
-        self, rc: RunContext, candidate: PlanCandidate, steps: tuple[PlanStep, ...], *, parallelism: int
+        self,
+        rc: RunContext,
+        candidate: PlanCandidate,
+        steps: tuple[PlanStep, ...],
+        *,
+        parallelism: int,
+        loop_guard: LoopGuard,
     ) -> None:
-        """执行一个并行调度段：被拒步留段外，入池步并发跑既有管线，完成后声明序收口。"""
+        """执行一个并行调度段：被拒步留段外，入池步并发跑既有管线，完成后声明序收口。
+
+        A-1 循环记账（docs/Agent/13 §2 K1-a）：**池执行前**按声明序对段内每步逐步记账
+        （与串行「步前记账」同位——被拒/失败的重复动作同样计入循环形态）；同签名连续
+        重复第 1 次注入 kernel.loop_nudge 软警告，达阈值抛 LoopDetectedError 硬终止
+        （发生在池启动前 ⇒ 整段零工具调用，比串行逐步拦截更保守）。
+        """
         ctx = rc.ctx
+        for step in steps:
+            register_step(rc, loop_guard, step, emit=self._emit)
         admitted: list[PlanStep] = []
         for step in steps:  # 门禁先行（顺序过 gate，事件/快照与串行同序）
             await self._gate(rc, candidate, step)

@@ -116,6 +116,8 @@ class ChatOrchestrator:
         extra_tool_bindings: tuple = (),  # 能力层 P0（docs/Agent/06）：fs/web 等工具绑定，经 B1 门禁链注册
         run_registry: Any | None = None,  # M4.5-A：RunRegistry（进程内 run_id→inbox/probe；None=不注册）
         estop_probe_factory: Callable[[UUID], Callable[[], str | None]] | None = None,  # M4.5-A：estop 探针工厂
+        # E-4 K1-c（docs/Agent/13 §2）：CriterionProjection 端口实现；None=判据仅回执匹配
+        criterion_projection: Any | None = None,
     ) -> None:
         self._extra_tool_bindings = tuple(extra_tool_bindings)
         self._adapters = dict(adapters)
@@ -145,6 +147,9 @@ class ChatOrchestrator:
         # 终态注销（_execute_turn finally 面）；两者缺省 None=零行为变化（直跑形态）。
         self._run_registry = run_registry
         self._estop_probe_factory = estop_probe_factory
+        # E-4 K1-c 判据投影端口（docs/Agent/13 §2）：实现位=business.OntologyCriterionProjection
+        #（组合根注入）；None=不注册 → 判据仅回执匹配（M3 口径，零行为变化面）。
+        self._criterion_projection = criterion_projection
 
     async def stream_chat(self, command: ChatCommand) -> AsyncIterator[ChatEvent]:
         """执行一次对话（M4.5-C：Run 生命周期内绑定 llm.* 事件汇，见 _stream_chat_impl）。"""
@@ -312,6 +317,8 @@ class ChatOrchestrator:
         dispatcher.register_tool(adapter.turn_tool(turn, box, on_event))
         for binding in self._extra_tool_bindings:  # 能力层 P0（docs/Agent/06）：fs/web 等工具经 B1 门禁链注册
             dispatcher.register_tool(binding)
+        if self._criterion_projection is not None:  # E-4 K1-c：判据投影端口（唯一注册面，无注入=纯回执口径）
+            dispatcher.register_criterion_projection(self._criterion_projection)
         # 40 篇 R2 转译 observer（H-0a on_kernel_event）：内核子 run/计划类锚点 → 执行结构
         # ChatEvent（SUBRUN_*/PLAN_UPDATED），经 on_event 入队走既有 SSE/落库路径；非转译型
         # 锚点 fast-path 跳过（发射点=spawn/close、规划 R4 逐批落地，见 exec_events.py 契约）。

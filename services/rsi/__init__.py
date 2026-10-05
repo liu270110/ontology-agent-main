@@ -22,11 +22,17 @@ business/orsi_registry.py 注册面（face 枚举校验+指纹计算）、api/ca
 （GET/POST /api/v1/orsi/capabilities、GET /{id}；读公开/写 rsi:write）、data 层
 orsi_capabilities（**data 实现不进包根命名空间**，同 sinks/drafter 口径——直
 ``from services.rsi.data.repo_impl.orsi_repo import …``）。
+
+K9 批（2026-10-05，docs/Agent/13 §15，G-9 并发漂移防线）追加：transition(expect) 乐观
+并发 CAS（StaleProposalError）、Proposal.baseline_hash 基线快照 + apply 路径漂移即拒
+（BaselineDriftError，entry_loader 注入当前条目内容取数口）——蓝本 prime-agent refine.rs
+「entry changed during refinement planning」即拒。
 """
 
 from __future__ import annotations
 
 from services.rsi.audit import (
+    ACTION_APPLY_BASELINE_DRIFT,
     ACTION_APPLY_DENIED,
     ACTION_WHITELIST_VIOLATION,
     AuditTrail,
@@ -67,13 +73,22 @@ from services.rsi.gap import (
 )
 from services.rsi.gates import GateResult, evaluate_chain
 from services.rsi.proposal import (
+    BASELINE_HASH_VERSION,
     ENVELOPE_REQUIRED_KEYS,
     Proposal,
     ProposalError,
     ProposalStatus,
+    StaleProposalError,
     TriggerTrack,
+    entry_baseline_hash,
 )
-from services.rsi.service import APPLY_ENABLED_STAGE, RsiApplyForbiddenError, RsiService
+from services.rsi.service import (
+    APPLY_ENABLED_STAGE,
+    BaselineDriftError,
+    EntryLoader,
+    RsiApplyForbiddenError,
+    RsiService,
+)
 from services.rsi.surfaces import REGISTRY, EvolutionSurface, SurfaceMeta, surface_of
 from services.rsi.triggers import TriggerEvent, TriggerRegistry
 from services.rsi.whitelist import (
@@ -85,14 +100,18 @@ from services.rsi.whitelist import (
 
 __all__ = [
     "APPLY_ENABLED_STAGE",
+    "ACTION_APPLY_BASELINE_DRIFT",
     "ACTION_APPLY_DENIED",
     "ACTION_ORSI_CAPABILITY_REGISTERED",
     "ACTION_WHITELIST_VIOLATION",
+    "BASELINE_HASH_VERSION",
     "ENVELOPE_REQUIRED_KEYS",
     "FINGERPRINT_VERSION",
     "FORBIDDEN_TARGET_MARKERS",
     "GAP_FINGERPRINT_VERSION",
     "AuditTrail",
+    "BaselineDriftError",
+    "EntryLoader",
     "EvolutionSurface",
     "GateResult",
     "GapClusterSummary",
@@ -124,12 +143,14 @@ __all__ = [
     "RsiAuditRecord",
     "RsiService",
     "SourceChannel",
+    "StaleProposalError",
     "SurfaceMeta",
     "TriggerEvent",
     "TriggerRegistry",
     "TriggerTrack",
     "WhitelistViolation",
     "capability_fingerprint",
+    "entry_baseline_hash",
     "evaluate_chain",
     "normalize_name",
     "parse_face",

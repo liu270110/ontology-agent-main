@@ -17,6 +17,7 @@ logger = logging.getLogger("services.rsi.audit")
 # 安全审计动作（09 §3 铁律：白名单外拒绝必须落安全审计）
 ACTION_WHITELIST_VIOLATION = "rsi.whitelist.violation"
 ACTION_APPLY_DENIED = "rsi.apply.denied"
+ACTION_APPLY_BASELINE_DRIFT = "rsi.apply.baseline_drift"  # K9-b 基线漂移拒（docs/Agent/13 §15，拒绝亦留痕）
 ACTION_TRIGGER_SUPPRESSED = "rsi.trigger.suppressed"  # kill switch（红线 6）
 
 

@@ -18,9 +18,11 @@
 from __future__ import annotations
 
 import uuid
+from collections.abc import Awaitable, Callable
 from typing import Any
 
 from services.rsi.audit import (
+    ACTION_APPLY_BASELINE_DRIFT,
     ACTION_APPLY_DENIED,
     ACTION_WHITELIST_VIOLATION,
     AuditTrail,
@@ -28,25 +30,45 @@ from services.rsi.audit import (
     RsiAuditRecord,
 )
 from services.rsi.gates import build_eval_report, evaluate_chain
-from services.rsi.proposal import Proposal, ProposalError, ProposalStatus, TriggerTrack
+from services.rsi.proposal import (
+    Proposal,
+    ProposalError,
+    ProposalStatus,
+    TriggerTrack,
+    entry_baseline_hash,
+)
 from services.rsi.triggers import TriggerRegistry
 from services.rsi.whitelist import WhitelistViolation, validate_improvement
 
 APPLY_ENABLED_STAGE = "M5+"  # 生效通路启用里程碑（09 §9 阶段 B）；阶段 A 恒拒
+
+# 当前条目内容取数口（K9-b）：target → 条目当前内容（None=条目不存在/已删除）。
+# 阶段 A 无真实条目注册表，由组合根按载体注入（测试用闭包假体）；None 注入=无取数口，
+# 基线校验跳过（无法取当前内容 ≠ 已漂移，不虚拒）。
+EntryLoader = Callable[[str], Awaitable[str | None]]
 
 
 class RsiApplyForbiddenError(Exception):
     """apply 恒拒（阶段 A 红线）：任何候选、任何状态、任何操作者均不得经 RSI 直接生效。"""
 
 
+class BaselineDriftError(ProposalError):
+    """基线漂移拒（K9-b，G-9）：目标条目内容相对提案创建时快照已变化，拒绝按过期基线生效。
+
+    语义对齐 prime-agent planner.rs:368-379「entry changed during refinement planning」
+    即拒（方案依据=docs/Agent/13 §15）；调用方应废弃旧提案重新起草。
+    """
+
+
 class RsiService:
     """RSI 阶段 A 门面：触发注册/候选受理/门禁评估/apply 恒拒（全动作审计）。"""
 
-    def __init__(self, *, audit_trail: AuditTrail | None = None) -> None:
+    def __init__(self, *, audit_trail: AuditTrail | None = None, entry_loader: EntryLoader | None = None) -> None:
         self.audit_trail = audit_trail or InMemoryAuditTrail()
         self.triggers = TriggerRegistry(audit_trail=self.audit_trail)
         self.pool: dict[uuid.UUID, Proposal] = {}  # 候选池（进程内；PG 承载随 DDL 欠账清偿）
         self.apply_enabled = False  # 红线位：恒 False（M5+ 通道启用位，阶段 A 不提供翻转入口）
+        self.entry_loader = entry_loader  # K9-b 当前条目内容取数口（None=无取数口，基线校验跳过）
 
     # ------------------------------------------------------------- 触发注册
 
@@ -81,10 +103,14 @@ class RsiService:
         envelope: dict[str, Any],
         trigger: TriggerTrack,
         source_trace_ids: tuple[str, ...] = (),
+        baseline_content: str | None = None,
     ) -> Proposal:
         """候选受理入口（复盘归因/指标退化侧的统一落池口；白名单校验先行）。
 
         白名单外 → 安全审计（09 §3 铁律）后上抛 WhitelistViolation，不入池。
+        ``baseline_content``（K9-b 可选）：受理时对目标能力条目内容取 sha256 快照
+        （``entry_baseline_hash`` 口径）落 ``Proposal.baseline_hash``，供 apply/审批通过
+        路径执行前比对漂移；``None`` = 不建快照（旧提案形态，apply 跳过基线校验）。
         """
         try:
             improvement_type = validate_improvement(type_str, target)
@@ -105,6 +131,7 @@ class RsiService:
             trigger=trigger,
             envelope=dict(envelope),
             source_trace_ids=tuple(source_trace_ids),
+            baseline_hash=None if baseline_content is None else entry_baseline_hash(baseline_content),
         )
         await self._accept(proposal)
         return proposal
@@ -142,9 +169,12 @@ class RsiService:
         """生效入口——**恒拒绝**（阶段 A 红线；任何状态/操作者均不可经此生效）。
 
         机械执行点（09 §1 宪法 1「候选非成品无一生效豁免」+ 收缩裁决「apply 恒拒」）：
-        先落拒绝审计（登记 M5+ 启用），再抛 RsiApplyForbiddenError；候选状态不变。
+        先过 K9-b 基线校验（有快照且能取到当前内容时，漂移即拒——防「基于过期基线的进化」，
+        M5+ 通道启用时本检查点即执行前 CAS 门的执行位置），再落拒绝审计（登记 M5+ 启用），
+        抛 RsiApplyForbiddenError；候选状态不变。
         """
         proposal = self._require(proposal_id)
+        await self._assert_baseline_fresh(proposal)
         await self.audit_trail.record(
             RsiAuditRecord(
                 action=ACTION_APPLY_DENIED,
@@ -159,6 +189,40 @@ class RsiService:
         )
         raise RsiApplyForbiddenError(
             f"RSI apply 恒拒绝：改进项生效通路随 {APPLY_ENABLED_STAGE} 启用（阶段 A 骨架红线）"
+        )
+
+    # ------------------------------------------------------------- K9-b 基线校验
+
+    async def _assert_baseline_fresh(self, proposal: Proposal) -> None:
+        """基线快照比对（K9-b，执行前并发防线；阶段 A 挂在 apply 唯一执行点之前）。
+
+        - ``baseline_hash is None`` → 旧提案无快照，跳过（向后兼容既有调用方）；
+        - ``entry_loader is None`` → 无当前内容取数口，跳过（无法取当前内容 ≠ 已漂移，不虚拒；
+          M5+ 组合根注入取数口后本防线在真实执行 await 前后各调一次收口双查）；
+        - 快照与当前内容不符，或条目已不存在（取数 None，删除亦属漂移）→ 拒绝审计 +
+          BaselineDriftError（错误信息含 changed during refinement 语义），候选状态不变。
+        """
+        if proposal.baseline_hash is None or self.entry_loader is None:
+            return
+        current = await self.entry_loader(proposal.target)
+        if current is not None and entry_baseline_hash(current) == proposal.baseline_hash:
+            return
+        await self.audit_trail.record(
+            RsiAuditRecord(
+                action=ACTION_APPLY_BASELINE_DRIFT,
+                outcome="rejected",
+                proposal_id=str(proposal.id),
+                detail={
+                    "reason": "目标条目内容相对提案创建时基线快照已漂移",
+                    "target": proposal.target,
+                    "baseline_hash": proposal.baseline_hash,
+                    "entry_present": current is not None,
+                },
+            )
+        )
+        raise BaselineDriftError(
+            f"目标条目 changed during refinement：{proposal.target} 内容相对基线快照已漂移，"
+            "拒绝按过期基线生效（K9-b/G-9；废弃旧提案重新起草）"
         )
 
     # ------------------------------------------------------------- 内部

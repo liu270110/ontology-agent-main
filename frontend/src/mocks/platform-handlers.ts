@@ -5,16 +5,18 @@ import { http, HttpResponse } from 'msw'
  *  语境=电力（记忆「馈线 F12 过载阈值 85%」、插件「工单系统连接器」、MCP「crm-prod」，
  *  与画板 ix-06-platform / ix-07-extensions 口径一致）。
  *
- *  预登记口径（26 篇 §14 铁律 2，禁止默写为已登记，交付报告 R 清单同步）：
+ *  live 投影对齐（2026-10-05，C2 批前端适配）：agents/mcp/tools/skills 四段已改写为后端
+ *  实装契约的投影（裸体/裸 {items}/{data,meta} 信封、UUID/内容寻址短 id、脱敏掩码），
+ *  权威=services/{agent,mcp,tools,skills}/api 实装 pydantic schema——mock 不再是这四段的
+ *  契约源；字段级断言见 frontend 三页 contract 测试。响应统一走 HttpResponse.json 裸体
+ *  （ok()/err() 信封壳仅保留给未收敛段）。
+ *
+ *  仍属预登记/建议登记口径（26 篇 §14 铁律 2，禁止默写为已登记）：
  *  - GET  /memory/l1（列表）+ POST /memory/promotions/{id}/decision——已实装（B8-WB 断头补齐
  *    2026-10-04，services/memory/api/memory.py；B8-WC 契约卡终对齐：l1 裸 DTO {items} 无信封、
  *    ttl_remaining 降序、Redis 降级 items=[]；decision 信封壳 + X-Tenant-Id/X-User-Id 双 header
  *    缺失 422、4705 对账缝 409、404 未命中/跨租户）
- *  - GET  /agents/adapter-schemas / POST /agents/connection-test / POST /agents/{id}/start|stop / debug-chat——§5.1 无适配器 Schema、预注册连接测试、启停、调试对话端点
- *  - GET  /sessions?agent=——§5.2 GET /sessions 未登记 agent 过滤参数（26 篇 IX-AGT-02 引用）；无 agent 参时回落 handlers.ts 既有 mock
- *  - POST /tools / GET /tools/{id} / POST /tools/{id}/enable|disable / POST /tools/dry-run / GET /tools/{id}/stats——§5.6 仅有 GET /tools 目录（名称+摘要）与 search
- *  - GET  /skills / GET /skills/{id}——§5.6 无 skills 端点（26 篇 IX-TLS-03 引「§5.6 skills 读取」）
- *  - POST /mcp/discover / GET /mcp/servers/{id} / POST /mcp/tools/{id}/disable / DELETE /mcp/servers/{id}——§5.7 无预注册发现、详情、停用与移除端点（26 篇 §10 行 15） */
+ *  - GET  /sessions?agent=——§5.2 GET /sessions 未登记 agent 过滤参数（26 篇 IX-AGT-02 引用）；无 agent 参时回落 handlers.ts 既有 mock */
 
 function ok<T>(data: T, status = 200) {
   return HttpResponse.json({ code: 0, message: 'ok', data }, { status })
@@ -182,117 +184,98 @@ function factTimeline(id: string): TimelineEvent[] {
 }
 
 // ============================================================
-// §5.1 agents —— 适配器实例（nanobot / openclaw / hermes）
+// §5.1 agents —— live 投影（services/agent/api/schemas/agent.py 逐字段，2026-10-05 收敛：
+// AgentOut {id,name,agent_tool,status,system_prompt,config,created_at} + 详情 adapter 对象；
+// 列表信封 {data,meta}；adapter-schemas 键集=builtin/claude（_ADAPTER_REGISTRY）；启停
+// enable/disable → {id,status,terminated_sessions}；connection-test {provider,base_url,
+// api_key,model} → {ok,latency_ms,model,error}；debug-chat {message} → {reply,usage,latency_ms}。
+// mock 旧 adapter='nanobot'/endpoint_masked/tools/health 富形状随 live 收敛退役）
 // ============================================================
 
 export interface PlatformAgent {
   id: string
   name: string
-  adapter: 'nanobot' | 'openclaw' | 'hermes' | 'custom'
-  adapter_version: string
-  status: 'running' | 'stopped' | 'error'
-  version: string
-  description: string
-  endpoint_masked: string
-  token_masked: string
-  timeout_ms: number
-  tools: string[]
-  active_sessions: number
-  queued_tasks: number
-  health: { last_probe: string; rtt_ms: number; consecutive_failures: number }
-  owner: string
-  created_at: string
+  agent_tool: 'builtin' | 'claude'
+  status: 'enabled' | 'disabled' | 'degraded'
+  system_prompt: string | null
+  config: Record<string, unknown>
+  created_at: string | null
+  /** 详情多出 adapter 绑定行（AgentDetailOut；列表无） */
+  adapter?: { id: string; agent_tool: string; version: string; health_endpoint: string | null }
 }
 
 const AGENTS: PlatformAgent[] = [
   {
-    id: 'agt-nanobot-01', name: '停电分析助手', adapter: 'nanobot', adapter_version: 'v1.3',
-    status: 'running', version: 'v1.3.0',
-    description: 'nanobot 适配：配网停电研判主助手，绑定 GraphRAG 检索与本体推理。',
-    endpoint_masked: 'https://nanobot.int****:8443/rpc', token_masked: 'nbk_****9f3e',
-    timeout_ms: 30000, tools: ['kb.search', 'ontology.reason', 'crm.query'],
-    active_sessions: 1, queued_tasks: 1,
-    health: { last_probe: '2026-09-26T08:00:00Z', rtt_ms: 86, consecutive_failures: 0 },
-    owner: '刘以在', created_at: '2026-08-02T10:00:00Z',
+    id: '921b05c3-2161-44a8-8c65-f37698c0599a', name: '停电分析助手', agent_tool: 'builtin',
+    status: 'enabled', system_prompt: '你是配网停电研判助手：输出必须携带数据出处指针。',
+    config: { model: 'glm-4.7', temperature: 0.5, tool_whitelist: ['kb.search', 'ontology.reason', 'crm.query'], num_ctx: 8192 },
+    created_at: '2026-08-02T10:00:00Z',
+    adapter: { id: '01a0e24b-d032-7093-af24-a84821f9b039', agent_tool: 'builtin', version: 'platform', health_endpoint: null },
   },
   {
-    id: 'agt-openclaw-02', name: '抢修指挥助手', adapter: 'openclaw', adapter_version: 'v0.9',
-    status: 'running', version: 'v0.9.2',
-    description: 'openclaw 适配：抢修工单派发与现场回传跟踪，含回写动作（高危 scope 需审批）。',
-    endpoint_masked: 'https://openclaw.int****:9443/mcp', token_masked: 'ock_****77b2',
-    timeout_ms: 20000, tools: ['kb.search', 'cli-anything.exec'],
-    active_sessions: 3, queued_tasks: 1,
-    health: { last_probe: '2026-09-26T08:00:00Z', rtt_ms: 122, consecutive_failures: 0 },
-    owner: '刘以在', created_at: '2026-08-20T14:00:00Z',
+    id: 'c4d81f92-0000-4000-8000-000000000002', name: '标准抽取员', agent_tool: 'claude',
+    status: 'enabled', system_prompt: '标准条款抽取：固定输出条款号/限值/试验方法三元组。',
+    config: { model: 'claude-sonnet-4-5', temperature: 0.7, tool_whitelist: ['kb.search'], num_ctx: 0 },
+    created_at: '2026-08-20T14:00:00Z',
+    adapter: { id: '01a0e24b-0000-7000-8000-000000000002', agent_tool: 'claude', version: 'platform', health_endpoint: null },
   },
   {
-    id: 'agt-hermes-03', name: '报表秘书', adapter: 'hermes', adapter_version: 'v2.1',
-    status: 'error', version: 'v2.1.0',
-    description: 'hermes 适配：日报/周报导出生成。适配器无响应（E-5003），待诊断。',
-    endpoint_masked: 'https://hermes.int****:7700/rpc', token_masked: 'hrs_****01cd',
-    timeout_ms: 15000, tools: [],
-    active_sessions: 0, queued_tasks: 0,
-    health: { last_probe: '2026-09-26T07:40:00Z', rtt_ms: 0, consecutive_failures: 3 },
-    owner: '刘以在', created_at: '2026-09-01T09:00:00Z',
+    id: 'c4d81f92-0000-4000-8000-000000000003', name: '日报秘书', agent_tool: 'builtin',
+    status: 'disabled', system_prompt: null,
+    config: { model: '', temperature: 0.7, tool_whitelist: [], num_ctx: 0 },
+    created_at: '2026-09-01T09:00:00Z',
+    adapter: { id: '01a0e24b-d032-7093-af24-a84821f9b039', agent_tool: 'builtin', version: 'platform', health_endpoint: null },
   },
 ]
 
-/** 适配器 JSON Schema（RJSF 渲染源；R 预登记：契约无 Schema 下发端点） */
+/** 适配器 config schema 下发（live 投影=services/agent/business/agent_admin.py
+ *  _ADAPTER_REGISTRY：builtin/claude 两键；schema.properties=model/temperature/
+ *  tool_whitelist/num_ctx 与领域 config 白名单同键；FastAPI 按别名序列化出 `schema`） */
 const ADAPTER_SCHEMAS: { key: string; name: string; vendor: string; capability: string; schema: Record<string, unknown> }[] = [
   {
-    key: 'nanobot', name: 'nanobot', vendor: 'earendil-works · 开源 MIT', capability: 'RPC 模式 · 20+ 模型 provider · JSONL 会话树 · compaction',
+    key: 'builtin', name: 'builtin（内置 harness）', vendor: '平台内置',
+    capability: 'ModelPort 直驱 · 真流式 · 平台审计/预算内建',
     schema: {
       type: 'object',
-      required: ['endpoint', 'token'],
       properties: {
-        endpoint: { type: 'string', title: '服务端点 endpoint', format: 'uri', default: 'https://nanobot.internal.example:8443/rpc', description: 'RPC 模式接入地址' },
-        token: { type: 'string', title: '接入令牌 token', default: '', description: '仅创建时回显一次；此后详情页只显示前 4 位与末 4 位（AGT-02 适配器 Tab）' },
-        timeout_ms: { type: 'integer', title: '调用超时 timeout_ms', default: 30000, description: '毫秒 · 超过则判定工具调用失败' },
+        model: { type: 'string', title: '模型别名 model', default: '', description: '平台模型网关内的模型别名（缺省=平台缺省模型）' },
+        temperature: { type: 'number', title: '采样温度 temperature', default: 0.7, description: '0~2；对话档建议 0.7' },
+        tool_whitelist: { type: 'array', items: { type: 'string' }, title: '工具白名单 tool_whitelist', default: [], description: '该 agent 可绑定的工具清单' },
+        num_ctx: { type: 'integer', title: '上下文窗口 num_ctx', default: 0, description: 'Ollama/vLLM 语义窗口；不支持时忽略' },
       },
     },
   },
   {
-    key: 'openclaw', name: 'openclaw', vendor: '开源 Apache-2.0', capability: 'MCP 模式 · 会话回放 · 多 Agent 编排',
+    key: 'claude', name: 'claude（Anthropic 直连）', vendor: 'Anthropic · 保留通道',
+    capability: 'Messages API 直连 · prompt caching · SSE 流式',
     schema: {
       type: 'object',
-      required: ['endpoint', 'token'],
       properties: {
-        endpoint: { type: 'string', title: '服务端点 endpoint', format: 'uri', default: 'https://openclaw.internal.example:9443/mcp', description: 'MCP 网关地址' },
-        token: { type: 'string', title: '接入令牌 token', default: '', description: '仅创建时回显一次' },
-        timeout_ms: { type: 'integer', title: '调用超时 timeout_ms', default: 20000, description: '毫秒' },
-      },
-    },
-  },
-  {
-    key: 'hermes', name: 'hermes', vendor: '内部组件 · 闭源', capability: 'RPC 模式 · 报表任务队列 · 定时调度',
-    schema: {
-      type: 'object',
-      required: ['endpoint'],
-      properties: {
-        endpoint: { type: 'string', title: '服务端点 endpoint', format: 'uri', default: 'https://hermes.internal.example:7700/rpc', description: 'RPC 模式接入地址' },
-        token: { type: 'string', title: '接入令牌 token', default: '', description: '可选鉴权令牌' },
-        timeout_ms: { type: 'integer', title: '调用超时 timeout_ms', default: 15000, description: '毫秒' },
+        model: { type: 'string', title: '模型 model', default: 'claude-sonnet-4-5', description: 'Anthropic 模型名（直连通道）' },
+        temperature: { type: 'number', title: '采样温度 temperature', default: 0.7, description: '0~2；对话档建议 0.7' },
+        tool_whitelist: { type: 'array', items: { type: 'string' }, title: '工具白名单 tool_whitelist', default: [], description: '该 agent 可绑定的工具清单' },
+        num_ctx: { type: 'integer', title: '上下文窗口 num_ctx', default: 0, description: '上下文预算上限；端点不支持时忽略' },
       },
     },
   },
 ]
 
-// ---- Agent 运行历史（IX-AGT-02 三区：会话 / 任务 / 调试对话） ----
+// ---- Agent 运行历史（IX-AGT-02 三区：会话 / 任务 / 调试对话；agent_id 对齐 live 投影 UUID） ----
 
 const AGENT_SESSIONS = [
-  { id: 's-2417', title: '3 号机组停电影响推演', agent_id: 'agt-nanobot-01', status: '运行中', updated_at: '2026-09-26T08:00:00Z', message_count: 18 },
-  { id: 's-2402', title: '馈线 F12 过载归档核验', agent_id: 'agt-nanobot-01', status: '已归档', updated_at: '2026-09-26T02:00:00Z', message_count: 31 },
-  { id: 's-2389', title: '保电名单会签', agent_id: 'agt-nanobot-01', status: '已结束', updated_at: '2026-09-23T11:30:00Z', message_count: 9 },
-  { id: 's-2411', title: '95598 工单线索研判', agent_id: 'agt-openclaw-02', status: '运行中', updated_at: '2026-09-26T07:50:00Z', message_count: 6 },
-  { id: 's-2415', title: '抢修队伍调度确认', agent_id: 'agt-openclaw-02', status: '运行中', updated_at: '2026-09-26T07:55:00Z', message_count: 4 },
-  { id: 's-2400', title: '现场安全交底草拟', agent_id: 'agt-openclaw-02', status: '运行中', updated_at: '2026-09-26T07:58:00Z', message_count: 3 },
+  { id: 's-2417', title: '3 号机组停电影响推演', agent_id: '921b05c3-2161-44a8-8c65-f37698c0599a', status: '运行中', updated_at: '2026-09-26T08:00:00Z', message_count: 18 },
+  { id: 's-2402', title: '馈线 F12 过载归档核验', agent_id: '921b05c3-2161-44a8-8c65-f37698c0599a', status: '已归档', updated_at: '2026-09-26T02:00:00Z', message_count: 31 },
+  { id: 's-2389', title: '保电名单会签', agent_id: '921b05c3-2161-44a8-8c65-f37698c0599a', status: '已结束', updated_at: '2026-09-23T11:30:00Z', message_count: 9 },
+  { id: 's-2411', title: '95598 工单线索研判', agent_id: 'c4d81f92-0000-4000-8000-000000000002', status: '运行中', updated_at: '2026-09-26T07:50:00Z', message_count: 6 },
+  { id: 's-2415', title: '抢修队伍调度确认', agent_id: 'c4d81f92-0000-4000-8000-000000000002', status: '运行中', updated_at: '2026-09-26T07:55:00Z', message_count: 4 },
+  { id: 's-2400', title: '现场安全交底草拟', agent_id: 'c4d81f92-0000-4000-8000-000000000002', status: '运行中', updated_at: '2026-09-26T07:58:00Z', message_count: 3 },
 ]
 
 const AGENT_TASKS = [
-  { id: 'TASK-0342', title: '抽取〈停电操作票规范〉· 今天 09:12', status: 'done', agent_id: 'agt-nanobot-01' },
-  { id: 'TASK-0339', title: '生成保电名单（CSV 导出）· 今天 08:40', status: 'running', agent_id: 'agt-nanobot-01' },
-  { id: 'TASK-0330', title: '知识库回写（kb-power-01）· 09-24', status: 'failed', agent_id: 'agt-nanobot-01' },
-  { id: 'TASK-0346', title: '抢修工单批量派发 · 今天 08:12', status: 'queued', agent_id: 'agt-openclaw-02' },
+  { id: 'TASK-0342', title: '抽取〈停电操作票规范〉· 今天 09:12', status: 'done', agent_id: '921b05c3-2161-44a8-8c65-f37698c0599a' },
+  { id: 'TASK-0339', title: '生成保电名单（CSV 导出）· 今天 08:40', status: 'running', agent_id: '921b05c3-2161-44a8-8c65-f37698c0599a' },
+  { id: 'TASK-0330', title: '知识库回写（kb-power-01）· 09-24', status: 'failed', agent_id: '921b05c3-2161-44a8-8c65-f37698c0599a' },
+  { id: 'TASK-0346', title: '抢修工单批量派发 · 今天 08:12', status: 'queued', agent_id: 'c4d81f92-0000-4000-8000-000000000002' },
 ]
 
 // ============================================================
@@ -356,139 +339,123 @@ const PLUGINS: PlatformPlugin[] = [
 ]
 
 export interface PlatformTool {
+  /** S1 ToolOut live 投影（services/tools/api/schemas/tool.py 逐字段；2026-10-05 收敛：
+   *  mock 旧 source/scopes/danger/enabled 随 S1 契约退役——source_channel L0~L3 + 五态状态机） */
   id: string
+  tenant_id: string
   name: string
-  desc: string
-  source: 'builtin' | 'plugin' | 'mcp' | 'http'
-  provider: string
-  scopes: string[]
-  danger: boolean
-  enabled: boolean
-  /** 依赖的工具（勾选自动带上；取消依赖则取消该工具） */
-  depends_on?: string[]
-  server_id?: string
-  plugin_id?: string
-  action_class?: { id: string; label: string; onto_id: string }
-  input_schema?: Record<string, unknown>
-  output_schema?: Record<string, unknown>
-  input_example?: Record<string, unknown>
+  action_iri: string
+  source_channel: 'L0' | 'L1' | 'L2' | 'L3'
+  semantic_annotation: Record<string, unknown>
+  version: string
+  status: 'draft' | 'in_review' | 'listed' | 'deprecated' | 'revoked'
+  health_hint: string | null
+  evidence_uri: string | null
 }
 
 const TOOLS: PlatformTool[] = [
   {
-    id: 'tool-kb-search', name: 'kb.search', desc: 'GraphRAG 检索（local/global/drift 三模式）', source: 'builtin', provider: '内置 core-knowledge',
-    scopes: ['kb.read'], danger: false, enabled: true,
-    action_class: { id: 'CL-021', label: '检索行为', onto_id: 'ont_grid_std' },
-    input_schema: { type: 'object', properties: { query: { type: 'string' }, mode: { type: 'string', enum: ['local', 'global', 'drift'] } } },
-    output_schema: { type: 'object', properties: { chunks: { type: 'array' }, graph_paths: { type: 'array' } } },
-    input_example: { query: 'F12 过载处置预案', mode: 'local' },
+    id: '0b1e3a10-0000-4000-8000-000000000001', tenant_id: 't-demo', name: 'kb.search',
+    action_iri: 'ont_core#CL-021', source_channel: 'L0',
+    semantic_annotation: { label: '检索行为', description: 'GraphRAG 检索（local/global/drift 三模式）', read_only: true },
+    version: '1.2.0', status: 'listed', health_hint: null, evidence_uri: null,
   },
   {
-    id: 'tool-ontology-reason', name: 'ontology.reason', desc: '本体推理（SHACL + 增量规则）', source: 'builtin', provider: '内置 core-ontology',
-    scopes: ['ontology:read'], danger: false, enabled: true,
-    input_schema: { type: 'object', properties: { onto_id: { type: 'string' }, focus: { type: 'string' } } },
-    input_example: { onto_id: 'ont-outage', focus: 'out:Feeder' },
+    id: '0b1e3a10-0000-4000-8000-000000000002', tenant_id: 't-demo', name: 'ontology.reason',
+    action_iri: 'ont_core#CL-031', source_channel: 'L0',
+    semantic_annotation: { label: '推理行为', description: '本体推理（SHACL + 增量规则）', read_only: true },
+    version: '1.1.0', status: 'listed', health_hint: null, evidence_uri: null,
   },
   {
-    id: 'tool-writeback-invoke', name: 'writeback.invoke', desc: '业务回写（经审批队列）', source: 'builtin', provider: '内置 writeback',
-    scopes: ['writeback:invoke'], danger: true, enabled: true,
-    input_schema: { type: 'object', properties: { target: { type: 'string' }, payload: { type: 'object' } } },
-    input_example: { target: 'erp.workorder', payload: { status: 'done' } },
+    id: '0b1e3a10-0000-4000-8000-000000000003', tenant_id: 't-demo', name: 'writeback.invoke',
+    action_iri: 'ont_grid_std#CL-045', source_channel: 'L3',
+    semantic_annotation: { label: '业务回写', description: '业务回写（经审批队列）', write: true },
+    version: '1.0.4', status: 'listed', health_hint: '依赖审批队列可用性', evidence_uri: 'https://wiki.example.com/writeback',
   },
   {
-    id: 'tool-clianything', name: 'cli-anything.exec', desc: '插件命令执行器（受沙箱约束）', source: 'plugin', provider: '插件 p_clianything',
-    scopes: ['sandbox:exec'], danger: false, enabled: true, depends_on: ['kb.search'], plugin_id: 'p_clianything',
-    input_schema: { type: 'object', properties: { argv: { type: 'array', items: { type: 'string' } } } },
-    input_example: { argv: ['ls', '/data'] },
+    id: '0b1e3a10-0000-4000-8000-000000000004', tenant_id: 't-demo', name: 'cli-anything.exec',
+    action_iri: 'ont_core#CL-052', source_channel: 'L2',
+    semantic_annotation: { label: '命令执行', description: '插件命令执行器（受沙箱约束）' },
+    version: '0.9.2', status: 'listed', health_hint: null, evidence_uri: null,
   },
   {
-    id: 'tool-pdf-export', name: 'pdf.export', desc: '文档导出（PDF 渲染）', source: 'plugin', provider: '插件 p_clianything',
-    scopes: ['file:write'], danger: false, enabled: true, plugin_id: 'p_clianything',
-    input_schema: { type: 'object', properties: { template: { type: 'string' } } },
-    input_example: { template: 'outage-report' },
+    id: '0b1e3a10-0000-4000-8000-000000000005', tenant_id: 't-demo', name: 'pdf.export',
+    action_iri: 'ont_core#CL-061', source_channel: 'L2',
+    semantic_annotation: { label: '文档导出', description: '文档导出（PDF 渲染）' },
+    version: '0.8.0', status: 'listed', health_hint: null, evidence_uri: null,
   },
   {
-    id: 'tool-crm-query', name: 'crm.query', desc: '95598 工单查询（按区域/时间过滤）', source: 'mcp', provider: 'crm-prod.example.com',
-    scopes: ['mcp:invoke'], danger: false, enabled: true, server_id: 'mcp-crm-prod',
-    input_schema: { type: 'object', properties: { region: { type: 'string' }, time_range: { type: 'object' } } },
-    input_example: { region: '兰州', time_range: { start: '2026-09-01', end: '2026-09-26' } },
+    id: '0b1e3a10-0000-4000-8000-000000000006', tenant_id: 't-demo', name: 'crm.query',
+    action_iri: 'ont_grid_std#CL-021', source_channel: 'L3',
+    semantic_annotation: { label: '停电工单查询', description: '95598 工单查询（按区域/时间过滤）', read_only: true },
+    version: '2.4.1', status: 'listed', health_hint: null, evidence_uri: null,
   },
   {
-    id: 'tool-crm-write', name: 'crm.write', desc: '95598 工单写入（高危·需审批）', source: 'mcp', provider: 'crm-prod.example.com',
-    scopes: ['mcp:invoke'], danger: true, enabled: false, server_id: 'mcp-crm-prod',
-    input_schema: { type: 'object', properties: { ticket: { type: 'object' } } },
-    input_example: { ticket: { title: 'F12 抢修', level: '紧急' } },
+    id: '0b1e3a10-0000-4000-8000-000000000007', tenant_id: 't-demo', name: 'crm.write',
+    action_iri: 'ont_grid_std#CL-022', source_channel: 'L3',
+    semantic_annotation: { label: '工单写入', description: '95598 工单写入（高危·需审批）', write: true },
+    version: '2.4.1', status: 'deprecated', health_hint: null, evidence_uri: null,
   },
   {
-    id: 'tool-grid-load-query', name: 'grid.load.query', desc: '查询台区实时负荷与 24h 历史曲线，用于停电范围研判', source: 'http', provider: '配电自动化适配器',
-    scopes: [], danger: false, enabled: true,
-    action_class: { id: 'CL-021', label: '停电工单查询', onto_id: 'ont_grid_std' },
-    input_schema: { type: 'object', required: ['tg_id'], properties: { tg_id: { type: 'string', description: '工单编号' }, window: { type: 'string', enum: ['1h', '24h', '7d'] } } },
-    output_schema: { type: 'object', properties: { tg_id: { type: 'string' }, p_max_kw: { type: 'number' }, samples: { type: 'integer' }, window: { type: 'string' } } },
-    input_example: { tg_id: 'TQ-0417', window: '24h' },
+    id: '0b1e3a10-0000-4000-8000-000000000008', tenant_id: 't-demo', name: 'grid.load.query',
+    action_iri: 'ont_grid_std#CL-023', source_channel: 'L3',
+    semantic_annotation: { label: '负荷查询', description: '查询台区实时负荷与 24h 历史曲线，用于停电范围研判', read_only: true },
+    version: '1.3.0', status: 'listed', health_hint: null, evidence_uri: null,
   },
 ]
 
-const TOOL_STATS: Record<string, { calls_30d: number; success_rate: number; avg_ms: number; daily: number[] }> = {
-  'tool-crm-query': { calls_30d: 1847, success_rate: 99.2, avg_ms: 340, daily: [40, 52, 61, 48, 70, 66, 80, 74, 63, 90, 85, 78, 95, 88] },
-  'tool-kb-search': { calls_30d: 4211, success_rate: 99.9, avg_ms: 612, daily: [90, 95, 100, 88, 110, 105, 120, 98, 112, 130, 125, 118, 135, 128] },
-  'tool-grid-load-query': { calls_30d: 402, success_rate: 97.5, avg_ms: 210, daily: [10, 14, 12, 18, 16, 20, 22, 15, 19, 24, 21, 26, 23, 28] },
-}
-
 export interface PlatformSkill {
+  /** S2 SkillOut live 投影（services/skills/api/schemas/skill.py 逐字段；2026-10-05 收敛：
+   *  mock 旧 summary/frontmatter/body/depends_tools 随 S2 契约退役——description 元数据 +
+   *  body 只回长度 body_bytes + K5 密钥透出） */
   id: string
   name: string
-  summary: string
+  description: string
+  source_uri: string
   version: string
-  status: '未分发' | '已启用'
-  frontmatter: { key: string; value: string }[]
-  body: string
-  depends_tools: string[]
+  status: 'draft' | 'in_review' | 'listed' | 'deprecated' | 'revoked'
+  body_bytes: number
+  origin: 'repo' | 'external'
+  required_secrets: string[]
+  missing_secrets: string[]
+  unprovisioned: boolean
+  created_at: string | null
+  updated_at: string | null
 }
 
 const SKILLS: PlatformSkill[] = [
   {
-    id: 'sk-outage-chain', name: '停电分析思维链', summary: '获取对象 → 拉取数据 → 计算指标，配双盲检测校验查询意图',
-    version: 'v2', status: '未分发',
-    frontmatter: [
-      { key: 'name', value: 'outage-analysis-chain' },
-      { key: 'description', value: '获取对象 → 拉取数据 → 计算指标，配双盲检测校验查询意图' },
-      { key: 'version', value: '"2"' },
-      { key: 'allowed-tools', value: 'grid.outage.query, knowledge.search' },
-    ],
-    body:
-      '## 作业流程\n\n面向 95598 停电工单场景的固定思维链，输出必须携带数据出处指针，禁止凭空补齐数值。\n\n1. **获取对象**：锁定停电台区与关联馈线（本体实例）\n2. **拉取数据**：拉取工单、负荷与气象曲线（工具调用留痕）\n3. **计算指标**：停电范围、受影响户数与预计复电时长\n\n## 双盲检测\n\n指标计算完成后由第二通道独立复算并比对，偏差超过 2% 时降级为候选答案进入人工审核。',
-    depends_tools: ['grid.outage.query', 'knowledge.search'],
+    id: '3f2a7c10-0000-4000-8000-000000000001', name: '停电分析思维链',
+    description: '获取对象 → 拉取数据 → 计算指标，配双盲检测校验查询意图',
+    source_uri: 'services/skills/outage-analysis-chain/SKILL.md', version: '2.0.0',
+    status: 'in_review', body_bytes: 486, origin: 'repo',
+    required_secrets: [], missing_secrets: [], unprovisioned: false,
+    created_at: '2026-09-20T10:00:00Z', updated_at: '2026-09-26T08:00:00Z',
   },
   {
-    id: 'sk-standard-extract', name: '标准条款抽取', summary: '四步抽取模板 · 固定输出条款号/限值/试验方法三元组',
-    version: 'v3', status: '已启用',
-    frontmatter: [
-      { key: 'name', value: 'standard-clause-extract' },
-      { key: 'description', value: '四步抽取模板：条款定位 → 限值识别 → 试验方法归一 → 候选生成' },
-      { key: 'version', value: '"3"' },
-      { key: 'allowed-tools', value: 'kb.search' },
-    ],
-    body:
-      '## 抽取四步\n\n1. 条款定位（章节锚点）\n2. 限值识别（数值 + 单位 + 判定方向）\n3. 试验方法归一（对齐标准词典）\n4. 候选生成（进审核队列，人工终审生效）',
-    depends_tools: ['kb.search'],
+    id: '3f2a7c10-0000-4000-8000-000000000002', name: '标准条款抽取',
+    description: '四步抽取模板 · 固定输出条款号/限值/试验方法三元组',
+    source_uri: 'services/skills/standard-clause-extract/SKILL.md', version: '3.1.0',
+    status: 'listed', body_bytes: 352, origin: 'repo',
+    required_secrets: ['KB_API_KEY'], missing_secrets: [], unprovisioned: false,
+    created_at: '2026-09-05T09:00:00Z', updated_at: '2026-09-25T08:00:00Z',
   },
   {
-    id: 'sk-onto-six-step', name: '本体建模六步法', summary: '访谈 → 整局层级 → 属性关系 → 业务公理 → 评审 → 推理测试的固定作业流',
-    version: 'v1', status: '已启用',
-    frontmatter: [
-      { key: 'name', value: 'ontology-six-step' },
-      { key: 'description', value: '访谈 → 整局层级 → 属性关系 → 业务公理 → 评审 → 推理测试' },
-      { key: 'version', value: '"1"' },
-      { key: 'allowed-tools', value: '' },
-    ],
-    body: '## 六步法\n\n访谈 → 整局层级 → 属性关系 → 业务公理 → 评审 → 推理测试。每步产出物进版本库，评审走 changeset 五动词。',
-    depends_tools: [],
+    id: '3f2a7c10-0000-4000-8000-000000000003', name: '本体建模六步法',
+    description: '访谈 → 整局层级 → 属性关系 → 业务公理 → 评审 → 推理测试的固定作业流',
+    source_uri: 'https://skills.example.com/ontology-six-step/SKILL.md', version: '1.2.0',
+    status: 'listed', body_bytes: 297, origin: 'external',
+    required_secrets: ['ONTO_EDITOR_TOKEN'], missing_secrets: ['ONTO_EDITOR_TOKEN'], unprovisioned: true,
+    created_at: '2026-08-30T09:00:00Z', updated_at: '2026-09-24T08:00:00Z',
   },
 ]
 
 // ============================================================
-// §5.7 mcp —— 外部 Server（默认不可信）
+// §5.7 mcp —— 外部 Server（默认不可信；live 投影=services/mcp/api/schemas/management.py
+// 逐字段，2026-10-05 收敛：server id=UUID、tool id=mt-<hash10>（发现态 nd-<hash10>，
+// 内容寻址刷新稳定）、url_masked 主机掩码、transport 出参恒 'streamable http'、
+// tools 内嵌全量缓存行（含 adopted=false）、discovered_count=最近探测全集数、
+// protocol/server_version 取握手）
 // ============================================================
 
 export interface McpTool {
@@ -515,7 +482,7 @@ export interface McpServer {
   status: 'healthy' | 'unknown' | 'failing'
   latency_ms: number
   consecutive_failures: number
-  last_probe: string
+  last_probe: string | null
   probes_24h: { ok: boolean }[]
   adopted_count: number
   discovered_count: number
@@ -527,23 +494,23 @@ export interface McpServer {
 /** 可变清单导出：供测试覆写 POST /mcp/servers 时同步状态（否则列表新行断言失效） */
 export const MCP_SERVERS: McpServer[] = [
   {
-    id: 'mcp-crm-prod', name: 'crm-prod', desc: '客服工单系统', transport: 'streamable http',
-    url_masked: 'https://crm-prod.example.com/mcp', auth: 'Bearer Token', token_masked: 'sk-*****9f2c',
+    id: '7c3d1a2e-0000-4000-8000-000000000001', name: 'crm-prod', desc: '客服工单系统', transport: 'streamable http',
+    url_masked: 'https://crm-pro****.example.com/mcp', auth: 'Bearer Token', token_masked: 'sk-ab****9f2c',
     protocol: '2025-06-18', server_version: 'v2.4.1', status: 'healthy', latency_ms: 180, consecutive_failures: 0,
     last_probe: '2026-09-26T08:00:00Z',
     probes_24h: [...Array(24)].map((_, i) => ({ ok: i !== 19 })),
-    adopted_count: 4, discovered_count: 6, added_by: '刘以在', added_at: '2026-08-12T10:00:00Z',
+    adopted_count: 5, discovered_count: 6, added_by: '刘以在', added_at: '2026-08-12T10:00:00Z',
     tools: [
-      { tool_id: 'mt-1', name: 'crm.ticket.query', desc: '停电关联工单查询（按区域 / 时间过滤）', write: false, read_only: true, adopted: true, enabled: true },
-      { tool_id: 'mt-2', name: 'crm.customer.search', desc: '客户档案与联系方式检索', write: false, read_only: true, adopted: true, enabled: true },
-      { tool_id: 'mt-3', name: 'crm.ticket.create', desc: '创建抢修工单（写）', write: true, read_only: false, adopted: true, enabled: true },
-      { tool_id: 'mt-4', name: 'crm.ticket.update', desc: '更新工单状态与处理回填（写）', write: true, read_only: false, adopted: true, enabled: true },
-      { tool_id: 'mt-5', name: 'crm.outage.subscribe', desc: '订阅计划停电事件推送', write: false, read_only: true, adopted: true, enabled: false },
-      { tool_id: 'mt-6', name: 'crm.report.export', desc: '导出工单日报（未纳管 · 需单独申请）', write: false, read_only: true, adopted: false, enabled: false },
+      { tool_id: 'mt-1a2b3c4d5e', name: 'crm.ticket.query', desc: '停电关联工单查询（按区域 / 时间过滤）', write: false, read_only: true, adopted: true, enabled: true },
+      { tool_id: 'mt-2b3c4d5e6f', name: 'crm.customer.search', desc: '客户档案与联系方式检索', write: false, read_only: true, adopted: true, enabled: true },
+      { tool_id: 'mt-3c4d5e6f7a', name: 'crm.ticket.create', desc: '创建抢修工单（写）', write: true, read_only: false, adopted: true, enabled: true },
+      { tool_id: 'mt-4d5e6f7a8b', name: 'crm.ticket.update', desc: '更新工单状态与处理回填（写）', write: true, read_only: false, adopted: true, enabled: true },
+      { tool_id: 'mt-5e6f7a8b9c', name: 'crm.outage.subscribe', desc: '订阅计划停电事件推送', write: false, read_only: true, adopted: true, enabled: false },
+      { tool_id: 'mt-6f7a8b9c0d', name: 'crm.report.export', desc: '导出工单日报（未纳管 · 需单独申请）', write: false, read_only: true, adopted: false, enabled: false },
     ],
   },
   {
-    id: 'mcp-github', name: 'github-mcp', desc: '代码仓与 PR 助手', transport: 'stdio',
+    id: '7c3d1a2e-0000-4000-8000-000000000002', name: 'github-mcp', desc: '代码仓与 PR 助手', transport: 'stdio',
     url_masked: 'stdio · npx @modelcontextprotocol/server-github', command: 'npx @modelcontextprotocol/server-github',
     auth: 'PAT', token_masked: 'ghp_****8a11',
     protocol: '2025-03-26', server_version: 'v0.9.0', status: 'healthy', latency_ms: 92, consecutive_failures: 0,
@@ -551,13 +518,13 @@ export const MCP_SERVERS: McpServer[] = [
     probes_24h: [...Array(24)].map(() => ({ ok: true })),
     adopted_count: 2, discovered_count: 2, added_by: '陈工', added_at: '2026-09-02T14:00:00Z',
     tools: [
-      { tool_id: 'mg-1', name: 'repo.read', desc: '读取仓库文件与 README', write: false, read_only: true, adopted: true, enabled: true },
-      { tool_id: 'mg-2', name: 'pr.comment', desc: 'PR 评论（写·经网关审计）', write: true, read_only: false, adopted: true, enabled: true },
+      { tool_id: 'mt-0a1b2c3d4e', name: 'repo.read', desc: '读取仓库文件与 README', write: false, read_only: true, adopted: true, enabled: true },
+      { tool_id: 'mt-1b2c3d4e5f', name: 'pr.comment', desc: 'PR 评论（写·经网关审计）', write: true, read_only: false, adopted: true, enabled: true },
     ],
   },
   {
-    id: 'mcp-legacy-erp', name: 'legacy-erp', desc: '老旧 ERP 网关（待升级）', transport: 'streamable http',
-    url_masked: 'https://legacy-erp.int****/mcp', auth: 'Basic', token_masked: 'Basic ****',
+    id: '7c3d1a2e-0000-4000-8000-000000000003', name: 'legacy-erp', desc: '老旧 ERP 网关（待升级）', transport: 'streamable http',
+    url_masked: 'https://legacy-er****/mcp', auth: 'Basic', token_masked: 'Basic ****',
     protocol: '2024-11-05', server_version: 'v1.2.0', status: 'failing', latency_ms: 0, consecutive_failures: 3,
     last_probe: '2026-09-26T07:40:00Z',
     probes_24h: [...Array(24)].map((_, i) => ({ ok: i < 18 })),
@@ -566,15 +533,17 @@ export const MCP_SERVERS: McpServer[] = [
   },
 ]
 
-/** 接入向导发现态（R 预登记 POST /mcp/discover 的固定返回；crm-prod 语境与画板一致） */
+/** 接入向导发现态（POST /mcp/discover live 投影：nd- 内容寻址短 id、protocol/server_version
+ *  取 initialize 握手；与 crm-prod 上架行的工具语境一致） */
 const DISCOVER_REPLY = {
   ok: true, latency_ms: 180, protocol: '2025-06-18', server_version: 'v2.4.1',
   tools: [
-    { tool_id: 'nd-1', name: 'crm.ticket.query', desc: '停电关联工单查询（按区域 / 时间过滤）', write: false, read_only: true },
-    { tool_id: 'nd-2', name: 'crm.customer.search', desc: '客户档案与联系方式检索', write: false, read_only: true },
-    { tool_id: 'nd-3', name: 'crm.ticket.create', desc: '创建抢修工单（写）', write: true, read_only: false },
-    { tool_id: 'nd-4', name: 'crm.ticket.update', desc: '更新工单状态与处理回填（写）', write: true, read_only: false },
-    { tool_id: 'nd-5', name: 'crm.outage.subscribe', desc: '订阅计划停电事件推送', write: false, read_only: true },
+    { tool_id: 'nd-0a1b2c3d4e', name: 'crm.ticket.query', desc: '停电关联工单查询（按区域 / 时间过滤）', write: false, read_only: true },
+    { tool_id: 'nd-1b2c3d4e5f', name: 'crm.customer.search', desc: '客户档案与联系方式检索', write: false, read_only: true },
+    { tool_id: 'nd-2c3d4e5f6a', name: 'crm.ticket.create', desc: '创建抢修工单（写）', write: true, read_only: false },
+    { tool_id: 'nd-3d4e5f6a7b', name: 'crm.ticket.update', desc: '更新工单状态与处理回填（写）', write: true, read_only: false },
+    { tool_id: 'nd-4e5f6a7b8c', name: 'crm.outage.subscribe', desc: '订阅计划停电事件推送', write: false, read_only: true },
+    { tool_id: 'nd-5f6a7b8c9d', name: 'crm.report.export', desc: '导出工单日报', write: false, read_only: true },
   ],
 }
 
@@ -729,85 +698,92 @@ export const platformHandlers = [
     return ok({ pm_id: pm.id, action: body.action, fact_id: pm.fact_id, fact_layer: fact?.layer === 'L3' ? 'L3' : 'L2' })
   }),
 
-  // ---------- §5.1 agents ----------
+  // ---------- §5.1 agents（live 投影：裸体、{data,meta} 列表信封、builtin/claude 键集） ----------
   // 注意：adapter-schemas 为静态路径，必须先于 /agents/:id 注册（MSW 首匹配优先）
   http.get('*/api/v1/agents/adapter-schemas', () =>
-    ok({ items: ADAPTER_SCHEMAS.map(({ key, name, vendor, capability, schema }) => ({ key, name, vendor, capability, schema })) }),
+    HttpResponse.json({ items: ADAPTER_SCHEMAS }),
   ),
-  // R 预登记：预注册连接测试（契约仅 POST /agents/{id}/health-check，需先有实例）
+  // live 契约：{provider,base_url,api_key?,model} → {ok,latency_ms,model,error}——
+  // 失败结构化 200 ok=false（不上 500）；缺 base_url/model 422+3001
   http.post('*/api/v1/agents/connection-test', async ({ request }) => {
-    const body = (await request.json().catch(() => ({}))) as { endpoint?: string; adapter?: string }
-    if (!body.endpoint?.startsWith('https://')) {
-      return ok({ ok: false, code: 'E-5003', message: '适配器无响应 · 请检查 endpoint 与白名单', rtt_ms: 0 })
+    const body = (await request.json().catch(() => ({}))) as {
+      provider?: string; base_url?: string; api_key?: string; model?: string
     }
-    return ok({ ok: true, rtt_ms: 86, protocol: 'RPC/JSONL', message: '能力清单返回 12 项', adapter: body.adapter ?? 'nanobot' })
+    if (!body.base_url || !body.model) {
+      return HttpResponse.json({ code: 3001, message: '入参校验失败：base_url/model 必填', detail: null, trace_id: 'tr-mock' }, { status: 422 })
+    }
+    if (!body.base_url.startsWith('http')) {
+      return HttpResponse.json({ ok: false, latency_ms: 4, model: body.model, error: '5002: 模型服务不可达（连接被拒）' })
+    }
+    return HttpResponse.json({ ok: true, latency_ms: 86, model: body.model, error: null })
   }),
-  http.get('*/api/v1/agents', () => ok({ items: AGENTS })),
+  http.get('*/api/v1/agents', () =>
+    HttpResponse.json({ data: AGENTS, meta: { page: 1, page_size: 20, total: AGENTS.length } }),
+  ),
+  // live 契约：POST /agents {name,agent_tool,system_prompt?,config?,adapter_id?} → 201 AgentOut
   http.post('*/api/v1/agents', async ({ request }) => {
     const body = (await request.json()) as {
-      name: string; adapter: string; endpoint: string; token: string; timeout_ms: number; tools: string[]
+      name: string; agent_tool: string; system_prompt?: string | null; config?: Record<string, unknown>
+    }
+    if (!/^(builtin|claude)$/.test(body.agent_tool ?? '')) {
+      return HttpResponse.json({ code: 3001, message: '入参校验失败：agent_tool 仅支持 builtin/claude', detail: null, trace_id: 'tr-mock' }, { status: 422 })
     }
     const agent: PlatformAgent = {
-      id: `agt-${body.adapter}-${String(AGENTS.length + 1).padStart(2, '0')}`,
-      name: body.name, adapter: (body.adapter as PlatformAgent['adapter']) ?? 'custom', adapter_version: 'latest',
-      status: 'stopped', version: 'v0.1.0', description: `新建 ${body.adapter} 适配实例（已停止，启动前自动健康自检）`,
-      endpoint_masked: body.endpoint.replace(/\/\/([^/:]{3})[^/:]*/, '//$1****'),
-      token_masked: body.token ? `${body.token.slice(0, 4)}****${body.token.slice(-4)}` : '—',
-      timeout_ms: body.timeout_ms ?? 30000, tools: body.tools ?? [],
-      active_sessions: 0, queued_tasks: 0,
-      health: { last_probe: new Date().toISOString(), rtt_ms: 0, consecutive_failures: 0 },
-      owner: '刘以在', created_at: new Date().toISOString(),
+      id: crypto.randomUUID(),
+      name: body.name, agent_tool: body.agent_tool as PlatformAgent['agent_tool'],
+      status: 'enabled', system_prompt: body.system_prompt ?? null, config: body.config ?? {},
+      created_at: new Date().toISOString(),
+      adapter: { id: '01a0e24b-d032-7093-af24-a84821f9b039', agent_tool: body.agent_tool, version: 'platform', health_endpoint: null },
     }
     AGENTS.unshift(agent)
-    return ok(agent, 201)
+    return HttpResponse.json(agent, { status: 201 })
   }),
+  // live 契约：POST /agents/{id}/health-check → {status:'inprocess'|'ok', latency_ms}（builtin 无端点=进程内）
   http.post('*/api/v1/agents/:id/health-check', ({ params }) => {
     const agent = AGENTS.find(a => a.id === String(params.id))
-    if (!agent) return err(3001, 'Agent 不存在', 404)
-    if (agent.status === 'error') {
-      return ok({ ok: false, code: 'E-5003', message: '适配器无响应 · 建议：检查 endpoint 与白名单', rtt_ms: 0, suggestion: '检查 endpoint 与白名单' })
-    }
-    return ok({ ok: true, rtt_ms: agent.health.rtt_ms || 86, protocol: agent.adapter === 'openclaw' ? 'MCP' : 'RPC/JSONL', last_probe: new Date().toISOString() })
+    if (!agent) return HttpResponse.json({ code: 404, message: 'agent 不存在', detail: null, trace_id: 'tr-mock' }, { status: 404 })
+    return HttpResponse.json({ status: 'inprocess', latency_ms: null })
   }),
-  // R 预登记：启停端点（26 篇 IX-AGT-04 引「api/01 §5.1 agents 启停端点」，表内未列）
+  // live 契约启停：disable → {id,status:'disabled',terminated_sessions:0}（存量会话不中断）；
+  // enable → {id,status:'enabled',terminated_sessions:null}；幂等
   http.post('*/api/v1/agents/:id/disable', ({ params }) => {
     const agent = AGENTS.find(a => a.id === String(params.id))
-    if (!agent) return err(3001, 'Agent 不存在', 404)
-    agent.status = 'stopped'
-    const affected = agent.active_sessions
-    agent.active_sessions = 0
-    return ok({ id: agent.id, status: 'stopped', terminated_sessions: affected })
+    if (!agent) return HttpResponse.json({ code: 404, message: 'agent 不存在', detail: null, trace_id: 'tr-mock' }, { status: 404 })
+    agent.status = 'disabled'
+    return HttpResponse.json({ id: agent.id, status: 'disabled', terminated_sessions: 0 })
   }),
   http.post('*/api/v1/agents/:id/enable', ({ params }) => {
     const agent = AGENTS.find(a => a.id === String(params.id))
-    if (!agent) return err(3001, 'Agent 不存在', 404)
-    agent.status = 'running'
-    agent.health = { last_probe: new Date().toISOString(), rtt_ms: 86, consecutive_failures: 0 }
-    return ok({ id: agent.id, status: 'running' })
+    if (!agent) return HttpResponse.json({ code: 404, message: 'agent 不存在', detail: null, trace_id: 'tr-mock' }, { status: 404 })
+    agent.status = 'enabled'
+    return HttpResponse.json({ id: agent.id, status: 'enabled', terminated_sessions: null })
   }),
-  // R 预登记：调试对话（IX-AGT-02 调试窗，trace 标 debug 不计正式历史）
+  // live 契约调试对话：{message,params?} → {reply,usage,latency_ms}——调试面不落会话行、
+  // 响应无 trace 会话语义字段（trace 随网关中间件留痕）
   http.post('*/api/v1/agents/:id/debug-chat', async ({ params, request }) => {
-    const body = (await request.json()) as { content?: string }
-    const agent = AGENTS.find(a => a.id === String(params.id))
-    return ok({
-      reply: agent
-        ? `【${agent.name} · 调试应答】命中规则 R-107「F12 过载转移」：先查明母联开关状态，再转 3 号机组负荷。（对「${body.content ?? ''}」的试运行回复）`
-        : '调试应答',
-      trace_id: `tr-${Math.random().toString(16).slice(2, 8)}`,
-      debug: true,
+    void params
+    const body = (await request.json().catch(() => ({}))) as { message?: string }
+    if (!body.message) {
+      return HttpResponse.json({ code: 3001, message: '入参校验失败：message 必填', detail: null, trace_id: 'tr-mock' }, { status: 422 })
+    }
+    return HttpResponse.json({
+      reply: `【调试应答】命中规则 R-107「F12 过载转移」：先查明母联开关状态，再转 3 号机组负荷。（对「${body.message}」的试运行回复）`,
+      usage: { token_in: 18, token_out: 7, cache_read_tokens: 0 },
+      latency_ms: 412,
     })
   }),
   http.get('*/api/v1/agents/:id', ({ params }) => {
     const agent = AGENTS.find(a => a.id === String(params.id))
-    if (!agent) return err(3001, 'Agent 不存在', 404)
-    return ok(agent)
+    if (!agent) return HttpResponse.json({ code: 404, message: 'agent 不存在', detail: null, trace_id: 'tr-mock' }, { status: 404 })
+    return HttpResponse.json(agent)
   }),
+  // live 契约：PUT /agents/{id}/tools {tools} → AgentOut（覆盖式白名单）
   http.put('*/api/v1/agents/:id/tools', async ({ params, request }) => {
     const agent = AGENTS.find(a => a.id === String(params.id))
-    if (!agent) return err(3001, 'Agent 不存在', 404)
+    if (!agent) return HttpResponse.json({ code: 404, message: 'agent 不存在', detail: null, trace_id: 'tr-mock' }, { status: 404 })
     const body = (await request.json()) as { tools: string[] }
-    agent.tools = body.tools
-    return ok({ id: agent.id, tools: agent.tools })
+    agent.config = { ...agent.config, tool_whitelist: body.tools }
+    return HttpResponse.json(agent)
   }),
 
   // ---------- §5.2 sessions（?agent= 过滤，IX-AGT-02 运行历史）+ tasks ----------
@@ -853,97 +829,140 @@ export const platformHandlers = [
     return ok({ install_id: `in_01X${Date.now().toString(36)}`, status: 'installing', version: body.version, scope_grants: body.scope_grants }, 202)
   }),
 
-  // ---------- §5.6 tools（注册中心；目录行外字段为 R 预登记扩展） ----------
-  http.get('*/api/v1/tools', () => ok({ items: TOOLS })),
-  // R 预登记：试运行（IX-TLS-02 试运行面板）
-  http.post('*/api/v1/tools/dry-run', async ({ request }) => {
-    const body = (await request.json()) as { input_example?: Record<string, unknown> }
-    return ok({ ok: true, status: 200, elapsed_ms: 340, result: { ...(body.input_example ?? {}), p_max_kw: 412.6, samples: 24, window: '24h' } })
-  }),
-  // R 预登记：注册/详情/启停/统计（§5.6 仅登记目录 GET /tools 与 search）
+  // ---------- §5.6 tools（S1 集市契约 live 投影：{data,meta} 信封 + lifecycle） ----------
+  http.get('*/api/v1/tools', () =>
+    ok({ data: TOOLS, meta: { page: 1, page_size: 20, total: TOOLS.length } }),
+  ),
+  // S1 注册：{name, action_iri, source_channel, semantic_annotation, version, ...} → 201 直通 listed
   http.post('*/api/v1/tools', async ({ request }) => {
-    const body = (await request.json()) as { name: string; desc: string; endpoint: string; auth: string; input_schema: unknown; output_schema: unknown }
+    const body = (await request.json()) as {
+      name: string; action_iri: string; source_channel: PlatformTool['source_channel']
+      semantic_annotation: Record<string, unknown>; version: string; health_hint?: string; evidence_uri?: string
+    }
+    if (!body.semantic_annotation || Object.keys(body.semantic_annotation).length === 0) {
+      return err(4601, '无语义标注不上架（清单校验拒绝）', 422)
+    }
+    if (TOOLS.some(t => t.name === body.name)) {
+      return err(4602, '同名工具已登记', 409)
+    }
     const tool: PlatformTool = {
-      id: `tool-${Date.now().toString(36)}`, name: body.name, desc: body.desc, source: 'http', provider: body.endpoint,
-      scopes: [], danger: false, enabled: true,
-      input_schema: body.input_schema as Record<string, unknown>, output_schema: body.output_schema as Record<string, unknown>,
+      id: crypto.randomUUID(), tenant_id: 't-demo', name: body.name, action_iri: body.action_iri,
+      source_channel: body.source_channel, semantic_annotation: body.semantic_annotation,
+      version: body.version, status: 'listed',
+      health_hint: body.health_hint ?? null, evidence_uri: body.evidence_uri ?? null,
     }
     TOOLS.unshift(tool)
-    return ok({ id: tool.id, status: 'registered' }, 201)
+    return ok({ data: tool, meta: {} }, 201)
   }),
-  http.post('*/api/v1/tools/:id/enable', ({ params }) => setToolEnabled(String(params.id), true)),
-  http.post('*/api/v1/tools/:id/disable', ({ params }) => setToolEnabled(String(params.id), false)),
+  // S1 生命周期：{action: delist|restore|revoke, reason?}（delist: listed→deprecated；
+  //  restore: deprecated→listed；revoke 终态；非法迁移 4603→409）
+  http.post('*/api/v1/tools/:id/lifecycle', async ({ params, request }) => {
+    const tool = TOOLS.find(t => t.id === String(params.id))
+    if (!tool) return err(404, '工具不存在', 404)
+    const body = (await request.json()) as { action: 'delist' | 'restore' | 'revoke'; reason?: string }
+    const target = { delist: 'deprecated', restore: 'listed', revoke: 'revoked' }[body.action]
+    const allowed: Record<string, string[]> = {
+      draft: ['in_review', 'listed'], in_review: ['listed', 'draft'],
+      listed: ['deprecated', 'revoked'], deprecated: ['listed', 'revoked'], revoked: [],
+    }
+    if (!allowed[tool.status].includes(target)) {
+      return err(4603, `非法状态迁移 ${tool.status} → ${target}`, 409)
+    }
+    tool.status = target as PlatformTool['status']
+    return ok({ data: tool, meta: {} })
+  }),
   http.get('*/api/v1/tools/:id', ({ params }) => {
     const tool = TOOLS.find(t => t.id === String(params.id))
-    if (!tool) return err(3001, '工具不存在', 404)
-    const stats = TOOL_STATS[tool.id] ?? { calls_30d: 128, success_rate: 98.1, avg_ms: 250, daily: [4, 6, 8, 5, 9, 7, 11, 10, 8, 12, 9, 14, 12, 15] }
-    return ok({ ...tool, stats })
+    if (!tool) return err(404, '工具不存在', 404)
+    return ok({ data: tool, meta: {} })
   }),
 
-  // ---------- §5.6 skills（R 预登记：全缺，IX-TLS-03 引「api/01 §5.6 skills 读取」） ----------
-  http.get('*/api/v1/skills', () => ok({ items: SKILLS.map(({ id, name, summary, version, status }) => ({ id, name, summary, version, status })) })),
+  // ---------- §5.6 skills（S2 契约 live 投影：{data,meta} 信封；body 只回长度） ----------
+  http.get('*/api/v1/skills', () =>
+    ok({ data: SKILLS, meta: { page: 1, page_size: 20, total: SKILLS.length } }),
+  ),
   http.get('*/api/v1/skills/:id', ({ params }) => {
     const skill = SKILLS.find(s => s.id === String(params.id))
-    if (!skill) return err(3001, '技能不存在', 404)
-    return ok(skill)
+    if (!skill) return err(404, '技能不存在', 404)
+    return ok({ data: skill, meta: {} })
   }),
 
-  // ---------- §5.7 mcp ----------
-  // R 预登记：预注册发现（§5.7 的 refresh 需先注册实例；IX-MCP-01 第②步需先测后注册）
-  http.post('*/api/v1/mcp/discover', () => ok(DISCOVER_REPLY)),
-  http.get('*/api/v1/mcp/servers', () => ok({ items: MCP_SERVERS })),
+  // ---------- §5.7 mcp（live 投影：裸体/裸 {items}；discover 不落库；nd- 勾选集上架） ----------
+  http.post('*/api/v1/mcp/discover', () => HttpResponse.json(DISCOVER_REPLY)),
+  http.get('*/api/v1/mcp/servers', () => HttpResponse.json({ items: MCP_SERVERS })),
+  // live 契约：{name,desc?,transport,url?,command?,auth,token?,adopt_tool_ids} → 201 行+token_sentinel；
+  // stdio 缺 command / 非 http(s) url 422+3001；adopt_tool_ids=nd- 勾选集（空=全部不纳管）
   http.post('*/api/v1/mcp/servers', async ({ request }) => {
     const body = (await request.json()) as {
-      name: string; desc?: string; transport: 'streamable http' | 'stdio'; url?: string; command?: string; auth: string; token?: string; adopt_tool_ids: string[]
+      name: string; desc?: string; transport: 'streamable http' | 'stdio'; url?: string; command?: string
+      auth: string; token?: string; adopt_tool_ids: string[]
+    }
+    const isHttp = body.transport === 'streamable http'
+    if (isHttp && !(body.url ?? '').startsWith('http')) {
+      return HttpResponse.json({ code: 3001, message: 'streamable http 目标必须提供 http(s) url', detail: null, trace_id: 'tr-mock' }, { status: 422 })
+    }
+    if (!isHttp && !(body.command ?? '').trim()) {
+      return HttpResponse.json({ code: 3001, message: 'stdio 目标必须提供启动命令', detail: null, trace_id: 'tr-mock' }, { status: 422 })
+    }
+    if (MCP_SERVERS.some(s => s.name === body.name)) {
+      return HttpResponse.json({ code: 3001, message: '同名 Server 已上架', detail: null, trace_id: 'tr-mock' }, { status: 422 })
     }
     const found = DISCOVER_REPLY.tools.filter(t => body.adopt_tool_ids.includes(t.tool_id))
     const server: McpServer = {
-      id: `mcp-${body.name.toLowerCase().replace(/[^a-z0-9-]/g, '-')}-${String(MCP_SERVERS.length + 1)}`,
-      name: body.name, desc: body.desc ?? '', transport: body.transport,
-      url_masked: body.url ?? `stdio · ${body.command ?? ''}`,
-      command: body.command, auth: body.auth,
+      id: crypto.randomUUID(),
+      name: body.name, desc: body.desc ?? '', transport: 'streamable http' as const,
+      url_masked: isHttp
+        ? (body.url ?? '').replace(/^(https?:\/\/)([^/]{4})[^/]*/, '$1$2****')
+        : `stdio · ${body.command ?? ''}`,
+      command: isHttp ? undefined : body.command, auth: body.auth,
       token_masked: body.token ? `${body.token.slice(0, 5)}****${body.token.slice(-4)}` : '—',
       protocol: DISCOVER_REPLY.protocol, server_version: DISCOVER_REPLY.server_version,
       status: 'unknown', latency_ms: DISCOVER_REPLY.latency_ms, consecutive_failures: 0,
       last_probe: new Date().toISOString(), probes_24h: [], added_by: '刘以在', added_at: new Date().toISOString(),
-      // 纳管后默认「未启用」——外部工具默认不可信（写入类需逐项审核开启）
-      tools: found.map((t, i) => ({ ...t, tool_id: `${body.name}-t${i + 1}`, adopted: true, enabled: false })),
-      adopted_count: found.length, discovered_count: found.length,
+      // 纳管行 mt- 短 id、默认「未启用」——外部工具默认不可信（写入类需逐项审核开启）
+      tools: found.map(t => ({ ...t, tool_id: `mt-${t.tool_id.slice(3)}`, adopted: true, enabled: false })),
+      adopted_count: found.length, discovered_count: DISCOVER_REPLY.tools.length,
     }
     MCP_SERVERS.unshift(server)
-    return ok({ ...server, token_sentinel: true }, 201)
+    return HttpResponse.json({ ...server, token_sentinel: true }, { status: 201 })
   }),
   http.post('*/api/v1/mcp/servers/:id/refresh', ({ params }) => {
     const server = MCP_SERVERS.find(s => s.id === String(params.id))
-    if (!server) return err(5003, 'Server 探活失败', 502)
-    server.discovered_count = Math.max(server.tools.length, DISCOVER_REPLY.tools.length)
+    if (!server) return HttpResponse.json({ code: 5003, message: 'Server 探测失败', detail: null, trace_id: 'tr-mock' }, { status: 502 })
+    // 缓存对账（live 语义简化投影）：远端全集=DISCOVER_REPLY；既有纳管/启停决策保留
+    for (const remote of DISCOVER_REPLY.tools) {
+      if (!server.tools.some(t => t.name === remote.name)) {
+        server.tools.push({ ...remote, tool_id: `mt-${remote.tool_id.slice(3)}`, adopted: false, enabled: false })
+      }
+    }
+    server.tools = server.tools.filter(t => DISCOVER_REPLY.tools.some(r => r.name === t.name))
+    server.discovered_count = DISCOVER_REPLY.tools.length
     server.latency_ms = DISCOVER_REPLY.latency_ms
     server.last_probe = new Date().toISOString()
     server.status = 'healthy'
-    return ok({ latency_ms: server.latency_ms, tools: server.tools, discovered_count: server.discovered_count })
+    server.consecutive_failures = 0
+    return HttpResponse.json({ latency_ms: server.latency_ms, tools: server.tools, discovered_count: server.discovered_count })
   }),
   http.get('*/api/v1/mcp/servers/:id', ({ params }) => {
     const server = MCP_SERVERS.find(s => s.id === String(params.id))
-    if (!server) return err(3001, 'Server 不存在', 404)
-    return ok(server)
+    if (!server) return HttpResponse.json({ code: 404, message: 'Server 不存在', detail: null, trace_id: 'tr-mock' }, { status: 404 })
+    return HttpResponse.json(server)
   }),
   http.get('*/api/v1/mcp/servers/:id/tools', ({ params }) => {
     const server = MCP_SERVERS.find(s => s.id === String(params.id))
-    if (!server) return err(3001, 'Server 不存在', 404)
-    return ok({ items: server.tools })
+    if (!server) return HttpResponse.json({ code: 404, message: 'Server 不存在', detail: null, trace_id: 'tr-mock' }, { status: 404 })
+    return HttpResponse.json({ items: server.tools })
   }),
   http.post('*/api/v1/mcp/tools/:tool_id/enable', ({ params }) => setMcpToolEnabled(String(params.tool_id), true)),
-  // R 预登记：停用（契约仅 enable；详情抽屉需要双向启停）
   http.post('*/api/v1/mcp/tools/:tool_id/disable', ({ params }) => setMcpToolEnabled(String(params.tool_id), false)),
-  // R 预登记：移除（26 篇 §10 行 15 引 DELETE /mcp/servers/{id}，§5.7 未列）
+  // live 契约：DELETE → 204 + X-Removed-Tools/X-Affected-Agents 提示头（级联工具行）
   http.delete('*/api/v1/mcp/servers/:id', ({ params }) => {
     const idx = MCP_SERVERS.findIndex(s => s.id === String(params.id))
-    if (idx < 0) return err(3001, 'Server 不存在', 404)
+    if (idx < 0) return HttpResponse.json({ code: 404, message: 'Server 不存在', detail: null, trace_id: 'tr-mock' }, { status: 404 })
     const [removed] = MCP_SERVERS.splice(idx, 1)
-    // 级联：在用 Agent 提示（mock 静态口径=画板 ix-mcp-03）
     return new HttpResponse(null, {
       status: 204,
-      headers: { 'X-Removed-Tools': String(removed.adopted_count), 'X-Affected-Agents': '2' },
+      headers: { 'X-Removed-Tools': String(removed.adopted_count), 'X-Affected-Agents': '0' },
     })
   }),
   // ---------- S-AD 切片追加（设置四新 Tab + 主页新手引导；纯追加，不改动上方既有行） ----------
@@ -1006,13 +1025,6 @@ export const platformHandlers = [
   ),
 ]
 
-function setToolEnabled(id: string, enabled: boolean) {
-  const tool = TOOLS.find(t => t.id === id)
-  if (!tool) return err(3001, '工具不存在', 404)
-  tool.enabled = enabled
-  return ok({ id: tool.id, enabled: tool.enabled })
-}
-
 function setMcpToolEnabled(toolId: string, enabled: boolean) {
   for (const s of MCP_SERVERS) {
     const t = s.tools.find(x => x.tool_id === toolId)
@@ -1021,5 +1033,5 @@ function setMcpToolEnabled(toolId: string, enabled: boolean) {
       return ok({ tool_id: t.tool_id, enabled: t.enabled })
     }
   }
-  return err(3001, '工具不存在', 404)
+  return err(404, '工具不存在', 404)
 }

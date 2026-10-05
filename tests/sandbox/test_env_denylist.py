@@ -4,6 +4,9 @@
 覆盖：刷洗表 ≥10 项含敏感族锚点；命中剥离+剥离清单；未命中透传+纯函数不改入参；
 spec_from_mapping 反序列化边界 env 透传+剥离告警；docker_backend.create 容器组装点
 接线（假 docker client 断言 containers.run 收到的 environment 已剥离）。
+
+K9-c/B-6 追加（方案依据=docs/Agent/13 §15）：后缀通配双层命中——*_API_KEY/*_TOKEN/*
+*_SECRET 未列名新凭证变量自动剥离；精确枚举项不回归。
 """
 
 import logging
@@ -110,6 +113,40 @@ async def test_刷洗_docker容器组装点_剥离发生告警(tmp_path: Path, c
     with caplog.at_level(logging.WARNING, logger="services.sandbox.runtime.docker_backend"):
         await backend.create(spec)
     assert any("GH_TOKEN" in r.getMessage() for r in caplog.records)
+
+
+# ---------------------------------------------------------------- K9-c 后缀通配双层命中
+
+
+def test_后缀通配_未列名新凭证变量自动剥离():
+    # Arrange：三家新厂商凭证（不在精确枚举表内，按命名惯例落标准后缀族）+ 普通变量
+    env = {
+        "PATH": "/usr/bin",
+        "MYAPP_API_KEY": "my.secret",
+        "VENDOR_TOKEN": "v.secret",
+        "X_SERVICE_SECRET": "x.secret",
+    }
+    # Act
+    clean, stripped = sanitize_env(env)
+    # Assert：后缀命中即剥；普通变量透传
+    assert clean == {"PATH": "/usr/bin"}
+    assert set(stripped) == {"MYAPP_API_KEY", "VENDOR_TOKEN", "X_SERVICE_SECRET"}
+
+
+def test_精确枚举项不回归_通配未吞精确语义():
+    # Assert：精确表里非凭证后缀的项（GIT_ASKPASS/SSH_AUTH_SOCK/GOOGLE_APPLICATION_CREDENTIALS）
+    # 与含 TOKEN 字样但不在表内的变量，行为均与 K5 时点一致
+    env = {"GIT_ASKPASS": "/path/askpass", "SSH_AUTH_SOCK": "/tmp/agent.sock", "TOKEN_COUNTER": "7"}
+    clean, stripped = sanitize_env(env)
+    assert set(stripped) == {"GIT_ASKPASS", "SSH_AUTH_SOCK"}  # 精确项照剥
+    assert clean == {"TOKEN_COUNTER": "7"}  # TOKEN_COUNTER 不以 _TOKEN 结尾 → 不误剥
+
+
+def test_后缀通配_反序列化边界同步生效():
+    # Act：spec_from_mapping 入口对通配命中项同样剥离
+    spec = spec_from_mapping({"instance_id": "i-wild", "env": {"MYAPP_API_KEY": "my.secret", "PATH": "/bin"}})
+    # Assert
+    assert spec.env == {"PATH": "/bin"}
 
 
 # ---------------------------------------------------------------- 假 docker client

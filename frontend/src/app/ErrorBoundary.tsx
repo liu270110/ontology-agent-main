@@ -67,12 +67,34 @@ export class ErrorBoundary extends Component<Props, State> {
             {this.state.showTech ? '收起技术详情' : '查看技术详情'}
           </button>
           {this.state.showTech && (
-            <pre
-              data-testid="error-stack"
-              className="scroll-thin max-h-48 max-w-md overflow-auto whitespace-pre-wrap break-words rounded-lg border border-separator bg-surface p-3 text-[11px] text-label-3"
-            >
-              {err.stack ?? String(err)}
-            </pre>
+            <>
+              <pre
+                data-testid="error-stack"
+                className="scroll-thin max-h-48 max-w-md overflow-auto whitespace-pre-wrap break-words rounded-lg border border-separator bg-surface p-3 text-[11px] text-label-3"
+              >
+                {err.stack ?? String(err)}
+              </pre>
+              {/* 历史取证（oa-errlog 环形）：偶发崩溃重载后堆栈仍在，供事后定位 */}
+              {(() => {
+                try {
+                  const log = JSON.parse(localStorage.getItem('oa-errlog') ?? '[]') as { at: string; path: string; message: string }[]
+                  const recent = log.slice(1, 4)
+                  if (recent.length === 0) return null
+                  return (
+                    <div className="max-w-md self-stretch text-left">
+                      <div className="ctx-t mb-1">近期崩溃记录（本地留存）</div>
+                      {recent.map((e, i) => (
+                        <div key={i} className="mono truncate text-[10px] text-label-3" title={`${e.at} ${e.path}`}>
+                          {e.at.slice(11, 19)} {e.path} · {e.message.slice(0, 60)}
+                        </div>
+                      ))}
+                    </div>
+                  )
+                } catch {
+                  return null
+                }
+              })()}
+            </>
           )}
           <button
             type="button"

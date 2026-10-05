@@ -107,6 +107,29 @@ class BudgetTracker:
     def add_step(self) -> None:
         self._steps_done += 1
 
+    # ── 步间水位复判（K11-a，docs/Agent/13 §17）─────────────────────────
+    @property
+    def max_tokens(self) -> int | None:
+        """Run token 预算上限（None=不限）：A4 预算终止维与子 Run 分账的分母。
+
+        口径注（K11-a P1 修法，K11 专家审核）：步间水位复判分母不再是本值（生产根 Run
+        唯一有 inbox/steer 的路径常为 None），而是组装级同源预算（Settings.
+        context_budget_tokens 口径，经 ContextAssemblyStage.resolve_budget_tokens 解析，
+        见 loop._recheck_watermark）——复判与 ``compress_estimated`` 回冲同面走估算口径。
+        """
+        return self._budget.max_tokens
+
+    def compress_estimated(self, reclaimed: int) -> None:
+        """步间压缩回冲估算账（K11-a）：上下文压缩回收的估算 tokens 从估算账扣减，
+        水位随压缩即时回落（「压缩后重算 watermark，更新 budget 锚定」）。
+
+        只动估算账（估算/真实分账分记纪律不变）：真实账单调不可回冲；估算扣减下限 0
+        （不产生负账）。不触发锚定重校（ratio 语义=真实/组装估算，压缩回冲不改口径，
+        下次真实 usage 到达自然重校）。
+        """
+        if reclaimed > 0:
+            self._estimated_used = max(0, self._estimated_used - reclaimed)
+
     # ── 锚定（M4.5-B）────────────────────────────────────────────────────
     @property
     def anchor_ratio(self) -> float | None:

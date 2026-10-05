@@ -145,6 +145,12 @@ class Settings(BaseSettings):
     # kernel 通道的第二线；语义同源：根 Run 深度 0，允许派生当且仅当 子深度 ≤ 上限）。
     kernel_subagent_max_depth: int = Field(default=2, ge=0)
 
+    # K11 步间水位复判（docs/Agent/13 §17，2026-10-05 第九迭代）：每 Run 步间压缩触发
+    # 次数上限（防「压缩→仍超→再压」风暴；达帽后超水位步照常执行+只落
+    # kernel.watermark_recheck_capped 警告事件，预算检查点/硬终止兜底）。0=关闭步间压缩
+    # （恒达帽）。内核构造参数显式注入优先，缺省读此值（D2 纪律同上）。
+    kernel_watermark_recheck_max: int = Field(default=3, ge=0)
+
     # 记忆域（06 篇 §4/§5.2/§5.5；计划 1 仅 L1 与检索参数）
     memory_l1_ttl_seconds: int = 24 * 3600  # L1 会话记忆块 TTL（会话活跃期）
     memory_search_top_k: int = 8  # 检索注入条数上限

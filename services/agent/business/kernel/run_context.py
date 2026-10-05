@@ -50,3 +50,8 @@ class RunContext:
         # 40 篇 R4（2026-10-04）：计划投影（规划阶段产出后填充；规划前 None=零发射）。
         # items=内核执行步整表，步推进时由 loop/tool_dispatch 经 begin/finish 推进并发快照。
         self.plan: PlanProjection | None = None
+        # K11-b 步间压缩风暴帽计数（docs/Agent/13 §17）：本 Run 步间水位复判已实际触发的
+        # 压缩次数（Run 级，达 Settings.kernel_watermark_recheck_max 即不再步间压缩）。
+        self.recheck_compactions = 0
+        # K11-b capped 事件去重：达帽警告每 Run 只发一次（首达帽置位并发事件，后续边界静默）。
+        self.recheck_capped_emitted = False

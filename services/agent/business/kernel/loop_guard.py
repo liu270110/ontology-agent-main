@@ -109,7 +109,10 @@ def register_step(rc: RunContext, guard: LoopGuard, step: PlanStep, *, emit: Emi
     """循环记账接线口（串行步循环与并行段路径共用）：记账 → nudge 注入与发射。
 
     nudge 注入（B3 标界）：文本追加进运行组装面（rc.context_blocks），source=kernel.loop_guard、
-    agent_attested、tier=3 易变尾、tokens=0（零成本留痕口径，同 inbox steer 先例）；
+    agent_attested、tier=3 易变尾、tokens=0 零成本留痕（两注入通道口径现状：inbox steer 已于
+    K11-a 收编为 estimate_tokens 计入组装面与 tracker 估算账——水位可见、压缩可回收，原
+    「tokens=0 同 inbox steer 先例」的说法随之失效；nudge 为内核自产软警告非用户负载，保持
+    零成本留痕不计水位，避免软警告自身推高水位诱发步间压缩，两通道不同源系有意为之）；
     同步发射 ``kernel.loop_nudge``（payload：step_seq/action_iri/signature/repeats/
     message/source——signature 为哈希，不含参数原文）。
     达阈值时 :meth:`LoopGuard.register` 抛 :class:`LoopDetectedError` 向上传播

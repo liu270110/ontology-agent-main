@@ -38,7 +38,7 @@ import time
 from pathlib import Path
 
 EVAL_DIR = Path(__file__).resolve().parent
-REPO_ROOT = EVAL_DIR.parent.parent
+REPO_ROOT = EVAL_DIR.parent.parent.parent  # 修复：EVAL_DIR 已是 evals 子目录，原少算一层→插入裸 services/ 遮蔽 mcp 包
 sys.path.insert(0, str(EVAL_DIR))
 sys.path.insert(0, str(REPO_ROOT))
 sys.path.insert(0, str(EVAL_DIR.parent))  # 共享 helper：services/evals/_resume.py

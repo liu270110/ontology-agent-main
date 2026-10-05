@@ -101,6 +101,20 @@ export interface DiffRow {
   shape?: string
 }
 
+/** 元素级 diff（features/ontology/api.ts ElementDiff 同形；24 篇 §3.2 DiffViewer 消费） */
+export interface DiffEntry {
+  key: string
+  label: string | null
+  changes: { field: string; before: string; after: string }[]
+}
+
+export interface ElementDiff {
+  added: DiffEntry[]
+  removed: DiffEntry[]
+  modified: DiffEntry[]
+  unchanged?: number
+}
+
 export interface ValidateResult {
   focus: string
   path: string
@@ -258,6 +272,61 @@ const DIFF_ROWS: DiffRow[] = [
   { id: 'd8', op: 'add', subject: '故障', predicate: 'causedBy', object: '设备缺陷' },
   { id: 'd9', op: 'add', subject: '停电事件', predicate: 'locatedIn', object: '馈线' },
 ]
+
+/** cs_01K 元素级 diff（§6.2 四投影分组口径，真实后端 ProjectionDiffOut 同构；
+ *  41 §2 V4.2 影响面徽标数据源）。扁平 elements = 四投影依序合并（classes→properties→
+ *  axioms→rules），与 24 篇 DiffViewer 三段分组消费口径同源；为演示子集而非全量 +12/−3/~4。 */
+const DIFF_PROJECTIONS = {
+  classes: {
+    added: [{ key: 'out:UrgentWorkOrder', label: '紧急抢修工单', changes: [] }],
+    removed: [],
+    modified: [
+      {
+        key: 'out:WorkOrder',
+        label: '停电工单',
+        changes: [
+          { field: 'rdfs:label', before: '工单', after: '停电工单' },
+          { field: 'rdfs:comment', before: '配网作业凭据', after: '配网停电作业的过程凭据与安全依据' },
+        ],
+      },
+      {
+        key: 'out:OutageScope',
+        label: '停电范围',
+        changes: [{ field: 'rdfs:label', before: '停电范围', after: '停电区域' }],
+      },
+      {
+        key: 'out:RestoreDuration',
+        label: '复电时长',
+        changes: [{ field: 'out:hasUnit', before: '"小时"^^xsd:string', after: '"分钟"^^xsd:string' }],
+      },
+    ],
+  },
+  properties: {
+    added: [{ key: 'out:hasSymptom', label: '故障症状属性', changes: [] }],
+    removed: [{ key: 'out:legacyCites', label: '旧附录引用属性', changes: [] }],
+    modified: [],
+  },
+  axioms: { added: [], removed: [], modified: [] },
+  rules: { added: [], removed: [], modified: [] },
+} satisfies Record<string, ElementDiff>
+
+/** 扁平元素级段（四投影依序合并；键序/条目顺序与拆分前逐条一致，DiffViewer 消费不变） */
+const DIFF_ELEMENTS: ElementDiff = {
+  added: [...DIFF_PROJECTIONS.classes.added, ...DIFF_PROJECTIONS.properties.added, ...DIFF_PROJECTIONS.axioms.added, ...DIFF_PROJECTIONS.rules.added],
+  removed: [
+    ...DIFF_PROJECTIONS.classes.removed,
+    ...DIFF_PROJECTIONS.properties.removed,
+    ...DIFF_PROJECTIONS.axioms.removed,
+    ...DIFF_PROJECTIONS.rules.removed,
+  ],
+  modified: [
+    ...DIFF_PROJECTIONS.classes.modified,
+    ...DIFF_PROJECTIONS.properties.modified,
+    ...DIFF_PROJECTIONS.axioms.modified,
+    ...DIFF_PROJECTIONS.rules.modified,
+  ],
+  unchanged: 26,
+}
 
 const VALIDATE_RESULTS: ValidateResult[] = [
   { focus: 'out:Fault · FAULT-009', path: 'out:hasOccurTime', value: undefined, constraint: 'sh:minCount=1', severity: 'Violation', message: '基数违规 sh:minCount=1，当前 0', source_shape: 'FaultShape' },
@@ -587,6 +656,10 @@ export const ontologyHandlers = [
         target: target ?? 'v2.2-draft',
         stats: CS_STATS,
         rows: DIFF_ROWS,
+        // 元素级分组（24 篇 DiffViewer；过渡期字段，api.ts DiffPayload.elements 可选读）
+        elements: DIFF_ELEMENTS,
+        // 四投影分组（41 §2 V4.2 影响面徽标数据源；api.ts DiffPayload.projections 可选读）
+        projections: DIFF_PROJECTIONS,
       },
     })
   }),

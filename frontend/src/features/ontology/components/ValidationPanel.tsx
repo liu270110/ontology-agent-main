@@ -1,14 +1,16 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { AlertTriangle, ChevronDown, Download, RefreshCw, Sparkles } from 'lucide-react'
 import { toast } from 'sonner'
 import type { ValidateReport } from '../api'
 import { Sheet } from '@/components/sheet'
 import { ChangeCountChips } from './shared'
+import { useWorkbenchStore } from '../stores/workbench-store'
 
 /** 底部校验面板（26 篇 §6.2 IX-ON-05；画板 ix-on-05，可折叠 220px）：
  *  SHACL 违例列表（违例路径 + 原因 + 「定位」→ 画布节点闪烁）/ 推理结果（新隐含三元组 +
- *  差异徽标）/ 变更预览（本变更单增删改三色列表）三 Tab；「试校验」调 POST validate
- *  渲染结果——确定性校验在后端，前端不跑 SHACL（宪法 2）。
+ *  差异徽标）/ 变更预览（workbench-store pending 层真实草稿：「+ 新建类 N / + 属性边 N /
+ *  − 标记删除 N」，空时显示空态）三 Tab；「试校验」调 POST validate 渲染结果——
+ *  确定性校验在后端，前端不跑 SHACL（宪法 2）。
  *  「查看报告」= 报告 Sheet（三项指标行：SHACL 违例数 / 术语唯一性 / HermiT 一致性）
  *  +「导出报告」JSON 下载（纯客户端 Blob，同 memory 导出模式）。 */
 
@@ -24,7 +26,6 @@ export function ValidationPanel({
   onToggleCollapse,
   onRunValidate,
   onLocate,
-  draftOps,
 }: {
   report: ValidateReport | null
   loading: boolean
@@ -33,10 +34,26 @@ export function ValidationPanel({
   onRunValidate: () => void
   /** 「定位」回调：映射违例 focus → 画布节点闪烁 */
   onLocate: (focus: string) => void
-  draftOps: { add: number; del: number; mod: number }
 }) {
   const [tab, setTab] = useState<PanelTab>('shacl')
   const [reportOpen, setReportOpen] = useState(false)
+
+  // ---- 变更预览数据源 = workbench-store pending 层（真实草稿，候选非成品宪法 3）：
+  //  refOnly 引用上屏是已有类的钉位引用（store 定义「非新建」），不计新建类；
+  //  mod 信号 = _manualDirty（Inspector「应用修改」bumpDirty 唯一写入点，元素级计数）。
+  const pendingClasses = useWorkbenchStore(s => s.pendingClasses)
+  const pendingEdges = useWorkbenchStore(s => s.pendingEdges)
+  const pendingDeletes = useWorkbenchStore(s => s.pendingDeletes)
+  const inspectorMods = useWorkbenchStore(s => s._manualDirty)
+
+  const newClassCount = useMemo(() => pendingClasses.filter(c => !c.refOnly).length, [pendingClasses])
+  const propEdgeCount = useMemo(() => pendingEdges.filter(e => e.kind === 'property').length, [pendingEdges])
+  const subEdgeCount = useMemo(() => pendingEdges.filter(e => e.kind === 'subclass').length, [pendingEdges])
+  /** 三色计数 chips 口径：add=新建类+属性/层级边，del=标记删除，mod=Inspector 元数据修改数 */
+  const draftOps = useMemo(
+    () => ({ add: newClassCount + propEdgeCount + subEdgeCount, del: pendingDeletes.length, mod: inspectorMods }),
+    [newClassCount, propEdgeCount, subEdgeCount, pendingDeletes.length, inspectorMods],
+  )
 
   const violations = report?.results ?? []
   const reportMetrics = report as ValidateReportWithMetrics | null
@@ -192,22 +209,35 @@ export function ValidationPanel({
 
         {tab === 'preview' && (
           <>
+            {/* 41 §2 V4.3 ChangesetPreview 真实化：pending 层逐类生成预览行（仅计数 > 0 的行），
+                不再有写死示例三元组；无任何草稿 → 空态文案 */}
             {[
-              { op: 'add' as const, n: draftOps.add, text: '（检修工单, subClassOf, 行动）' },
-              { op: 'del' as const, n: draftOps.del, text: '（部件, partOf, 车间）' },
-              { op: 'mod' as const, n: draftOps.mod, text: '（停电范围, rdfs:label）「停电范围」→「停电区域」' },
-            ].map(row => (
-              <div
-                key={row.op}
-                className={`diffline mb-1 flex items-center gap-2 ${row.op === 'add' ? 'add' : row.op === 'del' ? 'del' : ''}`}
-                style={row.op === 'mod' ? { background: 'var(--orange-soft)', color: 'var(--orange)' } : undefined}
-              >
-                <span className="font-bold">{row.op === 'add' ? '+' : row.op === 'del' ? '−' : '~'}</span>
-                <span className="truncate">{row.text}</span>
-                <span className="ml-auto flex-none">×{row.n}</span>
+              { op: 'add' as const, label: '新建类', n: newClassCount },
+              { op: 'add' as const, label: '属性边', n: propEdgeCount },
+              { op: 'add' as const, label: '层级边（subClassOf）', n: subEdgeCount },
+              { op: 'del' as const, label: '标记删除', n: pendingDeletes.length },
+            ]
+              .filter(row => row.n > 0)
+              .map(row => (
+                <div
+                  key={row.label}
+                  className={`diffline mb-1 flex items-center gap-2 ${row.op === 'add' ? 'add' : 'del'}`}
+                  data-testid={`preview-row-${row.label}`}
+                >
+                  <span className="font-bold">{row.op === 'add' ? '+' : '−'}</span>
+                  <span>{row.label}</span>
+                  <span className="ml-auto flex-none">×{row.n}</span>
+                </div>
+              ))}
+            {draftOps.add === 0 && pendingDeletes.length === 0 && (
+              <div className="empty !py-6" data-testid="preview-empty">
+                <div className="t text-[13px]">暂无待提交变更</div>
+                <div className="d text-[11px]">在画布新建类、连线或右键删除元素后，此处实时预览本变更单草稿（候选非成品）。</div>
               </div>
-            ))}
-            <p className="mt-1 text-[11px] text-label-3">本变更单增删改三元组三色列表；与 ON-08 摘要同源，提交评审后进入审批中心。</p>
+            )}
+            <p className="mt-1 text-[11px] text-label-3">
+              工作台 pending 草稿实时预览（另计 Inspector 元数据修改 {inspectorMods} 处）；保存草稿/提交评审后写入变更单进入审批中心。
+            </p>
           </>
         )}
       </div>

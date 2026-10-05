@@ -110,11 +110,12 @@ class BudgetTracker:
     # ── 步间水位复判（K11-a，docs/Agent/13 §17）─────────────────────────
     @property
     def max_tokens(self) -> int | None:
-        """Run token 预算上限（None=不限）：步间水位复判的水位线分母（0.8 比率语义）。
+        """Run token 预算上限（None=不限）：A4 预算终止维与子 Run 分账的分母。
 
-        K11-a 步间复判读 ``tokens_effective/max_tokens`` 与压缩同源阈值比较
-        （services/agent/business/kernel/compaction.py CompactionTrigger）；无上限=
-        无水位可言，复判零开销直通。
+        口径注（K11-a P1 修法，K11 专家审核）：步间水位复判分母不再是本值（生产根 Run
+        唯一有 inbox/steer 的路径常为 None），而是组装级同源预算（Settings.
+        context_budget_tokens 口径，经 ContextAssemblyStage.resolve_budget_tokens 解析，
+        见 loop._recheck_watermark）——复判与 ``compress_estimated`` 回冲同面走估算口径。
         """
         return self._budget.max_tokens
 

@@ -29,7 +29,7 @@ from services.agent.business.kernel.dispatcher import ExtensionDispatcher
 from services.agent.business.kernel.errors import BudgetExhaustedError, KernelContractError, KernelError
 from services.agent.business.kernel.execution import ExecutionStage
 from services.agent.business.kernel.gate_baseline import BaselineGate, canonical_param_hash
-from services.agent.business.kernel.grounding import ContextAssemblyStage
+from services.agent.business.kernel.grounding import ContextAssemblyStage, _estimated_tokens
 from services.agent.business.kernel.inbox import InboxItem, KernelInbox
 from services.agent.business.kernel.ledger import KernelLedger, LedgerSink
 from services.agent.business.kernel.loop_guard import (
@@ -250,8 +250,9 @@ class AgentKernel:
                     if inbox is not None:
                         self._splice_inbox_blocks(rc, inbox)
                     # K11-a 步间水位复判（docs/Agent/13 §17）：段=步边界统一挂点（串行单步段
-                    # 与并行多步段同位）——组装每 Run 仅一次，运行中 steer 注入与真实消耗使
-                    # 水位增长而组装级压缩门不复判；此处超水位先压缩再执行该步（K11-b 帽内）。
+                    # 与并行多步段同位）——组装每 Run 仅一次，运行中 steer 注入使组装面估算
+                    # 增长而组装级压缩门不复判；此处按组装级同源判据（同分子/分母口径）
+                    # 超水位先压缩再执行该步（K11-b 帽内；max_tokens=None 亦复判）。
                     await self._recheck_watermark(rc)
                     if len(group) == 1:  # 单步段=完全现状串行路径（B-① 零行为差异面）
                         step = group[0]
@@ -461,43 +462,47 @@ class AgentKernel:
 
     # ── K11-a 步间水位复判（docs/Agent/13 §17；研究 12/gemini-cli §4 请求前溢出预判）──
     async def _recheck_watermark(self, rc: RunContext) -> None:
-        """段边界步/段执行前水位复判：组装每 Run 仅一次，运行中 steer 注入与真实消耗使
-        ``tracker.tokens_effective``（M4.5-B 锚定估算，含 steer 增长）持续增长而组装级
-        压缩门不再生效——此处按压缩同源 0.8 比率语义（CompactionTrigger）复判：
+        """段边界步/段执行前水位复判：组装每 Run 仅一次，运行中 steer 注入使运行组装面
+        增长而组装级压缩门不再生效——此处按**组装级同源判据**（P1 修法，K11 专家审核）
+        复判：分子=``_estimated_tokens(rc.context_blocks)``（grounding 估算函数，与组装级
+        压缩门同一估算口径，含 steer 注入增长与上轮压缩回收）；分母=组装级同一预算解析口
+        （``Settings.context_budget_tokens`` 口径，ContextAssemblyStage 注入优先）。
+        与 ``Budget.max_tokens``（A4 预算终止维）解耦：生产根 Run 唯一有 inbox/steer 的
+        路径 ``Budget(max_tokens=None)``（chat_orchestrator）亦复判；tracker 真实消耗账
+        不参与判据——压缩只回收估算面，度量与补救必须同面（否则子 Run 错位）。
 
         - 未超水位：零开销直通（不触压缩器、零事件）；
         - 超水位且帽内：走组装阶段压缩等价路径（K1-b 降级链：策略→提取式→截断）压缩
           运行组装面（只动易变尾，不重新全量组装），压缩回收的估算 tokens 经
           ``tracker.compress_estimated`` 回冲锚定账（重算水位）后再执行该步；
-        - 超水位且达帽（K11-b 防压缩风暴）：不再步间压缩，落
-          ``kernel.watermark_recheck_capped`` 警告事件，超水位步照常执行（预算检查点/
-          硬终止兜底）；压缩后仍超限的步同样照常执行（帽是风暴唯一防线，兜底终断语义）。
+        - 超水位且达帽（K11-b 防压缩风暴）：不再步间压缩，首达帽落一次
+          ``kernel.watermark_recheck_capped`` 警告事件（每 Run 去重，后续边界静默），
+          超水位步照常执行（预算检查点/硬终止兜底）；压缩后仍超限的步同样照常执行
+          （帽是风暴唯一防线，兜底终断语义）。
         - 复判失败不阻断（A-8 同款：异常结构化转义留警告日志，该步照常执行）。
-
-        无 token 上限（max_tokens=None）=无水位可言，直接返回（零开销）。
         """
-        budget_tokens = rc.tracker.max_tokens
-        if budget_tokens is None or budget_tokens <= 0:
-            return  # 无 token 预算：无水位可言（A4 其他维兜底照常）
+        budget_tokens = self._context_stage.resolve_budget_tokens()  # 组装级同源分母（<=0 由 should_compact 直通）
         trigger = CompactionTrigger(threshold=self._context_stage.resolve_compaction_threshold())
-        effective = rc.tracker.tokens_effective
-        if not trigger.should_compact(effective, budget_tokens):
+        estimated = _estimated_tokens(rc.context_blocks)  # 组装级同源分子（运行组装面估算）
+        if not trigger.should_compact(estimated, budget_tokens):
             return  # 未超水位：零开销直通（压缩器不被调用）
         if rc.recheck_compactions >= self._watermark_recheck_max:
-            # K11-b：达帽——不再压缩，警告事件后照常执行（后续靠预算兜底/硬终止）
-            self._emit(
-                rc.ledger,
-                rc.ctx,
-                rc.task.run_id,
-                "kernel.watermark_recheck_capped",
-                {
-                    "cap": self._watermark_recheck_max,
-                    "compactions": rc.recheck_compactions,
-                    "tokens_effective": effective,
-                    "watermark_line": trigger.target_tokens(budget_tokens),
-                    "stage": str(LoopStage.EXECUTION),
-                },
-            )
+            # K11-b：达帽——不再压缩，首达帽警告一次（每 Run 去重），照常执行（预算兜底/硬终止）
+            if not rc.recheck_capped_emitted:
+                rc.recheck_capped_emitted = True
+                self._emit(
+                    rc.ledger,
+                    rc.ctx,
+                    rc.task.run_id,
+                    "kernel.watermark_recheck_capped",
+                    {
+                        "cap": self._watermark_recheck_max,
+                        "compactions": rc.recheck_compactions,
+                        "estimated_tokens": estimated,
+                        "watermark_line": trigger.target_tokens(budget_tokens),
+                        "stage": str(LoopStage.EXECUTION),
+                    },
+                )
             return
         try:
             compacted, event = await self._context_stage.compact_volatile_tail(
@@ -507,8 +512,8 @@ class AgentKernel:
             logger.warning("步间水位复判压缩失败（不阻断执行）: %s", exc)
             return
         rc.recheck_compactions += 1
-        before = sum(max(b.tokens, 0) for b in rc.context_blocks)
-        after = sum(max(b.tokens, 0) for b in compacted)
+        before = _estimated_tokens(list(rc.context_blocks))
+        after = _estimated_tokens(compacted)
         reclaimed = before - after
         if reclaimed > 0:
             rc.tracker.compress_estimated(reclaimed)  # 压缩后重算水位：回收估算回冲锚定账

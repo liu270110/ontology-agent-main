@@ -231,6 +231,12 @@ class ContextAssemblyStage:
         步间复判与组装级共用同一 0.8 比率语义（compaction.CompactionTrigger）。"""
         return self._resolve_threshold()
 
+    def resolve_budget_tokens(self) -> int:
+        """组装预算解析口（K11-a 步间复判分母与组装级压缩门同源，D2/F-4 纪律）：
+        显式构造注入优先，未注入运行期读 Settings.context_budget_tokens——步间复判
+        与组装级共用同一绝对预算口径（与 A4 预算终止维 Budget.max_tokens 解耦）。"""
+        return self._resolve_budget()
+
     async def _provide_block(self, rc: RunContext, provider: ContextProvider, *, budget_tokens: int) -> ContextBlock:
         """供给器调用（B3 标界：信任级一律覆写 agent_attested；失败按降级矩阵转空块）。"""
         try:

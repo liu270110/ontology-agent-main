@@ -225,6 +225,12 @@ class ContextAssemblyStage:
             return self._compaction_threshold
         return get_settings().context_compaction_threshold
 
+    def resolve_compaction_threshold(self) -> float:
+        """压缩水位阈值解析口（K11-a 步间复判与组装级压缩门同源，D2/F-4 纪律）：
+        显式构造注入优先，未注入运行期读 Settings.context_compaction_threshold——
+        步间复判与组装级共用同一 0.8 比率语义（compaction.CompactionTrigger）。"""
+        return self._resolve_threshold()
+
     async def _provide_block(self, rc: RunContext, provider: ContextProvider, *, budget_tokens: int) -> ContextBlock:
         """供给器调用（B3 标界：信任级一律覆写 agent_attested；失败按降级矩阵转空块）。"""
         try:
@@ -269,6 +275,19 @@ class ContextAssemblyStage:
         estimated = _estimated_tokens(kept)
         if not trigger.should_compact(estimated, budget_tokens):
             return kept, None
+        compacted, event = await self.compact_volatile_tail(rc, kept, budget_tokens=budget_tokens)
+        return compacted, event
+
+    async def compact_volatile_tail(
+        self, rc: RunContext, kept: list[ContextBlock], *, budget_tokens: int
+    ) -> tuple[list[ContextBlock], dict]:
+        """压缩等价路径核心（无条件压缩，K11-a 从 _compact_if_needed 抽取复用，
+        docs/Agent/13 §17）：调用方已完成水位判定，此处直接走 K1-b 降级链——
+        注册策略摘要 → 策略失败先试内置提取式中间档（产物复判水位达标才收货）→
+        仍超水位落确定性兜底截断（宁截勿编）；冻结前缀（tier≤2）不可压缩。
+        返回（压缩后块序列, kernel.context_compacted 事件 payload）。"""
+        trigger = CompactionTrigger(threshold=self._resolve_threshold())
+        estimated = _estimated_tokens(kept)
         stable = [b for b in kept if b.tier < TIER_VOLATILE]
         volatile = [b for b in kept if b.tier >= TIER_VOLATILE]
         target = trigger.target_tokens(budget_tokens)

@@ -107,6 +107,28 @@ class BudgetTracker:
     def add_step(self) -> None:
         self._steps_done += 1
 
+    # ── 步间水位复判（K11-a，docs/Agent/13 §17）─────────────────────────
+    @property
+    def max_tokens(self) -> int | None:
+        """Run token 预算上限（None=不限）：步间水位复判的水位线分母（0.8 比率语义）。
+
+        K11-a 步间复判读 ``tokens_effective/max_tokens`` 与压缩同源阈值比较
+        （services/agent/business/kernel/compaction.py CompactionTrigger）；无上限=
+        无水位可言，复判零开销直通。
+        """
+        return self._budget.max_tokens
+
+    def compress_estimated(self, reclaimed: int) -> None:
+        """步间压缩回冲估算账（K11-a）：上下文压缩回收的估算 tokens 从估算账扣减，
+        水位随压缩即时回落（「压缩后重算 watermark，更新 budget 锚定」）。
+
+        只动估算账（估算/真实分账分记纪律不变）：真实账单调不可回冲；估算扣减下限 0
+        （不产生负账）。不触发锚定重校（ratio 语义=真实/组装估算，压缩回冲不改口径，
+        下次真实 usage 到达自然重校）。
+        """
+        if reclaimed > 0:
+            self._estimated_used = max(0, self._estimated_used - reclaimed)
+
     # ── 锚定（M4.5-B）────────────────────────────────────────────────────
     @property
     def anchor_ratio(self) -> float | None:

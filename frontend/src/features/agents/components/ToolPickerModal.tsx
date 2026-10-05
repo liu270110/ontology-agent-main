@@ -7,19 +7,28 @@ import { Modal } from '@/components/modal'
 import { toast } from 'sonner'
 import { bindAgentTools, listRegistryTools, type RegistryTool } from '../api'
 /** IX-AGT-03 ToolPicker 工具勾选（26 篇 §8.2；画板 ix-agt-03）：600px 双栏。
- *  左：工具树三组（平台内置 / 插件 / 已纳管 MCP），复选 + 组头全选——树模型走
- *  @headless-tree/core 首战（headless 数据装载/展开/扁平渲染，样式全自持接令牌类）；
- *  右：选中摘要 + 依赖自动勾选提示（如 cli-anything.exec 依赖 kb.search）+ 高危 scope 徽标。
+ *  左：工具树四通道组（L0 工具 / L1 技能 / L2 包 / L3 内置扩展——S1 source_channel 元数据），
+ *  复选 + 组头全选——树模型走 @headless-tree/core 首战（headless 数据装载/展开/扁平渲染，
+ *  样式全自持接令牌类）；右：选中摘要 + 行动类 IRI（本体对账键）。
+ *  仅列 listed（S1 状态机：draft/in_review/deprecated/revoked 不入注入候选）。
  *  保存经 PUT /agents/{id}/tools 生效并写审计（api/01 §5.1）。
- *  域间不互引：工具目录类型在本域 api.ts 声明（与 features/tools 解耦）。 */
+ *  域间不互引：工具目录类型在本域 api.ts 声明（与 features/tools 解耦）。
+ *  诚实态（S1 收敛 2026-10-05）：mock 时代的依赖自动勾选（depends_on）/高危 scope 徽标
+ *  无 S1 字段来源，逻辑与提示退役；依赖治理待 S1 登记依赖字段后恢复。 */
 
 const GROUPS = [
-  { id: 'group-builtin', label: '平台内置', sources: ['builtin', 'http'] as string[] },
-  { id: 'group-plugin', label: '插件', sources: ['plugin'] as string[] },
-  { id: 'group-mcp', label: '已纳管 MCP', sources: ['mcp'] as string[] },
+  { id: 'group-l0', label: 'L0 工具', channels: ['L0'] as string[] },
+  { id: 'group-l1', label: 'L1 技能', channels: ['L1'] as string[] },
+  { id: 'group-l2', label: 'L2 包', channels: ['L2'] as string[] },
+  { id: 'group-l3', label: 'L3 内置扩展', channels: ['L3'] as string[] },
 ] as const
 
 const ROOT_ID = 'root'
+
+function toolDesc(t: RegistryTool): string {
+  const a = t.semantic_annotation ?? {}
+  return String(a.description ?? a.label ?? t.action_iri)
+}
 
 export function ToolPickerPanel({
   selected,
@@ -29,17 +38,16 @@ export function ToolPickerPanel({
   onChange: (names: string[]) => void
 }) {
   const { data } = useQuery({ queryKey: ['tools'], queryFn: listRegistryTools })
-  const tools = useMemo(() => data?.items ?? [], [data])
-  const byName = useMemo(() => new Map(tools.map(t => [t.name, t])), [tools])
+  // 仅 listed 可注入（S1 状态机治理语义）
+  const tools = useMemo(() => (data?.data ?? []).filter(t => t.status === 'listed'), [data])
 
   // 选中集为本组件内部事实源；挂载时以 selected 初始化（Modal 关闭即卸载子树，
-  // 重开=重新挂载；不再按 selectedKey 变化重置——否则会把依赖自动勾选的标记抹掉）
+  // 重开=重新挂载）
   const [checked, setChecked] = useState<Set<string>>(() => new Set(selected))
-  const [autoDeps, setAutoDeps] = useState<Map<string, string[]>>(new Map())
 
   const groupOf = useMemo(() => {
     const m = new Map<string, string>()
-    for (const g of GROUPS) for (const t of tools.filter(x => g.sources.includes(x.source))) m.set(t.id, g.id)
+    for (const g of GROUPS) for (const t of tools.filter(x => g.channels.includes(x.source_channel))) m.set(t.id, g.id)
     return m
   }, [tools])
 
@@ -73,77 +81,36 @@ export function ToolPickerPanel({
     if (tools.length > 0) tree.rebuildTree()
   }, [tools, tree])
 
-  function collectDeps(name: string, acc: Map<string, string[]>, origin: string) {
-    const tool = byName.get(name)
-    if (!tool) return
-    for (const dep of tool.depends_on ?? []) {
-      if (!acc.has(dep)) acc.set(dep, [])
-      const origins = acc.get(dep)!
-      if (!origins.includes(origin)) origins.push(origin)
-      collectDeps(dep, acc, origin)
-    }
-  }
-
-  function checkWithDeps(names: string[]) {
-    const next = new Set(checked)
-    const deps = new Map(autoDeps)
-    for (const n of names) {
-      next.add(n)
-      const tool = byName.get(n)
-      for (const dep of tool?.depends_on ?? []) {
-        // 记录自动勾选来源（badge 依据）；再由 collectDeps 递归传递依赖
-        if (!deps.has(dep)) deps.set(dep, [])
-        const origins = deps.get(dep)!
-        if (!origins.includes(n)) origins.push(n)
-        collectDeps(dep, deps, n)
-        next.add(dep)
-      }
-    }
+  function setCheckedAndReport(next: Set<string>) {
     setChecked(next)
-    setAutoDeps(deps)
-    onChange([...next])
-  }
-
-  function uncheckCascade(names: string[]) {
-    const next = new Set(checked)
-    const deps = new Map(autoDeps)
-    const drop = (n: string) => {
-      next.delete(n)
-      deps.delete(n)
-      // 取消依赖 → 同步取消依赖它的工具（画板：取消 kb.search 将同步取消该插件）
-      for (const t of tools) {
-        if (next.has(t.name) && (t.depends_on ?? []).includes(n)) drop(t.name)
-      }
-    }
-    names.forEach(drop)
-    setChecked(next)
-    setAutoDeps(deps)
     onChange([...next])
   }
 
   function toggleTool(t: RegistryTool) {
-    if (checked.has(t.name)) uncheckCascade([t.name])
-    else checkWithDeps([t.name])
+    const next = new Set(checked)
+    if (next.has(t.name)) next.delete(t.name)
+    else next.add(t.name)
+    setCheckedAndReport(next)
   }
 
   function toggleGroup(groupId: string) {
     const groupTools = byGroup[groupId] ?? []
     const allChecked = groupTools.every(t => checked.has(t.name))
-    if (allChecked) uncheckCascade(groupTools.map(t => t.name))
-    else checkWithDeps(groupTools.filter(t => !checked.has(t.name)).map(t => t.name))
+    const next = new Set(checked)
+    if (allChecked) groupTools.forEach(t => next.delete(t.name))
+    else groupTools.forEach(t => next.add(t.name))
+    setCheckedAndReport(next)
   }
 
   const selectedTools = tools.filter(t => checked.has(t.name))
-  const autoCheckedNow = selectedTools.filter(t => autoDeps.has(t.name))
-  const dangerSelected = selectedTools.filter(t => t.danger)
   const countOf = (g: (typeof GROUPS)[number]) => selectedTools.filter(t => groupOf.get(t.id) === g.id).length
 
   return (
     <div className="grid grid-cols-1 gap-3 md:grid-cols-[minmax(0,1fr)_240px]">
-      {/* 左：工具树三组 */}
+      {/* 左：工具树四通道组 */}
       <div className="rounded-xl border border-separator p-3" style={{ background: 'var(--surface)' }} data-testid="toolpicker-tree">
         <div className="mb-2 flex items-center gap-2">
-          <b className="text-xs">工具树 · 三组</b>
+          <b className="text-xs">工具树 · 四通道</b>
           <span className="badge b-blue ml-auto">已选 {selectedTools.length}</span>
         </div>
         <div className="space-y-0.5">
@@ -183,7 +150,6 @@ export function ToolPickerPanel({
             }
             const tool = tools.find(t => t.id === id)!
             const isChecked = checked.has(tool.name)
-            const isAuto = autoDeps.has(tool.name)
             return (
               <div
                 key={id}
@@ -199,17 +165,14 @@ export function ToolPickerPanel({
                   onChange={() => toggleTool(tool)}
                 />
                 <span className="mono text-xs font-semibold">{tool.name}</span>
-                <span className="truncate text-[11px] text-label-3">{tool.desc}</span>
-                {isAuto && <span className="badge b-blue">依赖自动勾选</span>}
-                {tool.scopes.includes('kb.read') && <span className="badge b-gray">只读</span>}
-                {tool.danger && <span className="badge b-red">高危</span>}
+                <span className="truncate text-[11px] text-label-3">{toolDesc(tool)}</span>
               </div>
             )
           })}
         </div>
       </div>
 
-      {/* 右：选中摘要 + 依赖提示 + 高危提示 */}
+      {/* 右：选中摘要 + 行动类 IRI（本体对账键） */}
       <div className="min-w-0 space-y-3">
         <div className="rounded-xl border border-separator p-3" style={{ background: 'var(--surface)' }} data-testid="toolpicker-summary">
           <b className="text-xs">选中摘要</b>
@@ -230,20 +193,19 @@ export function ToolPickerPanel({
         </div>
 
         <div className="rounded-xl px-3 py-2.5" style={{ background: 'var(--accent-soft)' }}>
-          <b className="text-[11px] text-accent">依赖已处理</b>
+          <b className="text-[11px] text-accent">本体对账</b>
           <p className="mt-1 break-words text-[11px] leading-4 text-label-2">
-            {autoCheckedNow.length > 0
-              ? `${autoCheckedNow.map(t => t.name).join('、')} 因依赖自动勾选；取消其依赖将同步取消该插件。`
-              : '勾选带依赖的工具时将自动勾选其依赖（如 cli-anything.exec 依赖 kb.search）。'}
+            {selectedTools.length > 0
+              ? `行动类 IRI：${[...new Set(selectedTools.map(t => t.action_iri))].join('、')}——注入清单以此与本体行动类对账。`
+              : '勾选工具后在此回显行动类 IRI（S1 对账键，无语义标注不上架）。'}
           </p>
         </div>
 
         <div className="rounded-xl px-3 py-2.5" style={{ background: 'var(--orange-soft)' }}>
-          <b className="text-[11px] text-orange">高危 scope 提示</b>
+          <b className="text-[11px] text-orange">注入治理</b>
           <p className="mt-1 break-words text-[11px] leading-4 text-label-2">
-            {dangerSelected.length > 0
-              ? `${dangerSelected.map(t => t.name).join(' / ')} 标注高危：即使注入，调用时仍需高风险确认（IX-G-04）并写审计；MCP annotations 仅作 UI 提示。`
-              : 'writeback.invoke / crm.write 标注高危：即使注入，调用时仍需高风险确认并写审计。'}
+            仅 listed 工具可注入（S1 状态机）；即使注入，调用仍需按平台治理确认并写审计；
+            依赖/高危治理待 S1 登记依赖与风险字段后恢复。
           </p>
         </div>
       </div>

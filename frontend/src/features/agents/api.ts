@@ -93,23 +93,26 @@ export interface ConnectionTestResult {
   suggestion?: string
 }
 
-/** 工具注册中心目录行（api/01 §5.6 GET /tools；域间不互引——与 features/tools 各自声明） */
+/** 工具注册中心目录行（S1 集市契约投影，services/tools/api/schemas/tool.py ToolOut 逐字段；
+ *  域间不互引——与 features/tools 各自声明）。mock 时代 source builtin/plugin/mcp/http +
+ *  scopes/danger/enabled 随 S1 收敛：source_channel L0~L3（能力来源通道元数据）、无
+ *  enabled/danger/depends_on 字段。 */
 export interface RegistryTool {
   id: string
   name: string
-  desc: string
-  source: 'builtin' | 'plugin' | 'mcp' | 'http'
-  provider: string
-  scopes: string[]
-  danger: boolean
-  enabled: boolean
-  depends_on?: string[]
-  server_id?: string
+  action_iri: string
+  source_channel: 'L0' | 'L1' | 'L2' | 'L3'
+  semantic_annotation: Record<string, unknown>
+  version: string
+  status: 'draft' | 'in_review' | 'listed' | 'deprecated' | 'revoked'
+  health_hint: string | null
+  evidence_uri: string | null
 }
 
-/** GET /tools —— 工具注册中心目录（§5.6；ToolPicker 数据源） */
+/** GET /tools —— 工具集市目录（S1 GET /tools {data,meta} 信封；api.list 归一，
+ *  与 features/tools listTools 同形——queryKey ['tools'] 共享缓存形态一致） */
 export function listRegistryTools() {
-  return api.get<{ items: RegistryTool[] }>('/tools')
+  return api.list<RegistryTool>('/tools')
 }
 
 /** GET /agents —— 列表（§5.1）。fe3 信封收口：be2 已改 {data,meta} 信封，

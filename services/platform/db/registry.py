@@ -16,10 +16,18 @@ from services.agent.data.orm import (  # noqa: F401
 from services.iam.data.orm import (  # noqa: F401
     ApiKey,
     AuditLog,
+    DeviceSession,
     Invite,
+    ModelChannel,
+    PermissionRequest,
     Role,
+    RolePermissionMatrix,
     Tenant,
+    TotpBackupCode,
+    TotpCredential,
     User,
+    UserGroup,
+    UserPreferences,
     UserRole,
 )
 from services.kb.data.connector_orm import (  # noqa: F401  连接器游标/登记表（多源接入 §3 v1）

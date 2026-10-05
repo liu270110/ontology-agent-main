@@ -7,6 +7,11 @@ docs/architecture/02-网关层设计.md §4（auth.py 第九模块）。
 错误映射（api/01 §5.9，不新增码）：凭据类失败统一 1002；refresh 过期 1003；缺令牌 1001。
 M1 裁剪：email 租户内唯一（database/01 §3.1）→ 同 email 多租户时取最早账号（TODO 随
 租户选择器/邮箱全局唯一策略收口）；密码锁定（08 §2.0 连续 5 次锁 10min）随 M1 收口补。
+
+me 域接线（2026-10-05 批）：login 落设备会话行（§5.13 GET /me/sessions 数据源，me_repo
+create_session_for_login）；DELETE /auth/sessions/all=下线全部设备会话（mock R 预登记行：
+设置·账号 Danger Zone「全设备（含当前）会话立即失效需重新登录」——当前 access 拉黑 +
+refresh 全家吊销水位（08 §2.1 先例）+ device_sessions 全行 revoked_at）。
 """
 
 from __future__ import annotations
@@ -22,7 +27,9 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from services.iam.api.schemas.auth import LoginRequest, LogoutRequest, RefreshRequest, TokenPairResponse
+from services.iam.api.schemas.me import RevokeAllOut
 from services.iam.data.orm import Role, User, UserRole
+from services.iam.data.repo_impl import me_repo
 from services.platform.deps import Principal, SessionDep, get_current_principal, get_redis
 from services.platform.errors import ErrorCode, GatewayError
 from services.platform.security import (
@@ -67,7 +74,8 @@ async def _issue_pair(
     user: User,
     roles: list[str],
     scopes: list[str],
-) -> TokenPairResponse:
+) -> tuple[TokenPairResponse, str, str]:
+    """签发令牌对；返回 (响应, access_jti, refresh_jti)——jti 供 login 落设备会话行（me 域接线）。"""
     settings = request.app.state.settings
     access = build_claims(
         user_id=user.id,
@@ -85,10 +93,14 @@ async def _issue_pair(
         typ="refresh",
         ttl_seconds=settings.jwt_refresh_ttl_days * 24 * 3600,
     )
-    return TokenPairResponse(
-        access_token=encode_token(access, settings.jwt_secret),
-        refresh_token=encode_token(refresh, settings.jwt_secret),
-        expires_in=settings.jwt_access_ttl_minutes * 60,
+    return (
+        TokenPairResponse(
+            access_token=encode_token(access, settings.jwt_secret),
+            refresh_token=encode_token(refresh, settings.jwt_secret),
+            expires_in=settings.jwt_access_ttl_minutes * 60,
+        ),
+        access["jti"],
+        refresh["jti"],
     )
 
 
@@ -116,8 +128,26 @@ async def login(body: LoginRequest, request: Request, session: SessionDep) -> To
 
     roles, scopes = await _load_roles_scopes(session, user.id)
     user.last_login_at = datetime.now(UTC)  # api/01 §5.9：登录写 last_login_at
-    await session.commit()
-    return await _issue_pair(request, session, user, roles, scopes)
+    pair, access_jti, refresh_jti = await _issue_pair(request, session, user, roles, scopes)
+    await session.commit()  # 既有提交面（last_login_at）保持原样
+    user_id = user.id  # rollback 后 ORM 行过期（惰性加载在 async 上下文即炸），日志面预取
+    # me 域接线：落设备会话行（§5.13 GET /me/sessions 数据源）。best-effort fail-open
+    # （_revoke_jti/审计中间件同款裁决）：device_sessions 未迁移（共享库/旧部署）不阻断登录，
+    # 仅 /me/sessions 降级为空——08 §2.0 登录可用性优先。
+    try:
+        await me_repo.create_session_for_login(
+            session,
+            tenant_id=user.tenant_id,
+            user_id=user.id,
+            access_jti=access_jti,
+            refresh_jti=refresh_jti,
+            user_agent=request.headers.get("user-agent"),
+        )
+        await session.commit()
+    except Exception:  # noqa: BLE001
+        await session.rollback()
+        logger.exception("device session write failed (login unaffected, /me/sessions degraded): user_id=%s", user_id)
+    return pair
 
 
 @router.post("/refresh", response_model=TokenPairResponse, summary="刷新：refresh 轮换换发新令牌对（匿名）")
@@ -148,7 +178,7 @@ async def refresh(body: RefreshRequest, request: Request, session: SessionDep) -
 
     # 轮换：旧件立即入黑名单（TTL=剩余有效期），签发全新令牌对
     await _revoke_jti(request, claims["jti"], remaining_ttl_seconds(claims))
-    return await _issue_pair(request, session, user, roles, scopes)
+    return (await _issue_pair(request, session, user, roles, scopes))[0]
 
 
 @router.post("/logout", status_code=204, summary="登出：所持令牌 jti 写吊销黑名单（认证即可）")
@@ -168,3 +198,29 @@ async def logout(
             logger.info("logout: attached refresh token invalid, ignored")
     await _revoke_jti(request, principal.jti, remaining_ttl_seconds(principal.raw))  # access 立即失效
     return Response(status_code=204)
+
+
+@router.delete(
+    "/sessions/all",
+    response_model=RevokeAllOut,
+    summary="下线全部设备会话（mock R 预登记行：含当前，立即失效需重新登录）",
+)
+async def revoke_all_sessions(
+    request: Request, principal: Annotated[Principal, Depends(get_current_principal)], session: SessionDep
+) -> RevokeAllOut:
+    """Danger Zone 全设备下线（api/01 §5.9 无登记行，契约源=mock platform-handlers.ts +
+    features/settings/api.ts revokeAllSessions；写审计走网关中间件）。
+
+    三件收口（08 §2.1 全家吊销先例）：① device_sessions 全行 revoked_at（列表即隐）；
+    ② refresh 全家吊销水位=now——任何早于此刻签发的 refresh 在 /auth/refresh 处被拒
+    （覆盖轮换后存活件，单设备吊销不具备的水位面）；③ 各登录行 access/refresh jti
+    逐一拉黑 + 当前 access 立即失效。响应 {revoked:N}=本次下线行数（mock {revoked:3} 同形）。"""
+    rows = await me_repo.revoke_all_sessions(db=session, tenant_id=principal.tenant_id, user_id=principal.user_id)
+    settings = request.app.state.settings
+    ttl_bound = settings.jwt_refresh_ttl_days * 24 * 3600  # 存量 jti 无 claims，取最长寿命上界
+    for row in rows:
+        await _revoke_jti(request, row.access_jti, ttl_bound)
+        await _revoke_jti(request, row.refresh_jti, ttl_bound)
+    await _revoke_jti(request, principal.jti, remaining_ttl_seconds(principal.raw))  # 当前 access 立即失效
+    await get_redis(settings).set(_REFRESH_WATERMARK_KEY.format(user_id=principal.user_id), str(int(time.time())))
+    return RevokeAllOut(revoked=len(rows))

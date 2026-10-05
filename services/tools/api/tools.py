@@ -3,7 +3,7 @@
     GET  /tools                     集市列表（query/通道/状态过滤+count）  tool:read   200
     GET  /tools/{tool_id}           详情（含语义标注/通道/版本/健康）      tool:read   200 / 404*
     POST /tools                     注册（清单校验→v1 直通 listed）       tool:write  201 / 4601、4602
-    POST /tools/{tool_id}/lifecycle 生命周期动作（下架/恢复/撤销+审计行） tool:write  200 / 404*、4603
+    POST /tools/{tool_id}/lifecycle 生命周期动作（下架/恢复/撤销+审计行） tool:write  200 / 404*、4603、4604*
 
 scope 采词：tool:read / tool:write 均为 iam 种子既有词表（m1 迁移 f0f79f84dce4 角色矩阵，
 super_admin/admin/ontologist/member 持 read；super_admin/admin/member 持 write）——不新增词表。
@@ -55,6 +55,7 @@ def _domain_error(exc: DomainError) -> GatewayError:
         4601: 422,  # 清单校验拒绝（缺语义标注等，可修复）
         4602: 409,  # 同名工具已登记
         4603: 409,  # 非法状态迁移
+        4604: 403,  # 非登记人且非 admin（行级归属防线 K10-b；memory restore 先例语义）
     }.get(code, 409)
     return GatewayError(code, message, status_code=status_code)
 
@@ -129,6 +130,7 @@ async def tool_lifecycle(
             action=body.action,
             reason=body.reason,
             operator_id=principal.user_id,
+            operator_roles=principal.roles,  # K10-b：归属校验 admin 判定透传
             trace_id=getattr(request.state, "trace_id", "") or "",
         )
     except LookupError as exc:

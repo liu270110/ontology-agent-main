@@ -2680,6 +2680,58 @@
         "title": "DecisionOut",
         "type": "object"
       },
+      "DeviceSessionListOut": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/DeviceSessionOut"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "DeviceSessionListOut",
+        "type": "object"
+      },
+      "DeviceSessionOut": {
+        "additionalProperties": false,
+        "description": "GET /me/sessions 列表项（DeviceSession 逐字段）。",
+        "properties": {
+          "current": {
+            "title": "Current",
+            "type": "boolean"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "last_active": {
+            "title": "Last Active",
+            "type": "string"
+          },
+          "location": {
+            "title": "Location",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "location",
+          "last_active",
+          "current"
+        ],
+        "title": "DeviceSessionOut",
+        "type": "object"
+      },
       "DiffEntryOut": {
         "additionalProperties": false,
         "properties": {
@@ -3252,6 +3304,57 @@
         "description": "非列表响应的空 meta（api/01 §3.1「meta 可为空对象」；序列化恒 {}）。",
         "properties": {},
         "title": "EmptyMeta",
+        "type": "object"
+      },
+      "ExportTaskCreatedOut": {
+        "additionalProperties": false,
+        "description": "POST /me/export 响应（202；mock {task_id:'512', status:'queued'} 同形）。",
+        "properties": {
+          "status": {
+            "default": "queued",
+            "title": "Status",
+            "type": "string"
+          },
+          "task_id": {
+            "title": "Task Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "task_id"
+        ],
+        "title": "ExportTaskCreatedOut",
+        "type": "object"
+      },
+      "ExportTaskOut": {
+        "additionalProperties": false,
+        "description": "GET /me/export/{task_id} 响应（ExportTask 逐字段；done 带下载链接）。",
+        "properties": {
+          "download_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Download Url"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "task_id": {
+            "title": "Task Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "task_id",
+          "status"
+        ],
+        "title": "ExportTaskOut",
         "type": "object"
       },
       "FactCategory": {
@@ -5634,6 +5737,35 @@
         "title": "ModelTestOut",
         "type": "object"
       },
+      "NotificationChannel": {
+        "additionalProperties": false,
+        "description": "通知渠道开关（mock PREFS.notifications 值形状；locked 只读由服务端置位）。",
+        "properties": {
+          "email": {
+            "default": false,
+            "title": "Email",
+            "type": "boolean"
+          },
+          "inapp": {
+            "default": true,
+            "title": "Inapp",
+            "type": "boolean"
+          },
+          "locked": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Locked"
+          }
+        },
+        "title": "NotificationChannel",
+        "type": "object"
+      },
       "OntologyCreateIn": {
         "additionalProperties": false,
         "properties": {
@@ -6633,6 +6765,281 @@
           "scan_report"
         ],
         "title": "PluginVersionOut",
+        "type": "object"
+      },
+      "PreferencesOut": {
+        "additionalProperties": false,
+        "description": "GET/PUT /me/preferences 响应（Preferences 逐字段 + S-AD 扩展可选字段）。",
+        "properties": {
+          "chat_default_model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Chat Default Model"
+          },
+          "chat_thinking_level": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Chat Thinking Level"
+          },
+          "department": {
+            "default": "",
+            "title": "Department",
+            "type": "string"
+          },
+          "display_name": {
+            "title": "Display Name",
+            "type": "string"
+          },
+          "email": {
+            "title": "Email",
+            "type": "string"
+          },
+          "group_routing_default": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Group Routing Default"
+          },
+          "language": {
+            "default": "zh-CN",
+            "title": "Language",
+            "type": "string"
+          },
+          "memory_clear_via_invalidate": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Memory Clear Via Invalidate"
+          },
+          "memory_enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Memory Enabled"
+          },
+          "memory_group_l1_write": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Memory Group L1 Write"
+          },
+          "notifications": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/NotificationChannel"
+            },
+            "title": "Notifications",
+            "type": "object"
+          },
+          "onboarding_done": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Onboarding Done"
+          },
+          "timezone": {
+            "default": "Asia/Shanghai",
+            "title": "Timezone",
+            "type": "string"
+          },
+          "totp_enabled": {
+            "title": "Totp Enabled",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "display_name",
+          "email",
+          "totp_enabled",
+          "notifications"
+        ],
+        "title": "PreferencesOut",
+        "type": "object"
+      },
+      "PreferencesPutIn": {
+        "additionalProperties": false,
+        "description": "PUT /me/preferences 请求体（Partial<Preferences>：全字段可省，浅合并语义同 mock\nObject.assign——notifications 整键替换；email 不可自改（账号身份列，users.email 唯一\n事实源，体携带即 422 防误覆盖登录名）。",
+        "properties": {
+          "chat_default_model": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Chat Default Model"
+          },
+          "chat_thinking_level": {
+            "anyOf": [
+              {
+                "maxLength": 32,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Chat Thinking Level"
+          },
+          "department": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Department"
+          },
+          "display_name": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Display Name"
+          },
+          "group_routing_default": {
+            "anyOf": [
+              {
+                "maxLength": 32,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Group Routing Default"
+          },
+          "language": {
+            "anyOf": [
+              {
+                "maxLength": 32,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Language"
+          },
+          "memory_clear_via_invalidate": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Memory Clear Via Invalidate"
+          },
+          "memory_enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Memory Enabled"
+          },
+          "memory_group_l1_write": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Memory Group L1 Write"
+          },
+          "notifications": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/NotificationChannel"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notifications"
+          },
+          "onboarding_done": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Onboarding Done"
+          },
+          "timezone": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Timezone"
+          }
+        },
+        "title": "PreferencesPutIn",
         "type": "object"
       },
       "ProjectionDiffOut": {
@@ -7785,6 +8192,21 @@
           }
         },
         "title": "ReviewQueueSummaryOut",
+        "type": "object"
+      },
+      "RevokeAllOut": {
+        "additionalProperties": false,
+        "description": "DELETE /auth/sessions/all 响应（mock 200 {revoked:3} 裸 DTO）。",
+        "properties": {
+          "revoked": {
+            "title": "Revoked",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "revoked"
+        ],
+        "title": "RevokeAllOut",
         "type": "object"
       },
       "RoleMatrixOut": {
@@ -9704,6 +10126,77 @@
         ],
         "title": "ToolStatus",
         "type": "string"
+      },
+      "TotpBackupCodesOut": {
+        "additionalProperties": false,
+        "description": "enable 签发 / backup-codes 重生成响应（backup_codes 8 枚，明文仅本次）。",
+        "properties": {
+          "backup_codes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Backup Codes",
+            "type": "array"
+          }
+        },
+        "required": [
+          "backup_codes"
+        ],
+        "title": "TotpBackupCodesOut",
+        "type": "object"
+      },
+      "TotpEnableIn": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "maxLength": 16,
+            "minLength": 1,
+            "title": "Code",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code"
+        ],
+        "title": "TotpEnableIn",
+        "type": "object"
+      },
+      "TotpPasswordIn": {
+        "additionalProperties": false,
+        "description": "disable / backup-codes 共用请求体（mock 契约=密码确认；§5.9 行「otp 或备份码」\n措辞随文档批对齐）。",
+        "properties": {
+          "password": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Password",
+            "type": "string"
+          }
+        },
+        "required": [
+          "password"
+        ],
+        "title": "TotpPasswordIn",
+        "type": "object"
+      },
+      "TotpSetupOut": {
+        "additionalProperties": false,
+        "description": "POST /auth/totp/setup 响应（TotpSetup 逐字段；secret/URI 仅本次返回）。",
+        "properties": {
+          "otpauth_uri": {
+            "title": "Otpauth Uri",
+            "type": "string"
+          },
+          "secret": {
+            "title": "Secret",
+            "type": "string"
+          }
+        },
+        "required": [
+          "secret",
+          "otpauth_uri"
+        ],
+        "title": "TotpSetupOut",
+        "type": "object"
       },
       "TraceCostOut": {
         "additionalProperties": false,
@@ -12132,6 +12625,165 @@
         ]
       }
     },
+    "/api/v1/auth/sessions/all": {
+      "delete": {
+        "description": "Danger Zone 全设备下线（api/01 §5.9 无登记行，契约源=mock platform-handlers.ts +\nfeatures/settings/api.ts revokeAllSessions；写审计走网关中间件）。\n\n三件收口（08 §2.1 全家吊销先例）：① device_sessions 全行 revoked_at（列表即隐）；\n② refresh 全家吊销水位=now——任何早于此刻签发的 refresh 在 /auth/refresh 处被拒\n（覆盖轮换后存活件，单设备吊销不具备的水位面）；③ 各登录行 access/refresh jti\n逐一拉黑 + 当前 access 立即失效。响应 {revoked:N}=本次下线行数（mock {revoked:3} 同形）。",
+        "operationId": "revoke_all_sessions_api_v1_auth_sessions_all_delete",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RevokeAllOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "下线全部设备会话（mock R 预登记行：含当前，立即失效需重新登录）",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/v1/auth/totp/backup-codes": {
+      "post": {
+        "operationId": "totp_backup_codes_api_v1_auth_totp_backup_codes_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TotpPasswordIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TotpBackupCodesOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "备份码重生成（api/01 §5.15 ★；密码确认，旧集作废，明文仅本次）",
+        "tags": [
+          "iam"
+        ]
+      }
+    },
+    "/api/v1/auth/totp/disable": {
+      "post": {
+        "operationId": "totp_disable_api_v1_auth_totp_disable_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TotpPasswordIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "停用 2FA（密码确认；备份码旧集作废；审计走网关中间件）",
+        "tags": [
+          "iam"
+        ]
+      }
+    },
+    "/api/v1/auth/totp/enable": {
+      "post": {
+        "operationId": "totp_enable_api_v1_auth_totp_enable_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TotpEnableIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TotpBackupCodesOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "2FA 第二步：六位码校验并启用（备份码签发，明文仅本次）",
+        "tags": [
+          "iam"
+        ]
+      }
+    },
+    "/api/v1/auth/totp/setup": {
+      "post": {
+        "operationId": "totp_setup_api_v1_auth_totp_setup_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TotpSetupOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "2FA 第一步：生成 secret 与 otpauth URI（已启用 409）",
+        "tags": [
+          "iam"
+        ]
+      }
+    },
     "/api/v1/healthz": {
       "get": {
         "operationId": "healthz_api_v1_healthz_get",
@@ -13712,6 +14364,187 @@
         "summary": "knowledge.search lite（bm25+向量+图三路 RRF；图=LazyGraphRAG lite 查询时扩展）",
         "tags": [
           "knowledge-base"
+        ]
+      }
+    },
+    "/api/v1/me/export": {
+      "post": {
+        "operationId": "create_export_api_v1_me_export_post",
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExportTaskCreatedOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "我的数据导出建任务（§5.13「202→异步任务 type=me_export」；受理即返）",
+        "tags": [
+          "iam"
+        ]
+      }
+    },
+    "/api/v1/me/export/{task_id}": {
+      "get": {
+        "operationId": "get_export_api_v1_me_export__task_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "task_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Task Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExportTaskOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "导出任务轮询（mock R 预登记行；本人归属校验，他人单统一 404）",
+        "tags": [
+          "iam"
+        ]
+      }
+    },
+    "/api/v1/me/preferences": {
+      "get": {
+        "operationId": "get_preferences_api_v1_me_preferences_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PreferencesOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "个人偏好读（无行投影默认值；email/2FA 状态读时覆盖）",
+        "tags": [
+          "iam"
+        ]
+      },
+      "put": {
+        "operationId": "put_preferences_api_v1_me_preferences_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PreferencesPutIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PreferencesOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "个人偏好写（浅合并同 mock；display_name 兼写资料列）",
+        "tags": [
+          "iam"
+        ]
+      }
+    },
+    "/api/v1/me/sessions": {
+      "get": {
+        "operationId": "list_sessions_api_v1_me_sessions_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeviceSessionListOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "本人设备会话列表（current=登录行 jti 比对）",
+        "tags": [
+          "iam"
+        ]
+      }
+    },
+    "/api/v1/me/sessions/{session_id}/revoke": {
+      "post": {
+        "operationId": "revoke_session_api_v1_me_sessions__session_id__revoke_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "下线本人设备会话（api/01 §5.15 ★；拉黑登录时 access+refresh jti）",
+        "tags": [
+          "iam"
         ]
       }
     },

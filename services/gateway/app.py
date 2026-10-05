@@ -70,6 +70,8 @@ from services.iam.api.admin import permission_router as permission_requests_rout
 from services.iam.api.admin import router as admin_domain_router  # admin 域 9 组端点（api/01 §5.8/§5.10）
 from services.iam.api.auth import router as auth_router
 from services.iam.api.invites import router as invites_router  # 邀请链接五端点（架构设计/32，api/01 §5.8）
+from services.iam.api.me import router as me_domain_router  # me 域六端点（api/01 §5.13/§5.15，2026-10-05）
+from services.iam.api.me import totp_router as totp_router  # totp 四端点（api/01 §5.9/§5.15）
 from services.iam.api.users import router as admin_users_router  # 用户管理 CRUD 四端点（api/01 §5.8，B8-WA 追认实装）
 from services.kb.api.kb import router as kb_router
 from services.memory.api.memory import router as memory_router
@@ -497,6 +499,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         admin_domain_router, prefix=settings.api_prefix
     )  # admin 域 9 组端点（api/01 §5.8/§5.10，2026-10-05）
     app.include_router(permission_requests_router, prefix=settings.api_prefix)  # 权限申请两行（api/01 §5.10 预登记）
+    app.include_router(me_domain_router, prefix=settings.api_prefix)  # me 域六端点（api/01 §5.13/§5.15，2026-10-05）
+    app.include_router(totp_router, prefix=settings.api_prefix)  # totp 四端点（api/01 §5.9/§5.15，同上）
     app.include_router(agents_router, prefix=settings.api_prefix)  # M3.1：agents CRUD（api/01 §5.1）
     app.include_router(sessions_router, prefix=settings.api_prefix)
     app.include_router(run_control_router, prefix=settings.api_prefix)  # M4.5-A：inbox 提交 + admin estop（§1.4）

@@ -31,6 +31,7 @@ def _to_domain(row: ToolRegistryORM) -> ToolEntry:
         status=ToolStatus(row.status),
         health_hint=row.health_hint,
         evidence_uri=row.evidence_uri,
+        registrant_id=row.registrant_id,
     )
 
 
@@ -72,6 +73,7 @@ class PgToolRepository:
                 status=entry.status.value,
                 health_hint=entry.health_hint,
                 evidence_uri=entry.evidence_uri,
+                registrant_id=entry.registrant_id,
             )
         )
         await self._db.flush()

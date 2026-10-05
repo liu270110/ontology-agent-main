@@ -77,6 +77,7 @@ class ToolRegistryService:
             version=version,
             health_hint=health_hint,
             evidence_uri=evidence_uri,
+            registrant_id=registrant_id,  # K10-a：登记人落主表（此前仅审计行）
             status=ToolStatus.DRAFT,
         )
         entry.apply_transition(ToolStatus.LISTED)  # v1 直通边：draft → listed（14 §2）
@@ -123,17 +124,26 @@ class ToolRegistryService:
         action: str,
         reason: str = "",
         operator_id: uuid.UUID | None = None,
+        operator_roles: list[str] | None = None,
         trace_id: str = "",
     ) -> ToolEntry:
         """生命周期动作（14 §2 POST /tools/{id}/lifecycle {action, reason?}）。
 
-        迁移合法性由聚合硬编码迁移表保证（非法迁移 4603 → api 409）；动作与理由随
-        域级审计行留痕（全程可追溯）。
+        行级归属防线（K10-b，F-10；admin 判定照 memory.py restore 先例 ``"admin" in
+        principal.roles``）：非登记人且非 admin 拒绝 4604（registrant_id 为 None 的存量行
+        语义=admin 可管理）。迁移合法性由聚合硬编码迁移表保证（非法迁移 4603 → api 409）；
+        动作与理由随域级审计行留痕（全程可追溯）。
         """
         target = _ACTION_TARGETS.get(action)
         if target is None:  # 词汇表由 DTO Literal 前置；此为服务直调防御
             raise DomainError(f"4601 TOOL_LISTING_INVALID: 未知生命周期动作: {action}")
         entry = await self.get(tool_id)
+        if (
+            entry.registrant_id is not None
+            and entry.registrant_id != operator_id
+            and "admin" not in (operator_roles or [])
+        ):
+            raise DomainError(f"4604 TOOL_NOT_REGISTRANT: 非登记人且非 admin 不得操作他人工具: {entry.name}")
         from_status = entry.status
         entry.apply_transition(target)  # 非法迁移 4603（负向测试锚点）
         await self._repo.save(entry)

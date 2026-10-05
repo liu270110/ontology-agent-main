@@ -35,6 +35,7 @@ from services.agent.business.kernel.ledger import KernelLedger, LedgerSink
 from services.agent.business.kernel.loop_guard import (
     DEFAULT_LOOP_ABORT_THRESHOLD,
     LoopGuard,
+    StuckWatch,
     register_step,
 )
 from services.agent.business.kernel.plan import KERNEL_PLAN_UPDATED, PlanProjection, plan_updated_data
@@ -92,6 +93,8 @@ class AgentKernel:
         tool_parallelism: int | None = None,
         loop_abort_threshold: int | None = None,
         watermark_recheck_max: int | None = None,
+        stuck_threshold: int | None = None,
+        stuck_step_timeout_s: float | None = None,
     ) -> None:
         self._dispatcher = dispatcher
         self._baseline = BaselineGate()
@@ -106,6 +109,16 @@ class AgentKernel:
         # 显式注入优先，缺省读 Settings（D2 纪律同 loop_abort_threshold）
         self._watermark_recheck_max = (
             watermark_recheck_max if watermark_recheck_max is not None else get_settings().kernel_watermark_recheck_max
+        )
+        # K12 STUCK 观测态（docs/Agent/13 §18）：停滞判据阈值（0=关闭）与单步执行超时
+        # 阈值（0=关闭），显式注入优先，缺省读 Settings（D2 纪律同上）
+        self._stuck_threshold = (
+            stuck_threshold if stuck_threshold is not None else get_settings().kernel_stuck_threshold
+        )
+        self._stuck_step_timeout_s = (
+            stuck_step_timeout_s
+            if stuck_step_timeout_s is not None
+            else get_settings().kernel_stuck_step_timeout_s
         )
         # B-① 并行段并发度：显式注入优先，缺省读 Settings（T6 唯一事实源；=1 退化为串行）
         self._tool_parallelism = (
@@ -192,6 +205,10 @@ class AgentKernel:
             raise KernelContractError("TenantContext.trace_id 为空，拒绝运行（C2 可追溯底线）")
         rc = RunContext(task, ctx, budget, clock=self._clock, approvals=approvals, ledger_sink=ledger_sink)
         loop_guard = LoopGuard(abort_threshold=self._loop_abort_threshold)  # A-1：每 Run 独立记账（状态不跨 Run）
+        # K12 STUCK 观测器（docs/Agent/13 §18）：每 Run 独立（Run 级状态承载于 rc，观测器无跨 Run 态）
+        stuck_watch = StuckWatch(
+            threshold=self._stuck_threshold, step_timeout_s=self._stuck_step_timeout_s, emit=self._emit
+        )
         self._last_ledger = rc.ledger
 
         def emit_budget_anchor(payload: dict[str, Any]) -> None:
@@ -261,6 +278,9 @@ class AgentKernel:
                         # 重复第 1 次注入 kernel.loop_nudge 软警告，达阈值抛 LoopDetectedError
                         #（KernelError 家族 → run() 结构化终止，账本可追溯）
                         register_step(rc, loop_guard, step, emit=self._emit)
+                        # K12-a/b 心跳记账（docs/Agent/13 §18）：步边界刷新 Run 级进展快照，
+                        # 停滞/单步超时判据命中发 kernel.run_stuck 观测事件（只观测不迁移）
+                        stuck_watch.beat(rc, step.seq)
                         state = rc.states[step.seq]
                         await self._stage_gate(rc, candidate, step)
                         if state.status is StepStatus.GATED:
@@ -278,9 +298,15 @@ class AgentKernel:
                         planned = len(group)
                         # 段截断至剩余步预算：尾部步不执行=与串行逐步检查点语义等价（预算耗尽后串行同样不执行它们）
                         group = group if remaining is None else group[:remaining]
-                        # A-1：并行段路径同步记账（run_group 段内按声明序门禁前逐步记账）
+                        # A-1：并行段路径同步记账（run_group 段内按声明序门禁前逐步记账）；
+                        # K12 心跳记账随段边界走（run_group 段前一次，段=调度单元）
                         await self._tool_dispatch.run_group(
-                            rc, candidate, group, parallelism=self._tool_parallelism, loop_guard=loop_guard
+                            rc,
+                            candidate,
+                            group,
+                            parallelism=self._tool_parallelism,
+                            loop_guard=loop_guard,
+                            stuck_watch=stuck_watch,
                         )
                         if len(group) < planned:  # 尾部步被截断=计划仍有未执行步：补段边界检查点（步数已耗尽必抛）
                             rc.tracker.check()

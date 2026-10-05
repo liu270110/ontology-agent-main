@@ -151,6 +151,16 @@ class Settings(BaseSettings):
     # （恒达帽）。内核构造参数显式注入优先，缺省读此值（D2 纪律同上）。
     kernel_watermark_recheck_max: int = Field(default=3, ge=0)
 
+    # K12 STUCK 观测态（docs/Agent/13 §18，2026-10-05 第十迭代）：连续 N 次记账无实质
+    # 进展（进展指纹零增长：token 增长 0 且无新工具结果）即置 Run 级 stuck 标记并发
+    # kernel.run_stuck 观测事件——只观测不迁移（Run/Step 状态机枚举零改动，04 §3 状态
+    # 主权不变）。0=关闭停滞判据（语义对齐 kernel_watermark_recheck_max 先例）。
+    # kernel_stuck_step_timeout_s=相邻记账点边界间隔的单步执行超时判据（0=关闭；默认
+    # 关闭——慢而有序的 Run 不误报，需观测单步卡滞的部署显式开启）。内核构造参数
+    # 显式注入优先，缺省读此值（D2 纪律同上）。
+    kernel_stuck_threshold: int = Field(default=3, ge=0)
+    kernel_stuck_step_timeout_s: float = Field(default=0.0, ge=0.0)
+
     # 记忆域（06 篇 §4/§5.2/§5.5；计划 1 仅 L1 与检索参数）
     memory_l1_ttl_seconds: int = 24 * 3600  # L1 会话记忆块 TTL（会话活跃期）
     memory_search_top_k: int = 8  # 检索注入条数上限

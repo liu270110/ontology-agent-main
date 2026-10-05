@@ -23,7 +23,7 @@ import logging
 from collections.abc import Awaitable, Callable, Sequence
 
 from services.agent.business.kernel.execution import ExecutionStage
-from services.agent.business.kernel.loop_guard import LoopGuard, register_step
+from services.agent.business.kernel.loop_guard import LoopGuard, StuckWatch, register_step
 from services.agent.business.kernel.plan import KERNEL_PLAN_UPDATED, plan_updated_data
 from services.agent.business.kernel.run_context import Emit, RunContext
 from services.agent.domain.model.kernel_actions import ExecutionMode
@@ -75,6 +75,7 @@ class ToolGroupDispatcher:
         *,
         parallelism: int,
         loop_guard: LoopGuard,
+        stuck_watch: StuckWatch,
     ) -> None:
         """执行一个并行调度段：被拒步留段外，入池步并发跑既有管线，完成后声明序收口。
 
@@ -82,8 +83,14 @@ class ToolGroupDispatcher:
         （与串行「步前记账」同位——被拒/失败的重复动作同样计入循环形态）；同签名连续
         重复第 1 次注入 kernel.loop_nudge 软警告，达阈值抛 LoopDetectedError 硬终止
         （发生在池启动前 ⇒ 整段零工具调用，比串行逐步拦截更保守）。
+
+        K12-a/b 心跳记账（docs/Agent/13 §18）：**段前记账一次**（段为一个调度单元——
+        若按池前逐步记账，同段多步会在池产出任何结果前被误计为连续停滞；段边界与
+        串行步边界同位同源，进展指纹/停滞计数语义一致）。
         """
         ctx = rc.ctx
+        if steps:
+            stuck_watch.beat(rc, steps[0].seq)
         for step in steps:
             register_step(rc, loop_guard, step, emit=self._emit)
         admitted: list[PlanStep] = []

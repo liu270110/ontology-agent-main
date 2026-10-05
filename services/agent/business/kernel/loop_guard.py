@@ -21,9 +21,10 @@ from typing import Any
 
 from services.agent.business.kernel.errors import LoopDetectedError
 from services.agent.business.kernel.gate_baseline import canonical_param_hash
-from services.agent.business.kernel.run_context import Emit, RunContext
+from services.agent.business.kernel.run_context import Emit, ProgressHeartbeat, RunContext
 from services.agent.domain.model.kernel_context import ContextBlock, TrustLevel
 from services.agent.domain.model.kernel_planning import PlanStep
+from services.agent.domain.model.step_state import LoopStage
 
 # 硬终止阈值缺省（K1-a：阈值常量可配置，默认 2；构造注入覆盖，内核不藏数值策略）
 DEFAULT_LOOP_ABORT_THRESHOLD = 2
@@ -39,6 +40,20 @@ _NUDGE_TEXT_TEMPLATE = (
     "以完全相同的参数第 {repeats} 次连续重复。请核实前置条件是否真的发生变化；"
     "若无变化，请改变策略或显式放弃本方向，不要原样重试。"
 )
+
+# ── K12 STUCK 观测态（docs/Agent/13 §18；上游对标 OpenHands STUCK+nudge，nudge 半边
+#    已由上方 K1 loop_guard 落地，此处补观测半边）─────────────────────────────
+
+# STUCK 观测账本事件名（C2 锚点事件，transport-only：指纹为计数不含参数原文）
+STUCK_EVENT = "kernel.run_stuck"
+
+# 停滞判据缺省（连续无实质进展记账次数；0=关闭，语义对齐 kernel_watermark_recheck_max 先例）
+DEFAULT_STUCK_THRESHOLD = 3
+# 单步执行超时判据缺省（相邻记账点边界间隔秒数；0=关闭——慢而有序的 Run 不误报，默认关闭）
+DEFAULT_STUCK_STEP_TIMEOUT_S = 0.0
+
+# 卡死引导 nudge 注入块来源标识（B3 标界：一眼区分内核卡死观测与用户/工具内容）
+STUCK_NUDGE_SOURCE = "kernel.stuck_watch"
 
 
 @dataclass(frozen=True)
@@ -145,3 +160,89 @@ def register_step(rc: RunContext, guard: LoopGuard, step: PlanStep, *, emit: Emi
             "untrusted": True,
         },
     )
+
+
+class StuckWatch:
+    """Run 内 STUCK 观测器（K12-a/b/c 载体，docs/Agent/13 §18）：心跳记账 + 只观测不迁移。
+
+    心跳源=loop_guard 记账点（串行步循环逐步 + 并行段池前**按段一次**——段为一个调度
+    单元，逐步记账会把同段多步误计为连续停滞）：每次记账刷新 Run 级 last_progress
+    （时间戳+步号+进展指纹 token/新工具结果数，RunContext 承载）。
+
+    判据（任一命中即进入 stuck 期，发 ``kernel.run_stuck`` 观测事件至多一次）：
+    - 停滞：连续 N 次记账无实质进展（进展指纹零增长：token 增长 0 且无新工具结果，
+      N=threshold，0=关闭）；
+    - 单步执行超时：相邻记账点边界间隔 ≥ step_timeout_s（>0 时启用；记账点只挂边界，
+      区间时长为单步/段执行的观测代理——在途真挂死由工具超时/取消清单既有兜底收敛）。
+
+    **只观测不迁移**（A-6 原文红线）：Run/Step 状态机枚举与迁移表零改动；去重=同一
+    stuck 期内事件至多一次（照 recheck_capped_emitted 先例），有实质进展即解除
+    （计数清零、标记复位）可再次置位。
+    """
+
+    def __init__(
+        self,
+        *,
+        threshold: int = DEFAULT_STUCK_THRESHOLD,
+        step_timeout_s: float = DEFAULT_STUCK_STEP_TIMEOUT_S,
+        emit: Emit,
+    ) -> None:
+        if threshold < 0:
+            raise ValueError(f"stuck 停滞阈值须 ≥ 0（0=关闭），得到 {threshold}")
+        if step_timeout_s < 0:
+            raise ValueError(f"单步执行超时阈值须 ≥ 0（0=关闭），得到 {step_timeout_s}")
+        self._threshold = threshold
+        self._step_timeout_s = step_timeout_s
+        self._emit = emit
+
+    @property
+    def threshold(self) -> int:
+        return self._threshold
+
+    @property
+    def step_timeout_s(self) -> float:
+        return self._step_timeout_s
+
+    def beat(self, rc: RunContext, step_seq: int) -> None:
+        """记账一次心跳并判定 STUCK（步/段边界调用；只观测不迁移，零状态机副作用）。
+
+        进展判定：token（tracker.tokens_effective）与新工具结果（len(rc.results)）任一
+        较上次记账增长=实质进展——停滞计数清零、stuck 期解除（可再次置位）。命中时
+        发 ``kernel.run_stuck``（payload：停滞计数/阈值/触发面/当前步号/最近进展指纹/
+        stage）。
+        """
+        if self._threshold <= 0 and self._step_timeout_s <= 0:
+            return  # 两判据全关：零开销直通（0=关闭语义，对齐 watermark_recheck_max 先例）
+        now = rc.tracker.elapsed_s  # 与记账时间戳同源单调时钟（Run 级）
+        tokens = rc.tracker.tokens_effective
+        results = len(rc.results)
+        last = rc.last_progress
+        timeout_hit = self._step_timeout_s > 0 and last is not None and (now - last.at) >= self._step_timeout_s
+        progressed = last is None or tokens != last.tokens or results != last.tool_results
+        rc.last_progress = ProgressHeartbeat(step_seq=step_seq, at=now, tokens=tokens, tool_results=results)
+        if progressed:
+            rc.stall_count = 0
+            rc.stuck_emitted = False  # 解除标记：有实质进展可再次置位（同期去重随之复位）
+            if not timeout_hit:
+                return
+        else:
+            rc.stall_count += 1
+            if not (timeout_hit or (self._threshold > 0 and rc.stall_count >= self._threshold)):
+                return
+        if not rc.stuck_emitted:  # 同一 stuck 期事件至多一次（recheck_capped_emitted 先例）
+            rc.stuck_emitted = True
+            self._emit(
+                rc.ledger,
+                rc.ctx,
+                rc.task.run_id,
+                STUCK_EVENT,
+                {
+                    "stall_count": rc.stall_count,
+                    "threshold": self._threshold,
+                    "trigger": "step_timeout" if timeout_hit else "stall",
+                    "step_seq": step_seq,
+                    "last_progress": rc.last_progress.as_payload(),
+                    "stage": str(LoopStage.EXECUTION),
+                    "source": STUCK_NUDGE_SOURCE,
+                },
+            )

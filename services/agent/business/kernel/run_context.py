@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from dataclasses import dataclass
 from typing import Any
 from uuid import UUID
 
@@ -16,6 +17,30 @@ from services.agent.domain.model.step_state import StepState
 
 # 审计事件发射口签名（AgentKernel._emit，C2）：各阶段共用，账本统一校验归属
 Emit = Callable[[KernelLedger, TenantContext, UUID, str, dict[str, Any]], None]
+
+
+@dataclass(frozen=True)
+class ProgressHeartbeat:
+    """K12-a 心跳快照（值对象，docs/Agent/13 §18）：记账点观测到的进展面。
+
+    tokens=预算检查口径累计（tracker.tokens_effective，真实回执+锚定缩放估算）；
+    tool_results=已完成步结果累计（rc.results 条数——门禁拒绝步无结果不计入）。
+    两指纹较上次记账零增长=该记账区间无实质进展（K12-b 停滞判据，loop_guard.StuckWatch）。
+    """
+
+    step_seq: int  # 记账点步号（并行段=段首步）
+    at: float  # 记账时刻（tracker.elapsed_s 同源单调时钟，Run 级）
+    tokens: int
+    tool_results: int
+
+    def as_payload(self) -> dict[str, Any]:
+        """进展指纹的事件载荷形态（kernel.run_stuck payload 用；纯计数不含参数原文）。"""
+        return {
+            "step_seq": self.step_seq,
+            "at": round(self.at, 6),
+            "tokens": self.tokens,
+            "tool_results": self.tool_results,
+        }
 
 
 class RunContext:
@@ -55,3 +80,21 @@ class RunContext:
         self.recheck_compactions = 0
         # K11-b capped 事件去重：达帽警告每 Run 只发一次（首达帽置位并发事件，后续边界静默）。
         self.recheck_capped_emitted = False
+        # K12-a 心跳记账（docs/Agent/13 §18）：最近一次记账点进展快照（None=尚无记账）。
+        # 由 loop_guard 记账点经 StuckWatch.beat 刷新——串行步循环与并行段边界同源。
+        self.last_progress: ProgressHeartbeat | None = None
+        # K12-b STUCK 观测态（只观测不迁移：Run/Step 状态机枚举零改动，04 §3 状态主权不变）：
+        # stall_count=连续无实质进展记账次数；stuck_emitted=当前 stuck 期已发
+        # kernel.run_stuck（照 recheck_capped_emitted 每期一次去重先例）；有实质进展即
+        # 解除（计数清零、标记复位）可再次置位。is_stuck=外部只读观测面。
+        self.stall_count = 0
+        self.stuck_emitted = False
+
+    @property
+    def is_stuck(self) -> bool:
+        """Run 级 stuck 观测标记（K12-b 只读面）：当前处于 stuck 期（事件已发、未因进展解除）。
+
+        只观测不迁移：状态机枚举与迁移表零改动，前端/治理面据 kernel.run_stuck 事件
+        与本标记展示「疑似卡死」，不改变任何状态迁移语义（A-6 原文红线）。
+        """
+        return self.stuck_emitted

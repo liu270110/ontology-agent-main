@@ -26,6 +26,22 @@ export class ErrorBoundary extends Component<Props, State> {
   componentDidCatch(error: Error, info: ErrorInfo) {
     // TODO(监控): error + info.componentStack 上报（含 trace_id）
     console.error('[ErrorBoundary]', error, info.componentStack)
+    // 偶发崩溃取证：本地环形留存最近 5 次（含组件栈与路径），供「查看技术详情」与事后定位——
+    // 契合 06 篇「先定位根因」：崩溃类 bug 的堆栈不能只留在案发 console 里。
+    try {
+      const raw = localStorage.getItem('oa-errlog')
+      const log = raw ? (JSON.parse(raw) as unknown[]) : []
+      log.unshift({
+        at: new Date().toISOString(),
+        path: window.location.pathname,
+        message: String(error?.message ?? error),
+        stack: String(error?.stack ?? '').slice(0, 2000),
+        componentStack: String(info.componentStack ?? '').slice(0, 1200),
+      })
+      localStorage.setItem('oa-errlog', JSON.stringify(log.slice(0, 5)))
+    } catch {
+      /* 取证失败不影响兜底渲染 */
+    }
   }
 
   render() {

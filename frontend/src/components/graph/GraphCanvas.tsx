@@ -77,12 +77,26 @@ export interface GraphEdgeBiz {
   dashed?: boolean
 }
 
-/** 对外暴露的画布操控句柄（工具条「布局/缩放/适应」用，页面不触达 xyflow 类型） */
+/** 视口三元组（E8 保存/恢复视图快照；页面零 xyflow 概念，结构与 xyflow Viewport 对齐） */
+export interface GraphViewport {
+  x: number
+  y: number
+  zoom: number
+}
+
+/** 对外暴露的画布操控句柄（工具条「布局/缩放/适应」用，页面不触达 xyflow 类型）。
+ *  E8（41 篇 V3）增快照通道：exportObject=xyflow toObject 全量序列化（节点/边/视口，
+ *  纯 JSON 可落盘）；getView/setView=视口读写（localStorage 视图快照存取）。
+ *  全部为可选性新增成员，既有调用方（工作台/EvidenceGraph/RetrievalPanel）零波及。 */
 export interface GraphCanvasApi {
   zoomIn: () => void
   zoomOut: () => void
   fitView: () => void
   relayout: () => void
+  /** 导出画布 JSON 快照（xyflow toObject；PNG 导出随 html-to-image 依赖裁决，v1 不做） */
+  exportObject: () => Record<string, unknown>
+  getView: () => GraphViewport
+  setView: (v: GraphViewport) => void
 }
 
 export interface GraphCanvasProps {
@@ -123,6 +137,10 @@ export interface GraphCanvasProps {
   /** 命中弱化（opt-in，默认 false）：存在 hit 节点时，命中集外的节点与边加 gc-dim
    *  （opacity .35 过渡）；边任一端命中即视为命中。搜索命中聚焦场景用。 */
   dimUnhighlight?: boolean
+  /** 分类过滤弱化（opt-in，默认 null；41 篇 V3 E1 seg 过滤）：传入需降透明（gc-dim .35）
+   *  的节点 id 集，与 hit 命中弱化解耦——不参与 active 描边/辉光，二者可并存（搜索命中
+   *  高亮 + seg 过滤弱化同时生效）。边两端都弱化才随弱化（单端命中保留拓扑上下文）。 */
+  dimNodeIds?: string[] | null
   /** 页面私有节点卡覆盖（合并默认 nodeTypes） */
   nodeTypes?: NodeTypes
   showMiniMap?: boolean
@@ -164,7 +182,8 @@ interface OntoNodeData extends Record<string, unknown> {
   hit?: boolean
   /** highlightIds 驱动的视觉描边（与 xyflow selected 语义解耦） */
   highlighted?: boolean
-  /** dimUnhighlight：命中集外弱化（gc-dim；恒为 boolean 保持 data 键集稳定） */
+  /** dimUnhighlight 命中集外弱化 ∪ dimNodeIds 分类过滤弱化（gc-dim；恒为 boolean 保持
+   *  data 键集稳定） */
   dimmed?: boolean
   /** 草稿级标删视觉（gc-deleted：虚线+降透明；恒为 boolean 保持 data 键集稳定） */
   deleted?: boolean
@@ -304,8 +323,9 @@ function computeLayout(nodes: GraphNodeBiz[], edges: GraphEdgeBiz[]): Map<string
 }
 
 /** 闪烁样式 + xyflow 控件令牌化（亮暗随令牌；组件内注入避免触碰 design-system）。
- *  gc-dim 命中弱化：opacity 过渡声明在 .gc-node/.react-flow__edge 基类上（双向渐变），
- *  .gc-dim 只落目标值 .35（41 篇 V1 口径「约 0.35 过渡」）。 */
+ *  gc-dim 弱化（dimUnhighlight 命中集外 ∪ dimNodeIds 分类过滤）：opacity 过渡声明在
+ *  .gc-node/.react-flow__edge 基类上（双向渐变），.gc-dim 只落目标值 .35（41 篇 V1 口径
+ *  「约 0.35 过渡」）。 */
 const GC_CSS = `
 @keyframes gc-flash{0%,100%{box-shadow:0 0 0 0 var(--red-soft)}50%{box-shadow:0 0 0 7px var(--red-soft)}}
 .gc-flash{animation:gc-flash .9s var(--ease) 3}
@@ -327,7 +347,7 @@ function InnerCanvas(props: GraphCanvasProps) {
     onNodeClick, onNodeDoubleClick, onConnect, onSelectionChange: onSelectionChangeProp, nodeTypes,
     onNodeContextMenu: onNodeContextMenuProp, onPaneContextMenu: onPaneContextMenuProp,
     onDropAt: onDropAtProp,
-    boxSelection, dimUnhighlight,
+    boxSelection, dimUnhighlight, dimNodeIds,
     showMiniMap, showControls, zoomOnScroll, preventScrolling, fitKey, onReady,
     className, testId,
   } = props
@@ -387,6 +407,11 @@ function InnerCanvas(props: GraphCanvasProps) {
   const hitNodeIds = useMemo(
     () => (dimActive ? new Set(nodes.filter(n => n.hit).map(n => n.id)) : null),
     [nodes, dimActive],
+  )
+  // 分类过滤弱化（dimNodeIds）：id 集非空才建 Set（空数组/ null 恒不弱化，零开销直通）
+  const segDimSet = useMemo(
+    () => (dimNodeIds && dimNodeIds.length > 0 ? new Set(dimNodeIds) : null),
+    [dimNodeIds],
   )
 
   // 位置治理（缺陷1修复）：基础布局只随数据重算；用户位（拖拽/「布局」）存 positions，
@@ -459,12 +484,13 @@ function InnerCanvas(props: GraphCanvasProps) {
       data: {
         label: n.label, sub: n.sub, kind: n.kind, category: n.category,
         badge: n.badge, iri: n.iri, hit: n.hit,
-        highlighted: hl.has(n.id), dimmed: !!hitNodeIds && !hitNodeIds.has(n.id),
+        highlighted: hl.has(n.id),
+        dimmed: (!!hitNodeIds && !hitNodeIds.has(n.id)) || (!!segDimSet && segDimSet.has(n.id)),
         deleted: !!n.deleted, entering: !!n.entering,
         flashing: fl.has(n.id), pulsing: pu.has(n.id),
       },
     }))
-  }, [nodes, basePositions, positions, selectedSet, highlightIds, effectiveFlash, effectivePulse, hitNodeIds])
+  }, [nodes, basePositions, positions, selectedSet, highlightIds, effectiveFlash, effectivePulse, hitNodeIds, segDimSet])
 
   const flowEdges = useMemo<Edge[]>(
     () =>
@@ -472,13 +498,15 @@ function InnerCanvas(props: GraphCanvasProps) {
         const active = highlightIds?.includes(e.source) || highlightIds?.includes(e.target)
         // 边命中传导：任一端在命中集即视为命中（不受弱化）；存在命中集时其余边 gc-dim
         const edgeHit = !hitNodeIds || hitNodeIds.has(e.source) || hitNodeIds.has(e.target)
+        // 分类过滤弱化传导：两端都在弱化集才随弱化（单端挂点保留拓扑上下文）
+        const edgeSegDim = !!segDimSet && segDimSet.has(e.source) && segDimSet.has(e.target)
         return {
           id: e.id ?? `e-${e.source}-${e.target}-${i}`,
           source: e.source,
           target: e.target,
           label: e.label,
           animated: active,
-          className: hitNodeIds && !edgeHit ? 'gc-dim' : undefined,
+          className: (hitNodeIds && !edgeHit) || edgeSegDim ? 'gc-dim' : undefined,
           style: {
             stroke: active ? 'var(--accent)' : 'var(--edge)',
             strokeWidth: active ? 2 : 1.2,
@@ -490,7 +518,7 @@ function InnerCanvas(props: GraphCanvasProps) {
           labelBgBorderRadius: 4,
         }
       }),
-    [edges, highlightIds, hitNodeIds],
+    [edges, highlightIds, hitNodeIds, segDimSet],
   )
 
   const focusNode = useCallback(
@@ -519,7 +547,7 @@ function InnerCanvas(props: GraphCanvasProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // 工具条句柄（布局/缩放/适应）——页面经 onReady 持有
+  // 工具条句柄（布局/缩放/适应 + E8 快照通道）——页面经 onReady 持有
   useEffect(() => {
     onReady?.({
       zoomIn: () => void rf.zoomIn({ duration: 200 }),
@@ -530,6 +558,9 @@ function InnerCanvas(props: GraphCanvasProps) {
         setPositions(Object.fromEntries(computeLayout(nodes, edges)))
         window.setTimeout(() => void rf.fitView({ duration: 420, padding: 0.24 }), 40)
       },
+      exportObject: () => rf.toObject() as unknown as Record<string, unknown>,
+      getView: () => rf.getViewport(),
+      setView: v => void rf.setViewport(v, { duration: 300 }),
     })
   }, [nodes, edges, rf, onReady])
 

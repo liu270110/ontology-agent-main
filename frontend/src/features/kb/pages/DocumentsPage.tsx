@@ -38,6 +38,10 @@ const STATUS_FILTERS = [
   { v: 'failed', label: '失败' },
 ] as const
 
+/** 图谱浏览深链 kbId（38 号 K2 销账，E12）：与 chat 域 EvidenceSheet 深链同款常量口径
+ *  （EvidenceSheet.tsx EXPLORE_KB_ID='col-1'，mock 图端点不区分 kb，路由参数仅作入口标识） */
+const EXPLORE_KB_ID = 'col-1'
+
 export function DocumentsPage() {
   const qc = useQueryClient()
   const navigate = useNavigate()
@@ -152,6 +156,14 @@ export function DocumentsPage() {
       <div className="flex flex-wrap items-center gap-2">
         <h1 className="text-lg font-bold">知识库文档</h1>
         <span className="ml-auto flex items-center gap-2">
+          {/* E12（38 号 K2 销账）：入库结果可直接下钻图谱浏览（/kb/explore/{kbId}，26 篇矩阵联动） */}
+          <Link
+            to={`/kb/explore/${EXPLORE_KB_ID}`}
+            className="rounded-full border border-separator px-3 py-1.5 text-xs text-label-2 hover:border-accent hover:text-accent"
+            data-testid="kb-docs-to-explore"
+          >
+            浏览入库图谱 →
+          </Link>
           <button type="button" className="btn btn-g btn-sm" onClick={() => setSettingsOpen(true)}>
             <Settings size={12} aria-hidden /> 库设置
           </button>

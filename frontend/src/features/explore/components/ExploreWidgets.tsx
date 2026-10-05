@@ -3,12 +3,19 @@ import { Check, MessageSquareText, Search, X } from 'lucide-react'
 import { Modal } from '@/components/modal'
 import { Sheet } from '@/components/sheet'
 import { FloatingCard } from '@/components/popover'
-import { graphNeighborhood, graphPath, type GraphEntity, type GraphNeighbors, type GraphPath } from '../api'
+import {
+  graphNeighborhood, graphPath,
+  type GraphEntity, type GraphNeighbors, type GraphPath, type GraphSourceDoc,
+} from '../api'
 
 /** 图谱浏览交互件（26 篇 §7.2）：IX-EX-01 实体抽屉（属性表/来源文档/证据计数/去对话/
  *  Playground）、IX-EX-02 两实体路径查询（起止联想 + 跳数滑块 1-4 + 关系类型多选 +
  *  路径列表高亮到画布）、IX-EX-03 邻域展开过滤（关系类型勾选带计数 + 深度）。
- *  跳转带深链：去对话 → /chat/new?entity=；Playground → /kb/playground?q=（26 篇 §1.3 铁律 3）。 */
+ *  跳转带深链：去对话 → /chat/new?entity=；Playground → /kb/playground?q=（26 篇 §1.3 铁律 3）。
+ *  E5（41 篇 V3）：来源文档在 doc_id 在位时点击 → onOpenSourceDoc（页面开 kb 分片预览抽屉）；
+ *  无 doc_id（未关联库内文档）呈禁用态，不再保留可点样式死链。
+ *  E4（41 篇 V3）：路径查询关系类型清单动态化——graphNeighborhood(depth:1).rel_counts
+ *  真实清单替换硬编码 6 种（NeighborhoodFilter 同源模式，加载占位）。 */
 
 // ---- IX-EX-01 实体抽屉（Drawer 400px） ----
 
@@ -17,11 +24,14 @@ export function EntityDrawer({
   onClose,
   onGoChat,
   onGoPlayground,
+  onOpenSourceDoc,
 }: {
   entity: GraphEntity | null
   onClose: () => void
   onGoChat: (e: GraphEntity) => void
   onGoPlayground: (e: GraphEntity) => void
+  /** E5：来源文档点击回调（页面挂 SourceDocChunkSheet）；未传=功能未接，列表呈只读态 */
+  onOpenSourceDoc?: (d: GraphSourceDoc) => void
 }) {
   const [copied, setCopied] = useState(false)
   useEffect(() => setCopied(false), [entity])
@@ -65,20 +75,38 @@ export function EntityDrawer({
           </table>
         </div>
 
-        {/* 来源文档 */}
+        {/* 来源文档（E5：doc_id 在位=可点开原文抽屉；否则禁用态不再死链） */}
         <div className="mt-4">
           <div className="field-label">来源文档 · {entity.source_docs.length}</div>
           <ul className="space-y-1.5">
-            {entity.source_docs.map(d => (
-              <li key={d.doc} className="group flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 text-xs hover:bg-surface-2">
-                <span className="flex h-6 w-6 flex-none items-center justify-center rounded-md bg-accent-soft text-2xs text-accent">PDF</span>
-                <span className="min-w-0">
-                  <b className="block truncate text-xs">{d.doc}</b>
-                  <span className="text-[11px] text-label-3">{d.loc} · 点击打开原文抽屉</span>
-                </span>
-                <span className="ml-auto flex-none text-label-3 transition-transform group-hover:translate-x-0.5">→</span>
-              </li>
-            ))}
+            {entity.source_docs.map(d => {
+              const openable = !!d.doc_id && !!onOpenSourceDoc
+              return (
+                <li key={d.doc}>
+                  <button
+                    type="button"
+                    disabled={!openable}
+                    data-testid={`entity-source-doc-${d.doc_id ?? 'unlinked'}`}
+                    title={openable ? '打开原文抽屉' : '未关联库内文档'}
+                    onClick={openable ? () => onOpenSourceDoc?.(d) : undefined}
+                    className={
+                      openable
+                        ? 'group flex w-full cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 text-left text-xs hover:bg-surface-2'
+                        : 'flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-xs opacity-60'
+                    }
+                  >
+                    <span className="flex h-6 w-6 flex-none items-center justify-center rounded-md bg-accent-soft text-2xs text-accent">PDF</span>
+                    <span className="min-w-0">
+                      <b className="block truncate text-xs">{d.doc}</b>
+                      <span className="text-[11px] text-label-3">{d.loc} · {openable ? '点击打开原文抽屉' : '未关联库内文档'}</span>
+                    </span>
+                    {openable && (
+                      <span className="ml-auto flex-none text-label-3 transition-transform group-hover:translate-x-0.5">→</span>
+                    )}
+                  </button>
+                </li>
+              )
+            })}
           </ul>
         </div>
 
@@ -129,7 +157,11 @@ export function PathQueryDialog({
   const [busy, setBusy] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
 
-  const REL_TYPES = ['partOf', 'locatedIn', 'isa', 'hasFault', 'triggers', 'serves']
+  /** E4（41 篇 V3）：关系类型清单动态化——不再硬编码 6 种。打开时以初始源实体
+   *  （无则实体目录首条，即页面默认中心）拉 graphNeighborhood(depth:1).rel_counts
+   *  取真实关系类型（与 NeighborhoodFilter 同源同参模式）；null=加载中（占位文案）。
+   *  清单到位后把已勾选集与清单求交，防「勾选项已不在清单」幽灵过滤。 */
+  const [relCounts, setRelCounts] = useState<{ rel: string; count: number }[] | null>(null)
 
   useEffect(() => {
     if (open) {
@@ -139,6 +171,35 @@ export function PathQueryDialog({
       setEditing(initialSource ? 'target' : 'source')
     }
   }, [open, initialSource])
+
+  useEffect(() => {
+    if (!open) return
+    // ocr 2026-10-05：锚点跟随对话框当前源（用户改选后重拉该源邻域关系清单，
+    // 陈旧勾选静默幽灵过滤到零结果的路径已堵——求交守卫随每次清单到位重跑）
+    const anchor = source?.id ?? initialSource?.id ?? entities[0]?.id
+    if (!anchor) {
+      setRelCounts([])
+      return
+    }
+    let alive = true
+    setRelCounts(null)
+    graphNeighborhood(anchor, { depth: 1 })
+      .then(res => {
+        if (alive) {
+          setRelCounts(res.rel_counts)
+          setRelations(prev =>
+            prev.length ? prev.filter(r => res.rel_counts.some(c => c.rel === r)) : prev,
+          )
+        }
+      })
+      .catch(() => {
+        if (alive) setRelCounts([])
+      })
+    return () => {
+      alive = false
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, source?.id, initialSource?.id, entities[0]?.id])
 
   const suggestions = entities.filter(
     e => !q.trim() || e.label.toLowerCase().includes(q.trim().toLowerCase()) || e.iri.toLowerCase().includes(q.trim().toLowerCase()),
@@ -270,31 +331,44 @@ export function PathQueryDialog({
         </div>
       </div>
 
-      {/* 关系类型过滤多选（留空 = 不过滤） */}
+      {/* 关系类型过滤多选（留空 = 不过滤；E4 动态清单 + NeighborhoodFilter 同款加载占位） */}
       <fieldset className="mt-3">
         <legend className="field-label">关系类型过滤（留空 = 不过滤）</legend>
-        <div className="flex flex-wrap gap-2">
-          {REL_TYPES.map(rel => {
-            const on = relations.includes(rel)
-            return (
-              <label
-                key={rel}
-                className={`flex cursor-pointer items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] ${
-                  on ? 'border-accent bg-accent-soft text-accent' : 'border-separator text-label-2'
-                }`}
-              >
-                <input
-                  type="checkbox"
-                  className="hidden"
-                  checked={on}
-                  onChange={() => setRelations(v => (on ? v.filter(x => x !== rel) : [...v, rel]))}
-                />
-                <span className="mono">{rel}</span>
-                {on && <Check size={10} aria-hidden />}
-              </label>
-            )
-          })}
-        </div>
+        {relCounts === null && (
+          <div className="py-2 text-[11px] text-label-3" data-testid="path-rel-loading" role="status" aria-label="加载关系类型">
+            加载关系类型…
+          </div>
+        )}
+        {relCounts !== null && relCounts.length === 0 && (
+          <div className="py-2 text-[11px] text-label-3" data-testid="path-rel-empty">
+            当前邻域暂无关系类型（查询将不做类型过滤）
+          </div>
+        )}
+        {relCounts !== null && relCounts.length > 0 && (
+          <div className="flex flex-wrap gap-2" data-testid="path-rel-options">
+            {relCounts.map(c => {
+              const on = relations.includes(c.rel)
+              return (
+                <label
+                  key={c.rel}
+                  className={`flex cursor-pointer items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] ${
+                    on ? 'border-accent bg-accent-soft text-accent' : 'border-separator text-label-2'
+                  }`}
+                >
+                  <input
+                    type="checkbox"
+                    className="hidden"
+                    checked={on}
+                    onChange={() => setRelations(v => (on ? v.filter(x => x !== c.rel) : [...v, c.rel]))}
+                  />
+                  <span className="mono">{c.rel}</span>
+                  <span className="text-2xs text-label-3">{c.count}</span>
+                  {on && <Check size={10} aria-hidden />}
+                </label>
+              )
+            })}
+          </div>
+        )}
       </fieldset>
 
       {/* 查询结果：路径列表（每条可高亮到画布） */}

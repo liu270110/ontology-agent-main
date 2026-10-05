@@ -14,7 +14,12 @@ import { NextActionsCard } from './NextActionsCard'
  *  颜色/圆角/字号全走令牌（tokens.css），零硬编码色值。agentic 缺省（旧响应）→ 不渲染任何节点。
  *  2026-10-04 perf 批：本组件是全仓唯一 framer-motion 使用点，ChatStream 改 React.lazy
  *  异步挂载（degraded 横幅拆出 AgenticDegradedBanner.tsx 静态首载），framer-motion 家族
- *  （motion-dom 等 ~130KB min）随之剥离 ChatPage 首包进异步 chunk。 */
+ *  （motion-dom 等 ~130KB min）随之剥离 ChatPage 首包进异步 chunk。
+ *  2026-10-05 v3 修复批：随跨域复用（explore RetrievalPanel E11）自 chat 域迁入
+ *  src/components/agentic/（含 AgenticDegradedBanner/NextActionsCard 两子件）——features
+ *  域间禁横向 import（架构门禁 tests/architecture/imports.test.ts），跨域只允许经
+ *  app/api/components（16 篇 §1 / 22 篇）；chat 既有消费方（ChatStream lazy 静态横幅/
+ *  s10 测试）仅改 import 路径，行为零改动。 */
 
 const DECISION_REASON_TEXT: Record<AgenticBlock['decision_reason'], string> = {
   deterministic_task: '确定性任务，无需检索',

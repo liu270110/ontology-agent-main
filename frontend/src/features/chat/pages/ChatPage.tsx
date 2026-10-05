@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Activity, FolderOpen, MessageSquareDashed, Plus, Sparkles } from 'lucide-react'
 import { toast } from 'sonner'
@@ -21,6 +21,7 @@ import type { ChatMessage } from '@/stores/session-store'
 import { CONN_STATE_TEXT } from '@/lib/conn-label'
 import { BASELINE, STOP_GENERATED } from '@/lib/toast-templates'
 import { createDefaultSession } from '../api'
+import { parseEntityDeepLink } from '../deep-link'
 
 /** 连接状态中文化（IX 顶栏状态徽标）：running 优先，其余按 SSE 连接态映射（单源=lib/conn-label） */
 const CONNECTION_TEXT = CONN_STATE_TEXT
@@ -76,6 +77,25 @@ export function ChatPage() {
   const running = useSessionStore(s => s.running)
   const navigate = useNavigate()
   const qc = useQueryClient()
+  /** E7/E9 实体深链预填（41 篇 §2 V3.6/7「chat 侧输入预填@提及」）：/chat/new?entity=
+   *  （画布级引用/实体抽屉）/​?entities=（框选子图）挂载时一次性解析为 @提及文本
+   *  （useState 惰性初值——URL 随后清理不回读、不重播）；会话就位后经 seedText 交给
+   *  MessageInput 首挂载注入草稿，随即置 spent 并归位 /chat 剥参（防刷新重预填）。
+   *  /chat↔/chat/new 同位同型路由元素（react-router 不重挂组件实例），createSession
+   *  onSuccess 的 navigate('/chat') 不丢本地态——种子跨该导航存活。 */
+  const [deepMentions] = useState(() => parseEntityDeepLink(new URLSearchParams(window.location.search)))
+  const [seedSpent, setSeedSpent] = useState(false)
+  const location = useLocation()
+  useEffect(() => {
+    if (!sessionId || !deepMentions) return
+    setSeedSpent(true)
+    // 参数剥离与 F5「URL 归位 /chat 防深链残留」同向导航：v7_startTransition 下两条
+    // transition 谁后到谁生效，但目标一致（/chat 无参）→ 终态确定，不再互相覆盖
+    //（勿改回 setSearchParams 清参——会以 /chat/new 无参覆盖 F5 的归位导航，实测竞态）。
+    if (location.pathname !== '/chat' || location.search) navigate('/chat', { replace: true })
+  }, [sessionId, deepMentions, location.pathname, location.search, navigate])
+  /** 种子只在会话首挂载前有效：MessageInput 以 useState 惰性初值收下（挂载后本 prop 变化不回写草稿） */
+  const seedText = !seedSpent && sessionId && deepMentions ? deepMentions.join(' ') : null
   /** F5（C-3）：/chat/new 空态「新建会话」=POST /sessions create mutation——建成功就地选中
    *  （无 /chat/:id 路由，选中态=picked；URL 归位 /chat 防深链残留），失败 toast。 */
   const createSession = useMutation({
@@ -269,7 +289,7 @@ export function ChatPage() {
               baselineTick={baselineTick}
             />
             <ContextMeter used={ctxUsed} limit={ctxLimit} />
-            <MessageInput sessionId={sessionId} onStop={handleStop} />
+            <MessageInput sessionId={sessionId} onStop={handleStop} seedText={seedText ?? undefined} />
           </>
         ) : (
           // 36 §A1 未选中会话：EmptyState hero 替换裸文字（遗留 #2 销账）；主区唯一 btn-p。

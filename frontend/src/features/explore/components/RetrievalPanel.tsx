@@ -2,14 +2,21 @@ import { useState } from 'react'
 import { ChevronRight, Loader2, Search } from 'lucide-react'
 import { ErrorState } from '@/components/states'
 import { ApiError } from '@/api/client'
+import type { AgenticBlock } from '@/api/contracts'
 import { categoryColor } from '@/components/graph/GraphCanvas'
+import { AgenticTracePanel } from '@/components/agentic/AgenticTracePanel'
 import { graphNeighborhood, graphSearch, type GraphEntity } from '../api'
 
 /** 检索测试台（宿主画框 p-explore 右栏 .ctx，37 号对账 E-1/P0）：
  *  提问框 → graphSearch 实体检索，结果行附一跳邻域证据路径（与画布同源真实数据），
  *  点击结果聚焦画布（设为中心 + pulse 高亮，宿主接线）。
  *  Local 档先行可用；Global（社区摘要 map-reduce）随 M4 GraphRAG 路由端点开放——
- *  置灰 + title 注明，不做死入口（W-1 同口径）。空/载/错三态齐备（33 §4）。 */
+ *  置灰 + title 注明，不做死入口（W-1 同口径）。空/载/错三态齐备（33 §4）。
+ *  E11（41 篇 V3）：响应含 agentic 块（api/contracts §8.1，api 层透传）时复用共享
+ *  AgenticTracePanel（components/agentic，chat 同源——features 域间禁横向 import，
+ *  架构门禁 tests/architecture/imports.test.ts，故经 components 通道）渲染检索迭代
+ *  时间线——旧响应无块 → 面板不渲染，存量行为零改动
+ *  （红线：本组件除 agentic 复用渲染外本体行为不改；Global disabled 语义保持）。 */
 
 /** 单条结果：实体 + 证据路径（邻域一跳边，最多 2 条） */
 interface RetrievalHit {
@@ -28,6 +35,8 @@ export function RetrievalPanel({
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<unknown>(null)
   const [hits, setHits] = useState<RetrievalHit[] | null>(null)
+  /** E11：agentic 块（响应在位才非 null；每次检索覆盖，旧响应恒 null → 面板不渲染） */
+  const [agentic, setAgentic] = useState<AgenticBlock | null>(null)
 
   async function run() {
     const query = q.trim()
@@ -36,6 +45,7 @@ export function RetrievalPanel({
     setError(null)
     try {
       const res = await graphSearch(query, 6)
+      setAgentic(res.agentic ?? null)
       const top = res.items.slice(0, 3)
       // 证据路径：各结果实体一跳邻域（mock/live 同端点）；单实体失败不拖垮整版结果
       const nbs = await Promise.all(top.map(e => graphNeighborhood(e.id, { depth: 1 }).catch(() => null)))
@@ -166,6 +176,8 @@ export function RetrievalPanel({
               </span>
             </button>
           ))}
+          {/* E11：agentic 迭代时间线（复用共享 AgenticTracePanel components/agentic；块缺省=旧响应兼容不渲染） */}
+          {agentic && <AgenticTracePanel agentic={agentic} />}
         </div>
       )}
 

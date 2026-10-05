@@ -275,12 +275,16 @@ export interface GraphEntity {
   category: string
   in_kb: boolean
   props: { k: string; v: string }[]
-  source_docs: { doc: string; loc: string }[]
+  source_docs: { doc: string; loc: string; doc_id?: string }[]
   evidence_count: number
   chat_refs: number
   neighbors: number
 }
 
+/** E5（41 篇 V3）：source_docs.doc_id 指向 mocks/kb-handlers.ts KB_DOCS 真实文档
+ *  （故障记录.xlsx=d-103、设备手册.pdf=d-101、台区拓扑清单.csv=d-104），供实体抽屉
+ *  点击开 kb 分片预览抽屉；库内无对应文档的条目（comp-A102 两条记录、抢修工单模板.pdf）
+ *  故意不接——演示「未关联库内文档」禁用态。 */
 const ENTITIES: GraphEntity[] = [
   {
     id: 'comp-A102', iri: 'http://example.org/grid#comp-A102', label: '部件A', kind_label: '对象 · 部件', category: 'device', in_kb: true,
@@ -294,11 +298,11 @@ const ENTITIES: GraphEntity[] = [
     ],
     evidence_count: 7, chat_refs: 3, neighbors: 5,
   },
-  { id: 'fault-F0912', iri: 'http://example.org/grid#fault-F0912', label: '故障 F-0912', kind_label: '事件 · 故障', category: 'event', in_kb: true, props: [{ k: '发生时间', v: '09-12 14:22' }, { k: '类型', v: '单相接地' }], source_docs: [{ doc: '故障记录.xlsx', loc: 'chunk_001' }], evidence_count: 4, chat_refs: 1, neighbors: 3 },
-  { id: 'transformer-2', iri: 'http://example.org/grid#trans-2', label: '2号主变', kind_label: '对象 · 设备', category: 'device', in_kb: true, props: [{ k: '电压等级', v: '110kV' }, { k: '容量', v: '50MVA' }], source_docs: [{ doc: '设备手册.pdf', loc: 'chunk_002' }], evidence_count: 9, chat_refs: 2, neighbors: 6 },
-  { id: 'feeder-cd', iri: 'http://example.org/grid#feeder-cd', label: '10kV 城东馈线', kind_label: '类 · 馈线', category: 'line', in_kb: true, props: [{ k: '实例数', v: '12' }, { k: '供电分区', v: '城东' }], source_docs: [{ doc: '台区拓扑清单.csv', loc: 'chunk_007' }], evidence_count: 5, chat_refs: 0, neighbors: 8 },
-  { id: 'area-k77', iri: 'http://example.org/grid#area-K77', label: '台区 K-77', kind_label: '对象 · 台区', category: 'area', in_kb: true, props: [{ k: '影响用户', v: '32 户' }, { k: '配变', v: 'T-2093' }], source_docs: [{ doc: '故障记录.xlsx', loc: 'chunk_004' }], evidence_count: 3, chat_refs: 1, neighbors: 4 },
-  { id: 'event-e0901', iri: 'http://example.org/grid#event-E0901', label: '停电事件 E-0901', kind_label: '事件 · 停电', category: 'event', in_kb: true, props: [{ k: '复电时间', v: '23:47' }, { k: '责任原因', v: '计划检修' }], source_docs: [{ doc: '故障记录.xlsx', loc: 'chunk_004' }], evidence_count: 6, chat_refs: 2, neighbors: 4 },
+  { id: 'fault-F0912', iri: 'http://example.org/grid#fault-F0912', label: '故障 F-0912', kind_label: '事件 · 故障', category: 'event', in_kb: true, props: [{ k: '发生时间', v: '09-12 14:22' }, { k: '类型', v: '单相接地' }], source_docs: [{ doc: '故障记录.xlsx', loc: 'chunk_001', doc_id: 'd-103' }], evidence_count: 4, chat_refs: 1, neighbors: 3 },
+  { id: 'transformer-2', iri: 'http://example.org/grid#trans-2', label: '2号主变', kind_label: '对象 · 设备', category: 'device', in_kb: true, props: [{ k: '电压等级', v: '110kV' }, { k: '容量', v: '50MVA' }], source_docs: [{ doc: '设备手册.pdf', loc: 'chunk_002', doc_id: 'd-101' }], evidence_count: 9, chat_refs: 2, neighbors: 6 },
+  { id: 'feeder-cd', iri: 'http://example.org/grid#feeder-cd', label: '10kV 城东馈线', kind_label: '类 · 馈线', category: 'line', in_kb: true, props: [{ k: '实例数', v: '12' }, { k: '供电分区', v: '城东' }], source_docs: [{ doc: '台区拓扑清单.csv', loc: 'chunk_007', doc_id: 'd-104' }], evidence_count: 5, chat_refs: 0, neighbors: 8 },
+  { id: 'area-k77', iri: 'http://example.org/grid#area-K77', label: '台区 K-77', kind_label: '对象 · 台区', category: 'area', in_kb: true, props: [{ k: '影响用户', v: '32 户' }, { k: '配变', v: 'T-2093' }], source_docs: [{ doc: '故障记录.xlsx', loc: 'chunk_004', doc_id: 'd-103' }], evidence_count: 3, chat_refs: 1, neighbors: 4 },
+  { id: 'event-e0901', iri: 'http://example.org/grid#event-E0901', label: '停电事件 E-0901', kind_label: '事件 · 停电', category: 'event', in_kb: true, props: [{ k: '复电时间', v: '23:47' }, { k: '责任原因', v: '计划检修' }], source_docs: [{ doc: '故障记录.xlsx', loc: 'chunk_004', doc_id: 'd-103' }], evidence_count: 6, chat_refs: 2, neighbors: 4 },
   { id: 'workorder-w31', iri: 'http://example.org/grid#wo-31', label: '抢修工单 WO-31', kind_label: '对象 · 工单', category: 'workorder', in_kb: true, props: [{ k: '状态', v: '已归档' }, { k: '对应故障', v: 'F-0912' }], source_docs: [{ doc: '抢修工单模板.pdf', loc: 'chunk_002' }], evidence_count: 2, chat_refs: 0, neighbors: 2 },
 ]
 
@@ -588,13 +592,17 @@ export const ontologyHandlers = [
   }),
 
   // ---- 图谱浏览（api/01 §5.4 graph 三端点） ----
+  // 41 号 V3.11/协议 B3 附带（2026-10-05）：成功体旧信封 {code,message,data} → B1 目标形态
+  // {data,meta}（镜像 kb-handlers.ts /kb/collections live 对账先例：openapi 旧信封废止）；
+  // 错误体仍走 jsonErr 四字段信封（api/01 §4，不在 B3 范围）。explore/api.ts 契约边界
+  // 归一层双形态兼容（live 旧形态不受影响）。
   http.get('*/api/v1/kb/graph/search', ({ request }) => {
     const q = (new URL(request.url).searchParams.get('q') ?? '').trim().toLowerCase()
     const topK = Number(new URL(request.url).searchParams.get('top_k') ?? 8)
     const items = ENTITIES.filter(
       e => !q || e.label.toLowerCase().includes(q) || e.iri.toLowerCase().includes(q) || e.kind_label.includes(q),
     ).slice(0, topK)
-    return HttpResponse.json({ code: 0, message: 'ok', data: { items, next_cursor: null } })
+    return HttpResponse.json({ data: { items, next_cursor: null }, meta: { total: items.length } })
   }),
 
   http.get('*/api/v1/kb/graph/neighborhood', ({ request }) => {
@@ -606,9 +614,10 @@ export const ontologyHandlers = [
     const entity = entityById(entityId)
     if (!entity) return jsonErr(4041, '实体不存在', 404)
     const nb = neighborhoodOf(entity.id, depth, relations)
+    const nodes = nb.nodes.slice(0, limit)
     return HttpResponse.json({
-      code: 0, message: 'ok',
-      data: { center: entity.id, nodes: nb.nodes.slice(0, limit), edges: nb.edges, rel_counts: nb.rel_counts },
+      data: { center: entity.id, nodes, edges: nb.edges, rel_counts: nb.rel_counts },
+      meta: { total: nodes.length, depth },
     })
   }),
 
@@ -632,6 +641,9 @@ export const ontologyHandlers = [
       nodes: p.nodes[0].map(id => ({ id, iri: entityById(id)?.iri ?? id, label: label(id) })),
       edges: p.rels[1].map(rel => ({ rel })),
     }))
-    return HttpResponse.json({ code: 0, message: 'ok', data: { source: source.id, target: target.id, paths } })
+    return HttpResponse.json({
+      data: { source: source.id, target: target.id, paths },
+      meta: { total: paths.length },
+    })
   }),
 ]

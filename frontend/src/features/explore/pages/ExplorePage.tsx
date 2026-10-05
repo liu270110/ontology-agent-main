@@ -1,29 +1,37 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { ChevronLeft, CircleAlert, Info, Link2, Loader2, Maximize2, Search, Settings2, ZoomIn, ZoomOut } from 'lucide-react'
-import { GraphCanvas, type GraphCanvasApi, type GraphEdgeBiz, type GraphNodeBiz } from '@/components/graph/GraphCanvas'
+import { toast } from 'sonner'
+import {
+  ChevronLeft, CircleAlert, Download, Info, Link2, Loader2, Maximize2, MessageSquareText,
+  RotateCcw, Save, Search, Settings2, ZoomIn, ZoomOut,
+} from 'lucide-react'
+import { GraphCanvas, type GraphCanvasApi, type GraphEdgeBiz, type GraphNodeBiz, type GraphViewport } from '@/components/graph/GraphCanvas'
 import { GraphContextMenu } from '@/components/graph/GraphContextMenu'
 import { ApiError } from '@/api/client'
 import { ErrorState } from '@/components/states'
 import {
   graphNeighborhood, graphSearch,
-  type GraphEntity, type GraphPath,
+  type GraphEntity, type GraphPath, type GraphSourceDoc,
 } from '../api'
 import { EntityDrawer, NeighborhoodFilter, PathQueryDialog } from '../components/ExploreWidgets'
+import { LegendPanel } from '../components/LegendPanel'
 import { RetrievalPanel } from '../components/RetrievalPanel'
+import { EXPLORE_SEGMENTS, categoryBucket, type ExploreSeg } from '../categories'
+import { SourceDocChunkSheet } from '@/components/kb/SourceDocChunkSheet'
 
 /** 图谱浏览 /kb/explore/:kbId（宿主画框 p-explore；26 篇 §7.2 IX-EX-01~04）：
  *  GraphCanvas browser profile 全屏 + 实体搜索选择器 + 双击展开（⚙ 邻域过滤）+
  *  两实体路径查询 + 实体详情抽屉（去对话 / 在 Playground 检索深链）+
- *  深链定位 ?focus={iri}（pulse 高亮 2s + 画布居中 + 顶部提示条）。 */
-
-const CATEGORY_SEGMENTS = [
-  { key: 'all', label: '全部' },
-  { key: 'object', label: '对象' },
-  { key: 'event', label: '事件' },
-  { key: 'constraint', label: '约束' },
-]
+ *  深链定位 ?focus={iri}（pulse 高亮 2s + 画布居中 + 顶部提示条）。
+ *  V3 补缺（41 篇 §2 V3）：E1 seg 过滤画布生效（非命中类降透明保留拓扑）+
+ *  E10 口径 5 档对齐代码分类族（explore/categories.ts 单源）+ E2 图例面板（左上，点击联动）+
+ *  E5 来源文档点击开 kb 分片预览抽屉。
+ *  V3 二轮补缺：E7 画布级「引用此证据回对话」深链（与实体抽屉去对话同参 ?entity=）+
+ *  E8 导出视图 JSON（html-to-image 不在依赖清单，PNG 不做假按钮；另存/恢复视图 localStorage
+ *  快照=视口+中心实体 iri）+ E9 框选子图浮动条「发送 N 个实体到对话」（URL>2000 截断 toast）。
+ *  评审收口（2026-10-05）：E7/E9 深链随带 labels=（chat 侧输入预填@提及的消费端在
+ *  features/chat/deep-link.ts + ChatPage，最小通道闭环）。 */
 
 export function ExplorePage() {
   const { kbId = '' } = useParams()
@@ -32,7 +40,7 @@ export function ExplorePage() {
   const focusIri = searchParams.get('focus')
 
   const [q, setQ] = useState('')
-  const [seg, setSeg] = useState('all')
+  const [seg, setSeg] = useState<ExploreSeg>('all')
   const [drawerEntity, setDrawerEntity] = useState<GraphEntity | null>(null)
   const [pathOpen, setPathOpen] = useState(false)
   const [nbAnchor, setNbAnchor] = useState<DOMRect | null>(null)
@@ -71,9 +79,15 @@ export function ExplorePage() {
 
   const nb = useNeighborhoodSafe(centerId, relations, depth)
 
+  // ---- 实体抽屉来源文档（E5）：点击 li → 开 kb 域分片预览抽屉（doc_id 在位才可点） ----
+  const [sourceDoc, setSourceDoc] = useState<GraphSourceDoc | null>(null)
+
+  // ---- E9 框选子图：xyflow 选中集透出（GraphCanvas onSelectionChange，页面零 xyflow 概念） ----
+  const [selectedIds, setSelectedIds] = useState<string[]>([])
+
   // ---- 实体联想候选（搜索选择器下拉） ----
   const [suggestOpen, setSuggestOpen] = useState(false)
-  const suggestions = (searchQ.data?.items ?? []).filter(e => seg === 'all' || segGroup(e.category) === seg)
+  const suggestions = (searchQ.data?.items ?? []).filter(e => seg === 'all' || categoryBucket(e.category) === seg)
   // fe1-F3 空态判定：无可居中实体、且画布确无内容（fe1 ocr 发现2：centerId 已设或邻域已有
   // 节点 = 活图在渲染，搜索无结果不得把「暂无图谱数据」叠上——与下方错误/加载兄弟浮层同款
   // 「仅在画布尚无节点时覆盖」口径）、且不在加载/错误路径（错误态与加载态各归其位）
@@ -123,6 +137,17 @@ export function ExplorePage() {
     [nb.data],
   )
 
+  // ---- E1 seg 过滤画布生效（41 篇 V3）：选「非命中类降透明」而非隐藏——保留拓扑上下文；
+  // 实现走 GraphCanvas 新 opt-in dimNodeIds 通道（复用 V1 dimUnhighlight 的 gc-dim 思路，
+  // .35 为既有弱化定值不另造档），不占 hit 通道避免与搜索命中描边/辉光语义互扰
+  const segDimIds = useMemo(
+    () =>
+      seg === 'all'
+        ? null
+        : (nb.data?.nodes ?? []).filter(e => categoryBucket(e.category) !== seg).map(e => e.id),
+    [seg, nb.data],
+  )
+
   // ---- IX-EX-04 深链定位：?focus={iri} → pulse 高亮 2s + 居中 + 提示条 ----
   useEffect(() => {
     if (!focusIri || entityById.size === 0) return
@@ -164,6 +189,83 @@ export function ExplorePage() {
     setHighlightIds(p.nodes.map(n => n.id))
     window.setTimeout(() => setHighlightIds([]), 3200)
     setPathOpen(false)
+  }
+
+  // ---- E7 画布级引用回对话：当前中心实体 → /chat/new?entity={iri}&labels={label}
+  // （与实体抽屉「去对话」同参同编码；中心随双击展开/搜索定位联动；labels=chat 侧
+  // @提及预填用展示名——chat 侧无 IRI→名称解析端点，口径见 chat/deep-link.ts） ----
+  const centerNow = centerId ? entityById.get(centerId) ?? null : null
+
+  function citeToChat() {
+    if (!centerNow) return
+    navigate(`/chat/new?entity=${encodeURIComponent(centerNow.iri)}&labels=${encodeURIComponent(centerNow.label)}`)
+  }
+
+  // ---- E8 导出/视图快照。依赖核对（2026-10-05）：html-to-image 不在 package.json 依赖
+  // 清单、node_modules 亦无该包——按裁决不引新依赖，导出走 xyflow toObject JSON 快照 +
+  // toast 说明「PNG 随 html-to-image 依赖裁决」，不做假 PNG 按钮。
+  const viewKey = `fe-explore-view:${kbId}`
+
+  function exportCanvas() {
+    const api = canvasApi.current
+    if (!api) return
+    const blob = new Blob([JSON.stringify(api.exportObject(), null, 2)], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `explore-${kbId || 'graph'}-view.json`
+    a.click()
+    URL.revokeObjectURL(url)
+    toast.info('v1 导出视图 JSON（PNG 随 html-to-image 依赖裁决）')
+  }
+
+  function saveView() {
+    const api = canvasApi.current
+    if (!api) return
+    const iri = centerNow?.iri ?? null
+    try {
+      localStorage.setItem(viewKey, JSON.stringify({ viewport: api.getView(), iri, at: Date.now() }))
+    } catch {
+      toast.error('视图保存失败（存储不可用）')
+      return
+    }
+    toast.success(iri ? `视图已保存（视口 + 中心实体 ${centerNow?.label}）` : '视图已保存（视口）')
+  }
+
+  function restoreView() {
+    const api = canvasApi.current
+    if (!api) return
+    let snap: { viewport?: GraphViewport; iri?: string | null }
+    try {
+      // ocr 2026-10-05：字面量 "null" 等非对象解析结果与 restoreView 防御口径对齐（非对象归 {}）
+      const parsed: unknown = JSON.parse(localStorage.getItem(viewKey) ?? '')
+      snap = parsed && typeof parsed === 'object' ? (parsed as { viewport?: GraphViewport; iri?: string | null }) : {}
+    } catch {
+      snap = {}
+    }
+    if (!snap.viewport || typeof snap.viewport.x !== 'number' || typeof snap.viewport.zoom !== 'number') {
+      toast.info('暂无已保存视图')
+      return
+    }
+    const ent = snap.iri ? [...entityById.values()].find(e => e.iri === snap.iri) : undefined
+    if (ent) setCenterId(ent.id)
+    // 恢复视口要在中心切换引发的 fitView（fitKey 效应 80ms/时长 420ms）之后覆写，故延后落位
+    window.setTimeout(() => api.setView(snap.viewport as GraphViewport), ent ? 520 : 60)
+    toast.success(ent ? `已恢复视图 · 中心 ${ent.label}` : '已恢复视图')
+  }
+
+  // ---- E9 框选子图 → 对话：选中集取 IRI+label → buildEntitiesDeepLink（URL 长度守卫见该函数） ----
+  function sendSelectionToChat() {
+    const sel = selectedIds
+      .map(id => entityById.get(id))
+      .filter((e): e is GraphEntity => !!e)
+    if (sel.length === 0) return
+    const { url, kept, truncated } = buildEntitiesDeepLink(
+      sel.map(e => e.iri),
+      sel.map(e => e.label),
+    )
+    if (truncated) toast.info(`实体较多，链接超长已截断为前 ${kept} 个`)
+    navigate(url)
   }
 
   return (
@@ -209,14 +311,24 @@ export function ExplorePage() {
             </div>
           )}
         </div>
-        <span className="seg">
-          {CATEGORY_SEGMENTS.map(s => (
+        <span className="seg" data-testid="explore-seg">
+          {EXPLORE_SEGMENTS.map(s => (
             <button key={s.key} type="button" className={`seg-btn ${seg === s.key ? 'on' : ''}`} onClick={() => setSeg(s.key)}>
               {s.label}
             </button>
           ))}
         </span>
-        <button type="button" className="btn btn-g btn-sm ml-auto" data-testid="open-path-query" onClick={() => setPathOpen(true)}>
+        <button
+          type="button"
+          className="btn btn-g btn-sm ml-auto"
+          data-testid="cite-to-chat"
+          disabled={!centerNow}
+          title={centerNow ? `引用「${centerNow.label}」回到对话` : '暂无中心实体可引用'}
+          onClick={citeToChat}
+        >
+          <MessageSquareText size={12} aria-hidden /> 引用此证据回对话
+        </button>
+        <button type="button" className="btn btn-g btn-sm" data-testid="open-path-query" onClick={() => setPathOpen(true)}>
           <Link2 size={12} aria-hidden /> 两实体路径查询
         </button>
       </div>
@@ -253,12 +365,31 @@ export function ExplorePage() {
           showMiniMap
           boxSelection
           dimUnhighlight={hitIds.size > 0}
+          dimNodeIds={segDimIds}
           onNodeClick={onNodeClick}
           onNodeDoubleClick={onNodeDoubleClick}
           onNodeContextMenu={(nodeId, pos) => setCtx({ nodeId, pos })}
+          onSelectionChange={setSelectedIds}
           onReady={onReady}
           testId="explore-canvas"
         />
+        {/* E2 图例面板（画布左上，点击档位与 seg 过滤联动） */}
+        <LegendPanel nodes={nodes} seg={seg} onSegChange={setSeg} />
+        {/* E9 框选子图浮动条：选中 ≥1 节点浮现（清空=点画布空白，xyflow 标准 deselect 行为） */}
+        {selectedIds.length > 0 && (
+          <div
+            className="absolute bottom-9 left-1/2 z-10 flex -translate-x-1/2 items-center gap-2.5 rounded-full border border-separator bg-surface px-3.5 py-1.5 text-xs"
+            style={{ boxShadow: 'var(--sh-float)' }}
+            data-testid="selection-send-bar"
+          >
+            <span className="text-label-2">
+              已选 <b className="text-accent">{selectedIds.length}</b> 个实体
+            </span>
+            <button type="button" className="btn btn-p btn-sm" data-testid="send-selection-to-chat" onClick={sendSelectionToChat}>
+              <MessageSquareText size={12} aria-hidden /> 发送 {selectedIds.length} 个实体到对话
+            </button>
+          </div>
+        )}
         {/* S8 状态切片：图数据首载转圈占位 / 失败错误态（仅在画布尚无节点时覆盖，展开重拉不打扰） */}
         {(nb.data?.nodes.length ?? 0) === 0 && !nb.loading && (searchQ.isError || !!nb.error) && (
           <div className="absolute inset-0 flex items-center justify-center" data-testid="explore-error">
@@ -325,6 +456,16 @@ export function ExplorePage() {
           <button type="button" aria-label="展开选中实体" className="btn btn-g btn-sm" data-testid="expand-center" onClick={() => centerId && onNodeDoubleClick(centerId)}>
             <Maximize2 size={12} aria-hidden />
           </button>
+          {/* E8 导出/视图快照三钮（导出=toObject JSON；PNG 随 html-to-image 依赖裁决不造假钮） */}
+          <button type="button" aria-label="导出视图 JSON" title="导出视图 JSON" className="btn btn-g btn-sm" data-testid="canvas-export" onClick={exportCanvas}>
+            <Download size={12} aria-hidden />
+          </button>
+          <button type="button" aria-label="保存视图" title="保存视图（视口 + 中心实体）" className="btn btn-g btn-sm" data-testid="view-save" onClick={saveView}>
+            <Save size={12} aria-hidden />
+          </button>
+          <button type="button" aria-label="恢复视图" title="恢复上次保存的视图" className="btn btn-g btn-sm" data-testid="view-restore" onClick={restoreView}>
+            <RotateCcw size={12} aria-hidden />
+          </button>
         </div>
         <p className="pointer-events-none absolute bottom-2 left-3 text-[11px] text-label-3">
           单击打开实体抽屉 · 双击展开邻域 · ⚙ 过滤关系类型与深度
@@ -372,13 +513,25 @@ export function ExplorePage() {
         onClose={() => setCtx(null)}
       />
 
-      {/* IX-EX-01 实体抽屉 */}
+      {/* IX-EX-01 实体抽屉（E5：来源文档点击 → 开 kb 分片预览抽屉） */}
       <EntityDrawer
         entity={drawerEntity}
         onClose={() => setDrawerEntity(null)}
-        onGoChat={e => navigate(`/chat/new?entity=${encodeURIComponent(e.iri)}`)}
+        onGoChat={e => navigate(`/chat/new?entity=${encodeURIComponent(e.iri)}&labels=${encodeURIComponent(e.label)}`)}
         onGoPlayground={e => navigate(`/kb/playground?q=${encodeURIComponent(e.label)}`)}
+        onOpenSourceDoc={setSourceDoc}
       />
+
+      {/* E5 来源文档 → kb 分片预览（跨域经 components/kb 轻量包装——架构门禁 features 域间
+          禁横向 import；ChunkPreviewSheet 本体零改动。doc_id 缺省时不挂载——抽屉内该行已呈
+          禁用态，此处防御双保险） */}
+      {sourceDoc?.doc_id && (
+        <SourceDocChunkSheet
+          docId={sourceDoc.doc_id}
+          docName={sourceDoc.doc}
+          onClose={() => setSourceDoc(null)}
+        />
+      )}
 
       {/* IX-EX-02 路径查询 */}
       <PathQueryDialog
@@ -398,6 +551,32 @@ export function ExplorePage() {
       />
     </div>
   )
+}
+
+/** E9 框选子图 → 对话深链构造（导出供回归测试单测守卫分支）：
+ *  /chat/new?entities=iri1,iri2（逐个 encodeURIComponent；labels=名1,名2 可选——chat 侧
+ *  @提及预填展示名，与 iris 逐位对齐、成对截断保对齐）；URL 总长 >2000 字符截断到
+ *  前 N 对并置 truncated（首对恒保留防空链——超长单实体场景宁超限不回空）。 */
+export function buildEntitiesDeepLink(
+  iris: string[],
+  labels: string[] = [],
+  limit = 2000,
+): { url: string; kept: number; truncated: boolean } {
+  const kept: [iri: string, label: string][] = []
+  const q = (pairs: [string, string][]) => {
+    const base = `/chat/new?entities=${pairs.map(p => encodeURIComponent(p[0])).join(',')}`
+    return pairs.some(p => p[1]) ? `${base}&labels=${pairs.map(p => encodeURIComponent(p[1])).join(',')}` : base
+  }
+  let truncated = false
+  for (let i = 0; i < iris.length; i++) {
+    const pair: [string, string] = [iris[i], labels[i] ?? '']
+    if (q([...kept, pair]).length > limit && kept.length > 0) {
+      truncated = true
+      break
+    }
+    kept.push(pair)
+  }
+  return { url: q(kept), kept: kept.length, truncated }
 }
 
 /** 邻域拉取（组件内轻封装）：失败记 error 供 S8 错误态渲染（不再完全静默），
@@ -433,10 +612,4 @@ function useNeighborhoodSafe(entityId: string | null, relations: string[], depth
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [entityId, relKey, depth, nonce])
   return { data, loading, error, retry }
-}
-
-function segGroup(category: string): string {
-  if (category === 'event') return 'event'
-  if (category === 'constraint') return 'constraint'
-  return 'object'
 }

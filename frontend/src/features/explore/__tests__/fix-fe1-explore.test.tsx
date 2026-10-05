@@ -67,6 +67,16 @@ describe('fe1 ocr 发现1 · graphSearch 契约边界归一', () => {
     expect(enveloped.items).toHaveLength(1)
     expect(enveloped.items[0]?.id).toBe('comp-A102')
 
+    // B3 {data,meta} 形态（41 号 V3.11：mock 图三查目标信封）→ unwrapDataMeta 剥内层
+    server.use(
+      http.get('*/api/v1/kb/graph/search', () =>
+        HttpResponse.json({ data: { items: [COMP_A], next_cursor: null }, meta: { total: 1 } }),
+      ),
+    )
+    const b3 = await graphSearch('主变')
+    expect(b3.items).toHaveLength(1)
+    expect(b3.items[0]?.id).toBe('comp-A102')
+
     // 双形态皆缺字段（空数据）→ items 恒为数组而非 undefined
     server.use(http.get('*/api/v1/kb/graph/search', () => HttpResponse.json({ rels: [] })))
     const empty = await graphSearch('主变')

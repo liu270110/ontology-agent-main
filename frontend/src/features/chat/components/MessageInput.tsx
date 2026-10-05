@@ -15,8 +15,18 @@ type ThinkMode = (typeof THINK_MODES)[number]
  *  Enter 直发、Shift+Enter 换行（IX-CHT 输入约定）；流式中发送钮变 ⏹ 停止
  *  （IX-CHT-06 单击即停：POST /sessions/{id}/cancel + 本地终态标记，保留已生成部分）；
  *  全部控件 ≥28px 摸高、chipmodel 玻璃胶囊样式（design-system elements.css 同源）。 */
-export function MessageInput({ sessionId, onStop }: { sessionId: string; onStop: (runId: string | null) => void }) {
-  const [text, setText] = useState('')
+export function MessageInput({
+  sessionId,
+  onStop,
+  seedText,
+}: {
+  sessionId: string
+  onStop: (runId: string | null) => void
+  /** E7/E9 深链 @提及预填种子（ChatPage 下发）：仅随本组件首挂载经 useState 惰性初值
+   *  注入一次，挂载后 prop 变化不回写草稿（换会话/重选不重播）。 */
+  seedText?: string
+}) {
+  const [text, setText] = useState(() => seedText ?? '')
   const [busy, setBusy] = useState(false)
   const [thinkMode, setThinkMode] = useState<ThinkMode>('标准')
   const running = useSessionStore(s => s.running)

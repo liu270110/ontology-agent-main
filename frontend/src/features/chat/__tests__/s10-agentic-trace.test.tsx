@@ -3,8 +3,8 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { afterEach, beforeAll, describe, expect, it } from 'vitest'
 import type { AgenticBlock } from '@/api/contracts'
 import { server } from '@/mocks/node'
-import { AgenticTracePanel } from '@/features/chat/components/AgenticTracePanel'
-import { NextActionsCard } from '@/features/chat/components/NextActionsCard'
+import { AgenticTracePanel } from '@/components/agentic/AgenticTracePanel'
+import { NextActionsCard } from '@/components/agentic/NextActionsCard'
 import { useSessionStore } from '@/stores/session-store'
 import type { SseEvent } from '@/sse/events'
 

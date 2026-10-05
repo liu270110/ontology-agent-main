@@ -10,7 +10,7 @@ import { EmptyState, ErrorState, SkeletonRows } from '@/components/states'
 import { BASELINE } from '@/lib/toast-templates'
 import { ToolCallCard } from './ToolCallCard'
 import { ExecInlineCards } from './ExecCards'
-import { AgenticDegradedBanner } from './AgenticDegradedBanner'
+import { AgenticDegradedBanner } from '@/components/agentic/AgenticDegradedBanner'
 import type { EvidenceFocus } from './EvidenceSheet'
 
 // 2026-10-04 perf 批：面板（全仓唯一 framer-motion 使用点）异步挂载，家族 ~130KB 剥离
@@ -19,7 +19,7 @@ import type { EvidenceFocus } from './EvidenceSheet'
 // 若裸抛会炸到根整页白屏——工厂 catch 降级为空实现，与 fallback=null 同语义（面板尽力而为）。
 const AgenticTracePanel = lazy(async () => {
   try {
-    const m = await import('./AgenticTracePanel')
+    const m = await import('@/components/agentic/AgenticTracePanel')
     return { default: m.AgenticTracePanel }
   } catch {
     return { default: () => null }
@@ -482,7 +482,7 @@ export function ChatStream({
   // perf 批（ocr low）：证据首到即 fire-and-forget 预热面板 chunk——检索应答的证据到达是
   // 可预期的，预热吸收网络延迟，折叠摘要不晚一拍；失败静默（渲染侧工厂已有空实现兜底）。
   useEffect(() => {
-    if (evidence || messages.some(m => m.evidence)) void import('./AgenticTracePanel').catch(() => {})
+    if (evidence || messages.some(m => m.evidence)) void import('@/components/agentic/AgenticTracePanel').catch(() => {})
   }, [evidence, messages])
 
   useEffect(() => {

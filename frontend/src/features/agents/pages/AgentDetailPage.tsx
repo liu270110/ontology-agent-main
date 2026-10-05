@@ -14,7 +14,7 @@ import {
   AGENT_STATUS_LABEL,
   adapterText,
   adapterVersionText,
-  type ConnectionTestResult,
+  type AgentHealthResult,
 } from '../api'
 import { AgentStatusBadge, isAgentActive } from './AgentListPage'
 import { ToolPickerModal } from '../components/ToolPickerModal'
@@ -44,9 +44,12 @@ export function AgentDetailPage() {
 
   const [pickerOpen, setPickerOpen] = useState(false)
   const [toggle, setToggle] = useState<'start' | 'stop' | null>(null)
-  const [probe, setProbe] = useState<ConnectionTestResult | 'testing' | null>(null)
+  const [probe, setProbe] = useState<AgentHealthResult | 'testing' | null>(null)
+  const [probeError, setProbeError] = useState<string | null>(null)
   const [debugInput, setDebugInput] = useState('')
-  const [debugLog, setDebugLog] = useState<{ role: 'user' | 'agent'; text: string; trace?: string }[]>([])
+  const [debugPending, setDebugPending] = useState(false)
+  const [debugError, setDebugError] = useState<string | null>(null)
+  const [debugLog, setDebugLog] = useState<{ role: 'user' | 'agent'; text: string; meta?: string }[]>([])
 
   // F8②（B:A-16）：详情查询 422（live 对非 UUID id 回信封 3001）/404 → 错误态（重试=refetch），
   // 不再因 !agent 永挂「加载中…」
@@ -76,16 +79,35 @@ export function AgentDetailPage() {
 
   async function runProbe() {
     setProbe('testing')
-    setProbe(await healthCheckAgent(agentId))
+    setProbeError(null)
+    try {
+      setProbe(await healthCheckAgent(agentId))
+    } catch (e) {
+      // live 失败：503+5003（适配器绑定行缺失/探活失败）结构化错误透出
+      setProbe(null)
+      setProbeError(e instanceof Error ? e.message : '探活失败')
+    }
   }
 
   async function sendDebug() {
-    const content = debugInput.trim()
-    if (!content) return
+    const message = debugInput.trim()
+    if (!message || debugPending) return
     setDebugInput('')
-    setDebugLog(l => [...l, { role: 'user', text: content }])
-    const res = await debugChat(agentId, content)
-    setDebugLog(l => [...l, { role: 'agent', text: res.reply, trace: res.trace_id }])
+    setDebugPending(true)
+    setDebugError(null)
+    setDebugLog(l => [...l, { role: 'user', text: message }])
+    try {
+      // live 契约：{message} → {reply,usage,latency_ms}；调试面不落正式历史
+      const res = await debugChat(agentId, message)
+      const usage = res.usage ?? {}
+      const meta = `调试 · ${res.latency_ms}ms${usage.token_in != null ? ` · token ${usage.token_in}/${usage.token_out}` : ''}`
+      setDebugLog(l => [...l, { role: 'agent', text: res.reply, meta }])
+    } catch (e) {
+      // 502+5002（LLM 不可达/claude 无 key）等结构化错误原样透出
+      setDebugError(e instanceof Error ? e.message : '调试请求失败')
+    } finally {
+      setDebugPending(false)
+    }
   }
 
   if (agentError) {
@@ -215,18 +237,23 @@ export function AgentDetailPage() {
               测试连接
             </button>
             {probe === 'testing' && <span className="text-[11px] text-label-3">探活中…</span>}
-            {probe && probe !== 'testing' && probe.ok && (
+            {probe && probe !== 'testing' && probe.status === 'inprocess' && (
               <span className="badge b-green" data-testid="agt-adapter-probe-ok">
-                上次探活 · RTT {probe.rtt_ms}ms · {probe.protocol}
+                进程内适配器 · 无独立探活端点（恒健康计数清零）
               </span>
             )}
-            {probe && probe !== 'testing' && !probe.ok && (
+            {probe && probe !== 'testing' && probe.status === 'ok' && (
+              <span className="badge b-green" data-testid="agt-adapter-probe-ok">
+                探活通过 · RTT {probe.latency_ms ?? '—'}ms
+              </span>
+            )}
+            {probeError && (
               <span className="badge b-red" data-testid="agt-adapter-probe-fail">
-                {probe.code} {probe.message}（建议：{probe.suggestion}）
+                {probeError}
               </span>
             )}
           </div>
-          <div className="fhint">探活：POST /agents/{agentId}/health-check（E-5003 时给出诊断建议）。</div>
+          <div className="fhint">探活：POST /agents/{agentId}/health-check（live AgentHealthOut：inprocess | ok + latency_ms；失败 503+5003）。</div>
         </div>
       )}
 
@@ -286,15 +313,16 @@ export function AgentDetailPage() {
             </div>
           </div>
 
-          {/* 调试对话窗 */}
+          {/* 调试对话窗（live DebugChatOut：reply/usage/latency_ms——响应无 trace 字段，
+              trace 随网关中间件留痕；LLM 失败 502+5002 结构化透出） */}
           <div className="card !p-4">
             <div className="flex items-center gap-2">
               <b className="text-xs">调试对话</b>
-              <span className="badge b-purple">debug trace</span>
+              <span className="badge b-purple">调试面 · 不计正式历史</span>
             </div>
             <div className="mt-2 min-h-[160px] space-y-2" data-testid="agt-debug-log">
               {debugLog.length === 0 && (
-                <div className="text-[11px] text-label-3">发送测试消息… 调试会话不计入正式历史（trace 独立标记 debug）。</div>
+                <div className="text-[11px] text-label-3">发送测试消息… 调试面单轮生成，不落 sessions/messages 行。</div>
               )}
               {debugLog.map((m, i) => (
                 <div
@@ -307,9 +335,19 @@ export function AgentDetailPage() {
                   }
                 >
                   {m.text}
-                  {m.trace && <span className="mono mt-1 block text-2xs opacity-70">trace {m.trace} · debug</span>}
+                  {m.meta && <span className="mono mt-1 block text-2xs opacity-70">{m.meta}</span>}
                 </div>
               ))}
+              {debugPending && (
+                <div className="rounded-xl px-3 py-2 text-[11px]" style={{ background: 'var(--surface-2)' }} data-testid="agt-debug-pending">
+                  生成中…
+                </div>
+              )}
+              {debugError && (
+                <div className="rounded-xl px-3 py-2 text-[11px]" style={{ background: 'var(--red-soft)' }} data-testid="agt-debug-error" role="alert">
+                  <b className="text-red">调试失败</b> <span className="ml-1">{debugError}</span>
+                </div>
+              )}
             </div>
             <div className="mt-2 flex gap-1.5">
               <input
@@ -327,7 +365,7 @@ export function AgentDetailPage() {
                 <Send size={12} aria-hidden />
               </button>
             </div>
-            <div className="fhint">调试会话不计入正式历史（trace 独立标记 debug）。</div>
+            <div className="fhint">调试面单轮生成不落正式历史（sessions/messages 行数为 0）；LLM 失败 502+5002 结构化透出。</div>
           </div>
         </div>
       )}

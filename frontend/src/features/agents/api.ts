@@ -13,19 +13,27 @@ export const AGENT_STATUS_LABEL: Record<AgentStatus, string> = {
   enabled: '已启用', disabled: '已停用',
 }
 
-/** 适配器字段双形态：mock=字符串枚举；live 详情（2026-10-04 实测）=对象
+/** 适配器字段双形态：mock 旧=字符串枚举；live 详情（2026-10-04 实测）=对象
  *  {id,agent_tool,version,health_endpoint}。展示一律走 adapterText/adapterVersionText
  *  收敛为可渲染文本（fe1-F2：对象直渲染曾抛「Objects are not valid as a React child」）。 */
 export type AdapterRef =
   | 'nanobot' | 'openclaw' | 'hermes' | 'custom'
   | { id: string; agent_tool?: string | null; version?: string | null; health_endpoint?: string | null }
 
+/** live 实测字段（tools/ui-audit/out/lianTiao-20261004/agents.json + GET /agents/:id）----
+ *  {id,name,agent_tool,status:'enabled',system_prompt,config,created_at,adapter?:对象}：无
+ *  tools/health/active_sessions；页面层已做防御性可选链（fe1-F2，client 归一化归 fe2）。 */
+export type AgentToolKey = 'builtin' | 'claude'
+
 export interface PlatformAgent {
   id: string
   name: string
+  /** live AgentOut.agent_tool（schemas/agent.py AgentOut 逐字段；adapter 工具键
+   *  builtin/claude——领域 ALLOWED_AGENT_TOOLS 同源） */
+  agent_tool?: AgentToolKey
   status: AgentStatus
-  created_at: string
-  /* ---- mock 富形状字段（mocks/platform-handlers.ts AGENTS）；live 后端暂不返回，一律可选 ---- */
+  created_at: string | null
+  /* ---- mock 富形状字段（mocks 已随 live 收敛，字段保留为过渡兼容、一律可选） ---- */
   adapter?: AdapterRef
   adapter_version?: string
   version?: string
@@ -38,10 +46,6 @@ export interface PlatformAgent {
   queued_tasks?: number
   health?: { last_probe: string; rtt_ms: number; consecutive_failures: number }
   owner?: string
-  /* ---- live 后端实测字段（tools/ui-audit/out/lianTiao-20261004/agents.json + GET /agents/:id）----
-   * {id,name,agent_tool,status:'enabled',system_prompt,config,created_at,adapter?:对象}：无
-   * tools/health/active_sessions；页面层已做防御性可选链（fe1-F2，client 归一化归 fe2）。 */
-  agent_tool?: string
   system_prompt?: string | null
   config?: Record<string, unknown>
 }
@@ -65,6 +69,7 @@ export interface AdapterSchemaDef {
   name: string
   vendor: string
   capability: string
+  /** JSON Schema（RJSF 渲染源；FastAPI 按别名序列化 config_schema→schema，agent_admin 同键） */
   schema: Record<string, unknown>
 }
 
@@ -84,13 +89,28 @@ export interface AgentTaskRow {
   agent_id: string
 }
 
+/** 连接测试结果（live ConnectionTestOut 逐字段：{ok,latency_ms,model,error}——失败结构化
+ *  200 ok=false+error 文案，不上 500） */
 export interface ConnectionTestResult {
   ok: boolean
-  rtt_ms: number
-  protocol?: string
-  message?: string
-  code?: string
-  suggestion?: string
+  latency_ms: number
+  model: string
+  error: string | null
+}
+
+/** 适配器探活结果（live AgentHealthOut：{status:'inprocess'|'ok', latency_ms}——
+ *  builtin/claude 无独立端点=进程内恒健康） */
+export interface AgentHealthResult {
+  status: 'inprocess' | 'ok'
+  latency_ms: number | null
+}
+
+/** 调试对话结果（live DebugChatOut 三字段：{reply,usage,latency_ms}——调试面不落
+ *  sessions/messages 行，响应无 trace 会话语义字段；usage=平台用量上下文形状） */
+export interface DebugChatResult {
+  reply: string
+  usage: Record<string, number>
+  latency_ms: number
 }
 
 /** 工具注册中心目录行（S1 集市契约投影，services/tools/api/schemas/tool.py ToolOut 逐字段；
@@ -121,55 +141,65 @@ export function listAgents() {
   return api.list<PlatformAgent>('/agents')
 }
 
-/** GET /agents/{id} —— 详情（模型配置 / 绑定工具 / 适配器健康） */
+/** GET /agents/{id} —— 详情（AgentDetailOut：列表字段+adapter 绑定对象） */
 export function getAgent(id: string) {
   return api.get<PlatformAgent>(`/agents/${id}`)
 }
 
-/** POST /agents —— 注册（201；完成→卡片列表新实例，状态·已停止） */
+/** POST /agents —— 注册（201 AgentOut；live AgentCreateIn 逐字段：name/agent_tool/
+ *  system_prompt?/config?/adapter_id?——adapter_id 缺省=取/建平台级 (agent_tool,'platform')
+ *  绑定行；agent_tool 仅 builtin/claude，其余 422+3001）。工具绑定完成后经
+ *  bindAgentTools 覆盖式写白名单。 */
 export function createAgent(body: {
   name: string
-  adapter: string
-  endpoint: string
-  token: string
-  timeout_ms: number
-  tools: string[]
+  agent_tool: AgentToolKey
+  system_prompt?: string | null
+  config?: Record<string, unknown>
+  adapter_id?: string
 }) {
   return api.post<PlatformAgent>('/agents', body)
 }
 
-/** PUT /agents/{id}/tools —— 绑定 / 解绑工具（ToolPicker 保存经此生效并写审计） */
+/** PUT /agents/{id}/tools —— 绑定/解绑工具白名单（覆盖式 {tools}；返回 AgentOut，
+ *  白名单落在 config.tool_whitelist 同键） */
 export function bindAgentTools(id: string, tools: string[]) {
-  return api.put<{ id: string; tools: string[] }>(`/agents/${id}/tools`, { tools })
+  return api.put<PlatformAgent>(`/agents/${id}/tools`, { tools })
 }
 
-/** POST /agents/{id}/health-check —— 适配器探活（§5.1 ★；E-5003 时给诊断建议） */
+/** POST /agents/{id}/health-check —— 适配器探活（live AgentHealthOut；无端点=进程内
+ *  inprocess，latency_ms=null；适配器绑定行缺失 503+5003） */
 export function healthCheckAgent(id: string) {
-  return api.post<ConnectionTestResult & { last_probe?: string }>(`/agents/${id}/health-check`)
+  return api.post<AgentHealthResult>(`/agents/${id}/health-check`)
 }
 
-/** POST /agents/connection-test —— 预注册连接测试（R 预登记，见 R 清单） */
-export function testConnection(body: { adapter: string; endpoint: string; token: string }) {
+/** POST /agents/connection-test —— 预注册连接测试（live ConnectionTestIn 逐字段：
+ *  {provider, base_url, api_key?, model}——provider 当前仅登记（唯一 OpenAI 兼容通道），
+ *  api_key 缺省占位 EMPTY；缺 model/base_url 422+3001） */
+export function testConnection(body: { provider: string; base_url: string; api_key?: string; model: string }) {
   return api.post<ConnectionTestResult>('/agents/connection-test', body)
 }
 
-/** POST /agents/{id}/stop —— 停止（R 预登记；N 个进行中会话被终止） */
+/** POST /agents/{id}/disable —— 禁用（幂等；{id,status:'disabled',terminated_sessions:0}——
+ *  语义=新会话拒绑，存量会话与运行中 Run 跑完不中断，不强改 sessions）。 */
 export function stopAgent(id: string) {
-  // api/01 §5.15 定稿动词：start/stop → enable/disable（live 后端同款；mock handlers 已同步改名）
-  return api.post<{ id: string; status: string; terminated_sessions: number }>(`/agents/${id}/disable`)
+  // api/01 §5.15 定稿动词：start/stop → enable/disable（live 后端同款；mock handlers 已同步）
+  return api.post<{ id: string; status: string; terminated_sessions: number | null }>(`/agents/${id}/disable`)
 }
 
-/** POST /agents/{id}/enable —— 启用（api/01 §5.15 定稿动词 start→enable；前端先跑健康自检三步进度） */
+/** POST /agents/{id}/enable —— 启用（幂等；{id,status:'enabled',terminated_sessions:null}） */
 export function startAgent(id: string) {
-  return api.post<{ id: string; status: string }>(`/agents/${id}/enable`)
+  return api.post<{ id: string; status: string; terminated_sessions: number | null }>(`/agents/${id}/enable`)
 }
 
-/** POST /agents/{id}/debug-chat —— 调试对话（R 预登记；trace 标 debug 不计正式历史） */
-export function debugChat(id: string, content: string) {
-  return api.post<{ reply: string; trace_id: string; debug: boolean }>(`/agents/${id}/debug-chat`, { content })
+/** POST /agents/{id}/debug-chat —— 调试对话（live DebugChatIn {message,params?}——单轮
+ *  生成不落正式历史；LLM 失败 502+5002 结构化错误由调用方 catch 透出） */
+export function debugChat(id: string, message: string, params?: Record<string, unknown>) {
+  return api.post<DebugChatResult>(`/agents/${id}/debug-chat`, params ? { message, params } : { message })
 }
 
-/** GET /agents/adapter-schemas —— 适配器 JSON Schema（R 预登记，RJSF 渲染源） */
+/** GET /agents/adapter-schemas —— 适配器 config schema 下发（live AdapterSchemaListOut：
+ *  {items:[{key,name,vendor,capability,schema}]}，键集=agent_adapters 表行或回落
+ *  builtin/claude 常量；schema=JSON Schema，RJSF 渲染源） */
 export function listAdapterSchemas() {
   return api.get<{ items: AdapterSchemaDef[] }>('/agents/adapter-schemas')
 }

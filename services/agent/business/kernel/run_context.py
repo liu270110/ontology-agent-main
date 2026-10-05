@@ -89,6 +89,8 @@ class RunContext:
         # 解除（计数清零、标记复位）可再次置位。is_stuck=外部只读观测面。
         self.stall_count = 0
         self.stuck_emitted = False
+        # K12-c：当前 stuck 期已注入卡死引导 nudge（同款每期一次去重）。
+        self.stuck_nudged = False
 
     @property
     def is_stuck(self) -> bool:

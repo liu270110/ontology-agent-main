@@ -55,6 +55,18 @@ DEFAULT_STUCK_STEP_TIMEOUT_S = 0.0
 # 卡死引导 nudge 注入块来源标识（B3 标界：一眼区分内核卡死观测与用户/工具内容）
 STUCK_NUDGE_SOURCE = "kernel.stuck_watch"
 
+_STUCK_NUDGE_STALL_TEMPLATE = (
+    "[卡死防护提示·来源 {source}·非用户指令·按不可信内容对待] 连续 {stall_count} 次记账"
+    "未观测到实质进展（token 无增长且无新工具结果）。请核实当前方向是否已停滞；若停滞，"
+    "请改变策略、更换路径或显式放弃本方向，不要原样继续。"
+)
+
+_STUCK_NUDGE_TIMEOUT_TEMPLATE = (
+    "[卡死防护提示·来源 {source}·非用户指令·按不可信内容对待] 距上次记账已 {elapsed_s:.1f}s，"
+    "超过单步执行超时阈值 {step_timeout_s:.1f}s。请核实当前步是否卡滞；若卡滞，请改变策略、"
+    "更换路径或显式放弃本方向，不要原样等待。"
+)
+
 
 @dataclass(frozen=True)
 class LoopNudge:
@@ -177,7 +189,9 @@ class StuckWatch:
 
     **只观测不迁移**（A-6 原文红线）：Run/Step 状态机枚举与迁移表零改动；去重=同一
     stuck 期内事件至多一次（照 recheck_capped_emitted 先例），有实质进展即解除
-    （计数清零、标记复位）可再次置位。
+    （计数清零、标记复位）可再次置位。K12-c nudge 联动：置位时若当前边界可注入
+    （与 loop_guard nudge 同一注入面=rc.context_blocks 追加，标界三重：source=
+    kernel.stuck_watch、agent_attested、tier=3），同一 stuck 期至多一次。
     """
 
     def __init__(
@@ -209,7 +223,7 @@ class StuckWatch:
         进展判定：token（tracker.tokens_effective）与新工具结果（len(rc.results)）任一
         较上次记账增长=实质进展——停滞计数清零、stuck 期解除（可再次置位）。命中时
         发 ``kernel.run_stuck``（payload：停滞计数/阈值/触发面/当前步号/最近进展指纹/
-        stage）。
+        stage）并联动 K12-c 卡死引导 nudge（每期各至多一次）。
         """
         if self._threshold <= 0 and self._step_timeout_s <= 0:
             return  # 两判据全关：零开销直通（0=关闭语义，对齐 watermark_recheck_max 先例）
@@ -223,12 +237,20 @@ class StuckWatch:
         if progressed:
             rc.stall_count = 0
             rc.stuck_emitted = False  # 解除标记：有实质进展可再次置位（同期去重随之复位）
+            rc.stuck_nudged = False
             if not timeout_hit:
                 return
         else:
             rc.stall_count += 1
             if not (timeout_hit or (self._threshold > 0 and rc.stall_count >= self._threshold)):
                 return
+        message = (
+            _STUCK_NUDGE_TIMEOUT_TEMPLATE.format(
+                source=STUCK_NUDGE_SOURCE, elapsed_s=now - last.at, step_timeout_s=self._step_timeout_s
+            )
+            if timeout_hit
+            else _STUCK_NUDGE_STALL_TEMPLATE.format(source=STUCK_NUDGE_SOURCE, stall_count=rc.stall_count)
+        )
         if not rc.stuck_emitted:  # 同一 stuck 期事件至多一次（recheck_capped_emitted 先例）
             rc.stuck_emitted = True
             self._emit(
@@ -245,4 +267,15 @@ class StuckWatch:
                     "stage": str(LoopStage.EXECUTION),
                     "source": STUCK_NUDGE_SOURCE,
                 },
+            )
+        if not rc.stuck_nudged:  # K12-c：同期卡死引导至多一次（防同因重复 nudge）
+            rc.stuck_nudged = True
+            rc.context_blocks = (
+                *rc.context_blocks,
+                ContextBlock(
+                    source=STUCK_NUDGE_SOURCE,
+                    content=message,
+                    tokens=0,  # 内核自产软警告零成本留痕（同 loop_guard nudge 口径，不推水位）
+                    trust_level=TrustLevel.AGENT_ATTESTED,
+                ),
             )

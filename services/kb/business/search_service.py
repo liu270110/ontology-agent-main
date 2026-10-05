@@ -194,11 +194,15 @@ class KnowledgeSearchService:
                     acl=acl,
                 )
 
+            # K8-c 检索第 4 路生产接线（docs/Agent/13 §14）：目录空 → None=该路不启用（零干扰）
+            glossary_fn = await build_glossary_recall_fn(session=db, tenant_id=tenant_id, hierarchy=hierarchy, acl=acl)
+
             result = await hybrid_search(
                 query,
                 bm25=bm25_fn,
                 vector=vector_fn,
                 graph=graph_fn if with_evidence else None,
+                glossary=glossary_fn,
                 top_k=top_k,
                 mode=mode,
                 entity_type_filter=entity_type_filter,
@@ -273,11 +277,17 @@ class KnowledgeSearchService:
                         acl=acl,
                     )
 
+                # K8-c 检索第 4 路生产接线（docs/Agent/13 §14）：每轮闭包装配（短会话即用即弃同款）
+                glossary_fn = await build_glossary_recall_fn(
+                    session=db, tenant_id=tenant_id, hierarchy=hierarchy, acl=acl
+                )
+
                 result = await hybrid_search(
                     round_query,
                     bm25=bm25_fn,
                     vector=vector_fn,
                     graph=graph_fn if with_evidence else None,
+                    glossary=glossary_fn,
                     top_k=top_k,
                     mode=mode,
                     entity_type_filter=entity_type_filter,

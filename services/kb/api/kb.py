@@ -154,7 +154,7 @@ from services.kb.business.kb_pipeline import (
     run_pipeline,
 )
 from services.kb.business.review_queue import ReviewQueueService
-from services.kb.business.search_service import rerank_hits_by_source_context
+from services.kb.business.search_service import build_glossary_recall_fn, rerank_hits_by_source_context
 from services.kb.business.usage_service import UsageStore
 from services.kb.data.orm import Document, DocumentChunk, KbCollection, KbFact, KbPipelineStep
 from services.kb.retrieval.embed import AclPushdown, OllamaEmbedder, bm25_search, vector_ready, vector_search
@@ -1071,6 +1071,17 @@ async def search(body: KbSearchIn, principal: KbReadDep, request: Request, sessi
             acl=acl,
         )
 
+    # K8-c 检索第 4 路生产接线（docs/Agent/13 §14）：glossary 术语回调（目录走 agentic 单例；
+    # 目录空 → None=该路不启用零干扰），agentic/非 agentic 两分支共用同一回调
+    glossary_fn = await build_glossary_recall_fn(
+        session=session,
+        tenant_id=principal.tenant_id,
+        hierarchy=hierarchy,
+        acl=acl,
+        as_of=body.as_of,
+        include_superseded=body.include_superseded,
+    )
+
     if body.agentic:
         # A0 服务端代跑（AgenticRAG优化方案 §3/§8.1）：编排委托 business/agentic——decide 判别
         # （寒暄 skip 时下方回调永不触发=零召回）→ 每轮走同一套三路召回闭包 → 规则评级 →
@@ -1083,6 +1094,7 @@ async def search(body: KbSearchIn, principal: KbReadDep, request: Request, sessi
                 bm25=bm25_fn,
                 vector=vector_fn,
                 graph=graph_fn if body.with_evidence else None,
+                glossary=glossary_fn,
                 top_k=body.top_k,
                 mode=body.mode,
                 entity_type_filter=body.entity_type_filter,
@@ -1109,6 +1121,7 @@ async def search(body: KbSearchIn, principal: KbReadDep, request: Request, sessi
             bm25=bm25_fn,
             vector=vector_fn,
             graph=graph_fn if body.with_evidence else None,
+            glossary=glossary_fn,
             top_k=body.top_k,
             mode=body.mode,
             entity_type_filter=body.entity_type_filter,

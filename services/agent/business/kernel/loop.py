@@ -91,6 +91,7 @@ class AgentKernel:
         spill_store: SpillStore | None = None,
         tool_parallelism: int | None = None,
         loop_abort_threshold: int | None = None,
+        watermark_recheck_max: int | None = None,
     ) -> None:
         self._dispatcher = dispatcher
         self._baseline = BaselineGate()
@@ -100,6 +101,11 @@ class AgentKernel:
         # A-1 循环检测两段式（docs/Agent/13 §2 K1-a）：阈值显式注入优先，缺省=常量 2
         self._loop_abort_threshold = (
             loop_abort_threshold if loop_abort_threshold is not None else DEFAULT_LOOP_ABORT_THRESHOLD
+        )
+        # K11-b 步间压缩风暴帽（docs/Agent/13 §17）：每 Run 步间压缩触发次数上限，
+        # 显式注入优先，缺省读 Settings（D2 纪律同 loop_abort_threshold）
+        self._watermark_recheck_max = (
+            watermark_recheck_max if watermark_recheck_max is not None else get_settings().kernel_watermark_recheck_max
         )
         # B-① 并行段并发度：显式注入优先，缺省读 Settings（T6 唯一事实源；=1 退化为串行）
         self._tool_parallelism = (
@@ -460,10 +466,12 @@ class AgentKernel:
         压缩门不再生效——此处按压缩同源 0.8 比率语义（CompactionTrigger）复判：
 
         - 未超水位：零开销直通（不触压缩器、零事件）；
-        - 超水位：走组装阶段压缩等价路径（K1-b 降级链：策略→提取式→截断）压缩
+        - 超水位且帽内：走组装阶段压缩等价路径（K1-b 降级链：策略→提取式→截断）压缩
           运行组装面（只动易变尾，不重新全量组装），压缩回收的估算 tokens 经
           ``tracker.compress_estimated`` 回冲锚定账（重算水位）后再执行该步；
-          压缩后仍超限的步照常执行（后续靠预算检查点/硬终止兜底）。
+        - 超水位且达帽（K11-b 防压缩风暴）：不再步间压缩，落
+          ``kernel.watermark_recheck_capped`` 警告事件，超水位步照常执行（预算检查点/
+          硬终止兜底）；压缩后仍超限的步同样照常执行（帽是风暴唯一防线，兜底终断语义）。
         - 复判失败不阻断（A-8 同款：异常结构化转义留警告日志，该步照常执行）。
 
         无 token 上限（max_tokens=None）=无水位可言，直接返回（零开销）。
@@ -475,6 +483,22 @@ class AgentKernel:
         effective = rc.tracker.tokens_effective
         if not trigger.should_compact(effective, budget_tokens):
             return  # 未超水位：零开销直通（压缩器不被调用）
+        if rc.recheck_compactions >= self._watermark_recheck_max:
+            # K11-b：达帽——不再压缩，警告事件后照常执行（后续靠预算兜底/硬终止）
+            self._emit(
+                rc.ledger,
+                rc.ctx,
+                rc.task.run_id,
+                "kernel.watermark_recheck_capped",
+                {
+                    "cap": self._watermark_recheck_max,
+                    "compactions": rc.recheck_compactions,
+                    "tokens_effective": effective,
+                    "watermark_line": trigger.target_tokens(budget_tokens),
+                    "stage": str(LoopStage.EXECUTION),
+                },
+            )
+            return
         try:
             compacted, event = await self._context_stage.compact_volatile_tail(
                 rc, list(rc.context_blocks), budget_tokens=budget_tokens

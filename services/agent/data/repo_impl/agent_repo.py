@@ -107,6 +107,12 @@ class PgAgentRepository:
         row = await self._db.get(AgentAdapterORM, adapter_id)
         return _adapter_to_domain(row) if row is not None else None
 
+    async def list_adapters(self) -> list[AgentAdapterInfo]:
+        """适配器绑定行全量（adapter-schemas 下发；平台级表，按 agent_tool 稳定排序）。"""
+        stmt = select(AgentAdapterORM).order_by(AgentAdapterORM.agent_tool, AgentAdapterORM.created_at)
+        rows = (await self._db.execute(stmt)).scalars().all()
+        return [_adapter_to_domain(r) for r in rows]
+
     async def ensure_platform_adapter(self, agent_tool: str) -> uuid.UUID:
         """取/建平台级适配器行（agent_tool, version='platform'）；uk_agent_adapters 兜底并发。"""
         stmt = select(AgentAdapterORM).where(

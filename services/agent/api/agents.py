@@ -12,24 +12,33 @@ import uuid
 from typing import Annotated
 
 import httpx
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, Query, Request, status
 
 from services.agent.api.deps import UowDep
 from services.agent.api.schemas.agent import (
+    AdapterSchemaListOut,
+    AdapterSchemaOut,
     AgentCreateIn,
     AgentDetailOut,
     AgentHealthOut,
     AgentListOut,
     AgentOut,
+    AgentStatusOut,
     AgentToolsIn,
     AgentUpdateIn,
+    ConnectionTestIn,
+    ConnectionTestOut,
+    DebugChatIn,
+    DebugChatOut,
     agent_detail_from_domain,
     agent_from_domain,
 )
+from services.agent.business import agent_admin
 from services.agent.business.agent_health import record_adapter_health_outcome
 from services.agent.domain.model.agent import Agent, AgentError
 from services.platform.deps import Principal, require_scope
 from services.platform.errors import GatewayError
+from services.platform.ports.model_port import ModelPortError
 from services.platform.schemas import PageMeta
 
 router = APIRouter(prefix="/agents", tags=["agents"])
@@ -83,6 +92,36 @@ async def list_agents(
         data=[agent_from_domain(a) for a in items],
         meta=PageMeta(page=page, page_size=page_size, total=total),
     )
+
+
+# ── 管理面扩展（api/01 §5.1 ★ 预登记；静态路径先于 /{agent_id} 注册——FastAPI 首匹配）────
+
+
+@router.get("/adapter-schemas", summary="适配器 config schema 下发（RJSF 渲染源；★ 预登记）")
+async def list_adapter_schemas(principal: AgentReadDep, uow: UowDep) -> AdapterSchemaListOut:
+    """枚举=agent_adapters 表行（按 agent_tool 去重）；无库表数据回落 pydantic 常量 schema
+    （business._ADAPTER_REGISTRY，键集与领域 config 白名单同源）。"""
+    async with uow.for_tenant(principal.tenant_id) as tx:
+        adapters = await tx.agents.list_adapters()
+    entries = agent_admin.adapter_schema_items(adapters)
+    items = [AdapterSchemaOut.model_validate(entry.model_dump(by_alias=True)) for entry in entries]
+    return AdapterSchemaListOut(items=items)
+
+
+@router.post("/connection-test", summary="预注册连接测试（一次最小补全；失败结构化 200 不上 500）")
+async def connection_test(body: ConnectionTestIn, principal: AgentWriteDep, request: Request) -> ConnectionTestOut:
+    """注册向导「先测后注册」步（实例尚不存在故无 {id} 路径）：对目标 base_url/model 发一次
+    1-token 最小补全（platform/llm 端口）；传输经 app.state.llm_probe_factory 注入（缺省真传输，
+    测试注桩）。provider 当前仅登记（唯一 OpenAI 兼容通道，M0 口径）。"""
+    probe = getattr(request.app.state, "llm_probe_factory", None)
+    result = await agent_admin.probe_connection(
+        provider=body.provider,
+        base_url=body.base_url,
+        api_key=body.api_key,
+        model=body.model,
+        probe=probe,
+    )
+    return ConnectionTestOut(**result)
 
 
 @router.get("/{agent_id}", summary="agent 详情（含适配器绑定信息）")
@@ -161,3 +200,61 @@ async def health_check(agent_id: uuid.UUID, principal: AgentReadDep, uow: UowDep
         raise GatewayError(5003, f"适配器探活失败: {exc}", status_code=503) from exc
     await record_adapter_health_outcome(uow, tenant_id=principal.tenant_id, agent_id=agent_id, healthy=True)
     return AgentHealthOut(status="ok", latency_ms=int((time.monotonic() - started) * 1000))
+
+
+# ── 启停与调试面（api/01 §5.15 定稿动词 start/stop→enable/disable；mock §5.1 R 预登记）──────
+
+
+@router.post("/{agent_id}/disable", summary="禁用 agent（幂等；disabled=拒绝新会话绑定）")
+async def disable_agent(agent_id: uuid.UUID, principal: AgentWriteDep, uow: UowDep) -> AgentStatusOut:
+    """agents.status → disabled（聚合方法唯一写路径，幂等=已在目标状态零操作）。
+
+    disabled 语义=**拒绝新会话绑定**（Agent.ensure_usable_for_new_session，创建会话端点强制
+    409）——不级联改 sessions：存量会话与运行中 Run 跑完不中断（04 §10 degraded 同裁决），
+    terminated_sessions 恒 0（前端 mock 形状占位字段）。"""
+    return await _set_enabled(agent_id, principal=principal, uow=uow, enabled=False)
+
+
+@router.post("/{agent_id}/enable", summary="启用 agent（幂等；disabled/degraded 离场）")
+async def enable_agent(agent_id: uuid.UUID, principal: AgentWriteDep, uow: UowDep) -> AgentStatusOut:
+    """agents.status → enabled（状态机：disabled 仅 enable 出口；degraded 可自愈同款通道）。"""
+    return await _set_enabled(agent_id, principal=principal, uow=uow, enabled=True)
+
+
+async def _set_enabled(agent_id: uuid.UUID, *, principal: Principal, uow: UowDep, enabled: bool) -> AgentStatusOut:
+    """启停共用写路径：聚合翻转 + save_meta（同一 UoW 事务）；幂等短路在聚合侧。
+    terminated_sessions 仅 disable 语义携带（恒 0，不强改 sessions）；enable 回 None。"""
+    async with uow.for_tenant(principal.tenant_id) as tx:
+        agent = await tx.agents.get(agent_id)
+        if agent is None:
+            raise GatewayError(404, "agent 不存在", status_code=404)
+        terminated = agent_admin.set_agent_enabled(agent, enabled=enabled)
+        await tx.agents.save_meta(agent)
+    return AgentStatusOut(id=agent.id, status=agent.status.value, terminated_sessions=None if enabled else terminated)
+
+
+@router.post("/{agent_id}/debug-chat", summary="调试对话（单轮生成；调试面不落会话/消息/任务行）")
+async def debug_chat(
+    agent_id: uuid.UUID, body: DebugChatIn, principal: AgentWriteDep, uow: UowDep, request: Request
+) -> DebugChatOut:
+    """IX-AGT-02 调试窗：对该 agent 配置走一次单轮生成（复用编排器最小生成面
+    ChatAdapter.stream_chat，与 chat 主链同 builtin/claude 通道）。
+
+    调试面声明：**不落 sessions/messages/tasks/runs 行**（调试对话不计正式历史，trace 随
+    网关中间件留痕）；LLM 失败映射已登记 5xxx（5001→504，其余→502），不裸 500。"""
+    async with uow.for_tenant(principal.tenant_id) as tx:
+        agent = await tx.agents.get(agent_id)
+        if agent is None:
+            raise GatewayError(404, "agent 不存在", status_code=404)
+    try:
+        result = await agent_admin.debug_reply(
+            agent=agent,
+            message=body.message,
+            params=body.params,
+            model_port=getattr(request.app.state, "model_port", None),
+            user_id=principal.user_id,
+        )
+    except ModelPortError as exc:  # 5xxx 已登记码结构化上抛（02 §4.1 ④：禁裸异常逃逸）
+        code = int(getattr(exc, "code", 5999))
+        raise GatewayError(code, str(exc), status_code=504 if code == 5001 else 502) from exc
+    return DebugChatOut(**result)

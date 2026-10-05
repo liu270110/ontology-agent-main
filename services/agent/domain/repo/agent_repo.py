@@ -36,6 +36,10 @@ class AgentRepository(Protocol):
         """适配器绑定行只读投影（详情/健康检查）；未命中返回 None。"""
         ...
 
+    async def list_adapters(self) -> list[AgentAdapterInfo]:
+        """适配器绑定行全量只读（adapter-schemas 下发用例；平台级表无租户列，不过滤）。"""
+        ...
+
     async def ensure_platform_adapter(self, agent_tool: str) -> UUID:
         """取/建平台级适配器行（agent_tool, version='platform'）：注册用例的缺省绑定。"""
         ...

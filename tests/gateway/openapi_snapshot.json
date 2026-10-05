@@ -156,6 +156,56 @@
         "title": "AccessRequestOut",
         "type": "object"
       },
+      "AdapterSchemaListOut": {
+        "additionalProperties": false,
+        "description": "适配器 schema 列表（非分页静态清单：{items} 裸信封，mcp ServerListOut 同款）。",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/AdapterSchemaOut"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "title": "AdapterSchemaListOut",
+        "type": "object"
+      },
+      "AdapterSchemaOut": {
+        "additionalProperties": false,
+        "description": "适配器 config schema 下发单项（mock ADAPTER_SCHEMAS 逐字段；schema=JSON Schema，\nRJSF 渲染源——字段别名序列化，内部名 config_schema 避让 pydantic v1 遗留方法名）。",
+        "properties": {
+          "capability": {
+            "title": "Capability",
+            "type": "string"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "schema": {
+            "additionalProperties": true,
+            "title": "Schema",
+            "type": "object"
+          },
+          "vendor": {
+            "title": "Vendor",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "name",
+          "vendor",
+          "capability"
+        ],
+        "title": "AdapterSchemaOut",
+        "type": "object"
+      },
       "AdminGroupCreateIn": {
         "additionalProperties": false,
         "properties": {
@@ -926,6 +976,38 @@
           "config"
         ],
         "title": "AgentOut",
+        "type": "object"
+      },
+      "AgentStatusOut": {
+        "additionalProperties": false,
+        "description": "启停结果（enable：{id,status}；disable 附 terminated_sessions——恒 0，调试：语义=新会话\n拒绑，不强改 sessions，字段为前端 mock 形状占位）。status 取领域三态值（enabled/disabled/\ndegraded），前端 fe1-F2 双口径映射已收敛。",
+        "properties": {
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "terminated_sessions": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Terminated Sessions"
+          }
+        },
+        "required": [
+          "id",
+          "status"
+        ],
+        "title": "AgentStatusOut",
         "type": "object"
       },
       "AgentToolsIn": {
@@ -2540,6 +2622,85 @@
         "title": "ConflictTicketOut",
         "type": "object"
       },
+      "ConnectionTestIn": {
+        "additionalProperties": false,
+        "description": "预注册连接测试入参（注册向导「先测后注册」步；实例尚不存在故无 {id} 路径）。",
+        "properties": {
+          "api_key": {
+            "anyOf": [
+              {
+                "maxLength": 512,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Api Key"
+          },
+          "base_url": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Base Url",
+            "type": "string"
+          },
+          "model": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Model",
+            "type": "string"
+          },
+          "provider": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Provider",
+            "type": "string"
+          }
+        },
+        "required": [
+          "provider",
+          "base_url",
+          "model"
+        ],
+        "title": "ConnectionTestIn",
+        "type": "object"
+      },
+      "ConnectionTestOut": {
+        "additionalProperties": false,
+        "description": "连接测试结果：失败**结构化 200**（ok=false + error），不上 500（探测面非服务故障）。",
+        "properties": {
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "latency_ms": {
+            "title": "Latency Ms",
+            "type": "integer"
+          },
+          "model": {
+            "title": "Model",
+            "type": "string"
+          },
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "ok",
+          "latency_ms",
+          "model"
+        ],
+        "title": "ConnectionTestOut",
+        "type": "object"
+      },
       "ConsolidateIn": {
         "description": "POST /memory/consolidate：触发指定会话 L1→L2 沉淀（202 受理，后台执行）。",
         "properties": {
@@ -2612,6 +2773,60 @@
           "role"
         ],
         "title": "CreateInviteIn",
+        "type": "object"
+      },
+      "DebugChatIn": {
+        "additionalProperties": false,
+        "description": "调试对话入参（单轮；params 预留——当前仅消费 timeout_ms）。",
+        "properties": {
+          "message": {
+            "maxLength": 8192,
+            "minLength": 1,
+            "title": "Message",
+            "type": "string"
+          },
+          "params": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Params"
+          }
+        },
+        "required": [
+          "message"
+        ],
+        "title": "DebugChatIn",
+        "type": "object"
+      },
+      "DebugChatOut": {
+        "additionalProperties": false,
+        "description": "调试对话结果（usage=平台用量上下文形状 token_in/token_out/cache_read_tokens；桩不回填报\n空对象）。调试面不落 sessions/messages/tasks 行——响应不含 trace 会话语义字段。",
+        "properties": {
+          "latency_ms": {
+            "title": "Latency Ms",
+            "type": "integer"
+          },
+          "reply": {
+            "title": "Reply",
+            "type": "string"
+          },
+          "usage": {
+            "additionalProperties": true,
+            "title": "Usage",
+            "type": "object"
+          }
+        },
+        "required": [
+          "reply",
+          "latency_ms"
+        ],
+        "title": "DebugChatOut",
         "type": "object"
       },
       "DecisionIn": {
@@ -12929,6 +13144,70 @@
         ]
       }
     },
+    "/api/v1/agents/adapter-schemas": {
+      "get": {
+        "description": "枚举=agent_adapters 表行（按 agent_tool 去重）；无库表数据回落 pydantic 常量 schema\n（business._ADAPTER_REGISTRY，键集与领域 config 白名单同源）。",
+        "operationId": "list_adapter_schemas_api_v1_agents_adapter_schemas_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdapterSchemaListOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "适配器 config schema 下发（RJSF 渲染源；★ 预登记）",
+        "tags": [
+          "agents"
+        ]
+      }
+    },
+    "/api/v1/agents/connection-test": {
+      "post": {
+        "description": "注册向导「先测后注册」步（实例尚不存在故无 {id} 路径）：对目标 base_url/model 发一次\n1-token 最小补全（platform/llm 端口）；传输经 app.state.llm_probe_factory 注入（缺省真传输，\n测试注桩）。provider 当前仅登记（唯一 OpenAI 兼容通道，M0 口径）。",
+        "operationId": "connection_test_api_v1_agents_connection_test_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConnectionTestIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConnectionTestOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "预注册连接测试（一次最小补全；失败结构化 200 不上 500）",
+        "tags": [
+          "agents"
+        ]
+      }
+    },
     "/api/v1/agents/{agent_id}": {
       "delete": {
         "operationId": "delete_agent_api_v1_agents__agent_id__delete",
@@ -13052,6 +13331,148 @@
           }
         },
         "summary": "更新提示词/配置（改 agent_tool 视为重建，不支持）",
+        "tags": [
+          "agents"
+        ]
+      }
+    },
+    "/api/v1/agents/{agent_id}/debug-chat": {
+      "post": {
+        "description": "IX-AGT-02 调试窗：对该 agent 配置走一次单轮生成（复用编排器最小生成面\nChatAdapter.stream_chat，与 chat 主链同 builtin/claude 通道）。\n\n调试面声明：**不落 sessions/messages/tasks/runs 行**（调试对话不计正式历史，trace 随\n网关中间件留痕）；LLM 失败映射已登记 5xxx（5001→504，其余→502），不裸 500。",
+        "operationId": "debug_chat_api_v1_agents__agent_id__debug_chat_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "agent_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Agent Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DebugChatIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DebugChatOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "调试对话（单轮生成；调试面不落会话/消息/任务行）",
+        "tags": [
+          "agents"
+        ]
+      }
+    },
+    "/api/v1/agents/{agent_id}/disable": {
+      "post": {
+        "description": "agents.status → disabled（聚合方法唯一写路径，幂等=已在目标状态零操作）。\n\ndisabled 语义=**拒绝新会话绑定**（Agent.ensure_usable_for_new_session，创建会话端点强制\n409）——不级联改 sessions：存量会话与运行中 Run 跑完不中断（04 §10 degraded 同裁决），\nterminated_sessions 恒 0（前端 mock 形状占位字段）。",
+        "operationId": "disable_agent_api_v1_agents__agent_id__disable_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "agent_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Agent Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentStatusOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "禁用 agent（幂等；disabled=拒绝新会话绑定）",
+        "tags": [
+          "agents"
+        ]
+      }
+    },
+    "/api/v1/agents/{agent_id}/enable": {
+      "post": {
+        "description": "agents.status → enabled（状态机：disabled 仅 enable 出口；degraded 可自愈同款通道）。",
+        "operationId": "enable_agent_api_v1_agents__agent_id__enable_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "agent_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Agent Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentStatusOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "启用 agent（幂等；disabled/degraded 离场）",
         "tags": [
           "agents"
         ]

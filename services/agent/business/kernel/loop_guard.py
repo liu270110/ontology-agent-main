@@ -232,7 +232,9 @@ class StuckWatch:
         results = len(rc.results)
         last = rc.last_progress
         timeout_hit = self._step_timeout_s > 0 and last is not None and (now - last.at) >= self._step_timeout_s
-        progressed = last is None or tokens != last.tokens or results != last.tool_results
+        # 增长（>）而非变化（!=）：K11 步间压缩会回冲 tokens_effective 使其下降，
+        # 压缩回冲不构成实质进展（ocr 2026-10-05 评审发现，对齐 §18「增长为 0」语义）。
+        progressed = last is None or tokens > last.tokens or results > last.tool_results
         rc.last_progress = ProgressHeartbeat(step_seq=step_seq, at=now, tokens=tokens, tool_results=results)
         if progressed:
             rc.stall_count = 0

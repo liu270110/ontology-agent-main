@@ -18,21 +18,24 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 import time
 import uuid
 from collections.abc import Mapping, Sequence
 from dataclasses import replace
+from datetime import datetime
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from services.kb.business.agentic import AgenticTrace, run_agentic_search
+from services.kb.business.agentic import AgenticTrace, _default_catalog, run_agentic_search
+from services.kb.business.kb_extraction import SeedCatalog
 from services.kb.business.usage_service import UsageStore
 from services.kb.retrieval.embed import AclPushdown, OllamaEmbedder, bm25_search, vector_search
-from services.kb.retrieval.graph import ClassHierarchy, build_class_hierarchy, expand_graph
-from services.kb.retrieval.retrieve import GraphPath, SearchHit, hybrid_search, resolve_mode
+from services.kb.retrieval.graph import ClassHierarchy, build_class_hierarchy, expand_graph, glossary_recall
+from services.kb.retrieval.retrieve import GraphPath, RankFn, SearchHit, hybrid_search, resolve_mode
 from services.ontology.business.hierarchy_service import get_class_hierarchy
 
 logger = logging.getLogger(__name__)
@@ -361,6 +364,71 @@ class KnowledgeSearchService:
         hierarchy = build_class_hierarchy((row.iri, row.name, row.subclass_of) for row in rows)
         self._hierarchy_cache[key] = (now, hierarchy)
         return hierarchy
+
+
+# ---------------------------------------------------------------- glossary 第 4 路共享回调构造器（K8-b，13 §14）
+
+
+_TERM_RE = re.compile(r"\w+", re.UNICODE)  # 词段扫描（agentic.rewrite 零级同构：\w 连续段含 CJK）
+
+
+def glossary_targets_for_query(query: str, catalog: SeedCatalog) -> list[str]:
+    """查询词面 → gloss:target 类 IRI 列表（K8-b 纯函数，独立可单测）。
+
+    词段（``\\w+`` 连续段）与术语 label/altLabel 归一小写精确相等 → 收 gloss:target
+    （agentic.rewrite 零级同款语义：双签目录的面先于猜测，不做包含/子序列启发）；声明序
+    去重；无命中 → []（第 4 路空命中不进通道集，不干扰其余路，K4-d 约束）。
+    """
+    targets: list[str] = []
+    for seg in _TERM_RE.findall(query):
+        entry = catalog.glossary_alias_index.get(seg.lower())
+        if entry is not None and entry.target not in targets:
+            targets.append(entry.target)
+    return targets
+
+
+async def build_glossary_recall_fn(
+    *,
+    session: AsyncSession,
+    tenant_id: uuid.UUID,
+    hierarchy: ClassHierarchy,
+    acl: AclPushdown | None = None,
+    as_of: datetime | None = None,
+    include_superseded: bool = False,
+    catalog: SeedCatalog | None = None,
+) -> RankFn | None:
+    """glossary 第 4 路回调工厂（K8-b）：「词面 → gloss:target → glossary_recall」可调用。
+
+    返回值与 bm25/vector 同形（RankFn），retrieve.hybrid_search ``glossary`` 参数直接消费；
+    api/kb.py 与本服务两处生产调用点共用本构造器（K8-c 接线单一事实源）。
+
+    - 目录走 agentic._default_catalog 进程内惰性单例（rdflib 装载一次全进程复用，与改写/
+      对齐消费同一份，避免重复装载）；``catalog`` 显式注入（测试/装配方）优先于单例；
+    - 目录空（glossary=()，旧种子/外部目录）→ None=调用方不启用该路（零干扰，向后兼容红线）；
+    - 词面无目录命中 → 回调返回 []（空命中不进通道集，同样零干扰）；
+    - 层次/acl/as_of 在调用点闭包（与 bm25/graph 回调同款装配），守卫与 hop-0 召回语义见
+      retrieval/graph.glossary_recall。
+    """
+    cat = catalog if catalog is not None else await _default_catalog()
+    if not cat.glossary:
+        return None
+
+    async def glossary_fn(query: str, pool: int) -> list[SearchHit]:
+        targets = glossary_targets_for_query(query, cat)
+        if not targets:
+            return []
+        return await glossary_recall(
+            targets,
+            session=session,
+            tenant_id=tenant_id,
+            hierarchy=hierarchy,
+            limit=pool,
+            acl=acl,
+            as_of=as_of,
+            include_superseded=include_superseded,
+        )
+
+    return glossary_fn
 
 
 # ---------------------------------------------------------------- source_context 软路由（多源接入 §5.2 v1）

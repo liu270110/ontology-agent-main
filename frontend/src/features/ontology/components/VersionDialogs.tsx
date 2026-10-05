@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { CheckCircle2, XCircle } from 'lucide-react'
 import { Modal } from '@/components/modal'
-import type { Changeset, DiffRow, OntoVersion } from '../api'
+import type { Changeset, DiffImpact, DiffRow, OntoVersion } from '../api'
 import { ChangeCountChips, CsStatusBadge } from './shared'
 import { Select } from '@/components/select'
 
@@ -133,14 +133,38 @@ export function CompareSelectorDialog({
 /** 五步物化：变更写入 → SHACL 复检 → 图谱物化 → 检索索引同步 → 完成（中性词，26 篇口径） */
 const PUBLISH_STEPS = ['变更写入', 'SHACL 复检', '图谱物化', '检索索引同步', '完成'] as const
 
+/** 影响面徽标（41 §2 V4.2；画板 p-versions「影响 3 实体 · 2 规则」）：数据全部来自 diff 端点
+ *  （api.ts diffImpact 派生，调用方传入）。rules=null（载荷缺四投影段）时只显实体半边；
+ *  impact=null（diff 无元素级数据）整枚不渲染。「预计物化 +N 三元组」行无任何端点供数——
+ *  数据不可得不显示（不造假），待物化预演端点登记后按数据驱动恢复。 */
+export function ImpactBadge({
+  impact,
+  testid = 'impact-badge',
+  className = '',
+}: {
+  impact: DiffImpact | null
+  testid?: string
+  className?: string
+}) {
+  if (!impact) return null
+  return (
+    <span className={`badge b-gray ${className}`} data-testid={testid}>
+      影响 {impact.entities} 实体{impact.rules == null ? '' : ` · ${impact.rules} 规则`}
+    </span>
+  )
+}
+
 export function PublishDialog({
   open,
   changeset,
+  impact,
   onClose,
   onPublish,
 }: {
   open: boolean
   changeset: Changeset | null
+  /** 影响面（41 §2 V4.2）：调用方从 diff 端点载荷派生（diffImpact）；无数据不渲染徽标 */
+  impact?: DiffImpact | null
   onClose: () => void
   /** 发布已受理（202）；进度由本弹窗推进，完成后回调携带新版本号 */
   onPublish: (note: string) => Promise<{ version: string }>
@@ -243,6 +267,7 @@ export function PublishDialog({
             <b>变更单 {changeset.id}</b>
             <span className="text-label-3">{changeset.title}</span>
             <CsStatusBadge status={changeset.status} />
+            <ImpactBadge impact={impact ?? null} testid="publish-impact" className="ml-auto" />
           </div>
           <div className="mt-1.5 flex items-center gap-2">
             变更计数：<ChangeCountChips stats={changeset.stats} />

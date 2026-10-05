@@ -48,6 +48,8 @@ export function WorkbenchPage() {
   const select = useWorkbenchStore(s => s.select)
   const dirtyCount = useWorkbenchStore(s => s.dirtyCount)
   const pendingDeleteCount = useWorkbenchStore(s => s.pendingDeletes.length)
+  /** Inspector「应用修改」计数（_manualDirty；41 §2 V4.3 mod 真实化数据源） */
+  const inspectorMods = useWorkbenchStore(s => s._manualDirty)
   const resetDirty = useWorkbenchStore(s => s.resetDirty)
   const changesetId = useWorkbenchStore(s => s.changesetId)
   const setChangesetId = useWorkbenchStore(s => s.setChangeset)
@@ -305,9 +307,11 @@ export function WorkbenchPage() {
       base_version: detail.data?.draft_version ?? detail.data?.head_version ?? '',
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
-      stats: { add: 1 + dirtyCount, del: pendingDeleteCount, mod: 2 }, // del 接真实删除标记数（评审 P2-4）；mod 随 V4 真实 diff 化
+      // 41 §2 V4.3：mod=Inspector「应用修改」次数（store _manualDirty，bumpDirty 唯一写点），
+      // 不再恒 2 占位；add/del 维持 dirty 派生口径
+      stats: { add: 1 + dirtyCount, del: pendingDeleteCount, mod: inspectorMods },
     }),
-    [changesetId, projectId, detail.data, dirtyCount, pendingDeleteCount],
+    [changesetId, projectId, detail.data, dirtyCount, pendingDeleteCount, inspectorMods],
   )
 
   async function handleSubmitReview() {
@@ -426,7 +430,8 @@ export function WorkbenchPage() {
         </div>
       )}
 
-      {/* 底部校验面板（IX-ON-05，可折叠 220px；公理编辑器整页态不重复展示） */}
+      {/* 底部校验面板（IX-ON-05，可折叠 220px；公理编辑器整页态不重复展示）。
+          变更预览/三色计数自 41 §2 V4.3 起由面板直读 store pending 层，页面不再传 draftOps */}
       {tab !== 'axioms' && (
         <ValidationPanel
           report={validation}
@@ -435,7 +440,6 @@ export function WorkbenchPage() {
           onToggleCollapse={() => setValCollapsed(v => !v)}
           onRunValidate={() => void runValidate()}
           onLocate={focus => locate(focus.split('·')[0]?.trim() ?? focus)}
-          draftOps={{ add: 1 + dirtyCount, del: pendingDeleteCount, mod: 2 }}
         />
       )}
 

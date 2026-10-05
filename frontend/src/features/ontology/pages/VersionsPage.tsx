@@ -6,15 +6,17 @@ import { ApiError } from '@/api/client'
 import { EmptyState, ErrorState, SkeletonRows } from '@/components/states'
 import { Check, GitCompare, RotateCcw, ShieldCheck, X } from 'lucide-react'
 import {
-  approveChangeset, diffVersions, getProject, listChangesets, publishChangeset, rejectChangeset, rollbackChangeset,
+  approveChangeset, diffImpact, getDiff, getProject, listChangesets, publishChangeset, rejectChangeset, rollbackChangeset,
   CS_STATUS_LABEL,
   type ChangesetStatus, type DiffRow, type ReviewDecision,
 } from '../api'
 import { CsStatusBadge, relativeTime } from '../components/shared'
-import { CompareSelectorDialog, PublishDialog, RejectDialog, RollbackDialog, diffRowStyle } from '../components/VersionDialogs'
+import { DiffViewer } from '../components/DiffViewer'
+import { CompareSelectorDialog, ImpactBadge, PublishDialog, RejectDialog, RollbackDialog, diffRowStyle } from '../components/VersionDialogs'
 
 /** 版本评审 /ontology/:projectId/versions（宿主画框 p-versions；26 篇 §7.1 IX-VR-01~05）：
  *  changeset 列表（编号/提交人/状态徽标/时间 + 状态 seg 筛选 ?status= 深链）+ 对比选择器 +
+ *  元素级 DiffViewer（24 篇 §3.2 P1 M2：added/removed/modified 三段分组 + changes[] 展开）+
  *  三元组 diff 逐条决策（+绿/−红/~黄行 + 每行接受/拒绝 + 批量栏 + 决策行灰化打勾；决策随
  *  approve 的 decisions[] 一次性提交——边界审计修正）+ 版本历史时间线（逐版「回滚到此版」）+
  *  发布五步进度 + 驳回 + 回滚（ROLLBACK 解锁）。
@@ -78,11 +80,13 @@ export function VersionsPage() {
   const [decisions, setDecisions] = useState<Record<string, 'accept' | 'reject'>>({})
   const diff = useQuery({
     queryKey: ['ontology', projectId, 'diff', diffBase, diffTarget],
-    queryFn: () => diffVersions(projectId, diffBase, diffTarget),
+    queryFn: () => getDiff(projectId, diffBase, diffTarget),
     enabled: diffViewOpen && !!diffBase && !!diffTarget && diffBase !== diffTarget,
   })
   useEffect(() => setDecisions({}), [activeCs, diffBase, diffTarget])
   const rows: DiffRow[] = diff.data?.rows ?? []
+  /** 影响面徽标（41 §2 V4.2）：diff 端点载荷派生；载荷无元素级/投影段时为 null 不渲染 */
+  const impact = diff.data ? diffImpact(diff.data) : null
   const decidedCount = Object.keys(decisions).length
   const remaining = rows.length - decidedCount
   const allDecided = rows.length > 0 && remaining === 0
@@ -333,6 +337,8 @@ export function VersionsPage() {
               </span>
             )}
             {currentCs && <span className="badge b-green ml-auto">SHACL 校验通过</span>}
+            {/* 影响面徽标（41 §2 V4.2，画板 p-versions 卡头位）：diff 端点派生，无数据不渲染 */}
+            <ImpactBadge impact={impact} testid="diff-impact" />
             <button
               type="button"
               className="btn btn-g btn-sm"
@@ -360,7 +366,17 @@ export function VersionsPage() {
             </div>
           )}
 
-          {/* Diff 行：+绿/−红/~黄；决策后灰化打勾 */}
+          {/* Diff 内容（24 篇 §3.2 DiffViewer · P1 M2）：元素级三段分组（added/removed/modified，
+              modified 展开 changes[] 逐字段 before→after）打头；载荷含 elements 段才渲染
+              （过渡期旧载荷缺省不渲染，避免与回落行卡互相矛盾）。 */}
+          {diff.isSuccess && rows.length > 0 && diff.data?.elements && (
+            <div className="mt-2">
+              <DiffViewer diff={diff.data.elements} />
+            </div>
+          )}
+
+          {/* 三元组行卡：+绿/−红/~黄；决策后灰化打勾。评审模式恒渲染（IX-VR-02 行级决策）；
+              纯对比视图仅在载荷无元素级数据时回落只读展示（过渡期兼容，不产生决策）。 */}
           <div className="mt-2 space-y-1.5">
             {/* S8 状态切片：diff 首载骨架 / 失败错误态 / 空差异（三分支不缺席） */}
             {diff.isPending && <SkeletonRows rows={5} rowHeight={30} />}
@@ -374,7 +390,7 @@ export function VersionsPage() {
             {diff.isSuccess && rows.length === 0 && (
               <EmptyState compact icon={GitCompare} title="两版本间无差异" desc={`${diffBase} 与 ${diffTarget} 内容一致`} />
             )}
-            {rows.map(r => {
+            {(currentCs || !diff.data?.elements) && rows.map(r => {
               const st = diffRowStyle(r.op)
               const d = compareOnly ? undefined : decisions[r.id]
               return (
@@ -455,11 +471,12 @@ export function VersionsPage() {
           // 38-V1：真实接线——所选版本对回填 searchParams，diff 查询消费之（不再弹占位 toast）
           patchParams({ base, target, compare: null })
         }}
-        onPreview={(base, target) => diffVersions(projectId, base, target).then(d => d.stats)}
+        onPreview={(base, target) => getDiff(projectId, base, target).then(d => d.stats)}
       />
       <PublishDialog
         open={publishOpen}
         changeset={currentCs}
+        impact={impact}
         onClose={() => setPublishOpen(false)}
         onPublish={async () => {
           const res = await publishM.mutateAsync()

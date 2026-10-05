@@ -108,6 +108,66 @@ export interface DiffRow {
   shape?: string
 }
 
+// ---- 元素级 diff（24 篇 §3.2 DiffViewer P1 M2；后端 services/ontology/api/schemas/ontology.py
+//      DiffEntryOut/ElementDiffOut 同形，DTO 手写过渡） ----
+
+/** 逐字段变更对照（modified 元素展开后的 before→after 行） */
+export interface DiffFieldChange {
+  field: string
+  before: string
+  after: string
+}
+
+/** 单个元素的增/删/改条目（key=元素 IRI；added/removed 的 changes 恒空） */
+export interface DiffEntry {
+  key: string
+  label: string | null
+  changes: DiffFieldChange[]
+}
+
+/** 一组元素级 diff（三段分组口径；unchanged 仅为口径补全计数，过渡期可缺省） */
+export interface ElementDiff {
+  added: DiffEntry[]
+  removed: DiffEntry[]
+  modified: DiffEntry[]
+  unchanged?: number
+}
+
+/** 四投影分组（真实后端 services/ontology/api/schemas/ontology.py ProjectionDiffOut 同构：
+ *  classes/properties/axioms/rules 各一段 ElementDiffOut）。扁平 elements = 四投影依序合并，
+ *  投影段供影响面徽标拆分「实体 / 公理·规则」计数；mock/旧后端过渡期可选。 */
+export interface DiffProjections {
+  classes?: ElementDiff
+  properties?: ElementDiff
+  axioms?: ElementDiff
+  rules?: ElementDiff
+}
+
+/** 影响面徽标口径（41 §2 V4.2）：entities=类/属性变更数（**不含公理/规则**，与 rules 半边互斥
+ *  ——画板「影响 3 实体 · 2 规则」为不相交集合语义），rules=axiom/rule 投影变更数
+ *  （投影段缺失时为 null——徽标只显实体半边，不造假）。 */
+export interface DiffImpact {
+  entities: number
+  rules: number | null
+}
+
+/** 从 diff 载荷派生影响面：优先 elements 段计数；无 elements 时回落四投影 classes+properties。
+ *  两段皆缺 → null（无数据不渲染徽标）。
+ *  ocr 2026-10-05（medium）：扁平 elements=四投影合并段（含 axioms/rules），直接全量计入 entities
+ *  会把规则重复数进「·M 规则」半边，且与 projections-only 载荷口径漂移——统一扣减公理/规则条数。 */
+export function diffImpact(payload: DiffPayload): DiffImpact | null {
+  const groupCount = (d?: ElementDiff) => (d ? d.added.length + d.removed.length + d.modified.length : 0)
+  const p = payload.projections
+  const el = payload.elements
+  if (!el && !p) return null
+  const ruleCount = p && (p.axioms || p.rules) ? groupCount(p.axioms) + groupCount(p.rules) : null
+  let entities = el
+    ? el.added.length + el.removed.length + el.modified.length
+    : groupCount(p?.classes) + groupCount(p?.properties)
+  if (el && ruleCount != null) entities = Math.max(0, entities - ruleCount)
+  return { entities, rules: ruleCount }
+}
+
 export interface ValidateRow {
   focus: string
   path: string
@@ -229,10 +289,21 @@ export function validateOntology(id: string) {
   return api.post<ValidateReport>(`/ontologies/${id}/validate`)
 }
 
-/** GET /ontologies/{id}/diff?base=&target= —— 版本 / 变更单 diff */
-export function diffVersions(id: string, base: string, target: string) {
+/** GET /ontologies/{id}/diff?base=&target= 的响应载荷：三元组行（IX-VR-02 行级决策粒度）
+ *  + 元素级分组 elements（24 篇 DiffViewer 消费；mock/旧后端过渡期可选，缺省回落三元组行渲染） */
+export interface DiffPayload {
+  base: string
+  target: string
+  stats: { add: number; del: number; mod: number }
+  rows: DiffRow[]
+  elements?: ElementDiff
+  /** 四投影分组（真实后端 ProjectionDiffOut 口径；41 §2 V4.2 影响面徽标数据源，过渡期可选） */
+  projections?: DiffProjections
+}
+
+/** GET /ontologies/{id}/diff?base=&target= —— 版本 / 变更单 diff（原 diffVersions 更名：
+ *  24 篇 P1 M2 DiffViewer 接入，响应补元素级 elements 段） */
+export function getDiff(id: string, base: string, target: string) {
   const q = `base=${encodeURIComponent(base)}&target=${encodeURIComponent(target)}`
-  return api.get<{ base: string; target: string; stats: { add: number; del: number; mod: number }; rows: DiffRow[] }>(
-    `/ontologies/${id}/diff?${q}`,
-  )
+  return api.get<DiffPayload>(`/ontologies/${id}/diff?${q}`)
 }

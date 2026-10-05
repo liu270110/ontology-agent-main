@@ -93,14 +93,14 @@ _TABLE_DDL = [
 
 # review_tickets.target_type CHECK 扩展（第六类 permission_request；ORM 同文 review/data/orm.py）
 _REVIEW_CHECK_UPGRADE = (
-    "ALTER TABLE review_tickets DROP CONSTRAINT target_type",
-    "ALTER TABLE review_tickets ADD CONSTRAINT target_type CHECK (target_type IN ("
+    "ALTER TABLE review_tickets DROP CONSTRAINT IF EXISTS ck_review_tickets_target_type",
+    "ALTER TABLE review_tickets ADD CONSTRAINT ck_review_tickets_target_type CHECK (target_type IN ("
     "'ontology_candidate','knowledge_instance','memory_l2_upgrade','plugin_listing',"
     "'writeback_incident','conflict','permission_request'))",
 )
 _REVIEW_CHECK_DOWNGRADE = (
-    "ALTER TABLE review_tickets DROP CONSTRAINT target_type",
-    "ALTER TABLE review_tickets ADD CONSTRAINT target_type CHECK (target_type IN ("
+    "ALTER TABLE review_tickets DROP CONSTRAINT IF EXISTS ck_review_tickets_target_type",
+    "ALTER TABLE review_tickets ADD CONSTRAINT ck_review_tickets_target_type CHECK (target_type IN ("
     "'ontology_candidate','knowledge_instance','memory_l2_upgrade','plugin_listing',"
     "'writeback_incident','conflict'))",
 )

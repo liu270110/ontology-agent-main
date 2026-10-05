@@ -8,7 +8,13 @@
 本模块把上述机制抽成共享层：内容寻址 key + checkpoint JSONL（写入即落盘，
 增量追加而非整体重写）+ 墓碑（resume 默认跳过，`--retry-tombstones` 开关重跑）。
 供 services/evals/ 各 harness 逐步收编（首个接入：session_search_schema/runner.py，
-K6-b）。输出 JSONL 与 checkpoint 解耦：输出行照旧追加，跳过判定只读 checkpoint。
+K6-b；readtool/runner.py、core_tool_deferral/orchestrator.py，K7-c）。
+输出 JSONL 与 checkpoint 解耦：输出行照旧追加，跳过判定只读 checkpoint。
+
+单写者约束（K6 P2②，K7-d 补记）：一个 checkpoint 文件同一时刻只允许一个
+进程写入——本模块不做跨进程文件锁，两个进程并发 append 同一 checkpoint 会
+交错损坏；进程内多线程并发写必须由调用方以 threading.Lock 串行化（实例见
+core_tool_deferral/orchestrator.py，K7-c）。只读（load/is_blocked）不受限。
 """
 from __future__ import annotations
 

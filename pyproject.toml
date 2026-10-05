@@ -85,6 +85,7 @@ ignore_imports = [
     "services.platform.db.registry -> services.writeback.data.orm",
     "services.platform.db.registry -> services.plugin.data.orm",
     "services.platform.db.registry -> services.tools.data.orm",  # 工具集市登记表注册（docs/Agent/14 §5，S1 批）
+    "services.platform.db.registry -> services.mcp.data.orm",  # mcp 管理面两表注册（api/01 §5.7 预登记实装）
     "services.platform.db.registry -> services.rsi.data.orm",  # M4.6-S3：orsi_capabilities 注册（docs/Agent/14 §4）
     "services.platform.db.uow -> services.writeback.data.orm",
 ]
@@ -175,6 +176,7 @@ ignore_imports = [
     # 只读聚合+任务登记，TODO(M4) 端口化收口同批）
     "services.iam.data.repo_impl.admin_repo -> services.agent.data.orm",
     "services.iam.data.repo_impl.me_repo -> services.agent.data.orm",  # 2026-10-05 me 域 me_export 任务登记行（admin_repo export 先例同款，TODO(M4) 端口化收口）
+    "services.mcp.data.repo_impl.mcp_repo -> services.agent.data.orm",  # 2026-10-05 mcp 管理域跨面聚合（下架 X-Affected-Agents 在用提示计数；只读聚合，admin_repo 先例同款 TODO(M4) 收口）
     "services.gateway.app -> services.agent.api.sessions",
     "services.gateway.app -> services.agent.api.agents",  # 2026-09-27 agents CRUD 批
     "services.gateway.app -> services.agent.api.tasks",

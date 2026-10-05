@@ -53,6 +53,7 @@ from services.kb.data.orm import (  # noqa: F401
 )
 from services.kb.data.rule_orm import KbRuleCandidate  # noqa: F401  规则候选草案表（规则抽取通道 v1）
 from services.kb.data.usage_orm import KbUsageCounter  # noqa: F401  知识活性计数（多源接入 §6.1 v1）
+from services.mcp.data.orm import McpServerORM, McpToolORM  # noqa: F401  mcp 管理面两表（api/01 §5.7 预登记实装）
 from services.memory.data.orm import MemoryL2Fact  # noqa: F401
 from services.memory.data.orm_records import (  # noqa: F401  M4 计划 1+2：records 三表权威（memory_records/promotions/review_items）
     MemoryPromotionORM,

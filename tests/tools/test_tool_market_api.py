@@ -2,7 +2,8 @@
 
 覆盖：注册 201 直通 listed（信封 {data, meta}）、缺语义标注 422+4601、同名 409+4602、
 列表过滤（query/channel/status）+count、lifecycle 下架/恢复/撤销 + 审计行、非法迁移
-409+4603、404、scope 不足 2001。
+409+4603、404、scope 不足 2001、K10 行级归属（registrant_id 落库 + 登记人/admin 可操作 +
+非登记人非 admin 4604 拒，docs/Agent/13 §16）。
 """
 
 from __future__ import annotations
@@ -29,17 +30,41 @@ pytestmark = pytest.mark.integration
 _ACTION_IRI = "https://ontology.example/action/ItWeatherQuery"
 
 
-def _principal(seed: ToolsSeed, scopes: list[str] | None = None) -> Principal:
+def _principal(
+    seed: ToolsSeed,
+    scopes: list[str] | None = None,
+    *,
+    user_id: uuid.UUID | None = None,
+    roles: list[str] | None = None,
+) -> Principal:
+    """构造主体（K10 归属用例可换操作者 user_id 与 roles，默认=种子登记人 member）。"""
     return Principal(
         {
-            "sub": str(seed.user_id),
+            "sub": str(user_id or seed.user_id),
             "tenant_id": str(seed.tenant_id),
-            "roles": ["member"],
+            "roles": roles or ["member"],
             "scopes": scopes or ["tool:read", "tool:write"],
             "typ": "access",
             "jti": uuid.uuid4().hex,
         }
     )
+
+
+async def _add_user(seed: ToolsSeed) -> uuid.UUID:
+    """再建一名同租户用户（K10 归属用例的第二操作者；清理随 conftest 按租户兜底）。"""
+    from services.iam.data.orm import User as UserORM
+
+    uid = uuid.uuid4()
+    async with seed.factory() as db, db.begin():
+        db.add(
+            UserORM(
+                id=uid,
+                tenant_id=seed.tenant_id,
+                email=f"{uuid.uuid4().hex[:10]}@tools-it.local",
+                password_hash="it",
+            )
+        )
+    return uid
 
 
 def _request(seed: ToolsSeed) -> StarletteRequest:
@@ -256,3 +281,102 @@ async def test_tools端点_scope门禁依赖_2001拒绝(tools_seed):
     # Assert：持权主体放行（读端点 tool:read）
     allowed = require_scope("tool:read")(_principal(seed))
     assert allowed.tenant_id == seed.tenant_id
+
+
+async def test_POST_tools_register_registrant_id_落库(tools_seed):
+    # Arrange（K10-a：登记人写主表——此前仅审计行）
+    seed = tools_seed
+    principal, request = _principal(seed), _request(seed)
+    async with seed.factory() as db:
+        # Act
+        entry = (await create_tool(_create_body(f"it-{uuid.uuid4().hex[:10]}"), principal, db, request)).data
+        registrant = (
+            await db.execute(
+                text("SELECT registrant_id::text FROM tools_registry WHERE id = :id"), {"id": str(entry.id)}
+            )
+        ).scalar_one()
+        # Assert：register 后 registrant_id 正确落库（FK→users(id)，值=JWT principal.user_id）
+        assert registrant == str(seed.user_id)
+
+
+async def test_POST_lifecycle_登记人本人_可操作(tools_seed):
+    # Arrange（K10-b 正向：registrant_id == operator_id 放行）
+    seed = tools_seed
+    principal, request = _principal(seed), _request(seed)
+    async with seed.factory() as db:
+        entry = (await create_tool(_create_body(f"it-{uuid.uuid4().hex[:10]}"), principal, db, request)).data
+        # Act / Assert：登记人 delist 自己的工具 → 200 语义成功（DEPRECATED）
+        delisted = await tool_lifecycle(entry.id, ToolLifecycleIn(action="delist"), principal, db, request)
+        assert delisted.data.status is ToolStatus.DEPRECATED
+
+
+async def test_POST_lifecycle_非登记人非admin_4604拒绝_无审计行(tools_seed):
+    # Arrange（K10-b 负向：他人（member）操作登记人工具 → 403+4604，且不写 lifecycle 审计行、状态不动）
+    seed = tools_seed
+    owner, request = _principal(seed), _request(seed)
+    other_id = await _add_user(seed)
+    stranger = _principal(seed, user_id=other_id, roles=["member"])
+    async with seed.factory() as db:
+        entry = (await create_tool(_create_body(f"it-{uuid.uuid4().hex[:10]}"), owner, db, request)).data
+        # Act / Assert：非登记人且非 admin → 4604（HTTP 403，memory restore 先例语义）
+        with pytest.raises(GatewayError) as exc:
+            await tool_lifecycle(entry.id, ToolLifecycleIn(action="delist"), stranger, db, request)
+        assert exc.value.code == 4604 and exc.value.status_code == 403
+        # Assert：拒绝路径零副作用——状态仍 listed，审计行仅 register（无 lifecycle 行）
+        assert (await get_tool(entry.id, owner, db)).data.status is ToolStatus.LISTED
+        actions = (
+            (
+                await db.execute(
+                    text(
+                        "SELECT action FROM audit_logs WHERE resource_id = :rid AND resource_type = 'tool_entry'"
+                    ),
+                    {"rid": str(entry.id)},
+                )
+            )
+            .scalars()
+            .all()
+        )
+        assert actions == ["tools.register"]
+
+
+async def test_POST_lifecycle_admin_可操作他人工具(tools_seed):
+    # Arrange（K10-b admin 旁路：roles 含 admin 的他人放行，memory.py:298 判定先例同款）
+    seed = tools_seed
+    owner, request = _principal(seed), _request(seed)
+    admin_id = await _add_user(seed)
+    admin = _principal(seed, user_id=admin_id, roles=["admin"])
+    async with seed.factory() as db:
+        entry = (await create_tool(_create_body(f"it-{uuid.uuid4().hex[:10]}"), owner, db, request)).data
+        # Act / Assert：admin（非登记人）delist 他人工具 → 成功
+        delisted = await tool_lifecycle(entry.id, ToolLifecycleIn(action="delist"), admin, db, request)
+        assert delisted.data.status is ToolStatus.DEPRECATED
+        # Assert：审计行 actor=admin、动作=delist（全程可追溯）
+        row = (
+            (
+                await db.execute(
+                    text(
+                        "SELECT actor_id::text, action FROM audit_logs"
+                        " WHERE resource_id = :rid AND action = 'tools.lifecycle.delist'"
+                    ),
+                    {"rid": str(entry.id)},
+                )
+            )
+            .mappings()
+            .one()
+        )
+        assert row["actor_id"] == str(admin_id) and row["action"] == "tools.lifecycle.delist"
+
+
+async def test_POST_lifecycle_存量行registrant为空_admin外放行(tools_seed):
+    # Arrange（K10-b 存量语义：registrant_id=None 的行任何持权操作者可管理——真库 0 行免回填的兼容口径）
+    seed = tools_seed
+    owner, request = _principal(seed), _request(seed)
+    other_id = await _add_user(seed)
+    stranger = _principal(seed, user_id=other_id, roles=["member"])
+    async with seed.factory() as db:
+        entry = (await create_tool(_create_body(f"it-{uuid.uuid4().hex[:10]}"), owner, db, request)).data
+        await db.execute(text("UPDATE tools_registry SET registrant_id = NULL WHERE id = :id"), {"id": str(entry.id)})
+        db.expire_all()  # 同会话 db.get 走 identity map，置空后强制重载（免 commit，与其余用例事务语义一致）
+        # Act / Assert：registrant_id 为 None → 非 admin 他人亦放行
+        delisted = await tool_lifecycle(entry.id, ToolLifecycleIn(action="delist"), stranger, db, request)
+        assert delisted.data.status is ToolStatus.DEPRECATED

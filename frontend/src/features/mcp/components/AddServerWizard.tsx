@@ -2,20 +2,24 @@ import { useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { Check, ChevronRight, CircleCheck, Loader2, Plug } from 'lucide-react'
 import { toast } from 'sonner'
+import { ApiError } from '@/api/client'
 import { Modal } from '@/components/modal'
 import { discoverServer, registerServer, type DiscoveredTool, type McpTransport } from '../api'
 import { Select } from '@/components/select'
 
 /** IX-MCP-01 接入向导（26 篇 §9.3；画板 ix-mcp-01）：3 步 680px——
  *  ①连接配置：名称 + 传输分段（Streamable HTTP / stdio）+ URL/命令 + 鉴权（Bearer/Basic）
- *  ②连接测试与发现：测试按钮（进行中脉冲/成功列出工具清单/失败错误诊断）+ 工具清单勾选
+ *  ②连接测试与发现：POST /mcp/discover 真调（进行中脉冲/成功列出工具清单/失败错误诊断——
+ *    live 失败=结构化错误 502+5003 或 422+3001，文案取统一错误体 message）+ 工具清单勾选
  *    纳管（默认全选）+ 写入类「需审批」徽标 + 默认不可信警示；
  *  ③确认摘要（Server 信息 + 纳管工具数）→ POST /mcp/servers → 列表新行（健康·未知 → 首次探活）。 */
 
 const STEPS = ['① 连接配置', '② 连接测试与发现', '③ 确认摘要'] as const
 
 type TestOk = { ok: true; latency_ms: number; protocol: string; server_version: string; tools: DiscoveredTool[] }
-type TestedState = TestOk | { ok: false } | null
+/** live 失败形状：ok=false + 结构化错误文案（code/message 来自网关统一错误体） */
+type TestFail = { ok: false; code?: number | string; message: string }
+type TestedState = TestOk | TestFail | null
 
 export function AddServerWizard({ open, onClose }: { open: boolean; onClose: () => void }) {
   const qc = useQueryClient()
@@ -40,7 +44,7 @@ export function AddServerWizard({ open, onClose }: { open: boolean; onClose: () 
         url: transport === 'streamable http' ? url : undefined,
         command: transport === 'stdio' ? command : undefined,
         auth,
-        token,
+        token: auth === '无鉴权（内网白名单）' ? undefined : token,
         adopt_tool_ids: [...adopted],
       }),
     onSuccess: server => {
@@ -50,15 +54,27 @@ export function AddServerWizard({ open, onClose }: { open: boolean; onClose: () 
       })
       onClose()
     },
+    onError: e => {
+      // live 上架失败（重名 422+3001 / 探测失败 502+5003）：结构化错误文案透出，向导留在原步
+      toast.error('Server 上架失败', { description: e instanceof Error ? e.message : undefined })
+    },
   })
 
   async function runTest() {
     setTesting(true)
     setTested(null)
-    const res = await discoverServer({ name, transport, url, command, auth, token })
-    setTesting(false)
-    setTested(res)
-    if (res.ok) setAdopted(new Set(res.tools.map(t => t.tool_id))) // 全选默认开
+    try {
+      const res = await discoverServer({ name, transport, url, command, auth, token: auth === '无鉴权（内网白名单）' ? undefined : token })
+      // DiscoverResult.ok 为 boolean：live 恒 true（失败走 5xx/4xx 抛 ApiError 进 catch），
+      // ok=false 仅防御保留（不渲染假成功）
+      setTested(res.ok ? (res as TestOk) : { ok: false, message: '发现失败' })
+      if (res.ok) setAdopted(new Set(res.tools.map(t => t.tool_id))) // 全选默认开
+    } catch (e) {
+      // live 失败：502+5003（探测失败）/422+3001（入参校验）结构化错误——文案原样透出诊断
+      setTested({ ok: false, code: e instanceof ApiError ? e.code : undefined, message: e instanceof Error ? e.message : '探测失败' })
+    } finally {
+      setTesting(false)
+    }
   }
 
   function reset() {
@@ -226,7 +242,10 @@ export function AddServerWizard({ open, onClose }: { open: boolean; onClose: () 
               <label className="field-label" htmlFor="mcp-auth">
                 鉴权
               </label>
-              <Select id="mcp-auth" className="input" value={auth} onChange={e => setAuth(e.target.value)}>
+              <Select id="mcp-auth" className="input" value={auth} onChange={e => {
+                setAuth(e.target.value)
+                if (e.target.value === '无鉴权（内网白名单）') setToken('') // 无鉴权不携凭据（discover 入参 token 恒 undefined）
+              }}>
                 <option>Bearer Token</option>
                 <option>Basic</option>
                 <option>无鉴权（内网白名单）</option>
@@ -279,7 +298,10 @@ export function AddServerWizard({ open, onClose }: { open: boolean; onClose: () 
 
           {tested && !testing && !tested.ok && (
             <div className="mt-2 rounded-xl px-3 py-2.5 text-[11px]" style={{ background: 'var(--red-soft)' }} data-testid="mcp-discover-fail">
-              <b className="text-red">测试失败</b> · E-5003 未收到 tools/list 响应 · 建议：检查网络连通、凭据与协议版本匹配
+              <b className="text-red">测试失败</b>
+              {tested.code != null && <span className="mono ml-1.5">· {tested.code}</span>}
+              <span className="ml-1.5">{tested.message}</span>
+              <span className="mt-0.5 block text-label-3">建议：检查网络连通、凭据与协议版本匹配（stdio 需启动命令；http 需 http(s) URL）</span>
             </div>
           )}
 

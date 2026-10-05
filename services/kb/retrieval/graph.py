@@ -283,6 +283,47 @@ async def expand_graph(
     )
 
 
+# ---------------------------------------------------------------- glossary 第 4 路 hop-0 召回（K8-a，13 §14）
+
+
+async def glossary_recall(
+    targets: Iterable[str],
+    *,
+    session: AsyncSession,
+    tenant_id: uuid.UUID,
+    hierarchy: ClassHierarchy,
+    limit: int,
+    acl: AclPushdown | None = None,
+    as_of: datetime | None = None,
+    include_superseded: bool = False,
+) -> list[SearchHit]:
+    """glossary 第 4 路 hop-0 召回（K8-a）：gloss:target 类 IRI → 同类权威 chunk 精确命中集。
+
+    targets=目录命中的 gloss:target 类 IRI 集合（调用方经 search_service.build_glossary_recall_fn
+    从查询词面解析）；守卫=∩层次读模型已知类（_all_class_keys，与图三查 _match_classes 同源
+    口径）——目录与检索视图版本错位的 stale target 不进 SQL，空集/空层次（无已发布本体）零查询
+    返回 []（第 4 路空命中不进通道集，K4-d 约束；OntRAG §4 空结果非失败）。查询即
+    _ADJACENT_CHUNKS_SQL 的 hop-0 版（不 walk 层次闭包=0 跳语义；谓词与 expand_graph 逐跳
+    同款：§4.3 ACL + §8.2 bi-temporal 先过滤后排序下推），参数形态对齐既有路；结果与
+    bm25/vector 同构（list[SearchHit]，support 为信息值不入 hit——RRF 按路内名次计分）。
+    """
+    classes = sorted({t for t in targets if t} & set(_all_class_keys(hierarchy)))
+    if not classes:
+        return []
+    acl_sql = _acl_filter(as_of, include_superseded) + (acl.fragment if acl is not None else "")
+    rows = await session.execute(
+        text(_ADJACENT_CHUNKS_SQL.format(acl=acl_sql)),
+        {
+            "tenant_id": tenant_id,
+            "classes": classes,
+            "cap": max(limit, 0),
+            "as_of": as_of,
+            **(acl.params if acl is not None else {}),
+        },
+    )
+    return [_row_to_hit(row) for row in rows.mappings()]
+
+
 # ---------------------------------------------------------------- 类级图三查（api/01 §5.4 kb 行 /kb/graph/*）
 #
 # lite=类级图（与 expand_graph 同源的层次读模型）：节点=本体类（ontology 读模型公开查询），

@@ -33,6 +33,8 @@ class ToolRegistryORM(Base, PkMixin, TenantMixin, TimestampMixin):
     status: Mapped[str] = mapped_column(String(16), default="draft", nullable=False)  # 市场件五态（14 §2）
     health_hint: Mapped[str | None] = mapped_column(String(128))
     evidence_uri: Mapped[str | None] = mapped_column(String(512))
+    # 登记人（K10-a：register 落主表，lifecycle 行级归属校验锚点；None=存量行 admin 可管理）
+    registrant_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"))
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))  # 软删列（14 §5）
 
     __table_args__ = (

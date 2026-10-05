@@ -71,6 +71,8 @@ class ToolEntry(BaseModel):
     status: ToolStatus = ToolStatus.DRAFT
     health_hint: str | None = Field(default=None, max_length=128)
     evidence_uri: str | None = Field(default=None, max_length=512)
+    # 登记人（K10-a 行级归属：lifecycle 归属校验锚点；None=存量行语义=admin 可管理）
+    registrant_id: uuid.UUID | None = None
 
     def __eq__(self, other: object) -> bool:
         return isinstance(other, ToolEntry) and self.id == other.id

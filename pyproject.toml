@@ -121,6 +121,7 @@ ignore_imports = [
     "services.gateway.app -> services.iam.api.invites",  # 2026-10-01 邀请链接五端点（架构设计/32；挂载边同 auth 先例）
     "services.gateway.app -> services.iam.api.admin",  # 2026-10-05 admin 域 9 组端点（api/01 §5.8/§5.10；挂载边同 invites 先例）
     "services.gateway.app -> services.iam.api.me",  # 2026-10-05 me 域端点（api/01 §5.9 totp/§5.13 me/§5.15；挂载边同 admin 先例）
+    "services.gateway.app -> services.mcp.api.management",  # 2026-10-05 mcp 管理域 8 端点（api/01 §5.7；挂载边同 admin 先例，传递链经 mcp_repo 跨面聚合）
     "services.gateway.app -> services.agent.api.sessions",
     "services.gateway.app -> services.agent.api.agents",  # 2026-09-27 agents CRUD 批（挂载边同 sessions 先例）
     "services.gateway.app -> services.agent.api.tasks",
@@ -161,7 +162,9 @@ ignore_imports = [
     "services.gateway.app -> services.iam.api.invites",  # 挂载边豁免（邀请链接，架构设计/32）
     "services.gateway.app -> services.iam.api.admin",  # 2026-10-05 admin 域挂载边豁免（api/01 §5.8/§5.10，同 invites 先例）
     "services.gateway.app -> services.iam.api.me",  # 2026-10-05 me 域挂载边豁免（api/01 §5.9/§5.13/§5.15，同 admin 先例）
+    "services.gateway.app -> services.mcp.api.management",  # 2026-10-05 mcp 管理域挂载边豁免（传递链经 mcp_repo 解析登记人 display_name，同 admin 先例）
     "services.mcp.bootstrap -> services.iam.data.orm",  # P1-1 收口：MCP 审计 PG 汇随共享工厂（gateway/独立进程共用）
+    "services.mcp.data.repo_impl.mcp_repo -> services.iam.data.orm",  # 2026-10-05 mcp 管理域：登记人 display_name 解析（bootstrap 先例同款，TODO(M4) 端口化收口）
 ]
 
 [[tool.importlinter.contracts]]

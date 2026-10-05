@@ -2765,6 +2765,110 @@
         "title": "DiffEntryOut",
         "type": "object"
       },
+      "DiscoverIn": {
+        "additionalProperties": false,
+        "description": "POST /mcp/discover（frontend api.ts discoverServer body 逐字段）。",
+        "properties": {
+          "auth": {
+            "default": "none",
+            "maxLength": 64,
+            "title": "Auth",
+            "type": "string"
+          },
+          "command": {
+            "anyOf": [
+              {
+                "maxLength": 512,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Command"
+          },
+          "name": {
+            "maxLength": 32,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "token": {
+            "anyOf": [
+              {
+                "maxLength": 2048,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Token"
+          },
+          "transport": {
+            "maxLength": 16,
+            "minLength": 1,
+            "title": "Transport",
+            "type": "string"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "maxLength": 512,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url"
+          }
+        },
+        "required": [
+          "name",
+          "transport"
+        ],
+        "title": "DiscoverIn",
+        "type": "object"
+      },
+      "DiscoverOut": {
+        "additionalProperties": false,
+        "description": "POST /mcp/discover 响应（mock DISCOVER_REPLY 逐字段；不落库）。",
+        "properties": {
+          "latency_ms": {
+            "title": "Latency Ms",
+            "type": "integer"
+          },
+          "ok": {
+            "default": true,
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "protocol": {
+            "title": "Protocol",
+            "type": "string"
+          },
+          "server_version": {
+            "title": "Server Version",
+            "type": "string"
+          },
+          "tools": {
+            "items": {
+              "$ref": "#/components/schemas/ProbeToolOut"
+            },
+            "title": "Tools",
+            "type": "array"
+          }
+        },
+        "required": [
+          "latency_ms",
+          "protocol",
+          "server_version",
+          "tools"
+        ],
+        "title": "DiscoverOut",
+        "type": "object"
+      },
       "DocumentCreateIn": {
         "additionalProperties": false,
         "properties": {
@@ -5144,6 +5248,183 @@
         "title": "MatrixRoleOut",
         "type": "object"
       },
+      "McpServerRow": {
+        "additionalProperties": false,
+        "description": "Server 行（mock McpServer 逐字段；tools 内嵌全量缓存行）。",
+        "properties": {
+          "added_at": {
+            "title": "Added At",
+            "type": "string"
+          },
+          "added_by": {
+            "title": "Added By",
+            "type": "string"
+          },
+          "adopted_count": {
+            "title": "Adopted Count",
+            "type": "integer"
+          },
+          "auth": {
+            "title": "Auth",
+            "type": "string"
+          },
+          "command": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Command"
+          },
+          "consecutive_failures": {
+            "title": "Consecutive Failures",
+            "type": "integer"
+          },
+          "desc": {
+            "title": "Desc",
+            "type": "string"
+          },
+          "discovered_count": {
+            "title": "Discovered Count",
+            "type": "integer"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "last_probe": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Probe"
+          },
+          "latency_ms": {
+            "title": "Latency Ms",
+            "type": "integer"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "probes_24h": {
+            "items": {
+              "$ref": "#/components/schemas/ProbeWindowOut"
+            },
+            "title": "Probes 24H",
+            "type": "array"
+          },
+          "protocol": {
+            "title": "Protocol",
+            "type": "string"
+          },
+          "server_version": {
+            "title": "Server Version",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "token_masked": {
+            "title": "Token Masked",
+            "type": "string"
+          },
+          "tools": {
+            "items": {
+              "$ref": "#/components/schemas/McpToolRow"
+            },
+            "title": "Tools",
+            "type": "array"
+          },
+          "transport": {
+            "enum": [
+              "streamable http",
+              "stdio"
+            ],
+            "title": "Transport",
+            "type": "string"
+          },
+          "url_masked": {
+            "title": "Url Masked",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "desc",
+          "transport",
+          "url_masked",
+          "auth",
+          "token_masked",
+          "protocol",
+          "server_version",
+          "status",
+          "latency_ms",
+          "consecutive_failures",
+          "probes_24h",
+          "adopted_count",
+          "discovered_count",
+          "added_by",
+          "added_at",
+          "tools"
+        ],
+        "title": "McpServerRow",
+        "type": "object"
+      },
+      "McpToolRow": {
+        "additionalProperties": false,
+        "description": "工具缓存行（mock McpTool 逐字段）。",
+        "properties": {
+          "adopted": {
+            "title": "Adopted",
+            "type": "boolean"
+          },
+          "desc": {
+            "title": "Desc",
+            "type": "string"
+          },
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "read_only": {
+            "title": "Read Only",
+            "type": "boolean"
+          },
+          "tool_id": {
+            "title": "Tool Id",
+            "type": "string"
+          },
+          "write": {
+            "title": "Write",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "tool_id",
+          "name",
+          "desc",
+          "write",
+          "read_only",
+          "adopted",
+          "enabled"
+        ],
+        "title": "McpToolRow",
+        "type": "object"
+      },
       "MemberListOut": {
         "additionalProperties": false,
         "properties": {
@@ -7042,6 +7323,56 @@
         "title": "PreferencesPutIn",
         "type": "object"
       },
+      "ProbeToolOut": {
+        "additionalProperties": false,
+        "description": "发现态工具行（mock DiscoveredTool 逐字段）。",
+        "properties": {
+          "desc": {
+            "title": "Desc",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "read_only": {
+            "title": "Read Only",
+            "type": "boolean"
+          },
+          "tool_id": {
+            "title": "Tool Id",
+            "type": "string"
+          },
+          "write": {
+            "title": "Write",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "tool_id",
+          "name",
+          "desc",
+          "write",
+          "read_only"
+        ],
+        "title": "ProbeToolOut",
+        "type": "object"
+      },
+      "ProbeWindowOut": {
+        "additionalProperties": false,
+        "description": "probes_24h 元素（mock {ok: boolean}）。",
+        "properties": {
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "ok"
+        ],
+        "title": "ProbeWindowOut",
+        "type": "object"
+      },
       "ProjectionDiffOut": {
         "additionalProperties": false,
         "description": "GET /ontologies/{id}/diff：两版本读模型差异（类/属性/公理/规则增删改清单，§6.2 分组口径）。\n\n口径注记：base/target 均为**发布版本**（query 参数，缺省 target=head、base=head 前一版本）；\n三元组级规范化 diff（RDFC-1.0，§6.2 ①②）与 changeset 候选图 diff 随 rebase 机制细化（§11 待办）。",
@@ -7818,6 +8149,34 @@
         "title": "RecordWriteEnvelope",
         "type": "object"
       },
+      "RefreshOut": {
+        "additionalProperties": false,
+        "description": "POST /mcp/servers/{id}/refresh 响应（mock 逐字段：latency_ms/tools/discovered_count）。",
+        "properties": {
+          "discovered_count": {
+            "title": "Discovered Count",
+            "type": "integer"
+          },
+          "latency_ms": {
+            "title": "Latency Ms",
+            "type": "integer"
+          },
+          "tools": {
+            "items": {
+              "$ref": "#/components/schemas/McpToolRow"
+            },
+            "title": "Tools",
+            "type": "array"
+          }
+        },
+        "required": [
+          "latency_ms",
+          "tools",
+          "discovered_count"
+        ],
+        "title": "RefreshOut",
+        "type": "object"
+      },
       "RefreshRequest": {
         "additionalProperties": false,
         "description": "POST /auth/refresh 请求体（匿名；body 携 refresh token，api/01 §5.9）。",
@@ -8562,6 +8921,259 @@
           "content"
         ],
         "title": "SendMessageIn",
+        "type": "object"
+      },
+      "ServerCreateIn": {
+        "additionalProperties": false,
+        "description": "POST /mcp/servers（frontend api.ts registerServer body 逐字段；adopt_tool_ids=\ndiscover 返回的 nd- 短 id 勾选集，空=全部不纳管——mock filter 同口径）。",
+        "properties": {
+          "adopt_tool_ids": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 256,
+            "title": "Adopt Tool Ids",
+            "type": "array"
+          },
+          "auth": {
+            "default": "none",
+            "maxLength": 64,
+            "title": "Auth",
+            "type": "string"
+          },
+          "command": {
+            "anyOf": [
+              {
+                "maxLength": 512,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Command"
+          },
+          "desc": {
+            "default": "",
+            "maxLength": 512,
+            "title": "Desc",
+            "type": "string"
+          },
+          "name": {
+            "maxLength": 32,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "token": {
+            "anyOf": [
+              {
+                "maxLength": 2048,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Token"
+          },
+          "transport": {
+            "maxLength": 16,
+            "minLength": 1,
+            "title": "Transport",
+            "type": "string"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "maxLength": 512,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url"
+          }
+        },
+        "required": [
+          "name",
+          "transport"
+        ],
+        "title": "ServerCreateIn",
+        "type": "object"
+      },
+      "ServerCreatedOut": {
+        "additionalProperties": false,
+        "description": "POST /mcp/servers 201 响应（=行 + token_sentinel，mock 同形）。",
+        "properties": {
+          "added_at": {
+            "title": "Added At",
+            "type": "string"
+          },
+          "added_by": {
+            "title": "Added By",
+            "type": "string"
+          },
+          "adopted_count": {
+            "title": "Adopted Count",
+            "type": "integer"
+          },
+          "auth": {
+            "title": "Auth",
+            "type": "string"
+          },
+          "command": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Command"
+          },
+          "consecutive_failures": {
+            "title": "Consecutive Failures",
+            "type": "integer"
+          },
+          "desc": {
+            "title": "Desc",
+            "type": "string"
+          },
+          "discovered_count": {
+            "title": "Discovered Count",
+            "type": "integer"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "last_probe": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Probe"
+          },
+          "latency_ms": {
+            "title": "Latency Ms",
+            "type": "integer"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "probes_24h": {
+            "items": {
+              "$ref": "#/components/schemas/ProbeWindowOut"
+            },
+            "title": "Probes 24H",
+            "type": "array"
+          },
+          "protocol": {
+            "title": "Protocol",
+            "type": "string"
+          },
+          "server_version": {
+            "title": "Server Version",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "token_masked": {
+            "title": "Token Masked",
+            "type": "string"
+          },
+          "token_sentinel": {
+            "default": false,
+            "title": "Token Sentinel",
+            "type": "boolean"
+          },
+          "tools": {
+            "items": {
+              "$ref": "#/components/schemas/McpToolRow"
+            },
+            "title": "Tools",
+            "type": "array"
+          },
+          "transport": {
+            "enum": [
+              "streamable http",
+              "stdio"
+            ],
+            "title": "Transport",
+            "type": "string"
+          },
+          "url_masked": {
+            "title": "Url Masked",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "desc",
+          "transport",
+          "url_masked",
+          "auth",
+          "token_masked",
+          "protocol",
+          "server_version",
+          "status",
+          "latency_ms",
+          "consecutive_failures",
+          "probes_24h",
+          "adopted_count",
+          "discovered_count",
+          "added_by",
+          "added_at",
+          "tools"
+        ],
+        "title": "ServerCreatedOut",
+        "type": "object"
+      },
+      "ServerListOut": {
+        "additionalProperties": false,
+        "description": "GET /mcp/servers 响应（mock ok({items}) 的 live 裸体）。",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/McpServerRow"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "ServerListOut",
+        "type": "object"
+      },
+      "ServerToolsListOut": {
+        "additionalProperties": false,
+        "description": "GET /mcp/servers/{id}/tools 响应（mock ok({items}) 的 live 裸体）。",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/McpToolRow"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "ServerToolsListOut",
         "type": "object"
       },
       "SessionBlocksEnvelope": {
@@ -9992,6 +10604,26 @@
           "version"
         ],
         "title": "ToolCreateIn",
+        "type": "object"
+      },
+      "ToolEnabledOut": {
+        "additionalProperties": false,
+        "description": "POST /mcp/tools/{tool_id}/enable|disable 响应（mock setMcpToolEnabled 逐字段）。",
+        "properties": {
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "tool_id": {
+            "title": "Tool Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "tool_id",
+          "enabled"
+        ],
+        "title": "ToolEnabledOut",
         "type": "object"
       },
       "ToolEnvelope": {
@@ -14383,6 +15015,354 @@
         "summary": "knowledge.search lite（bm25+向量+图三路 RRF；图=LazyGraphRAG lite 查询时扩展）",
         "tags": [
           "knowledge-base"
+        ]
+      }
+    },
+    "/api/v1/mcp/discover": {
+      "post": {
+        "operationId": "discover_api_v1_mcp_discover_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DiscoverIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DiscoverOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "预注册发现（连接目标+tools/list 预览，不落库；失败 5003/502）",
+        "tags": [
+          "mcp"
+        ]
+      }
+    },
+    "/api/v1/mcp/servers": {
+      "get": {
+        "operationId": "list_servers_api_v1_mcp_servers_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServerListOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "外部 Server 列表（最新在前；tools 内嵌全量缓存行）",
+        "tags": [
+          "mcp"
+        ]
+      },
+      "post": {
+        "operationId": "create_server_api_v1_mcp_servers_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ServerCreateIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServerCreatedOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "上架外部 Server（探测失败不上架 5003；adopt_tool_ids=discover 勾选集）",
+        "tags": [
+          "mcp"
+        ]
+      }
+    },
+    "/api/v1/mcp/servers/{server_id}": {
+      "delete": {
+        "operationId": "delete_server_api_v1_mcp_servers__server_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "server_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Server Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "下架 Server（api/01 §5.7 ★；级联其工具行，X-Removed-Tools/X-Affected-Agents 提示头）",
+        "tags": [
+          "mcp"
+        ]
+      },
+      "get": {
+        "operationId": "get_server_api_v1_mcp_servers__server_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "server_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Server Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/McpServerRow"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Server 详情（api/01 §5.7 ★；跨租户同口径 404）",
+        "tags": [
+          "mcp"
+        ]
+      }
+    },
+    "/api/v1/mcp/servers/{server_id}/refresh": {
+      "post": {
+        "operationId": "refresh_server_api_v1_mcp_servers__server_id__refresh_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "server_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Server Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RefreshOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "重新探测并更新工具缓存（api/01 §5.7；失败落 failing 后 5003/502）",
+        "tags": [
+          "mcp"
+        ]
+      }
+    },
+    "/api/v1/mcp/servers/{server_id}/tools": {
+      "get": {
+        "operationId": "list_server_tools_api_v1_mcp_servers__server_id__tools_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "server_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Server Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServerToolsListOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "该 Server 的工具清单（api/01 §5.7）",
+        "tags": [
+          "mcp"
+        ]
+      }
+    },
+    "/api/v1/mcp/tools/{tool_id}/disable": {
+      "post": {
+        "operationId": "disable_tool_api_v1_mcp_tools__tool_id__disable_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "tool_id",
+            "required": true,
+            "schema": {
+              "title": "Tool Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ToolEnabledOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "审核工具回退停用（enable 反向；api/01 §5.7 ★ 预登记）",
+        "tags": [
+          "mcp"
+        ]
+      }
+    },
+    "/api/v1/mcp/tools/{tool_id}/enable": {
+      "post": {
+        "operationId": "enable_tool_api_v1_mcp_tools__tool_id__enable_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "tool_id",
+            "required": true,
+            "schema": {
+              "title": "Tool Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ToolEnabledOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "审核开启外部工具（外部默认不可信；api/01 §5.7）",
+        "tags": [
+          "mcp"
         ]
       }
     },

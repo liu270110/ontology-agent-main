@@ -34,15 +34,16 @@ class McpServerORM(Base, PkMixin, TenantMixin, TimestampMixin):
 
     name: Mapped[str] = mapped_column(String(128), nullable=False)  # server 命名空间段（registry 保留段校验在用例层）
     desc: Mapped[str] = mapped_column(Text, nullable=False, default="")
-    transport: Mapped[str] = mapped_column(String(16), nullable=False)  # streamable_http | stdio（McpTargetConfig 同词表）
+    transport: Mapped[str] = mapped_column(String(16), nullable=False)  # streamable_http|stdio（McpTargetConfig 词表）
     url: Mapped[str | None] = mapped_column(String(512))  # streamable_http 必填（http/https）
     command: Mapped[str | None] = mapped_column(String(512))  # stdio 必填
     args: Mapped[list] = mapped_column(JSONB, default=list, nullable=False)  # stdio 参数（McpTargetConfig.args）
     env: Mapped[dict] = mapped_column(JSONB, default=dict, nullable=False)  # stdio 环境（McpTargetConfig.env）
-    auth: Mapped[str] = mapped_column(String(64), nullable=False, default="none")  # mock 展示串：Bearer Token/PAT/Basic
-    token_masked: Mapped[str] = mapped_column(String(128), nullable=False, default="—")  # mock 口径掩码串（读面唯一出参）
-    token_secret: Mapped[str | None] = mapped_column(Text)  # refresh 复探所必需；v1 明文=targets.json 同水位，凭据托管 M5 收口
-    protocol: Mapped[str] = mapped_column(String(32), nullable=False, default="")  # 握手 protocolVersion（mock '2025-06-18'）
+    auth: Mapped[str] = mapped_column(String(64), nullable=False, default="none")  # 展示串：Bearer Token/PAT/Basic
+    token_masked: Mapped[str] = mapped_column(String(128), nullable=False, default="—")  # mock 掩码串（读面唯一出参）
+    # refresh 复探所必需；v1 明文=targets.json 同水位，凭据托管 M5 收口（08 §2.0 读面已收口）
+    token_secret: Mapped[str | None] = mapped_column(Text)
+    protocol: Mapped[str] = mapped_column(String(32), nullable=False, default="")  # 握手 protocolVersion
     server_version: Mapped[str] = mapped_column(String(64), nullable=False, default="")  # 握手 serverInfo.version
     status: Mapped[str] = mapped_column(String(16), nullable=False, default="unknown")  # healthy|unknown|failing
     latency_ms: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
@@ -71,10 +72,10 @@ class McpToolORM(Base, PkMixin, TenantMixin, TimestampMixin):
     server_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("mcp_servers.id", ondelete="CASCADE"), nullable=False, index=True
     )
-    tool_id: Mapped[str] = mapped_column(String(64), nullable=False)  # 内容寻址短 id（mt-<hash>；mock mt-1 顺序号→稳定 id，schemas 头注登记）
+    tool_id: Mapped[str] = mapped_column(String(64), nullable=False)  # 内容寻址短 id mt-<hash>（刷新稳定）
     name: Mapped[str] = mapped_column(String(256), nullable=False)  # 远端 tool 名
     desc: Mapped[str] = mapped_column(Text, nullable=False, default="")  # 远端 description
-    write: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)  # 无 readOnlyHint 提示一律按写（外部默认不可信）
+    write: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)  # 无 readOnlyHint 按写（默认不可信）
     read_only: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)  # annotations.readOnlyHint 投影
     adopted: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)  # 纳管勾选
     enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)  # 审核开启（默认 false=不可信）

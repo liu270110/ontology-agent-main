@@ -1,0 +1,1222 @@
+{
+  "suite": "rag",
+  "tag": "v0",
+  "mode": "smoke",
+  "date": "2026-10-07T07:46:36",
+  "env": {
+    "commit": "eaea7ebbea23528595ffb5c4b49593d7770b37a3",
+    "python": "3.13.0",
+    "platform": "Windows-11-10.0.26200-SP0",
+    "corpus_sha256": "50192502fde1bbdce47f16b0bacb5aef85b36ebf06286b18ab6ea56a567cf60b",
+    "corpus_version": "v0",
+    "embed": {
+      "base_url": "http://127.0.0.1:18002",
+      "protocol": "tei",
+      "probe_dim": 1024
+    },
+    "token_counter": {
+      "kind": "vllm",
+      "vllm": "http://127.0.0.1:18001",
+      "model": "local-main"
+    },
+    "naive_embed": {
+      "base_url": "http://127.0.0.1:18002",
+      "protocol": "tei"
+    }
+  },
+  "config": {
+    "top_k": 8,
+    "recall_k": 5,
+    "faithfulness_min_support": 0.5,
+    "harness": "asgi",
+    "queries": 20,
+    "ingest": {
+      "kb_id": "01a11396-49f4-7353-82d1-e8ab73a12238",
+      "collection": "bench-rag-v0-reuse",
+      "documents": 50,
+      "indexed": 50,
+      "degraded_embed": 0,
+      "elapsed_s": 4.029,
+      "tenant_id": "69bf0f8b-a12f-46ff-9018-609c3b9c3eb9"
+    }
+  },
+  "harnesses": {
+    "ours_kb": {
+      "metrics": {
+        "recall_at_k": 0.975,
+        "recall_k": 5,
+        "mrr": 0.975,
+        "faithfulness": 1.0,
+        "faithfulness_scored_queries": 20,
+        "no_answer_count": 0,
+        "latency_p50_ms": 236.1789000005956,
+        "latency_p95_ms": 579.4820000010077,
+        "cost_per_query_tokens": 578.05
+      },
+      "per_query": [
+        {
+          "query_id": "q-001",
+          "recall": 1.0,
+          "reciprocal_rank": 1.0,
+          "faithfulness": 1.0,
+          "latency_ms": 579.48,
+          "cost_tokens": 585,
+          "no_answer": false,
+          "retrieved_doc_ids": [
+            "wo-001",
+            "wo-002",
+            "wo-019",
+            "wo-009",
+            "mx-002",
+            "wo-020"
+          ]
+        },
+        {
+          "query_id": "q-002",
+          "recall": 1.0,
+          "reciprocal_rank": 1.0,
+          "faithfulness": 1.0,
+          "latency_ms": 221.68,
+          "cost_tokens": 845,
+          "no_answer": false,
+          "retrieved_doc_ids": [
+            "eq-002",
+            "eq-001",
+            "eq-014",
+            "eq-005",
+            "eq-006",
+            "eq-015"
+          ]
+        },
+        {
+          "query_id": "q-003",
+          "recall": 1.0,
+          "reciprocal_rank": 1.0,
+          "faithfulness": 1.0,
+          "latency_ms": 218.9,
+          "cost_tokens": 759,
+          "no_answer": false,
+          "retrieved_doc_ids": [
+            "wo-004",
+            "wo-010",
+            "wo-005",
+            "wo-019",
+            "wo-008",
+            "wo-015"
+          ]
+        },
+        {
+          "query_id": "q-004",
+          "recall": 1.0,
+          "reciprocal_rank": 1.0,
+          "faithfulness": 1.0,
+          "latency_ms": 236.18,
+          "cost_tokens": 446,
+          "no_answer": false,
+          "retrieved_doc_ids": [
+            "wo-003",
+            "mx-001",
+            "mx-007",
+            "wo-020",
+            "wo-012",
+            "wo-011"
+          ]
+        },
+        {
+          "query_id": "q-005",
+          "recall": 1.0,
+          "reciprocal_rank": 1.0,
+          "faithfulness": 1.0,
+          "latency_ms": 191.54,
+          "cost_tokens": 320,
+          "no_answer": false,
+          "retrieved_doc_ids": [
+            "rg-001",
+            "wo-019",
+            "wo-011",
+            "wo-008",
+            "wo-004",
+            "wo-017",
+            "wo-003"
+          ]
+        },
+        {
+          "query_id": "q-006",
+          "recall": 1.0,
+          "reciprocal_rank": 1.0,
+          "faithfulness": 1.0,
+          "latency_ms": 198.26,
+          "cost_tokens": 777,
+          "no_answer": false,
+          "retrieved_doc_ids": [
+            "wo-002",
+            "wo-010",
+            "wo-006",
+            "wo-017",
+            "wo-013"
+          ]
+        },
+        {
+          "query_id": "q-007",
+          "recall": 1.0,
+          "reciprocal_rank": 1.0,
+          "faithfulness": 1.0,
+          "latency_ms": 245.12,
+          "cost_tokens": 940,
+          "no_answer": false,
+          "retrieved_doc_ids": [
+            "eq-007",
+            "eq-003",
+            "eq-009",
+            "wo-008",
+            "eq-006",
+            "eq-014",
+            "eq-008"
+          ]
+        },
+        {
+          "query_id": "q-008",
+          "recall": 1.0,
+          "reciprocal_rank": 1.0,
+          "faithfulness": 1.0,
+          "latency_ms": 255.19,
+          "cost_tokens": 708,
+          "no_answer": false,
+          "retrieved_doc_ids": [
+            "wo-004",
+            "wo-017",
+            "wo-012",
+            "wo-008",
+            "wo-002"
+          ]
+        },
+        {
+          "query_id": "q-009",
+          "recall": 1.0,
+          "reciprocal_rank": 1.0,
+          "faithfulness": 1.0,
+          "latency_ms": 258.52,
+          "cost_tokens": 714,
+          "no_answer": false,
+          "retrieved_doc_ids": [
+            "mx-005",
+            "mx-004",
+            "mx-001",
+            "mx-003",
+            "mx-002",
+            "mx-007",
+            "mx-010"
+          ]
+        },
+        {
+          "query_id": "q-010",
+          "recall": 1.0,
+          "reciprocal_rank": 1.0,
+          "faithfulness": 1.0,
+          "latency_ms": 256.51,
+          "cost_tokens": 650,
+          "no_answer": false,
+          "retrieved_doc_ids": [
+            "wo-005",
+            "wo-019",
+            "wo-020",
+            "wo-014",
+            "wo-013",
+            "wo-010"
+          ]
+        },
+        {
+          "query_id": "q-011",
+          "recall": 1.0,
+          "reciprocal_rank": 0.5,
+          "faithfulness": 1.0,
+          "latency_ms": 206.61,
+          "cost_tokens": 468,
+          "no_answer": false,
+          "retrieved_doc_ids": [
+            "mx-008",
+            "eq-013",
+            "wo-018",
+            "wo-006",
+            "wo-013"
+          ]
+        },
+        {
+          "query_id": "q-012",
+          "recall": 1.0,
+          "reciprocal_rank": 1.0,
+          "faithfulness": 1.0,
+          "latency_ms": 216.82,
+          "cost_tokens": 543,
+          "no_answer": false,
+          "retrieved_doc_ids": [
+            "wo-009",
+            "wo-001",
+            "wo-015",
+            "wo-018",
+            "wo-010",
+            "wo-008",
+            "wo-013",
+            "wo-002"
+          ]
+        },
+        {
+          "query_id": "q-013",
+          "recall": 1.0,
+          "reciprocal_rank": 1.0,
+          "faithfulness": 1.0,
+          "latency_ms": 248.76,
+          "cost_tokens": 425,
+          "no_answer": false,
+          "retrieved_doc_ids": [
+            "rg-002",
+            "rg-001",
+            "wo-016",
+            "wo-009",
+            "wo-011",
+            "wo-006",
+            "wo-013",
+            "wo-010"
+          ]
+        },
+        {
+          "query_id": "q-014",
+          "recall": 1.0,
+          "reciprocal_rank": 1.0,
+          "faithfulness": 1.0,
+          "latency_ms": 208.77,
+          "cost_tokens": 307,
+          "no_answer": false,
+          "retrieved_doc_ids": [
+            "rg-003",
+            "wo-018",
+            "eq-008",
+            "mx-007",
+            "mx-009",
+            "wo-008",
+            "rg-001"
+          ]
+        },
+        {
+          "query_id": "q-015",
+          "recall": 0.5,
+          "reciprocal_rank": 1.0,
+          "faithfulness": 1.0,
+          "latency_ms": 316.51,
+          "cost_tokens": 364,
+          "no_answer": false,
+          "retrieved_doc_ids": [
+            "mx-004",
+            "wo-006",
+            "wo-002",
+            "eq-010",
+            "mx-010",
+            "wo-010",
+            "wo-018"
+          ]
+        },
+        {
+          "query_id": "q-016",
+          "recall": 1.0,
+          "reciprocal_rank": 1.0,
+          "faithfulness": 1.0,
+          "latency_ms": 261.22,
+          "cost_tokens": 379,
+          "no_answer": false,
+          "retrieved_doc_ids": [
+            "eq-011",
+            "eq-010",
+            "mx-005",
+            "eq-009",
+            "eq-014",
+            "eq-007"
+          ]
+        },
+        {
+          "query_id": "q-017",
+          "recall": 1.0,
+          "reciprocal_rank": 1.0,
+          "faithfulness": 1.0,
+          "latency_ms": 225.15,
+          "cost_tokens": 501,
+          "no_answer": false,
+          "retrieved_doc_ids": [
+            "rg-005",
+            "wo-011",
+            "wo-019",
+            "wo-020",
+            "wo-005",
+            "wo-014",
+            "wo-013"
+          ]
+        },
+        {
+          "query_id": "q-018",
+          "recall": 1.0,
+          "reciprocal_rank": 1.0,
+          "faithfulness": 1.0,
+          "latency_ms": 231.26,
+          "cost_tokens": 658,
+          "no_answer": false,
+          "retrieved_doc_ids": [
+            "wo-009",
+            "wo-002",
+            "wo-012",
+            "wo-020",
+            "mx-006"
+          ]
+        },
+        {
+          "query_id": "q-019",
+          "recall": 1.0,
+          "reciprocal_rank": 1.0,
+          "faithfulness": 1.0,
+          "latency_ms": 399.69,
+          "cost_tokens": 573,
+          "no_answer": false,
+          "retrieved_doc_ids": [
+            "rg-004",
+            "rg-001",
+            "rg-002",
+            "rg-005",
+            "wo-010",
+            "wo-006",
+            "wo-002",
+            "wo-009"
+          ]
+        },
+        {
+          "query_id": "q-020",
+          "recall": 1.0,
+          "reciprocal_rank": 1.0,
+          "faithfulness": 1.0,
+          "latency_ms": 922.54,
+          "cost_tokens": 599,
+          "no_answer": false,
+          "retrieved_doc_ids": [
+            "eq-005",
+            "eq-001",
+            "eq-002",
+            "eq-003",
+            "wo-011",
+            "eq-004"
+          ]
+        }
+      ],
+      "extra": {
+        "kb_id": "01a11396-49f4-7353-82d1-e8ab73a12238",
+        "collection": "bench-rag-v0-reuse",
+        "degraded_queries": 0,
+        "queries": 20,
+        "channels_seen": [
+          "vector"
+        ]
+      }
+    },
+    "naive_bm25": {
+      "metrics": {
+        "recall_at_k": 1.0,
+        "recall_k": 5,
+        "mrr": 0.975,
+        "faithfulness": 1.0,
+        "faithfulness_scored_queries": 20,
+        "no_answer_count": 0,
+        "latency_p50_ms": 0.27039999986300245,
+        "latency_p95_ms": 0.41280000004917383,
+        "cost_per_query_tokens": 1498.9
+      },
+      "per_query": [
+        {
+          "query_id": "q-001",
+          "recall": 1.0,
+          "reciprocal_rank": 1.0,
+          "faithfulness": 1.0,
+          "latency_ms": 0.27,
+          "cost_tokens": 1811,
+          "no_answer": false,
+          "retrieved_doc_ids": [
+            "wo-001",
+            "mx-002",
+            "wo-002",
+            "mx-010",
+            "wo-013",
+            "wo-015",
+            "wo-009",
+            "wo-005"
+          ]
+        },
+        {
+          "query_id": "q-002",
+          "recall": 1.0,
+          "reciprocal_rank": 1.0,
+          "faithfulness": 1.0,
+          "latency_ms": 0.4,
+          "cost_tokens": 1246,
+          "no_answer": false,
+          "retrieved_doc_ids": [
+            "eq-002",
+            "eq-001",
+            "eq-005",
+            "eq-003",
+            "eq-004",
+            "eq-006",
+            "eq-015",
+            "eq-014"
+          ]
+        },
+        {
+          "query_id": "q-003",
+          "recall": 1.0,
+          "reciprocal_rank": 1.0,
+          "faithfulness": 1.0,
+          "latency_ms": 0.26,
+          "cost_tokens": 1859,
+          "no_answer": false,
+          "retrieved_doc_ids": [
+            "wo-004",
+            "mx-003",
+            "wo-011",
+            "wo-019",
+            "wo-016",
+            "wo-018",
+            "wo-003",
+            "wo-007"
+          ]
+        },
+        {
+          "query_id": "q-004",
+          "recall": 1.0,
+          "reciprocal_rank": 1.0,
+          "faithfulness": 1.0,
+          "latency_ms": 0.23,
+          "cost_tokens": 1856,
+          "no_answer": false,
+          "retrieved_doc_ids": [
+            "wo-003",
+            "wo-011",
+            "mx-001",
+            "wo-019",
+            "wo-014",
+            "wo-015",
+            "wo-008",
+            "wo-012"
+          ]
+        },
+        {
+          "query_id": "q-005",
+          "recall": 1.0,
+          "reciprocal_rank": 1.0,
+          "faithfulness": 1.0,
+          "latency_ms": 0.27,
+          "cost_tokens": 1842,
+          "no_answer": false,
+          "retrieved_doc_ids": [
+            "rg-001",
+            "wo-003",
+            "wo-011",
+            "wo-014",
+            "wo-019",
+            "wo-007",
+            "wo-013",
+            "wo-006"
+          ]
+        },
+        {
+          "query_id": "q-006",
+          "recall": 1.0,
+          "reciprocal_rank": 1.0,
+          "faithfulness": 1.0,
+          "latency_ms": 0.32,
+          "cost_tokens": 2005,
+          "no_answer": false,
+          "retrieved_doc_ids": [
+            "wo-010",
+            "wo-006",
+            "wo-002",
+            "wo-013",
+            "wo-015",
+            "wo-009",
+            "wo-001",
+            "wo-005"
+          ]
+        },
+        {
+          "query_id": "q-007",
+          "recall": 1.0,
+          "reciprocal_rank": 1.0,
+          "faithfulness": 1.0,
+          "latency_ms": 0.48,
+          "cost_tokens": 1370,
+          "no_answer": false,
+          "retrieved_doc_ids": [
+            "eq-007",
+            "eq-003",
+            "eq-014",
+            "wo-008",
+            "eq-006",
+            "eq-009",
+            "eq-008",
+            "wo-003"
+          ]
+        },
+        {
+          "query_id": "q-008",
+          "recall": 1.0,
+          "reciprocal_rank": 1.0,
+          "faithfulness": 1.0,
+          "latency_ms": 0.25,
+          "cost_tokens": 1603,
+          "no_answer": false,
+          "retrieved_doc_ids": [
+            "wo-004",
+            "wo-017",
+            "wo-008",
+            "wo-012",
+            "mx-003",
+            "eq-012",
+            "mx-007",
+            "mx-009"
+          ]
+        },
+        {
+          "query_id": "q-009",
+          "recall": 1.0,
+          "reciprocal_rank": 1.0,
+          "faithfulness": 1.0,
+          "latency_ms": 0.25,
+          "cost_tokens": 1283,
+          "no_answer": false,
+          "retrieved_doc_ids": [
+            "mx-005",
+            "mx-001",
+            "mx-004",
+            "mx-002",
+            "mx-003",
+            "mx-010",
+            "mx-006",
+            "mx-009"
+          ]
+        },
+        {
+          "query_id": "q-010",
+          "recall": 1.0,
+          "reciprocal_rank": 1.0,
+          "faithfulness": 1.0,
+          "latency_ms": 0.35,
+          "cost_tokens": 1906,
+          "no_answer": false,
+          "retrieved_doc_ids": [
+            "wo-005",
+            "wo-020",
+            "wo-014",
+            "wo-019",
+            "eq-012",
+            "wo-013",
+            "wo-011",
+            "wo-016"
+          ]
+        },
+        {
+          "query_id": "q-011",
+          "recall": 1.0,
+          "reciprocal_rank": 1.0,
+          "faithfulness": 1.0,
+          "latency_ms": 0.34,
+          "cost_tokens": 1242,
+          "no_answer": false,
+          "retrieved_doc_ids": [
+            "eq-013",
+            "mx-008",
+            "eq-014",
+            "eq-010",
+            "eq-009",
+            "eq-001",
+            "eq-005",
+            "eq-003"
+          ]
+        },
+        {
+          "query_id": "q-012",
+          "recall": 1.0,
+          "reciprocal_rank": 0.5,
+          "faithfulness": 1.0,
+          "latency_ms": 0.23,
+          "cost_tokens": 1742,
+          "no_answer": false,
+          "retrieved_doc_ids": [
+            "rg-004",
+            "wo-015",
+            "wo-001",
+            "wo-009",
+            "mx-002",
+            "wo-018",
+            "wo-006",
+            "wo-010"
+          ]
+        },
+        {
+          "query_id": "q-013",
+          "recall": 1.0,
+          "reciprocal_rank": 1.0,
+          "faithfulness": 1.0,
+          "latency_ms": 0.22,
+          "cost_tokens": 1623,
+          "no_answer": false,
+          "retrieved_doc_ids": [
+            "rg-002",
+            "rg-004",
+            "wo-018",
+            "wo-008",
+            "wo-012",
+            "wo-016",
+            "wo-003",
+            "wo-007"
+          ]
+        },
+        {
+          "query_id": "q-014",
+          "recall": 1.0,
+          "reciprocal_rank": 1.0,
+          "faithfulness": 1.0,
+          "latency_ms": 0.18,
+          "cost_tokens": 400,
+          "no_answer": false,
+          "retrieved_doc_ids": [
+            "rg-003",
+            "eq-008",
+            "eq-004"
+          ]
+        },
+        {
+          "query_id": "q-015",
+          "recall": 1.0,
+          "reciprocal_rank": 1.0,
+          "faithfulness": 1.0,
+          "latency_ms": 0.31,
+          "cost_tokens": 1458,
+          "no_answer": false,
+          "retrieved_doc_ids": [
+            "mx-004",
+            "eq-010",
+            "mx-010",
+            "wo-010",
+            "wo-002",
+            "mx-006",
+            "mx-005",
+            "mx-001"
+          ]
+        },
+        {
+          "query_id": "q-016",
+          "recall": 1.0,
+          "reciprocal_rank": 1.0,
+          "faithfulness": 1.0,
+          "latency_ms": 0.3,
+          "cost_tokens": 1312,
+          "no_answer": false,
+          "retrieved_doc_ids": [
+            "eq-011",
+            "eq-010",
+            "mx-005",
+            "wo-007",
+            "eq-008",
+            "eq-004",
+            "rg-001",
+            "eq-012"
+          ]
+        },
+        {
+          "query_id": "q-017",
+          "recall": 1.0,
+          "reciprocal_rank": 1.0,
+          "faithfulness": 1.0,
+          "latency_ms": 0.41,
+          "cost_tokens": 1802,
+          "no_answer": false,
+          "retrieved_doc_ids": [
+            "rg-005",
+            "wo-011",
+            "wo-019",
+            "wo-003",
+            "wo-014",
+            "wo-016",
+            "wo-007",
+            "wo-013"
+          ]
+        },
+        {
+          "query_id": "q-018",
+          "recall": 1.0,
+          "reciprocal_rank": 1.0,
+          "faithfulness": 1.0,
+          "latency_ms": 0.27,
+          "cost_tokens": 1878,
+          "no_answer": false,
+          "retrieved_doc_ids": [
+            "wo-009",
+            "mx-006",
+            "wo-003",
+            "wo-014",
+            "wo-011",
+            "wo-019",
+            "wo-016",
+            "wo-018"
+          ]
+        },
+        {
+          "query_id": "q-019",
+          "recall": 1.0,
+          "reciprocal_rank": 1.0,
+          "faithfulness": 1.0,
+          "latency_ms": 0.22,
+          "cost_tokens": 306,
+          "no_answer": false,
+          "retrieved_doc_ids": [
+            "rg-004",
+            "rg-002",
+            "rg-001"
+          ]
+        },
+        {
+          "query_id": "q-020",
+          "recall": 1.0,
+          "reciprocal_rank": 1.0,
+          "faithfulness": 1.0,
+          "latency_ms": 0.27,
+          "cost_tokens": 1434,
+          "no_answer": false,
+          "retrieved_doc_ids": [
+            "eq-005",
+            "eq-001",
+            "eq-003",
+            "eq-004",
+            "wo-011",
+            "wo-016",
+            "eq-002",
+            "eq-013"
+          ]
+        }
+      ],
+      "extra": {
+        "kind": "bm25",
+        "params": {
+          "k1": 1.5,
+          "b": 0.75,
+          "tokenizer": "char-bigram+ascii-word"
+        },
+        "queries": 20
+      }
+    },
+    "naive_vector": {
+      "metrics": {
+        "recall_at_k": 1.0,
+        "recall_k": 5,
+        "mrr": 0.9666666666666666,
+        "faithfulness": 1.0,
+        "faithfulness_scored_queries": 20,
+        "no_answer_count": 0,
+        "latency_p50_ms": 503.8463999990199,
+        "latency_p95_ms": 697.6372000008269,
+        "cost_per_query_tokens": 1646.4
+      },
+      "per_query": [
+        {
+          "query_id": "q-001",
+          "recall": 1.0,
+          "reciprocal_rank": 1.0,
+          "faithfulness": 1.0,
+          "latency_ms": 503.85,
+          "cost_tokens": 1909,
+          "no_answer": false,
+          "retrieved_doc_ids": [
+            "wo-001",
+            "wo-002",
+            "wo-009",
+            "mx-002",
+            "wo-015",
+            "wo-019",
+            "wo-005",
+            "wo-016"
+          ]
+        },
+        {
+          "query_id": "q-002",
+          "recall": 1.0,
+          "reciprocal_rank": 1.0,
+          "faithfulness": 1.0,
+          "latency_ms": 520.16,
+          "cost_tokens": 1246,
+          "no_answer": false,
+          "retrieved_doc_ids": [
+            "eq-002",
+            "eq-001",
+            "eq-005",
+            "eq-014",
+            "eq-006",
+            "eq-015",
+            "eq-003",
+            "eq-004"
+          ]
+        },
+        {
+          "query_id": "q-003",
+          "recall": 1.0,
+          "reciprocal_rank": 1.0,
+          "faithfulness": 1.0,
+          "latency_ms": 488.66,
+          "cost_tokens": 1999,
+          "no_answer": false,
+          "retrieved_doc_ids": [
+            "wo-004",
+            "wo-010",
+            "wo-013",
+            "wo-015",
+            "wo-019",
+            "wo-005",
+            "wo-006",
+            "wo-009"
+          ]
+        },
+        {
+          "query_id": "q-004",
+          "recall": 1.0,
+          "reciprocal_rank": 1.0,
+          "faithfulness": 1.0,
+          "latency_ms": 489.08,
+          "cost_tokens": 1869,
+          "no_answer": false,
+          "retrieved_doc_ids": [
+            "wo-003",
+            "mx-001",
+            "wo-011",
+            "wo-016",
+            "wo-009",
+            "wo-015",
+            "wo-007",
+            "wo-013"
+          ]
+        },
+        {
+          "query_id": "q-005",
+          "recall": 1.0,
+          "reciprocal_rank": 1.0,
+          "faithfulness": 1.0,
+          "latency_ms": 468.51,
+          "cost_tokens": 1380,
+          "no_answer": false,
+          "retrieved_doc_ids": [
+            "rg-001",
+            "rg-004",
+            "rg-002",
+            "wo-010",
+            "wo-002",
+            "wo-018",
+            "wo-001",
+            "rg-005"
+          ]
+        },
+        {
+          "query_id": "q-006",
+          "recall": 1.0,
+          "reciprocal_rank": 1.0,
+          "faithfulness": 1.0,
+          "latency_ms": 504.77,
+          "cost_tokens": 1987,
+          "no_answer": false,
+          "retrieved_doc_ids": [
+            "wo-010",
+            "wo-002",
+            "wo-006",
+            "wo-013",
+            "wo-017",
+            "wo-007",
+            "wo-012",
+            "wo-004"
+          ]
+        },
+        {
+          "query_id": "q-007",
+          "recall": 1.0,
+          "reciprocal_rank": 1.0,
+          "faithfulness": 1.0,
+          "latency_ms": 460.18,
+          "cost_tokens": 1462,
+          "no_answer": false,
+          "retrieved_doc_ids": [
+            "eq-007",
+            "wo-008",
+            "eq-003",
+            "eq-009",
+            "eq-014",
+            "eq-006",
+            "wo-003",
+            "wo-015"
+          ]
+        },
+        {
+          "query_id": "q-008",
+          "recall": 1.0,
+          "reciprocal_rank": 1.0,
+          "faithfulness": 1.0,
+          "latency_ms": 473.84,
+          "cost_tokens": 1975,
+          "no_answer": false,
+          "retrieved_doc_ids": [
+            "wo-004",
+            "wo-017",
+            "wo-012",
+            "wo-008",
+            "wo-002",
+            "wo-010",
+            "wo-006",
+            "wo-007"
+          ]
+        },
+        {
+          "query_id": "q-009",
+          "recall": 1.0,
+          "reciprocal_rank": 0.3333,
+          "faithfulness": 1.0,
+          "latency_ms": 464.76,
+          "cost_tokens": 1287,
+          "no_answer": false,
+          "retrieved_doc_ids": [
+            "mx-003",
+            "mx-001",
+            "mx-005",
+            "mx-004",
+            "mx-007",
+            "mx-002",
+            "mx-006",
+            "mx-008"
+          ]
+        },
+        {
+          "query_id": "q-010",
+          "recall": 1.0,
+          "reciprocal_rank": 1.0,
+          "faithfulness": 1.0,
+          "latency_ms": 454.77,
+          "cost_tokens": 2003,
+          "no_answer": false,
+          "retrieved_doc_ids": [
+            "wo-005",
+            "wo-020",
+            "wo-019",
+            "wo-014",
+            "wo-013",
+            "wo-010",
+            "wo-015",
+            "wo-001"
+          ]
+        },
+        {
+          "query_id": "q-011",
+          "recall": 1.0,
+          "reciprocal_rank": 1.0,
+          "faithfulness": 1.0,
+          "latency_ms": 531.0,
+          "cost_tokens": 1526,
+          "no_answer": false,
+          "retrieved_doc_ids": [
+            "eq-013",
+            "mx-008",
+            "eq-010",
+            "wo-006",
+            "wo-018",
+            "eq-009",
+            "eq-014",
+            "wo-013"
+          ]
+        },
+        {
+          "query_id": "q-012",
+          "recall": 1.0,
+          "reciprocal_rank": 1.0,
+          "faithfulness": 1.0,
+          "latency_ms": 603.28,
+          "cost_tokens": 1988,
+          "no_answer": false,
+          "retrieved_doc_ids": [
+            "wo-015",
+            "wo-009",
+            "wo-001",
+            "wo-013",
+            "wo-010",
+            "wo-018",
+            "wo-006",
+            "wo-002"
+          ]
+        },
+        {
+          "query_id": "q-013",
+          "recall": 1.0,
+          "reciprocal_rank": 1.0,
+          "faithfulness": 1.0,
+          "latency_ms": 697.64,
+          "cost_tokens": 1521,
+          "no_answer": false,
+          "retrieved_doc_ids": [
+            "rg-002",
+            "rg-004",
+            "rg-001",
+            "wo-018",
+            "wo-008",
+            "wo-004",
+            "wo-002",
+            "wo-019"
+          ]
+        },
+        {
+          "query_id": "q-014",
+          "recall": 1.0,
+          "reciprocal_rank": 1.0,
+          "faithfulness": 1.0,
+          "latency_ms": 579.16,
+          "cost_tokens": 1364,
+          "no_answer": false,
+          "retrieved_doc_ids": [
+            "rg-003",
+            "rg-001",
+            "mx-002",
+            "wo-018",
+            "mx-006",
+            "wo-020",
+            "rg-005",
+            "wo-019"
+          ]
+        },
+        {
+          "query_id": "q-015",
+          "recall": 1.0,
+          "reciprocal_rank": 1.0,
+          "faithfulness": 1.0,
+          "latency_ms": 920.68,
+          "cost_tokens": 1624,
+          "no_answer": false,
+          "retrieved_doc_ids": [
+            "mx-004",
+            "eq-010",
+            "wo-010",
+            "wo-013",
+            "wo-006",
+            "mx-003",
+            "mx-010",
+            "wo-004"
+          ]
+        },
+        {
+          "query_id": "q-016",
+          "recall": 1.0,
+          "reciprocal_rank": 1.0,
+          "faithfulness": 1.0,
+          "latency_ms": 589.3,
+          "cost_tokens": 1528,
+          "no_answer": false,
+          "retrieved_doc_ids": [
+            "eq-011",
+            "mx-005",
+            "wo-007",
+            "wo-012",
+            "wo-017",
+            "eq-010",
+            "eq-008",
+            "mx-003"
+          ]
+        },
+        {
+          "query_id": "q-017",
+          "recall": 1.0,
+          "reciprocal_rank": 1.0,
+          "faithfulness": 1.0,
+          "latency_ms": 460.71,
+          "cost_tokens": 1547,
+          "no_answer": false,
+          "retrieved_doc_ids": [
+            "rg-005",
+            "wo-019",
+            "wo-011",
+            "wo-013",
+            "rg-001",
+            "wo-005",
+            "rg-004",
+            "wo-001"
+          ]
+        },
+        {
+          "query_id": "q-018",
+          "recall": 1.0,
+          "reciprocal_rank": 1.0,
+          "faithfulness": 1.0,
+          "latency_ms": 558.57,
+          "cost_tokens": 1910,
+          "no_answer": false,
+          "retrieved_doc_ids": [
+            "wo-009",
+            "wo-002",
+            "wo-012",
+            "mx-006",
+            "wo-016",
+            "wo-020",
+            "wo-001",
+            "wo-014"
+          ]
+        },
+        {
+          "query_id": "q-019",
+          "recall": 1.0,
+          "reciprocal_rank": 1.0,
+          "faithfulness": 1.0,
+          "latency_ms": 508.95,
+          "cost_tokens": 1386,
+          "no_answer": false,
+          "retrieved_doc_ids": [
+            "rg-004",
+            "rg-001",
+            "rg-002",
+            "wo-013",
+            "wo-010",
+            "rg-005",
+            "wo-015",
+            "wo-006"
+          ]
+        },
+        {
+          "query_id": "q-020",
+          "recall": 1.0,
+          "reciprocal_rank": 1.0,
+          "faithfulness": 1.0,
+          "latency_ms": 476.34,
+          "cost_tokens": 1417,
+          "no_answer": false,
+          "retrieved_doc_ids": [
+            "eq-005",
+            "eq-001",
+            "eq-002",
+            "wo-011",
+            "wo-016",
+            "eq-003",
+            "eq-015",
+            "eq-006"
+          ]
+        }
+      ],
+      "extra": {
+        "kind": "vector",
+        "index_seconds": 59.24,
+        "params": {
+          "embed": "http://127.0.0.1:18002",
+          "protocol": "tei"
+        },
+        "queries": 20
+      }
+    }
+  },
+  "ontology_gain": {
+    "definition": "A1（本体约束档）− A0（现状检索）于 recall@k / MRR / faithfulness 三项差值",
+    "a0_harness": "ours_kb",
+    "a1_harness": null,
+    "diff": null,
+    "note": "A1 本体档未实现（本波仅 A0 现检索），差值列留空；A1 接入后按同语料重跑回填"
+  }
+}

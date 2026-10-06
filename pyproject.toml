@@ -46,6 +46,7 @@ markers = [
   "full: 依赖 full 档五存储（Neo4j/Milvus），仅 nightly",
   "e2e: 全栈端到端（Playwright，M3+）",
   "ollama: Ollama 真机冒烟（本机 11434；无服务自动 skip）",
+  "vllm: 本机 vLLM 栈实测（127.0.0.1:18001 /v1；无服务自动 skip）",
 ]
 
 [tool.importlinter]

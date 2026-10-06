@@ -14,6 +14,8 @@ venv/
 .mypy_cache/
 .coverage
 htmlcov/
+# U-③a 门禁完整输出日志（u3a_gate.py 每次运行覆盖，本地诊断用）
+.u3a_gate_last.log
 
 # IDE
 .idea/

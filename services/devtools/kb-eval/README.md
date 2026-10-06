@@ -36,3 +36,35 @@ python services/devtools/kb-eval/poc3_index_cost.py --skip-llm         # 跳过 
 - `docs/OntRAG/poc/PoC1-推理基准.md`：推理 SLA 冻结建议 + Fuseki 触发阈值建议
 - `docs/OntRAG/poc/PoC2-置信度校准.md`：骨架（方法/金标集已写），校准表待回填
 - `docs/OntRAG/poc/PoC3-索引成本.md`：检索默认档裁决建议（默认 LazyGraphRAG）
+
+## U-③a Utopia 基准起步批（2026-10-05，方案依据 docs/OntRAG/Utopia借鉴优化方案.md U-③a）
+
+本批新增三件套（全部零生产代码改动；用户铁律：项目内不使用 mock 数据——真模型一律打本机
+vLLM 栈 `127.0.0.1:18001/v1`，无服务自动 skip，ollama marker 同款纪律）：
+
+| 产物 | 作用 |
+| --- | --- |
+| `scoring.py` | 判分库（平级纯模块，不建包；纯 stdlib）：`roughly()` 全局唯一判等（数值放宽两个量级，约 8.63 亿==862793473.48）、`KnownGapLedger` known_gap 机制（缺口吸收剔除分母、单列计数）、`aggregate` absent 单列口径、`calibration` 0.1 宽分桶 precision+ECE（poc2 同源）、`count_references` resolved/dangling 引用计数、`save_results` *_results.json 落盘。单测 `tests/tools/test_kb_eval_scoring.py`（importlib 按路径加载先例） |
+| `u3a_gate.py` | 本批门禁唯一入口（纯 stdlib subprocess，cwd 自定位仓库根，转发 pytest 退出码）：无参=全量 `python -m pytest -q`；`--u3a`=仅 `-m vllm` 真模型场景 |
+| `BENCH_LEDGER.md` | 基准轮次台账（日期/commit/模型/两组数字/known_gap 变化），每轮一行追加 |
+
+真模型 e2e 场景：`tests/kb/test_utopia_bench_e2e.py`（`@pytest.mark.integration` + `@pytest.mark.vllm`，
+marker 已登记 pyproject）。既有真实语料 3 篇（d00/d03/d06）→ business 入口（`run_pipeline`
+五步直调）打真模型 → 结构性断言（管线完成/事实产出≥N/审核队列置信度口径/合并可撤销）+
+判分两组数字（结构面 + 置信度×门禁 proxy 校准面）；零逐字内容断言（真模型非确定性）、零虚构语料。
+`OA_U3A_RESULTS=<path>` 时落盘判分 JSON（缺省不写盘）。
+
+```bash
+# 本批门禁（在仓库根目录）：
+python services/devtools/kb-eval/u3a_gate.py --u3a   # 真模型场景（本机 vLLM 不可达自动 skip）
+python services/devtools/kb-eval/u3a_gate.py         # 全量套件（全量只由门禁跑，实现者不自行跑全量）
+
+# 判分结果落盘（可选；跑 --u3a 场景时）：
+OA_U3A_RESULTS=services/devtools/kb-eval/u3a_results.json python services/devtools/kb-eval/u3a_gate.py --u3a
+```
+
+运行注意：本机 vLLM 4B-AWQ 实测单次抽取 ~117s（e2e 内经测试侧耐心装饰器注入 per-call 预算
+900s，零生产改动）。已知模型能力缺口：4B 模型在叙事密集 chunk 上复读失控（~40K 字截断 JSON，
+2026-10-05 实测 5/22 chunk 命中），命中文档按生产 3 次重试语义失败留痕、由用例显式登记
+（known_gap），故全跑约 45-55 分钟属正常。共享本地 PG 与并行 worktree 批次互斥——基准批须
+串行（02 §多 Agent 协作纪律）。

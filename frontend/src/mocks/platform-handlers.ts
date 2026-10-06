@@ -474,7 +474,8 @@ export interface McpServer {
   desc: string
   transport: 'streamable http' | 'stdio'
   url_masked: string
-  command?: string
+  /** live McpServerRow.command: str | None——http 行恒 null（pydantic 恒序列化该键） */
+  command?: string | null
   auth: string
   token_masked: string
   protocol: string
@@ -495,7 +496,7 @@ export interface McpServer {
 export const MCP_SERVERS: McpServer[] = [
   {
     id: '7c3d1a2e-0000-4000-8000-000000000001', name: 'crm-prod', desc: '客服工单系统', transport: 'streamable http',
-    url_masked: 'https://crm-pro****.example.com/mcp', auth: 'Bearer Token', token_masked: 'sk-ab****9f2c',
+    url_masked: 'https://crm-pro****.example.com/mcp', command: null, auth: 'Bearer Token', token_masked: 'sk-ab****9f2c',
     protocol: '2025-06-18', server_version: 'v2.4.1', status: 'healthy', latency_ms: 180, consecutive_failures: 0,
     last_probe: '2026-09-26T08:00:00Z',
     probes_24h: [...Array(24)].map((_, i) => ({ ok: i !== 19 })),
@@ -524,7 +525,7 @@ export const MCP_SERVERS: McpServer[] = [
   },
   {
     id: '7c3d1a2e-0000-4000-8000-000000000003', name: 'legacy-erp', desc: '老旧 ERP 网关（待升级）', transport: 'streamable http',
-    url_masked: 'https://legacy-er****/mcp', auth: 'Basic', token_masked: 'Basic ****',
+    url_masked: 'https://legacy-er****/mcp', command: null, auth: 'Basic', token_masked: 'Basic ****',
     protocol: '2024-11-05', server_version: 'v1.2.0', status: 'failing', latency_ms: 0, consecutive_failures: 3,
     last_probe: '2026-09-26T07:40:00Z',
     probes_24h: [...Array(24)].map((_, i) => ({ ok: i < 18 })),
@@ -712,13 +713,18 @@ export const platformHandlers = [
     if (!body.base_url || !body.model) {
       return HttpResponse.json({ code: 3001, message: '入参校验失败：base_url/model 必填', detail: null, trace_id: 'tr-mock' }, { status: 422 })
     }
-    if (!body.base_url.startsWith('http')) {
+    if (!body.base_url.startsWith('https')) {
+      // 非加密端点按不可达剧本（ok=false 结构化 200，不上 500）
       return HttpResponse.json({ ok: false, latency_ms: 4, model: body.model, error: '5002: 模型服务不可达（连接被拒）' })
     }
     return HttpResponse.json({ ok: true, latency_ms: 86, model: body.model, error: null })
   }),
   http.get('*/api/v1/agents', () =>
-    HttpResponse.json({ data: AGENTS, meta: { page: 1, page_size: 20, total: AGENTS.length } }),
+    // live 列表行=AgentOut（无 adapter 键——adapter 仅详情下发）
+    HttpResponse.json({
+      data: AGENTS.map(({ adapter: _adapter, ...row }) => row),
+      meta: { page: 1, page_size: 20, total: AGENTS.length },
+    }),
   ),
   // live 契约：POST /agents {name,agent_tool,system_prompt?,config?,adapter_id?} → 201 AgentOut
   http.post('*/api/v1/agents', async ({ request }) => {
@@ -733,9 +739,9 @@ export const platformHandlers = [
       name: body.name, agent_tool: body.agent_tool as PlatformAgent['agent_tool'],
       status: 'enabled', system_prompt: body.system_prompt ?? null, config: body.config ?? {},
       created_at: new Date().toISOString(),
-      adapter: { id: '01a0e24b-d032-7093-af24-a84821f9b039', agent_tool: body.agent_tool, version: 'platform', health_endpoint: null },
+      // 201 响应=AgentOut（live 无 adapter 键——adapter 仅详情下发）
     }
-    AGENTS.unshift(agent)
+    AGENTS.unshift({ ...agent, adapter: { id: '01a0e24b-d032-7093-af24-a84821f9b039', agent_tool: body.agent_tool, version: 'platform', health_endpoint: null } })
     return HttpResponse.json(agent, { status: 201 })
   }),
   // live 契约：POST /agents/{id}/health-check → {status:'inprocess'|'ok', latency_ms}（builtin 无端点=进程内）
@@ -761,7 +767,8 @@ export const platformHandlers = [
   // live 契约调试对话：{message,params?} → {reply,usage,latency_ms}——调试面不落会话行、
   // 响应无 trace 会话语义字段（trace 随网关中间件留痕）
   http.post('*/api/v1/agents/:id/debug-chat', async ({ params, request }) => {
-    void params
+    const agent = AGENTS.find(a => a.id === String(params.id))
+    if (!agent) return HttpResponse.json({ code: 404, message: 'agent 不存在', detail: null, trace_id: 'tr-mock' }, { status: 404 })
     const body = (await request.json().catch(() => ({}))) as { message?: string }
     if (!body.message) {
       return HttpResponse.json({ code: 3001, message: '入参校验失败：message 必填', detail: null, trace_id: 'tr-mock' }, { status: 422 })
@@ -914,7 +921,7 @@ export const platformHandlers = [
       url_masked: isHttp
         ? (body.url ?? '').replace(/^(https?:\/\/)([^/]{4})[^/]*/, '$1$2****')
         : `stdio · ${body.command ?? ''}`,
-      command: isHttp ? undefined : body.command, auth: body.auth,
+      command: isHttp ? null : body.command, auth: body.auth,
       token_masked: body.token ? `${body.token.slice(0, 5)}****${body.token.slice(-4)}` : '—',
       protocol: DISCOVER_REPLY.protocol, server_version: DISCOVER_REPLY.server_version,
       status: 'unknown', latency_ms: DISCOVER_REPLY.latency_ms, consecutive_failures: 0,

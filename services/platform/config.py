@@ -88,6 +88,12 @@ class Settings(BaseSettings):
     skills_catalog_include: str = ""  # 逗号分隔技能名白名单；空=全部装载
     skills_catalog_exclude: str = ""  # 逗号分隔技能名排除项；优先级高于白名单
 
+    # 注入防御链（docs/Agent/15 §2 F2，G-09 最小面）：对话上下文三注入面（记忆段/检索证据
+    # quote/技能目录条目）的威胁模式扫描剥离开关（扫描器=services/platform/threats.py，
+    # hermes-agent MIT 收编件）。True=命中即剥离并落 context.injection_blocked 审计事件
+    # （防御=降级面，永不中断 run）；False=完全零行为变化（不扫描、不剥离、无事件回退口）。
+    context_threat_scan_enabled: bool = True
+
     # 网关运行
     api_prefix: str = "/api/v1"
     sse_heartbeat_seconds: int = 15  # 建议值，压测后冻结（02 §5）

@@ -499,6 +499,7 @@ def build_chat_orchestrator(
         policy = ChatPolicy(
             faithfulness_sampling_enabled=settings.faithfulness_sampling_enabled,
             faithfulness_sample_rate=settings.faithfulness_sample_rate,
+            context_threat_scan_enabled=settings.context_threat_scan_enabled,  # F2 注入防御链（15 §2.2）
         )
     assembler = build_chat_context_assembler(
         l1_store=l1_store,

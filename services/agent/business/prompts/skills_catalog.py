@@ -145,3 +145,29 @@ def render_skill_catalog_segment(entries: Iterable[SkillCatalogEntry]) -> str:
     if not lines:
         return ""
     return "\n".join(["【技能目录（元数据层：name+description；正文不随提示注入，按需加载）】", *lines])
+
+
+def filter_threat_entries(entries: Sequence[SkillCatalogEntry]) -> tuple[SkillCatalogEntry, ...]:
+    """注入防御链第三注入面（docs/Agent/15 §2.2 F2，G-09 最小面）：目录条目 name+description
+    逐条 scope="context" 威胁扫描（扫描器=services/platform/threats.py，hermes-agent MIT
+    收编件），命中条目剔除目录并 WARNING 留痕（处置=剥离不阻塞会话启动，坏文件降级同款）。
+
+    返回保留集（保序）；开关门控归调用方（sessions 组装点读 Settings，关=本函数不被调用
+    =零行为变化）。边界：技能目录为进程启动期装载（编排器单例），无 task/会话锚点可落
+    task_events——审计面按详设表行处置=剔除+日志（事件面仅 memory/evidence 两源）。
+    """
+    from services.platform.threats import scan_for_threats  # 局部 import：扫描器仅防御链消费
+
+    kept: list[SkillCatalogEntry] = []
+    for entry in entries:
+        findings = sorted(set(scan_for_threats(f"{entry.name}\n{entry.description}", scope="context")))
+        if findings:
+            logger.warning(
+                "skills catalog 剔除疑似注入条目（防御=降级面）: name=%s pattern_ids=%s source=%s",
+                entry.name,
+                ",".join(findings),
+                entry.source,
+            )
+            continue
+        kept.append(entry)
+    return tuple(kept)

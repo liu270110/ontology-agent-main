@@ -28,15 +28,15 @@ ck_%(table_name)s_%(constraint_name)s 模板编译同名）。
 tests/mcp/test_management_api.py）；离线干跑：alembic upgrade a4b1cc126df7:b2c4d6f8a1e3 --sql。
 """
 
-from typing import Sequence, Union
+from collections.abc import Sequence
 
 from alembic import op
 from sqlalchemy import text
 
 revision: str = "b2c4d6f8a1e3"
-down_revision: Union[str, None] = "a4b1cc126df7"
-branch_labels: Union[str, Sequence[str], None] = None
-depends_on: Union[str, Sequence[str], None] = None
+down_revision: str | None = "a4b1cc126df7"
+branch_labels: str | Sequence[str] | None = None
+depends_on: str | Sequence[str] | None = None
 
 
 _TABLE_DDL = [
@@ -45,7 +45,7 @@ _TABLE_DDL = [
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         tenant_id UUID NOT NULL REFERENCES tenants(id),
         name VARCHAR(128) NOT NULL,                 -- server 命名空间段（保留段校验在用例层）
-        desc TEXT NOT NULL DEFAULT '',
+        description TEXT NOT NULL DEFAULT '',
         transport VARCHAR(16) NOT NULL,             -- streamable_http | stdio（McpTargetConfig 同词表）
         url VARCHAR(512),                           -- streamable_http 必填（http/https）
         command VARCHAR(512),                       -- stdio 必填
@@ -78,7 +78,7 @@ _TABLE_DDL = [
         server_id UUID NOT NULL REFERENCES mcp_servers(id) ON DELETE CASCADE,
         tool_id VARCHAR(64) NOT NULL,               -- 内容寻址短 id mt-<hash>（稳定，刷新不变）
         name VARCHAR(256) NOT NULL,                 -- 远端 tool 名
-        desc TEXT NOT NULL DEFAULT '',
+        description TEXT NOT NULL DEFAULT '',
         write BOOLEAN NOT NULL DEFAULT false,       -- 无 readOnlyHint 提示一律按写（外部默认不可信）
         read_only BOOLEAN NOT NULL DEFAULT false,   -- annotations.readOnlyHint 投影
         adopted BOOLEAN NOT NULL DEFAULT false,     -- 纳管勾选

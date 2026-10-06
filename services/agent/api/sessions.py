@@ -392,6 +392,12 @@ def get_or_build_chat_orchestrator(state: Any) -> Any:
     from services.agent.api.control import get_or_build_estop_store, get_or_build_run_registry
 
     estop_store = get_or_build_estop_store(state, redis=get_redis(settings))  # Redis 优先、不可用内存兜底
+    spill_store = _build_spill_store(settings)  # spill（02 §11.2-11）：未配置目录=关闭
+    extra_bindings = list(_build_mcp_tool_bindings(state))  # 竖线①：MCP registry→内核绑定桥
+    if spill_store is not None:  # K14-b（docs/Agent/13 §20）：spill 关闭=不注册兑换工具（条件装配）
+        from services.agent.business.capabilities.spill_retrieval import build_spill_retrieval_binding
+
+        extra_bindings.append(build_spill_retrieval_binding(spill_store))
     orchestrator = build_chat_orchestrator(
         model_port=getattr(state, "model_port", None),
         l1_store=l1_store,
@@ -402,10 +408,10 @@ def get_or_build_chat_orchestrator(state: Any) -> Any:
         llm_event_emitter_factory=build_llm_event_emitter_factory(
             state.uow, getattr(state, "sse_hub", None)
         ),  # M4.5-C：llm.* 事件 → task_events（先落库后推送）
-        spill_store=_build_spill_store(settings),  # spill（02 §11.2-11）：未配置目录=关闭
+        spill_store=spill_store,
         run_registry=get_or_build_run_registry(state),  # M4.5-A：运行中输入面注册表
         estop_probe_factory=estop_store.probe,  # M4.5-A：estop 步边界闸门探针工厂
-        extra_tool_bindings=_build_mcp_tool_bindings(state),  # 竖线①：MCP registry→内核绑定桥
+        extra_tool_bindings=tuple(extra_bindings),
         skills_catalog=_build_skills_catalog_segment(settings),  # 竖线②：SKILL.md 目录式注入（L1）
     )
     state.chat_orchestrator = orchestrator

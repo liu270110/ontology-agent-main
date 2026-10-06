@@ -33,7 +33,7 @@ import httpx
 from services.agent.business.capabilities.web.allowlist import EgressAllowlist, hostname_of
 from services.agent.business.capabilities.web.audit import AuditSink, default_audit_sink, emit_audit
 from services.agent.business.capabilities.web.extract import extract_html_text
-from services.agent.business.kernel.spill import SpillStore
+from services.agent.business.kernel.spill import SPILL_MARKER_FMT, SpillStore
 from services.agent.domain.model.kernel_actions import ApprovalTicket, ToolCall, ToolResult
 from services.agent.domain.model.kernel_context import ExtensionMeta, TenantContext
 from services.platform.errors import ErrorCode
@@ -44,7 +44,17 @@ DEFAULT_TIMEOUT_S = 15.0  # 超时必设（缺省 15s；实际生效与内核 ti
 MAX_RESPONSE_BYTES = 2 * 1024 * 1024  # 响应大小上限 2MB（流式累计硬顶）
 BODY_PREVIEW_CHARS = 20_000  # 回灌正文预览上限（超出 spill/注明）
 MAX_REDIRECT_HOPS = 5  # 重定向跳数上限（防跳转环）
-_TRUNCATION_MARK = "\n…[web_fetch 截断：完整原文见 spill 指针]…"
+# K14-c（docs/Agent/13 §20）：截断标记收敛同源——与内核 spill 预览同一 SPILL_MARKER_FMT
+# 格式；locator 已知时内嵌指针（模型在预览内即可见兑换入口），未知（未注入 store/落盘
+# 失败）时给无指针兜底标注。
+_SPILL_MARK_FALLBACK = "\n…" + SPILL_MARKER_FMT.format(locator="不可用：原文未持久化，仅本次内存截断") + "…"
+
+
+def _truncation_mark(locator: str | None) -> str:
+    """统一截断标注（K14-c 同源）：有 locator 内嵌指针，无则兜底（读侧经 spill.get 兑换）。"""
+    if locator is None:
+        return _SPILL_MARK_FALLBACK
+    return "\n…" + SPILL_MARKER_FMT.format(locator=locator) + "…"
 
 # HTTP 客户端工厂（组合根/tests 注入 MockTransport；入参=本次调用的钳制后超时秒）
 HttpClientFactory = Callable[[float], httpx.AsyncClient]
@@ -260,6 +270,9 @@ class WebFetchTool:
             return self._fail(int(ErrorCode.UNSUPPORTED_MEDIA_TYPE), f"不支持的媒体类型: {media or '(未声明)'}")
 
         truncated = len(text) > BODY_PREVIEW_CHARS
+        # K14-c：先落盘后拼预览——截断标注可内嵌真实 locator（同源格式，模型在预览内
+        # 即可见兑换指针；spill 元数据键 spill/spill_note/spill_locator 保持不变）。
+        spill_meta: dict[str, Any] = await self._spill(text, ctx, call) if truncated else {}
         output: dict[str, Any] = {
             "requested_url": requested_url,  # B3 agent_attested 元数据：来源与抓取事实
             "url": final_url,
@@ -271,10 +284,11 @@ class WebFetchTool:
             "original_bytes": len(raw),
             "original_chars": len(text),
             "truncated": truncated,
-            "text": text[:BODY_PREVIEW_CHARS] + (_TRUNCATION_MARK if truncated else ""),
+            "text": (
+                text[:BODY_PREVIEW_CHARS] + (_truncation_mark(spill_meta.get("spill_locator")) if truncated else "")
+            ),
+            **spill_meta,
         }
-        if truncated:
-            output.update(await self._spill(text, ctx, call))
         return ToolResult(ok=True, output=output)  # B3：不自称 externally_verified，信任级由内核标界
 
     async def _spill(self, text: str, ctx: TenantContext, call: ToolCall) -> dict[str, Any]:

@@ -515,3 +515,37 @@ async def test_spill存储协议可注入_本地目录实现落盘可取回(tmp_
     locator = await store.put("web/tenant/call.txt", "原文")
     # assert
     assert Path(locator).read_text(encoding="utf-8") == "原文"
+
+
+# ── K14-c：截断标记收敛同源（docs/Agent/13 §20；与内核 spill 同一 SPILL_MARKER_FMT）──
+
+
+async def test_K14c_正文截断_落盘成功_标注内嵌同源locator():
+    # arrange：>20KB 正文 + spill store 注入
+    body = "<p>" + "标" * (BODY_PREVIEW_CHARS + 500) + "</p>"
+    store = FakeSpillStore()
+    tool, _ = build_web_bindings(
+        ("docs.example.com",), client_factory=spy_factory(_html_transport(body)), spill_store=store
+    )
+    # act
+    result = await invoke_tool(tool, {"url": "https://docs.example.com/long"}, make_ctx())
+    # assert：预览末尾标注=统一格式且内嵌真实 locator（与内核 spill 同源，读侧 spill.get 可兑换）
+    from services.agent.business.kernel.spill import SPILL_MARKER_FMT
+
+    assert result.ok is True and result.output["truncated"] is True
+    (key,) = store.payloads
+    locator = f"mem://{key}"
+    assert result.output["spill_locator"] == locator
+    assert result.output["text"].endswith(SPILL_MARKER_FMT.format(locator=locator) + "…")  # 标注含首尾省略号
+
+
+async def test_K14c_正文截断_未注入store_兜底标注同一格式族():
+    # arrange：>20KB 正文，未注入 store（内存截断形态）
+    body = "<p>" + "落" * (BODY_PREVIEW_CHARS + 500) + "</p>"
+    tool, _ = build_web_bindings(("docs.example.com",), client_factory=spy_factory(_html_transport(body)))
+    # act
+    result = await invoke_tool(tool, {"url": "https://docs.example.com/long"}, make_ctx())
+    # assert：无 locator 兜底标注仍在统一格式族（[spilled: locator=…]），且回灌有界不变
+    assert result.ok is True and result.output["truncated"] is True
+    assert result.output["text"].count("[spilled: locator=") == 1
+    assert len(result.output["text"]) <= BODY_PREVIEW_CHARS + 64

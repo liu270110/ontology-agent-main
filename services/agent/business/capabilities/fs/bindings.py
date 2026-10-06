@@ -17,6 +17,7 @@ from typing import Any
 
 from services.agent.business.capabilities.fs.guards import FsToolError, default_workspace_root
 from services.agent.business.capabilities.fs.tools import fs_edit, fs_glob, fs_grep, fs_read, fs_write
+from services.agent.business.kernel.spill import SpillStore, serialize_output
 from services.agent.domain.model.kernel_actions import ApprovalTicket, ExecutionMode, ToolCall, ToolResult
 from services.agent.domain.model.kernel_context import ExtensionMeta, TenantContext
 from services.platform.errors import ErrorCode
@@ -130,6 +131,7 @@ class FsToolBinding:
         root: Path,
         handler: Any,
         audit: bool,
+        spill_store: SpillStore | None = None,
     ) -> None:
         self.meta = ExtensionMeta(
             name=f"fs.{tool_name}",
@@ -143,6 +145,7 @@ class FsToolBinding:
         self._root = root
         self._handler = handler
         self._audit = audit
+        self._spill_store = spill_store  # K14-c：截断产物换 locator（None=维持现状仅 truncated 布尔）
 
     async def invoke(
         self,
@@ -153,9 +156,34 @@ class FsToolBinding:
         timeout_ms: int = 30_000,
     ) -> ToolResult:
         result = self._invoke_structured(call)
+        if (
+            self._spill_store is not None
+            and result.ok
+            and isinstance(result.output, dict)
+            and result.output.get("truncated") is True
+        ):
+            result = await self._spill_truncated(result, ctx, call)  # K14-c：截断产物全量落 spill 换 locator
         if self._audit:
             self._log_audit(call, ctx, result)
         return result
+
+    async def _spill_truncated(self, result: ToolResult, ctx: TenantContext, call: ToolCall) -> ToolResult:
+        """截断产物全量落 spill 并附 spill_locator（K14-c，docs/Agent/13 §20）。
+
+        落盘失败 fail-open：结果本身已有界（truncated 布尔照旧回灌），仅 WARNING 留痕，
+        不附 locator（读侧不可达的指针宁可不发——防孤儿）。store 未注入=不进本路径
+        （向后兼容：仅 truncated 布尔，与既有形态逐字节一致）。
+        """
+        assert result.output is not None
+        # key 分段：run_id 在绑定层不可得（ToolCall/TenantContext 均不携带）——以 call_id
+        # 分段保唯一与归属（方案建议 fs/{tenant}/{run_id}/{tool}_{hash} 的最小可行变体）。
+        key = f"fs/{ctx.tenant_id}/{call.call_id}/{self.name}.txt"
+        try:
+            locator = await self._spill_store.put(key, serialize_output(result.output))
+        except Exception as exc:  # noqa: BLE001 ——存储故障 fail-open：有界结果仍回灌（内核 spill 同款）
+            logger.warning("fs 截断产物 spill 落盘失败（key=%s）: %s", key, exc)
+            return result
+        return result.model_copy(update={"output": {**result.output, "spill_locator": locator}})
 
     # ── 内部：结构化执行与审计 ────────────────────────────────────────────
     def _invoke_structured(self, call: ToolCall) -> ToolResult:
@@ -194,8 +222,15 @@ class FsToolBinding:
         )
 
 
-def build_fs_bindings(workspace_root: str | Path | None = None) -> list[FsToolBinding]:
+def build_fs_bindings(
+    workspace_root: str | Path | None = None,
+    *,
+    spill_store: SpillStore | None = None,
+) -> list[FsToolBinding]:
     """fs 五件套绑定工厂：工作区根为唯一注入点（缺省 env OA_WORKSPACE_ROOT / ./workspace）。
+
+    ``spill_store``（K14-c，docs/Agent/13 §20）：截断产物换 locator 的存储注入（read/glob/
+    grep 三截断点经 truncated=True 统一挂接）；None=维持现状仅 truncated 布尔（向后兼容）。
 
     返回顺序固定 [read, write, edit, glob, grep]；只读类 executionMode=read（B1 基线放行），
     写类 executionMode=write（scope 覆盖判级，审批路由按内核 B5 规则）。
@@ -211,6 +246,7 @@ def build_fs_bindings(workspace_root: str | Path | None = None) -> list[FsToolBi
             root=root,
             handler=fs_read,
             audit=False,
+            spill_store=spill_store,
         ),
         FsToolBinding(
             tool_name="write",
@@ -221,6 +257,7 @@ def build_fs_bindings(workspace_root: str | Path | None = None) -> list[FsToolBi
             root=root,
             handler=fs_write,
             audit=True,
+            spill_store=spill_store,
         ),
         FsToolBinding(
             tool_name="edit",
@@ -231,6 +268,7 @@ def build_fs_bindings(workspace_root: str | Path | None = None) -> list[FsToolBi
             root=root,
             handler=fs_edit,
             audit=True,
+            spill_store=spill_store,
         ),
         FsToolBinding(
             tool_name="glob",
@@ -241,6 +279,7 @@ def build_fs_bindings(workspace_root: str | Path | None = None) -> list[FsToolBi
             root=root,
             handler=fs_glob,
             audit=False,
+            spill_store=spill_store,
         ),
         FsToolBinding(
             tool_name="grep",
@@ -251,5 +290,6 @@ def build_fs_bindings(workspace_root: str | Path | None = None) -> list[FsToolBi
             root=root,
             handler=fs_grep,
             audit=False,
+            spill_store=spill_store,
         ),
     ]

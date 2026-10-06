@@ -233,6 +233,105 @@ class DocumentDeleteEnvelope(BaseModel):
     meta: EmptyMeta = Field(default_factory=EmptyMeta)
 
 
+# ---------------------------------------------------------------- 回收站/库设置（api/01 §5.4 追加行，B3-Q 转实）
+#
+# 契约源=frontend/src/mocks/kb-handlers.ts 回收站/库设置段 + frontend features/kb/api.ts
+# RecycleItem/KbCollectionSettings 接口（字段名级对齐：回收站条目 size↔documents.size_bytes、
+# expires_at=deleted_at+7d 由投影层计算）。信封按 kb 域既有先例：列表 {data, meta}
+# （data 内层保 mock 的 {items, next_cursor} 形态——前端 api.get 直取 .data）、
+# 动作回执裸 DTO（restore↔PipelineStartOut 先例）、删除信封（purge↔DocumentDeleteEnvelope 先例）、
+# 资源读写 {data, meta}（settings↔DocumentDetailEnvelope 先例）。
+
+
+class RecycleItemOut(BaseModel):
+    """回收站条目（mock kb-handlers GET /kb/recycle-bin 逐字段：status 恒 'deleted'）。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    id: uuid.UUID
+    name: str  # = documents.title
+    collection_id: uuid.UUID  # = documents.kb_collection_id
+    deleted_at: datetime
+    expires_at: datetime  # = deleted_at + 7d（保留期投影，B3-Q 契约口径）
+    size: int = 0  # 字节（对账 DTO 命名；= documents.size_bytes 缺省 0）
+    status: Literal["deleted"] = "deleted"
+
+
+class RecycleBinData(BaseModel):
+    """回收站 data 面（mock 内层形态：items + next_cursor；游标分页 v1 未启用恒 None）。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    items: list[RecycleItemOut] = Field(default_factory=list)
+    next_cursor: str | None = None
+
+
+class RecycleBinListOut(BaseModel):
+    """回收站列表（{data, meta} 强信封，api/01 §3.1；软删 7 天保留期 B3-Q 转实）。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    data: RecycleBinData
+    meta: PageMeta
+
+
+class DocumentRestoreOut(BaseModel):
+    """恢复回执（mock/前端契约：{id, status:'ready'}——'ready' 为固定字面量，非后端八态）。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    id: uuid.UUID
+    status: Literal["ready"] = "ready"
+
+
+class DocumentPurgeData(BaseModel):
+    """彻底删除 data 面（api/01 §5.4 purge 行「回 200 信封 {id}，勿回 204 空体」）。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    id: uuid.UUID
+
+
+class DocumentPurgeEnvelope(BaseModel):
+    """彻底删除信封（DocumentDeleteEnvelope 同构 {data, meta}；200 非 204——前端不解析空体）。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    data: DocumentPurgeData
+    meta: EmptyMeta = Field(default_factory=EmptyMeta)
+
+
+class KbCollectionSettings(BaseModel):
+    """库设置整包（mock KbSettings 四键；chunk_size 300-2000 / chunk_overlap 0-500 越界
+    422→3001 PARAM_INVALID 与 mock 3001 同码；PUT 全量写，缺省值与 mock settingsFor 同源）。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    chunk_size: int = Field(ge=300, le=2000)  # 分片大小 tokens（必填，mock PUT 类型校验同口径）
+    chunk_overlap: int = Field(ge=0, le=500)  # 分片重叠 tokens（必填）
+    extract_prompt_level: Literal["standard", "deep"] = "standard"
+    auto_extract: bool = False  # mock PUT「body.auto_extract === true」缺省 false 口径
+
+
+# GET 空设置回落值（mock settingsFor：500/50/standard/true——与 PUT 缺省值不同源，GET 面专供）
+KB_SETTINGS_DEFAULTS: dict[str, Any] = {
+    "chunk_size": 500,
+    "chunk_overlap": 50,
+    "extract_prompt_level": "standard",
+    "auto_extract": True,
+}
+
+
+class CollectionSettingsEnvelope(BaseModel):
+    """库设置读写信封（资源面 {data, meta}，DocumentDetailEnvelope 同构；GET 空设置回落
+    默认 500/50/standard/true，PUT 回全量对象=mock「PUT 回全量」口径）。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    data: KbCollectionSettings
+    meta: EmptyMeta = Field(default_factory=EmptyMeta)
+
+
 class PipelineStartOut(BaseModel):
     model_config = ConfigDict(extra="forbid")
     document_id: uuid.UUID

@@ -85,6 +85,7 @@ ignore_imports = [
     "services.platform.db.registry -> services.kb.data.rule_orm",  # 规则候选草案表注册（规则抽取通道 v1）
     "services.platform.db.registry -> services.kb.data.governance_orm",  # TODO(M5): 知识治理两表注册随 kb-conflict-governance（OntRAG §8.1/8.2）
     "services.platform.db.registry -> services.kb.data.connector_orm",
+    "services.platform.db.registry -> services.kb.data.maintenance_orm",  # kb 维护表注册（2026-10-07 静态清账批补登记；ORM registry 组合点 TODO(M4) 收口同批）
     "services.platform.db.registry -> services.kb.data.usage_orm",  # TODO(M5): 知识活性计数表注册随 kb-usage-counters（多源接入 §6.1）  # TODO(M5): 连接器两表注册随 kb-connector-v1（多源接入 §3）
     "services.platform.db.registry -> services.ontology.data.orm",
     "services.platform.db.registry -> services.review.data.orm",
@@ -131,10 +132,13 @@ ignore_imports = [
     "services.gateway.app -> services.iam.api.admin",  # 2026-10-05 admin 域 9 组端点（api/01 §5.8/§5.10；挂载边同 invites 先例）
     "services.gateway.app -> services.iam.api.me",  # 2026-10-05 me 域端点（api/01 §5.9 totp/§5.13 me/§5.15；挂载边同 admin 先例）
     "services.gateway.app -> services.mcp.api.management",  # 2026-10-05 mcp 管理域 8 端点（api/01 §5.7；挂载边同 admin 先例，传递链经 mcp_repo 跨面聚合）
+    "services.gateway.app -> services.iam.api.users",  # 2026-10-07 静态清账批补登记：用户管理 CRUD 四端点（api/01 §5.8；挂载边同 me 先例）
     "services.gateway.app -> services.agent.api.sessions",
     "services.gateway.app -> services.agent.api.agents",  # 2026-09-27 agents CRUD 批（挂载边同 sessions 先例）
     "services.gateway.app -> services.agent.api.tasks",
     "services.gateway.app -> services.agent.api.prompts",  # 2026-09-29 H-1 提示词工程治理批（挂载边同 agents 先例）
+    "services.gateway.app -> services.agent.api.approvals",  # 2026-10-07 静态清账批补登记：H-0b 运行中审批（api/01 §5.15；挂载边同 tasks 先例）
+    "services.gateway.app -> services.agent.api.runs",  # 2026-10-07 静态清账批补登记：子 Run 快照（api/01 §5.2；挂载边同 tasks 先例）
     "services.gateway.app -> services.kb.api.kb",
     "services.gateway.app -> services.ontology.api.ontology",
     "services.gateway.app -> services.memory.api.memory",  # 计划 3.3：memory 六端点挂载边（同上逐边豁免）
@@ -147,6 +151,7 @@ ignore_imports = [
     "services.platform.db.uow -> services.agent.domain.repo.prompt_repo",
     "services.gateway.app -> services.agent.business.task_worker",  # 任务执行 worker 组合根装配（2026-09-27 批，mcp.bootstrap 单边豁免同款）
     "services.gateway.app -> services.agent.data.repo_impl.task_poller",  # 任务 worker 轮询器组合根装配（同上）
+    "services.gateway.app -> services.agent.data.spill_store",  # 2026-10-07 静态清账批补登记：K14-b spill 组合根条件装配（task_poller 同款组合根装配边）
     "services.gateway.app -> services.agent.domain.model.task",  # RunRetryPolicy 组合根注入（同上）
     # 候选审核端口组合点（契约六同款豁免；TODO(M4) 收口）
     "services.gateway.app -> services.review.business.candidates",
@@ -172,6 +177,7 @@ ignore_imports = [
     "services.gateway.app -> services.iam.api.admin",  # 2026-10-05 admin 域挂载边豁免（api/01 §5.8/§5.10，同 invites 先例）
     "services.gateway.app -> services.iam.api.me",  # 2026-10-05 me 域挂载边豁免（api/01 §5.9/§5.13/§5.15，同 admin 先例）
     "services.gateway.app -> services.mcp.api.management",  # 2026-10-05 mcp 管理域挂载边豁免（传递链经 mcp_repo 解析登记人 display_name，同 admin 先例）
+    "services.gateway.app -> services.iam.api.users",  # 2026-10-07 静态清账批：users 挂载边豁免（api/01 §5.8，同 me 先例；api 层模块内消费自身 data 属合法分层）
     "services.mcp.bootstrap -> services.iam.data.orm",  # P1-1 收口：MCP 审计 PG 汇随共享工厂（gateway/独立进程共用）
     "services.mcp.data.repo_impl.mcp_repo -> services.iam.data.orm",  # 2026-10-05 mcp 管理域：登记人 display_name 解析（bootstrap 先例同款，TODO(M4) 端口化收口）
 ]
@@ -197,6 +203,7 @@ ignore_imports = [
     "services.platform.db.uow -> services.agent.data.repo_impl.agent_repo",  # 同上（agents CRUD 批）
     "services.platform.db.uow -> services.agent.data.repo_impl.prompt_repo",  # 同上（H-1 提示词工程治理批，2026-09-29）
     "services.gateway.app -> services.agent.data.repo_impl.task_poller",  # 任务 worker 轮询器装配（writeback_repo 同款豁免，2026-09-27 批）
+    "services.gateway.app -> services.agent.data.spill_store",  # 2026-10-07 静态清账批补登记：K14-b spill 组合根条件装配（spill 传递链同 spill_store 边豁免）
     # spill 存储装配边（2026-09-27 批）：sessions 组合根持有 LocalDirSpillStore（ontology 本地目录先例，
     # M4 切 MinIO）；mcp.a2a 经 sessions 的传递链由本边豁免
     "services.agent.api.sessions -> services.agent.data.spill_store",
@@ -221,6 +228,10 @@ ignore_imports = [
     "services.gateway.app -> services.kb.api.kb",
     "services.kb.business.usage_service -> services.kb.data.usage_orm",  # 知识活性计数落库（TODO(M5) 随 kb-usage-counters 收口）
     "services.agent.business.chat_context -> services.kb.business.search_service",  # M3 检索装配挂载边（standards/01 §2.1 规则 3 显式服务调用；importlinter 连传递链算，agentic 新链触发显形）
+    # MCP registry 共享工厂经 kb.business 显式服务面触达 kb.data（模块内 business→data 合法分层
+    # 的传递链；2026-10-07 静态清账批补登记，同 kb.retrieval 契约 P1-1 注释口径）
+    "services.gateway.app -> services.mcp.bootstrap",
+    "services.mcp.bootstrap -> services.kb.business.search_service",
 ]
 
 [[tool.importlinter.contracts]]

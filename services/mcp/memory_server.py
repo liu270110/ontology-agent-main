@@ -20,7 +20,9 @@ from fastmcp import FastMCP
 from services.ontology.core.mem_tbox import validate_mem_record
 
 if TYPE_CHECKING:
-    from services.memory.data.repositories.records_repo import MemoryRepository
+    from services.memory.domain.repo.records_repo import (
+        MemoryRepository,  # 协议面在 domain（data 私有真修，静态清账批）
+    )
 
 mcp = FastMCP("ontology-agent-memory")
 

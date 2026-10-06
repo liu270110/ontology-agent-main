@@ -111,7 +111,7 @@ from services.memory.data.repo_impl.fact_repo import (
 from services.memory.domain.model.l2_fact import FactCategory, FactStatus, L2Fact, fact_fingerprint
 from services.memory.domain.repo.fact_repo import L1MemoryStore  # 运行时 import：FastAPI 装饰期解析注解
 from services.memory.domain.repo.review_port import PromotionDecisionPort, PromotionReviewPort
-from services.platform.deps import Principal, SessionDep, get_redis, require_scope
+from services.platform.deps import Principal, SessionDep, get_redis, get_session_factory, require_scope
 from services.platform.errors import ErrorCode, GatewayError
 from services.platform.kernel import DomainError
 from services.platform.schemas import PageMeta
@@ -558,6 +558,41 @@ def _hit_out(hit: L2Hit) -> SearchHitOut:
 # 三审+终审绿代码落位（feature/memory-m4p2-api @ 9951d3f，2026-09-28 集成）；鉴权沿用源 X-Tenant-Id
 # 头依赖（与上方 scope 体系并存，统一收口随 api/01 登记册批次）——装配在组合根 lifespan 替换，
 # 测试经 dependency_overrides 覆盖（tests/gateway/test_memory_api.py）。
+
+
+def wire_memory(app: Any, settings: Any) -> None:
+    """组合根装配接缝（静态清账批 2026-10-07）：gateway lifespan 经本函数装配 memory 三件
+    （PgMemoryRepository / MemoryService / ConsolidationPipeline）挂 app.state，路由依赖
+    （get_memory_service/get_pipeline）自 app.state 读取。
+
+    契约依据（docs/standards/01 §2.1 规则 2/3 + 契约③「gateway 只做装配」）：gateway 只准
+    import <模块>.api 与 platform——本函数落 memory.api 暴露面，gateway.app → services.memory.api.memory
+    为既有挂载边白名单（计划 3.3），组合根对 memory.business/memory.data 零直接 import
+    （2026-10-05 门2 摸底 6195c83 直入违例的真修，app.py 同款 mcp.bootstrap 共享工厂先例）。
+    fail-soft 由调用方（app.py lifespan）承担：装配失败应用以未装配继续，records 族端点
+    503+5004 明示。
+    """
+    from services.memory.business.consolidation_pipeline import ConsolidationPipeline
+    from services.memory.data.cache.l1_redis import L1SessionStore
+    from services.memory.data.repositories.records_repo import PgMemoryRepository
+    from services.platform.llm.ollama_json import get_llm_client
+
+    memory_repo = PgMemoryRepository(get_session_factory(settings))
+    app.state.memory_repo = memory_repo
+    app.state.memory_service = MemoryService(
+        repo=memory_repo,
+        l1=L1SessionStore(get_redis(settings), ttl_seconds=settings.memory_l1_ttl_seconds),
+        top_k=settings.memory_search_top_k,
+        rrf_k=settings.memory_rrf_k,
+        half_life_days=settings.memory_decay_half_life_days,
+    )
+    app.state.consolidation_pipeline = ConsolidationPipeline(
+        repo=memory_repo,
+        review_repo=memory_repo,
+        llm=get_llm_client(settings),
+        llm_model=settings.llm_model,
+        confidence_threshold=settings.memory_l2_confidence_threshold,
+    )
 
 
 def get_memory_service(request: Request) -> MemoryService:

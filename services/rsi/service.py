@@ -9,7 +9,12 @@
 - K13 落选回喂半环（docs/Agent/13 §19，方案 A）：rejected 有界入册（key=target deque，
   容量 rsi_rejection_ledger_maxlen，0=关闭）+ submit() 提交回显同 target 最近 rejected
   上下文 + list_rejections() 只读查询面——蓝本=reef cordis backend.py:1055-1057
-  rejected_proposals 有界入册+回喂（自动回喂 propose(rejected=…) 随阶段 B propose 环接续）。
+  rejected_proposals 有界入册+回喂（自动回喂 propose(rejected=…) 随阶段 B propose 环接续）；
+- K15 整内容比对第三道写冲突防线（docs/Agent/13 §21，G-15）：submit() 受理时条目原文与
+  baseline_hash 同位双存（``Proposal.baseline_content``），apply 前 hash 通道通过后整内容
+  直比（顺序=先 hash 后直比：K9 hash 通道语义零变化，直比兜 hash 假性通过残余面；
+  baseline_content=None 走 K9 hash 通道完全向后兼容）——蓝本=openviking
+  policy_updater.py:259-267 base-content guard。
 
 明确不做（红线与收缩边界）：
 - **apply 恒拒绝**：``apply()`` 是唯一"生效"入口，恒抛 ``RsiApplyForbiddenError`` 并留审计
@@ -141,9 +146,12 @@ class RsiService:
         """候选受理入口（复盘归因/指标退化侧的统一落池口；白名单校验先行）。
 
         白名单外 → 安全审计（09 §3 铁律）后上抛 WhitelistViolation，不入池。
-        ``baseline_content``（K9-b 可选）：受理时对目标能力条目内容取 sha256 快照
-        （``entry_baseline_hash`` 口径）落 ``Proposal.baseline_hash``，供 apply/审批通过
-        路径执行前比对漂移；``None`` = 不建快照（旧提案形态，apply 跳过基线校验）。
+        ``baseline_content``（K9-b 可选，K15-a 扩展）：受理时对目标能力条目内容取 sha256
+        快照（``entry_baseline_hash`` 口径）落 ``Proposal.baseline_hash``，并同位直存条目
+        原文落 ``Proposal.baseline_content``（阶段 A 条目=prompt 模板/config，KB 级量级，
+        直存内存开销可接受），供 apply/审批通过路径执行前先 hash 比对、通过后再整内容直比
+        （K15-b 第三道写冲突防线，docs/Agent/13 §21）；``None`` = 不建快照不存原文（旧提案
+        形态，apply 跳过基线校验，K9 语义零变化）。
 
         受理成功后回填 ``proposal.rejection_feedback``（K13-b 提交回显）：同 target 最近
         ``REJECTION_FEEDBACK_MAX`` 条 rejected 上下文（最旧→最新；无历史=空元组）——
@@ -170,6 +178,7 @@ class RsiService:
             envelope=dict(envelope),
             source_trace_ids=tuple(source_trace_ids),
             baseline_hash=None if baseline_content is None else entry_baseline_hash(baseline_content),
+            baseline_content=baseline_content,  # K15-a 原文快照同位双存（docs/Agent/13 §21）
         )
         await self._accept(proposal)
         proposal.rejection_feedback = self._recent_rejections(target)  # K13-b 提交回显
@@ -243,18 +252,48 @@ class RsiService:
     # ------------------------------------------------------------- K9-b 基线校验
 
     async def _assert_baseline_fresh(self, proposal: Proposal) -> None:
-        """基线快照比对（K9-b，执行前并发防线；阶段 A 挂在 apply 唯一执行点之前）。
+        """基线快照比对（K9-b hash 通道 + K15-b 整内容直比第三道防线；挂在 apply 唯一执行点前）。
+
+        通道顺序（K15-b 裁定=**先 hash 后直比**）：K9 hash 通道语义零变化在前，直比仅在
+        hash 通过后作为增量防线运行——hash 假性通过（实现错/快照构造缺陷/hash 键序漂移）
+        的残余面唯有整内容比对可兜住（openviking policy_updater.py:259-267 base-content
+        guard「before_content 与当前内容不匹配即拒」蓝本）：
 
         - ``baseline_hash is None`` → 旧提案无快照，跳过（向后兼容既有调用方）；
         - ``entry_loader is None`` → 无当前内容取数口，跳过（无法取当前内容 ≠ 已漂移，不虚拒；
           M5+ 组合根注入取数口后本防线在真实执行 await 前后各调一次收口双查）；
-        - 快照与当前内容不符，或条目已不存在（取数 None，删除亦属漂移）→ 拒绝审计 +
-          BaselineDriftError（错误信息含 changed during refinement 语义），候选状态不变。
+        - hash 通道（K9-b）：快照 hash 与当前内容复算不符，或条目已不存在（取数 None，删除
+          亦属漂移）→ 拒绝审计 + BaselineDriftError（错误信息含 changed during refinement
+          语义），候选状态不变；
+        - 直比通道（K15-b）：``baseline_content`` 非 None 且 hash 已通过，但当前原文 ≠
+          快照原文 → 与既有 drift 同路拒绝审计（action/outcome 同，detail 增
+          ``check=content_direct`` 区分通道）+ BaselineDriftError；
+          ``baseline_content is None``（K9 时代提案形态）时本通道跳过——hash 通道即全部
+          语义，完全向后兼容。
         """
         if proposal.baseline_hash is None or self.entry_loader is None:
             return
         current = await self.entry_loader(proposal.target)
         if current is not None and entry_baseline_hash(current) == proposal.baseline_hash:
+            if proposal.baseline_content is not None and current != proposal.baseline_content:
+                await self.audit_trail.record(
+                    RsiAuditRecord(
+                        action=ACTION_APPLY_BASELINE_DRIFT,
+                        outcome="rejected",
+                        proposal_id=str(proposal.id),
+                        detail={
+                            "reason": "条目当前原文与快照原文直比不一致（hash 相符但原文漂移，K15-b 第三道防线）",
+                            "target": proposal.target,
+                            "baseline_hash": proposal.baseline_hash,
+                            "entry_present": True,
+                            "check": "content_direct",
+                        },
+                    )
+                )
+                raise BaselineDriftError(
+                    f"目标条目 changed during refinement：{proposal.target} 当前原文与快照原文"
+                    "直比不一致（hash 相符但内容漂移，K15-b/G-15 整内容比对防线；废弃旧提案重新起草）"
+                )
             return
         await self.audit_trail.record(
             RsiAuditRecord(

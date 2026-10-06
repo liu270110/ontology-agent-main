@@ -20,10 +20,7 @@ from services.skills.domain.model.skill import SkillEntry
 
 def test_门1_声明含required_secrets_解析为凭证名元组():
     # Arrange：单行逗号分隔标量（scanner 零依赖解析风格；带引号整字段先剥）
-    text = (
-        "---\nname: gh-publisher\ndescription: d\n"
-        'required-secrets: "GITHUB_TOKEN, DEEPSEEK_API_KEY"\n---\nbody\n'
-    )
+    text = '---\nname: gh-publisher\ndescription: d\nrequired-secrets: "GITHUB_TOKEN, DEEPSEEK_API_KEY"\n---\nbody\n'
     # Act
     fields = parse_frontmatter(text)
     # Assert：整字段引号剥离 + 逗号拆分 + 逐项剥空白

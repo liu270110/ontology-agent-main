@@ -66,9 +66,7 @@ def preferences_projection(user: User, prefs_row: UserPreferences | None, totp_e
 async def get_preferences_row(db: AsyncSession, *, tenant_id: uuid.UUID, user_id: uuid.UUID) -> UserPreferences | None:
     return (
         await db.execute(
-            select(UserPreferences).where(
-                UserPreferences.tenant_id == tenant_id, UserPreferences.user_id == user_id
-            )
+            select(UserPreferences).where(UserPreferences.tenant_id == tenant_id, UserPreferences.user_id == user_id)
         )
     ).scalar_one_or_none()
 
@@ -153,9 +151,7 @@ async def create_session_for_login(
     return row
 
 
-async def list_active_sessions(
-    db: AsyncSession, *, tenant_id: uuid.UUID, user_id: uuid.UUID
-) -> list[DeviceSession]:
+async def list_active_sessions(db: AsyncSession, *, tenant_id: uuid.UUID, user_id: uuid.UUID) -> list[DeviceSession]:
     """活跃设备会话（revoked_at IS NULL，created_at 倒序——最新在前，mock 三台口径）。"""
     return list(
         (
@@ -259,9 +255,7 @@ async def get_export_task(
 # ================================================================ totp（§5.9 + §5.15 ★）
 
 
-async def get_totp_credential(
-    db: AsyncSession, *, tenant_id: uuid.UUID, user_id: uuid.UUID
-) -> TotpCredential | None:
+async def get_totp_credential(db: AsyncSession, *, tenant_id: uuid.UUID, user_id: uuid.UUID) -> TotpCredential | None:
     return (
         await db.execute(
             select(TotpCredential).where(TotpCredential.tenant_id == tenant_id, TotpCredential.user_id == user_id)

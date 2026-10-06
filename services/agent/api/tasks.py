@@ -235,9 +235,7 @@ async def list_task_logs(
     has_more = len(rows) > limit
     page = rows[:limit]
     return TaskLogPageOut(
-        items=[
-            TaskLogOut(ts=row.created_at, level=_log_level(row.event_type), line=_log_line(row)) for row in page
-        ],
+        items=[TaskLogOut(ts=row.created_at, level=_log_level(row.event_type), line=_log_line(row)) for row in page],
         next_cursor=str(page[-1].seq) if has_more and page else None,
     )
 

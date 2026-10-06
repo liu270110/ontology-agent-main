@@ -6,6 +6,7 @@ known malware advisories (MAL-* IDs). Regular CVEs are ignored — only confirme
 is blocked. Fail-open: network errors allow the package to proceed (~300ms typical).
 Inspired by Block/goose's extension malware check.
 """
+
 import json
 import logging
 import os
@@ -15,6 +16,7 @@ import threading
 import time
 import urllib.request
 from pathlib import Path
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -188,16 +190,19 @@ def check_package_for_malware(command: str, args: list) -> str | None:
     if malware:
         ids = ", ".join(m["id"] for m in malware[:3])
         summaries = "; ".join(m.get("summary", m["id"])[:100] for m in malware[:3])
-        result = (f"BLOCKED: Package '{package}' ({ecosystem}) has known malware "
-                  f"advisories: {ids}. Details: {summaries}")
+        result = f"BLOCKED: Package '{package}' ({ecosystem}) has known malware advisories: {ids}. Details: {summaries}"
     _cache_put(cache_key, result)
     return result
 
 
 _ECOSYSTEM_BY_COMMAND = {
-    "npx": "npm", "npx.cmd": "npm",
-    "uvx": "PyPI", "uvx.cmd": "PyPI", "uvx.exe": "PyPI",
-    "pipx": "PyPI", "pipx.exe": "PyPI",
+    "npx": "npm",
+    "npx.cmd": "npm",
+    "uvx": "PyPI",
+    "uvx.cmd": "PyPI",
+    "uvx.exe": "PyPI",
+    "pipx": "PyPI",
+    "pipx.exe": "PyPI",
 }
 
 
@@ -224,7 +229,7 @@ def _parse_package_from_args(args: list, ecosystem: str) -> tuple[str | None, st
             take_next = True
             continue
         if arg.startswith("--package="):
-            package_token = arg[len("--package="):]
+            package_token = arg[len("--package=") :]
             break
         if arg.startswith("-"):
             continue
@@ -258,14 +263,15 @@ _PACKAGE_PARSERS = {"npm": _parse_npm_package, "PyPI": _parse_pypi_package}
 
 def _query_osv(package: str, ecosystem: str, version: str | None = None) -> list:
     """Query the OSV API; return only MAL-* advisories (regular CVEs ignored)."""
-    payload = {"package": {"name": package, "ecosystem": ecosystem}}
+    payload: dict[str, Any] = {"package": {"name": package, "ecosystem": ecosystem}}
     if version:
         payload["version"] = version
     req = urllib.request.Request(
         _OSV_ENDPOINT,
         data=json.dumps(payload).encode("utf-8"),
         headers={"Content-Type": "application/json", "User-Agent": "ontology-agent-osv-check/1.0"},
-        method="POST")
+        method="POST",
+    )
     with urllib.request.urlopen(req, timeout=_TIMEOUT) as resp:
         result = json.loads(resp.read())
     return [v for v in result.get("vulns", []) if v.get("id", "").startswith("MAL-")]

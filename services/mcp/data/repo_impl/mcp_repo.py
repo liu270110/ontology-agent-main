@@ -92,9 +92,7 @@ async def affected_agents_count(db: AsyncSession, *, tenant_id: uuid.UUID, serve
 # ---------------------------------------------------------------- 写入
 
 
-async def create_server_with_tools(
-    db: AsyncSession, *, server: McpServerORM, tools: list[McpToolORM]
-) -> McpServerORM:
+async def create_server_with_tools(db: AsyncSession, *, server: McpServerORM, tools: list[McpToolORM]) -> McpServerORM:
     db.add(server)
     for tool in tools:
         db.add(tool)

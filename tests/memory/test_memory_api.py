@@ -205,9 +205,8 @@ async def test_POST_memory_search_命中带来源标注(mem_seed):
 
 
 async def test_POST_invalidate_202墓碑_幂等与404(mem_seed):
-    from services.platform.errors import GatewayError
-
     from services.memory.api.schemas.memory import FactInvalidateIn
+    from services.platform.errors import GatewayError
 
     async with mem_seed.factory() as db:
         # Arrange：先写一条

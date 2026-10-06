@@ -39,6 +39,7 @@ Usage:
   xlsx_edit.py book.xlsx --sheet Data --append '["Widget", 9.99, true]'
   xlsx_edit.py book.xlsx --copy-sheet Data:Backup --rename-sheet Data:Main
 """
+
 from __future__ import annotations
 
 import argparse
@@ -98,55 +99,45 @@ def table_append(ws, name, row_values):
     new_row = max_row + 1
     for offset, value in enumerate(row_values):
         ws.cell(row=new_row, column=min_col + offset, value=value)
-    table.ref = (f"{get_column_letter(min_col)}{min_row}:"
-                 f"{get_column_letter(max_col)}{new_row}")
+    table.ref = f"{get_column_letter(min_col)}{min_row}:{get_column_letter(max_col)}{new_row}"
 
 
 def main(argv=None):
     ap = argparse.ArgumentParser(
         description="Edit an existing .xlsx workbook.",
         epilog="Plain insert/delete does not shift merges/formula refs — "
-               "use xlsx_restructure.py for reference-aware moves.")
+        "use xlsx_restructure.py for reference-aware moves.",
+    )
     ap.add_argument("file", help="path to .xlsx file")
     ap.add_argument("--sheet", help="target sheet (default: active)")
     ap.add_argument("--out", help="output path (default: edit in place)")
-    ap.add_argument("--rename-sheet", action="append", default=[],
-                    metavar="OLD:NEW")
-    ap.add_argument("--copy-sheet", action="append", default=[],
-                    metavar="SRC:NEW")
-    ap.add_argument("--insert-rows", action="append", default=[],
-                    metavar="IDX[:N]")
-    ap.add_argument("--delete-rows", action="append", default=[],
-                    metavar="IDX[:N]")
-    ap.add_argument("--insert-cols", action="append", default=[],
-                    metavar="IDX[:N]")
-    ap.add_argument("--delete-cols", action="append", default=[],
-                    metavar="IDX[:N]")
+    ap.add_argument("--rename-sheet", action="append", default=[], metavar="OLD:NEW")
+    ap.add_argument("--copy-sheet", action="append", default=[], metavar="SRC:NEW")
+    ap.add_argument("--insert-rows", action="append", default=[], metavar="IDX[:N]")
+    ap.add_argument("--delete-rows", action="append", default=[], metavar="IDX[:N]")
+    ap.add_argument("--insert-cols", action="append", default=[], metavar="IDX[:N]")
+    ap.add_argument("--delete-cols", action="append", default=[], metavar="IDX[:N]")
     ap.add_argument("--set", action="append", default=[], metavar="CELL=VALUE")
     ap.add_argument("--append", action="append", default=[], metavar="ROWJSON")
-    ap.add_argument("--add-table", action="append", default=[],
-                    metavar="NAME:RANGE[:STYLE]")
-    ap.add_argument("--table-append", action="append", default=[],
-                    metavar="NAME=ROWJSON")
-    ap.add_argument("--list-tables", action="store_true",
-                    help="print tables on the target sheet and exit")
-    ap.add_argument("--define-name", action="append", default=[],
-                    metavar="NAME=REF")
-    ap.add_argument("--delete-name", action="append", default=[],
-                    metavar="NAME")
-    ap.add_argument("--hyperlink", action="append", default=[],
-                    metavar="CELL=URL[|TEXT]")
-    ap.add_argument("--note", action="append", default=[],
-                    metavar="CELL=TEXT[|AUTHOR]")
-    ap.add_argument("--clear-note", action="append", default=[],
-                    metavar="CELL")
-    ap.add_argument("--protect", nargs="?", const="", metavar="PASSWORD",
-                    help="protect the target sheet (integrity signal only, "
-                    "NOT security)")
-    ap.add_argument("--unlock", action="append", default=[], metavar="RANGE",
-                    help="cell range left editable under --protect")
-    ap.add_argument("--recalc", action="store_true",
-                    help="force full recalculation when the file is opened")
+    ap.add_argument("--add-table", action="append", default=[], metavar="NAME:RANGE[:STYLE]")
+    ap.add_argument("--table-append", action="append", default=[], metavar="NAME=ROWJSON")
+    ap.add_argument("--list-tables", action="store_true", help="print tables on the target sheet and exit")
+    ap.add_argument("--define-name", action="append", default=[], metavar="NAME=REF")
+    ap.add_argument("--delete-name", action="append", default=[], metavar="NAME")
+    ap.add_argument("--hyperlink", action="append", default=[], metavar="CELL=URL[|TEXT]")
+    ap.add_argument("--note", action="append", default=[], metavar="CELL=TEXT[|AUTHOR]")
+    ap.add_argument("--clear-note", action="append", default=[], metavar="CELL")
+    ap.add_argument(
+        "--protect",
+        nargs="?",
+        const="",
+        metavar="PASSWORD",
+        help="protect the target sheet (integrity signal only, NOT security)",
+    )
+    ap.add_argument(
+        "--unlock", action="append", default=[], metavar="RANGE", help="cell range left editable under --protect"
+    )
+    ap.add_argument("--recalc", action="store_true", help="force full recalculation when the file is opened")
     args = ap.parse_args(argv)
 
     wb = load_workbook(args.file)
@@ -165,13 +156,19 @@ def main(argv=None):
     ws = wb[args.sheet] if args.sheet else wb.active
 
     if args.list_tables:
-        print(json.dumps({"ok": True, "sheet": ws.title,
-                          "tables": {t.displayName: {
-                              "ref": t.ref,
-                              "style": t.tableStyleInfo.name
-                              if t.tableStyleInfo else None}
-                              for t in ws.tables.values()}},
-                         ensure_ascii=False))
+        print(
+            json.dumps(
+                {
+                    "ok": True,
+                    "sheet": ws.title,
+                    "tables": {
+                        t.displayName: {"ref": t.ref, "style": t.tableStyleInfo.name if t.tableStyleInfo else None}
+                        for t in ws.tables.values()
+                    },
+                },
+                ensure_ascii=False,
+            )
+        )
         return 0
 
     for arg in args.insert_rows:
@@ -240,9 +237,7 @@ def main(argv=None):
         if args.protect:
             ws.protection.password = args.protect
         ws.protection.sheet = True
-        changes.append(f"protect {ws.title}"
-                       + (f" (unlocked {len(args.unlock)} ranges)"
-                          if args.unlock else ""))
+        changes.append(f"protect {ws.title}" + (f" (unlocked {len(args.unlock)} ranges)" if args.unlock else ""))
 
     if args.recalc:
         wb.calculation.fullCalcOnLoad = True
@@ -250,8 +245,7 @@ def main(argv=None):
 
     out = args.out or args.file
     wb.save(out)
-    print(json.dumps({"ok": True, "output": out, "sheet": ws.title,
-                      "changes": changes}, ensure_ascii=False))
+    print(json.dumps({"ok": True, "output": out, "sheet": ws.title, "changes": changes}, ensure_ascii=False))
     return 0
 
 

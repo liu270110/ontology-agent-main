@@ -150,10 +150,24 @@ def _conflict_envelope(
             "conflict_type": "T2",
             "fact_a_id": str(fact_a_id),
             "fact_b_id": str(fact_b_id),
-            "fact_a": {"id": str(fact_a_id), "subject": "馈线F001", "predicate": predicate,
-                       "object": fact_a_obj, "scope": {}, "source_ref": {}, "confidence": 0.9},
-            "fact_b": {"id": str(fact_b_id), "subject": "馈线F001", "predicate": predicate,
-                       "object": fact_b_obj, "scope": {}, "source_ref": {}, "confidence": 0.8},
+            "fact_a": {
+                "id": str(fact_a_id),
+                "subject": "馈线F001",
+                "predicate": predicate,
+                "object": fact_a_obj,
+                "scope": {},
+                "source_ref": {},
+                "confidence": 0.9,
+            },
+            "fact_b": {
+                "id": str(fact_b_id),
+                "subject": "馈线F001",
+                "predicate": predicate,
+                "object": fact_b_obj,
+                "scope": {},
+                "source_ref": {},
+                "confidence": 0.8,
+            },
             "score_detail": {},
         },
         "decision_options": list(DECISION_OPTIONS),
@@ -269,8 +283,12 @@ async def test_run_validate_尾调分诊_T2矛盾候选建冲突工单(
     old_doc_id, new_doc_id = uuid.uuid4(), uuid.uuid4()
     old_fact = _fact(document_id=old_doc_id, subject="馈线F001", obj="false", created_at=datetime(2026, 9, 1, 8, 0))
     cand = _fact(
-        document_id=new_doc_id, subject="馈线F001", obj="true", status="candidate",
-        confidence=0.9, created_at=datetime(2026, 9, 1, 9, 0),
+        document_id=new_doc_id,
+        subject="馈线F001",
+        obj="true",
+        status="candidate",
+        confidence=0.9,
+        created_at=datetime(2026, 9, 1, 9, 0),
     )
     await _seed(factory, _doc(old_doc_id, title="制度A"), _doc(new_doc_id, title="制度B"), old_fact, cand)
     tickets = ReviewTicketService(factory)
@@ -320,12 +338,22 @@ async def _seed_conflict_pair(
     """终审分流环境：fact_a(candidate)+fact_b(authoritative)+双单（knowledge_instance + conflict）。"""
     doc_a, doc_b = uuid.uuid4(), uuid.uuid4()
     fact_a = _fact(
-        document_id=doc_a, subject="馈线F001", obj="100万", status="candidate", confidence=0.9,
-        predicate="hasLimit", created_at=datetime(2026, 9, 1, 9, 0),
+        document_id=doc_a,
+        subject="馈线F001",
+        obj="100万",
+        status="candidate",
+        confidence=0.9,
+        predicate="hasLimit",
+        created_at=datetime(2026, 9, 1, 9, 0),
     )
     fact_b = _fact(
-        document_id=doc_b, subject="馈线F001", obj="50万", status="authoritative", confidence=0.8,
-        predicate="hasLimit", created_at=datetime(2026, 9, 1, 8, 0),
+        document_id=doc_b,
+        subject="馈线F001",
+        obj="50万",
+        status="authoritative",
+        confidence=0.8,
+        predicate="hasLimit",
+        created_at=datetime(2026, 9, 1, 8, 0),
     )
     await _seed(factory, _doc(doc_a, title="制度A"), _doc(doc_b, title="制度B"), fact_a, fact_b)
     tickets = ReviewTicketService(factory)
@@ -432,9 +460,7 @@ async def _seed_one_conflict(
     fact_a = _fact(document_id=doc_a, subject="馈线F001", obj="100万", status="candidate", predicate="hasLimit")
     fact_b = _fact(document_id=doc_b, subject="馈线F001", obj=obj, status="authoritative", predicate="hasLimit")
     await _seed(factory, _doc(doc_a, title="A"), _doc(doc_b, title="B"), fact_a, fact_b)
-    payload = _conflict_envelope(
-        fact_a.id, fact_b.id, fact_a_obj="100万", fact_b_obj=obj, predicate="hasLimit"
-    )
+    payload = _conflict_envelope(fact_a.id, fact_b.id, fact_a_obj="100万", fact_b_obj=obj, predicate="hasLimit")
     if settled:
         payload["conflict_decision"] = {
             "resolution": "winner_a",

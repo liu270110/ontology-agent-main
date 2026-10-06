@@ -24,78 +24,91 @@ _MODIFY = r"(update|modify|edit|write|change|append|add\s+to)\s+[^\n]{0,2048}"
 # (regex, pattern_id, scope); scope ∈ {"all", "context", "strict"}
 _PATTERNS: list[tuple[str, str, str]] = [
     # ── Classic prompt injection (applies everywhere) ────────────────
-    (rf'ignore\s+{_FILLER}(previous|all|above|prior)\s+{_FILLER}instructions', "prompt_injection", "all"),
-    (r'system\s+prompt\s+override', "sys_prompt_override", "all"),
-    (rf'disregard\s+{_FILLER}(your|all|any)\s+{_FILLER}(instructions|rules|guidelines)', "disregard_rules", "all"),
-    (rf'act\s+as\s+(if|though)\s+{_FILLER}you\s+{_FILLER}'
-     rf"(have\s+no|don't\s+have)\s+{_FILLER}(restrictions|limits|rules)", "bypass_restrictions", "all"),
-    (r'<!--[^>]{0,512}(?:ignore|override|system|secret|hidden)[^>]{0,512}-->', "html_comment_injection", "all"),
+    (rf"ignore\s+{_FILLER}(previous|all|above|prior)\s+{_FILLER}instructions", "prompt_injection", "all"),
+    (r"system\s+prompt\s+override", "sys_prompt_override", "all"),
+    (rf"disregard\s+{_FILLER}(your|all|any)\s+{_FILLER}(instructions|rules|guidelines)", "disregard_rules", "all"),
+    (
+        rf"act\s+as\s+(if|though)\s+{_FILLER}you\s+{_FILLER}"
+        rf"(have\s+no|don't\s+have)\s+{_FILLER}(restrictions|limits|rules)",
+        "bypass_restrictions",
+        "all",
+    ),
+    (r"<!--[^>]{0,512}(?:ignore|override|system|secret|hidden)[^>]{0,512}-->", "html_comment_injection", "all"),
     (r'<\s*div\s+style\s*=\s*["\'][^>]{0,2048}display\s*:\s*none', "hidden_div", "all"),
     (
         r"translate\s+[^\n]{0,512}\s+into\s+\w+(?:[\s-]+\w+){0,2}\s+and\s+(execute|run|eval)\b",
         "translate_execute",
         "all",
     ),
-    (rf'do\s+not\s+{_FILLER}tell\s+{_FILLER}the\s+user', "deception_hide", "all"),
-
+    (rf"do\s+not\s+{_FILLER}tell\s+{_FILLER}the\s+user", "deception_hide", "all"),
     # ── Role-play / identity hijack (scraped web content, poisoned context files) ──
-    (rf'you\s+are\s+{_FILLER}now\s+(?:a|an|the)\s+', "role_hijack", "context"),
-    (rf'pretend\s+{_FILLER}(you\s+are|to\s+be)\s+', "role_pretend", "context"),
-    (rf'output\s+{_FILLER}(system|initial)\s+prompt', "leak_system_prompt", "context"),
-    (rf'(respond|answer|reply)\s+without\s+{_FILLER}'
-     rf'(restrictions|limitations|filters|safety)', "remove_filters", "context"),
-    (rf'you\s+have\s+been\s+{_FILLER}'
-     rf'(updated|upgraded|patched)\s+to', "fake_update", "context"),
+    (rf"you\s+are\s+{_FILLER}now\s+(?:a|an|the)\s+", "role_hijack", "context"),
+    (rf"pretend\s+{_FILLER}(you\s+are|to\s+be)\s+", "role_pretend", "context"),
+    (rf"output\s+{_FILLER}(system|initial)\s+prompt", "leak_system_prompt", "context"),
+    (
+        rf"(respond|answer|reply)\s+without\s+{_FILLER}"
+        rf"(restrictions|limitations|filters|safety)",
+        "remove_filters",
+        "context",
+    ),
+    (
+        rf"you\s+have\s+been\s+{_FILLER}"
+        rf"(updated|upgraded|patched)\s+to",
+        "fake_update",
+        "context",
+    ),
     # Brainworm tell: identity override via spec. Verb pair anchored so "name your variables" is safe.
-    (r'\bname\s+yourself\s+\w+', "identity_override", "context"),
-
+    (r"\bname\s+yourself\s+\w+", "identity_override", "context"),
     # ── C2 / Brainworm-style promptware (context scope) ──────────────
     # Anchored on C2 vocabulary. "register as a node" appears in legitimate distributed-systems
     # docs, so this is WARN not block: a researcher reading the Brainworm post keeps their session.
-    (r'register\s+(as\s+)?a?\s*node', "c2_node_registration", "context"),
-    (r'(heartbeat|beacon|check[\s\-]?in)\s+(to|with)\s+', "c2_heartbeat", "context"),
-    (r'pull\s+(down\s+)?(?:new\s+)?task(?:ing|s)?\b', "c2_task_pull", "context"),
-    (r'connect\s+to\s+the\s+network\b', "c2_network_connect", "context"),
+    (r"register\s+(as\s+)?a?\s*node", "c2_node_registration", "context"),
+    (r"(heartbeat|beacon|check[\s\-]?in)\s+(to|with)\s+", "c2_heartbeat", "context"),
+    (r"pull\s+(down\s+)?(?:new\s+)?task(?:ing|s)?\b", "c2_task_pull", "context"),
+    (r"connect\s+to\s+the\s+network\b", "c2_network_connect", "context"),
     # C2-specific verbs avoid the broader "you must X" false positive.
-    (r'you\s+must\s+(?:\w+\s+){0,3}(register|connect|report|beacon)\b', "forced_action", "context"),
+    (r"you\s+must\s+(?:\w+\s+){0,3}(register|connect|report|beacon)\b", "forced_action", "context"),
     # Anti-forensic instructions: near-zero false positive in legitimate content.
-    (r'only\s+use\s+one[\s\-]?liners?\b', "anti_forensic_oneliner", "context"),
-    (rf'never\s+{_FILLER}(?:create|write)\s+{_FILLER}(?:script|file)\s+{_FILLER}disk', "anti_forensic_disk", "context"),
+    (r"only\s+use\s+one[\s\-]?liners?\b", "anti_forensic_oneliner", "context"),
+    (rf"never\s+{_FILLER}(?:create|write)\s+{_FILLER}(?:script|file)\s+{_FILLER}disk", "anti_forensic_disk", "context"),
     # Unsetting agent-runtime env vars is pure attack behavior (Brainworm sub-session bypass).
-    (r'unset\s+\w*(?:CLAUDE|CODEX|HERMES|AGENT|OPENAI|ANTHROPIC)\w*', "env_var_unset_agent", "context"),
-
+    (r"unset\s+\w*(?:CLAUDE|CODEX|HERMES|AGENT|OPENAI|ANTHROPIC)\w*", "env_var_unset_agent", "context"),
     # ── Known C2 / red-team framework names (warn-only) ─────────────
     # Every token must be a distinctive offensive-security brand: a common English word here
     # (e.g. "praxis", also a legitimate agent name) false-positives whole AGENTS.md / SOUL.md files.
-    (r'\b(?:cobalt\s*strike|sliver|havoc|mythic|metasploit|brainworm)\b', "known_c2_framework", "context"),
-    (r'\bc2\s+(?:server|channel|infrastructure|beacon)\b', "c2_explicit", "context"),
-    (r'\bcommand\s+and\s+control\b', "c2_explicit_long", "context"),
-
+    (r"\b(?:cobalt\s*strike|sliver|havoc|mythic|metasploit|brainworm)\b", "known_c2_framework", "context"),
+    (r"\bc2\s+(?:server|channel|infrastructure|beacon)\b", "c2_explicit", "context"),
+    (r"\bcommand\s+and\s+control\b", "c2_explicit_long", "context"),
     # ── Exfiltration via curl/wget/cat with secrets (applies everywhere) ──
     # The var name ends with \b so benign names containing KEY/TOKEN as substrings
     # ($TRILLIUM_ETAPI_URL) pass. API is deliberately absent: mid-name API is ubiquitous in
     # benign vars, and every real secret it caught ($OPENAI_API_KEY) already ends in KEY/TOKEN.
-    (rf'curl\s+[^\n]{{0,2048}}{_SECRET_VAR}', "exfil_curl", "all"),
-    (rf'wget\s+[^\n]{{0,2048}}{_SECRET_VAR}', "exfil_wget", "all"),
-    (r'cat\s+[^\n]{0,2048}(\.env|credentials|\.netrc|\.pgpass|\.npmrc|\.pypirc)', "read_secrets", "all"),
-    (r'(send|post|upload|transmit)\s+[^\n]{0,2048}\s+(to|at)\s+https?://', "send_to_url", "strict"),
-    (rf'(include|output|print|share)\s+{_FILLER}'
-     rf'(conversation|chat\s+history|previous\s+messages|full\s+context|entire\s+context)',
-     "context_exfil", "strict"),
-
+    (rf"curl\s+[^\n]{{0,2048}}{_SECRET_VAR}", "exfil_curl", "all"),
+    (rf"wget\s+[^\n]{{0,2048}}{_SECRET_VAR}", "exfil_wget", "all"),
+    (r"cat\s+[^\n]{0,2048}(\.env|credentials|\.netrc|\.pgpass|\.npmrc|\.pypirc)", "read_secrets", "all"),
+    (r"(send|post|upload|transmit)\s+[^\n]{0,2048}\s+(to|at)\s+https?://", "send_to_url", "strict"),
+    (
+        rf"(include|output|print|share)\s+{_FILLER}"
+        rf"(conversation|chat\s+history|previous\s+messages|full\s+context|entire\s+context)",
+        "context_exfil",
+        "strict",
+    ),
     # ── Persistence / SSH backdoor (strict scope — memory + skills) ──
-    (r'authorized_keys', "ssh_backdoor", "strict"),
+    (r"authorized_keys", "ssh_backdoor", "strict"),
     # Write-verb gated like the *_config_mod rules: a bare path match blocked ordinary docs
     # ("check $HOME/.ssh is chmod 700"). ``>>?`` covers a leading redirect with no verb word;
     # ``open(`` covers the scripted-write shape; chmod/chown/sed/truncate/rm/touch/curl/wget/git
     # mutate the directory without an obvious copy verb.
-    (r'(?:\b(?:echo|cat|cp|mv|dd|tee|install|printf|rsync|scp|ln|append|add|write'
-     r'|sed|chmod|chown|truncate|rm|touch|curl|wget|git)\b|\bopen\s*\(|>>?)'
-     r'[^\n]{0,512}(?:\$HOME/\.ssh|~/\.ssh)', "ssh_access", "strict"),
-    (r'\$HOME/\.hermes/\.env|\~/\.hermes/\.env', "hermes_env", "strict"),
-    (rf'{_MODIFY}(?:AGENTS\.md|CLAUDE\.md|\.cursorrules|\.clinerules)', "agent_config_mod", "strict"),
-    (rf'{_MODIFY}\.hermes/(config\.yaml|SOUL\.md)', "hermes_config_mod", "strict"),
-
+    (
+        r"(?:\b(?:echo|cat|cp|mv|dd|tee|install|printf|rsync|scp|ln|append|add|write"
+        r"|sed|chmod|chown|truncate|rm|touch|curl|wget|git)\b|\bopen\s*\(|>>?)"
+        r"[^\n]{0,512}(?:\$HOME/\.ssh|~/\.ssh)",
+        "ssh_access",
+        "strict",
+    ),
+    (r"\$HOME/\.hermes/\.env|\~/\.hermes/\.env", "hermes_env", "strict"),
+    (rf"{_MODIFY}(?:AGENTS\.md|CLAUDE\.md|\.cursorrules|\.clinerules)", "agent_config_mod", "strict"),
+    (rf"{_MODIFY}\.hermes/(config\.yaml|SOUL\.md)", "hermes_config_mod", "strict"),
     # ── Hardcoded secrets ────────────────────────────────────────────
     # The lookahead skips a value that is itself an environment-variable NAME
     # (SHOUTY_SNAKE, ≥2 underscore-separated segments): ENV_PASSWORD =
@@ -104,17 +117,21 @@ _PATTERNS: list[tuple[str, str, str]] = [
     # IGNORECASE and a lowercase snake value is the password-passphrase shape
     # ("correct_horse_battery_staple"); requiring an underscore segment keeps
     # underscore-free all-caps credentials (AWS AKIA…, base32) matched.
-    (r'(?:api[_-]?key|token|secret|password)\s*[=:]\s*["\']'
-     r'(?!(?-i:[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+)["\'])'
-     r'[A-Za-z0-9+/=_-]{20,}', "hardcoded_secret", "strict"),
+    (
+        r'(?:api[_-]?key|token|secret|password)\s*[=:]\s*["\']'
+        r'(?!(?-i:[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+)["\'])'
+        r"[A-Za-z0-9+/=_-]{20,}",
+        "hardcoded_secret",
+        "strict",
+    ),
 ]
 
 # Invisible / bidirectional unicode used in injection attacks (aligned with skills_guard.py
 # INVISIBLE_CHARS): zero-width space/non-joiner/joiner, word joiner, invisible times/separator/
 # plus, BOM, LTR/RTL embedding + pop + overrides, LTR/RTL/first-strong isolates + pop.
 INVISIBLE_CHARS = frozenset(
-    "\u200b\u200c\u200d\u2060\u2062\u2063\u2064\ufeff"
-    "\u202a\u202b\u202c\u202d\u202e\u2066\u2067\u2068\u2069")
+    "\u200b\u200c\u200d\u2060\u2062\u2063\u2064\ufeff\u202a\u202b\u202c\u202d\u202e\u2066\u2067\u2068\u2069"
+)
 
 # Compiled per scope at import; inclusion is cumulative (all ⊂ context ⊂ strict).
 _SCOPE_SETS = {"all": ("all", "context", "strict"), "context": ("context", "strict"), "strict": ("strict",)}
@@ -159,9 +176,11 @@ def first_threat_message(content: str, scope: str = "strict") -> str | None:
     if pid.startswith("invisible_unicode_"):
         codepoint = pid.replace("invisible_unicode_", "")
         return f"Blocked: content contains invisible unicode character {codepoint} (possible injection)."
-    return (f"Blocked: content matches threat pattern '{pid}'. "
-            f"Content is injected into the system prompt and must not contain "
-            f"injection or exfiltration payloads.")
+    return (
+        f"Blocked: content matches threat pattern '{pid}'. "
+        f"Content is injected into the system prompt and must not contain "
+        f"injection or exfiltration payloads."
+    )
 
 
 __all__ = ["INVISIBLE_CHARS", "MAX_SCAN_CHARS", "scan_for_threats", "first_threat_message"]

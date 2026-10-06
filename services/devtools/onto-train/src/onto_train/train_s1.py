@@ -41,7 +41,7 @@ def main() -> None:
     rows = []
     for name in ("positives.jsonl", "positives_llm.jsonl"):
         p = ROOT / "data" / name
-        rows += [json.loads(l) for l in p.read_text(encoding="utf-8").splitlines()]
+        rows += [json.loads(line) for line in p.read_text(encoding="utf-8").splitlines()]
     train = [{"tokenized_text": r["tokenized_text"], "ner": r["ner"]} for r in rows if r["id"] not in dev_ids]
     print(f"[data] train {len(train)} 条（正例总数 {len(rows)}，dev {len(rows) - len(train)}）")
 
@@ -103,9 +103,9 @@ def main() -> None:
     ents = reloaded.predict_entities(
         to_gliner_text(demo),
         [
-            l["label_en"]
+            item["label_en"]
             for g in ("ob2_top_classes", "gbt_entity_types")
-            for l in json.loads((ROOT / "configs" / "labels.json").read_text(encoding="utf-8"))[g]["labels"]
+            for item in json.loads((ROOT / "configs" / "labels.json").read_text(encoding="utf-8"))[g]["labels"]
         ],
         threshold=0.4,
     )

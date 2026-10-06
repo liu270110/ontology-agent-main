@@ -11,7 +11,6 @@ import copy
 import uuid
 
 import pytest
-from tests.plugin.helpers import CHECKSUM, VALID_SERVER_JSON, FakeReviewPort, FakeTierReader
 
 from services.platform import security
 from services.platform.kernel import DomainError
@@ -20,6 +19,7 @@ from services.plugin.business.lifecycle import PluginMarketService
 from services.plugin.domain.model.plugin import Plugin, PluginKind, PluginStatus, PluginVersion, ToolBinding
 from services.plugin.runtime.registry import PluginRuntime
 from services.review.domain.approval_chain import GovernanceTier
+from tests.plugin.helpers import CHECKSUM, VALID_SERVER_JSON, FakeReviewPort, FakeTierReader
 
 # 进程内平台钥（dev key 口径；与生产 OA_PLATFORM_PLUGIN_SIGNING_KEY 同一消费点）
 PLATFORM_SIGNER = PluginSigner(security.generate_signing_key())

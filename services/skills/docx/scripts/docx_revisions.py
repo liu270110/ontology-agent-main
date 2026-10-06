@@ -24,6 +24,7 @@ included), headers and footers. Row/paragraph-mark revisions and format
 changes (w:rPrChange etc.) are reported by docx_read.py --revisions but
 not resolved here.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -92,23 +93,20 @@ def _apply(el, accept: bool) -> None:
 
 
 def resolve(doc, accept: bool, rev_id: str | None = None) -> int:
-    targets = [el for el in _iter_revision_elements(doc)
-               if rev_id is None or el.get(q("id")) == rev_id]
+    targets = [el for el in _iter_revision_elements(doc) if rev_id is None or el.get(q("id")) == rev_id]
     for el in targets:
         _apply(el, accept)
     return len(targets)
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser(
-        description="List, accept, or reject tracked changes in a .docx.")
+    ap = argparse.ArgumentParser(description="List, accept, or reject tracked changes in a .docx.")
     sub = ap.add_subparsers(dest="cmd", required=True)
 
     def common(p, out=True):
         p.add_argument("path", help="input .docx")
         if out:
-            p.add_argument("-o", "--output",
-                           help="output path (default: overwrite input)")
+            p.add_argument("-o", "--output", help="output path (default: overwrite input)")
 
     common(sub.add_parser("list", help="list revisions as JSON"), out=False)
     common(sub.add_parser("accept-all", help="accept every revision"))
@@ -130,14 +128,15 @@ def main() -> int:
     rev_id = getattr(args, "id", None)
     n = resolve(doc, accept, rev_id)
     if rev_id is not None and n == 0:
-        print(json.dumps({"ok": False,
-                          "error": f"no revision with id {rev_id}"}))
+        print(json.dumps({"ok": False, "error": f"no revision with id {rev_id}"}))
         return 1
     out = args.output or args.path
     doc.save(out)
-    print(json.dumps({"ok": True, "output": out, "resolved": n,
-                      "action": "accept" if accept else "reject"},
-                     ensure_ascii=False))
+    print(
+        json.dumps(
+            {"ok": True, "output": out, "resolved": n, "action": "accept" if accept else "reject"}, ensure_ascii=False
+        )
+    )
     return 0
 
 

@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Read a PDF: per-page text, tables, metadata, or form fields. JSON to stdout."""
+
 from __future__ import annotations
 
 import argparse
@@ -7,12 +8,16 @@ import csv
 import json
 import os
 import sys
+from typing import Any
 
 
 def _reconfigure_stdio() -> None:
     for stream in (sys.stdout, sys.stderr):
         try:
-            stream.reconfigure(encoding="utf-8")
+            if hasattr(
+                stream, "reconfigure"
+            ):  # TextIO 抽象面无 reconfigure(仅 TextIOWrapper);hasattr 兼运行时守卫与类型收窄
+                stream.reconfigure(encoding="utf-8")
         except Exception:
             pass
 
@@ -68,12 +73,14 @@ def read_meta(path: str, password: str | None) -> dict:
     pages = []
     for idx, page in enumerate(reader.pages, start=1):
         box = page.mediabox
-        pages.append({
-            "page": idx,
-            "width": float(box.width),
-            "height": float(box.height),
-            "rotation": int(page.get("/Rotate", 0)),
-        })
+        pages.append(
+            {
+                "page": idx,
+                "width": float(box.width),
+                "height": float(box.height),
+                "rotation": int(page.get("/Rotate", 0)),
+            }
+        )
     # scanned-page heuristic: no extractable text but page has images
     likely_scanned = []
     try:
@@ -95,8 +102,10 @@ def read_meta(path: str, password: str | None) -> dict:
         "likely_scanned_pages": likely_scanned,
     }
     if likely_scanned:
-        out["note"] = ("Image-only pages detected: no text layer to extract. "
-                       "Use the references/ocr-extraction.md in this skill for OCR.")
+        out["note"] = (
+            "Image-only pages detected: no text layer to extract. "
+            "Use the references/ocr-extraction.md in this skill for OCR."
+        )
     return out
 
 
@@ -116,7 +125,7 @@ def read_fields(path: str, password: str | None) -> dict:
         ftype = FIELD_TYPES.get(str(field.get("/FT")), str(field.get("/FT")))
         value = field.get("/V")
         states = field.get("/_States_")
-        entry = {"type": ftype, "value": None if value is None else str(value)}
+        entry: dict[str, Any] = {"type": ftype, "value": None if value is None else str(value)}
         if states:
             entry["options"] = [str(s) for s in states]
         out[name] = entry

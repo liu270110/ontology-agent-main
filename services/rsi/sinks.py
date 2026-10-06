@@ -37,8 +37,9 @@ def _utcnow() -> datetime:
 class LedgerFailedReader(Protocol):
     """台账 FAILED 读取面（PgWritebackLedgerRepository 的结构子集；测试注 Fake）。"""
 
-    async def list_by_statuses(self, statuses: Any, *, limit: int = 100) -> list[WritebackLedger]:
-        ...  # pragma: no cover — Protocol 方法无实现
+    async def list_by_statuses(
+        self, statuses: Any, *, limit: int = 100
+    ) -> list[WritebackLedger]: ...  # pragma: no cover — Protocol 方法无实现
 
 
 class LedgerFailureSink:

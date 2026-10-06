@@ -43,7 +43,7 @@ def embed(texts: list[str]) -> list[list[float]]:
 
 
 def cosine(a: list[float], b: list[float]) -> float:
-    dot = sum(x * y for x, y in zip(a, b))
+    dot = sum(x * y for x, y in zip(a, b, strict=True))
     na = math.sqrt(sum(x * x for x in a))
     nb = math.sqrt(sum(x * x for x in b))
     return dot / (na * nb) if na and nb else 0.0
@@ -55,7 +55,7 @@ def main() -> None:
     ap.add_argument("--out", default=str(ROOT / "data" / "negatives_filtered.jsonl"))
     args = ap.parse_args()
 
-    src = [json.loads(l) for l in (ROOT / "data" / "negatives.jsonl").read_text(encoding="utf-8").splitlines()]
+    src = [json.loads(line) for line in (ROOT / "data" / "negatives.jsonl").read_text(encoding="utf-8").splitlines()]
 
     kept, dropped, nan_failed = [], 0, 0
     sims_by_kind: dict[str, list[float]] = {}
@@ -89,7 +89,8 @@ def main() -> None:
             f.write(json.dumps(s, ensure_ascii=False) + "\n")
 
     print(
-        f"[filter] 阈值 {args.threshold}：保留 {len(kept)} / {len(src)}（NaN 降级保留 {nan_failed}），剔除 {dropped} -> {out}"
+        f"[filter] 阈值 {args.threshold}：保留 {len(kept)} / {len(src)}"
+        f"（NaN 降级保留 {nan_failed}），剔除 {dropped} -> {out}"
     )
     for kind, sims in sorted(sims_by_kind.items()):
         avg = sum(sims) / len(sims)

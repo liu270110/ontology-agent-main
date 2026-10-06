@@ -76,9 +76,7 @@ def test_刷洗_spec反序列化_env透传并剥离(caplog):
     # Arrange：env 混命中项；daemon 侧反序列化入口
     with caplog.at_level(logging.WARNING, logger="services.sandbox.runtime.backend"):
         # Act
-        spec = spec_from_mapping(
-            {"instance_id": "i-deny", "env": {"PATH": "/bin", "DEEPSEEK_API_KEY": "sk.secret"}}
-        )
+        spec = spec_from_mapping({"instance_id": "i-deny", "env": {"PATH": "/bin", "DEEPSEEK_API_KEY": "sk.secret"}})
     # Assert：剥离后落 spec + 告警留痕
     assert spec.env == {"PATH": "/bin"}
     assert any("DEEPSEEK_API_KEY" in r.getMessage() for r in caplog.records)

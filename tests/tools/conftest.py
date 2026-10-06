@@ -52,9 +52,7 @@ async def tools_seed() -> AsyncIterator[ToolsSeed]:
     factory = async_sessionmaker(engine, expire_on_commit=False)
     tenant_id, user_id = uuid.uuid4(), uuid.uuid4()
     async with factory() as db, db.begin():
-        db.add(
-            TenantORM(id=tenant_id, name="tools-it-租户", slug=f"tools-it-{uuid.uuid4().hex[:12]}", settings={})
-        )
+        db.add(TenantORM(id=tenant_id, name="tools-it-租户", slug=f"tools-it-{uuid.uuid4().hex[:12]}", settings={}))
         db.add(
             UserORM(
                 id=user_id,

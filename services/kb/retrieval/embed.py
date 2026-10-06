@@ -103,9 +103,7 @@ class OllamaEmbedder:
             raise EmbeddingUnavailableError(f"嵌入响应结构异常（{self._protocol}）: {exc}") from exc
         if not isinstance(embeddings, list) or len(embeddings) != len(batch):
             got = f"向量数 {len(embeddings)}" if isinstance(embeddings, list) else f"非数组 {type(embeddings).__name__}"
-            raise EmbeddingUnavailableError(
-                f"嵌入响应与批次不一致（{self._protocol}）: 响应{got} != 批次 {len(batch)}"
-            )
+            raise EmbeddingUnavailableError(f"嵌入响应与批次不一致（{self._protocol}）: 响应{got} != 批次 {len(batch)}")
         return embeddings
 
     async def aclose(self) -> None:

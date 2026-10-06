@@ -8,6 +8,7 @@ so callers can branch instead of crashing.
 Typical uses: visual verification with a vision model, and exporting
 image-only (scanned) pages for hand-off to the references/ocr-extraction.md in this skill.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -39,7 +40,10 @@ def parse_pages(spec: str, page_count: int) -> list[int]:
 def main() -> int:
     for stream in (sys.stdout, sys.stderr):
         try:
-            stream.reconfigure(encoding="utf-8")
+            if hasattr(
+                stream, "reconfigure"
+            ):  # TextIO 抽象面无 reconfigure(仅 TextIOWrapper);hasattr 兼运行时守卫与类型收窄
+                stream.reconfigure(encoding="utf-8")
         except Exception:
             pass
     parser = argparse.ArgumentParser(description="Export PDF pages as PNG images.")
@@ -89,8 +93,12 @@ def main() -> int:
         out_path = out_dir / f"{args.prefix}{pageno:03d}.png"
         img.save(out_path)
         files.append(str(out_path))
-    json.dump({"rendered": True, "dpi": args.dpi, "page_count": page_count,
-               "files": files}, sys.stdout, ensure_ascii=False, indent=2)
+    json.dump(
+        {"rendered": True, "dpi": args.dpi, "page_count": page_count, "files": files},
+        sys.stdout,
+        ensure_ascii=False,
+        indent=2,
+    )
     print()
     return 0
 

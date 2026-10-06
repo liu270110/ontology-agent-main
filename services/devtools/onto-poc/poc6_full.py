@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """PoC⑥ 完整版（M3 出口；ontology/02 §8 定义，本脚本为其可执行口径）。
 
 四项：①Neo4j ABox 装载耗时 ②投影缓存命中率 ③增量 vs 全量重算等价性金标 ④focus-node P99。
@@ -7,12 +6,11 @@ lite 部署档无 Neo4j 节点（存储职责：lite=PG+pgvector；Neo4j 随 ful
 
 用法：python services/devtools/onto-poc/poc6_full.py
 """
+
 from __future__ import annotations
 
-import statistics
 import sys
 import time
-import uuid
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[3]
@@ -51,10 +49,12 @@ def build_projection(tbox: Graph, task_graph: Graph, abox: Graph, feeder_prefix:
     proj = Graph()
     proj.parse(data=tbox.serialize(), format="turtle")
     proj += task_graph
-    from rdflib import URIRef
+    from rdflib import Node, URIRef
 
     keep = set()
-    frontier = [URIRef(feeder_prefix)]  # 必须是 URIRef：str 主语在 rdflib 按字面量匹配恒空（拷贝 07b 时引入的坑）
+    frontier: list[Node] = [
+        URIRef(feeder_prefix)
+    ]  # 必须是 URIRef：str 主语在 rdflib 按字面量匹配恒空（拷贝 07b 时引入的坑）
     for _ in range(2):
         nxt = []
         for node in frontier:
@@ -115,7 +115,9 @@ def main() -> int:
     proj_full = build_projection(tbox, taskg, abox, str(f17))  # 全量重算
     from rdflib.compare import to_isomorphic
 
-    iso_equal = to_isomorphic(proj_inc) == to_isomorphic(proj_full)  # BNode 规范化同构（SHACL 匿名形状每次解析 BNode id 不同）
+    iso_equal = to_isomorphic(proj_inc) == to_isomorphic(
+        proj_full
+    )  # BNode 规范化同构（SHACL 匿名形状每次解析 BNode id 不同）
     inc_set, full_set = set(proj_inc), set(proj_full)
     raw_only_inc, raw_only_full = len(inc_set - full_set), len(full_set - inc_set)
     results["equivalence"] = {
@@ -133,7 +135,11 @@ def main() -> int:
     t0 = time.perf_counter()
     conforms, _, _ = validate(data_graph=proj2, shacl_graph=shapes, inference="none", advanced=True)
     full_ms = (time.perf_counter() - t0) * 1000
-    results["focus_node"] = {"delta_shacl_ms_07b": "~20（07b 冻结）", "full_projection_shacl_ms": round(full_ms, 1), "conforms": conforms}
+    results["focus_node"] = {
+        "delta_shacl_ms_07b": "~20（07b 冻结）",
+        "full_projection_shacl_ms": round(full_ms, 1),
+        "conforms": conforms,
+    }
 
     out = Path(__file__).parent / "poc6_results.json"
     out.write_text(str(results).replace("'", '"'), encoding="utf-8")
@@ -141,12 +147,14 @@ def main() -> int:
 
     out.write_text(json.dumps(results, ensure_ascii=False, indent=2), encoding="utf-8")
     print(json.dumps(results, ensure_ascii=False, indent=2))
-    if not results["equivalence"]["identical"]:
+    equivalence = results["equivalence"]
+    assert isinstance(equivalence, dict)  # 收窄 dict[str, object] 值面
+    ok = equivalence["identical"]  # 等价性是硬门
+    if not ok:
         for t in list(inc_set - full_set)[:3]:
             print("INC-ONLY:", t)
         for t in list(full_set - inc_set)[:3]:
             print("FULL-ONLY:", t)
-    ok = results["equivalence"]["identical"]  # 等价性是硬门
     print("PoC⑥ 等价性金标:", "PASS" if ok else "FAIL")
     return 0 if ok else 1
 

@@ -42,13 +42,33 @@ class _StreamingStubPort:
     def __init__(self) -> None:
         self.calls: list[dict[str, Any]] = []
 
-    async def complete(self, messages, *, temperature=None, max_tokens=None, num_ctx=None,
-                       timeout_s=None, tools=None, tool_choice=None, trace_id=None) -> str:
+    async def complete(
+        self,
+        messages,
+        *,
+        temperature=None,
+        max_tokens=None,
+        num_ctx=None,
+        timeout_s=None,
+        tools=None,
+        tool_choice=None,
+        trace_id=None,
+    ) -> str:
         self.calls.append({"messages": messages, "tools": tools, "trace_id": trace_id})
         return "全文回答"
 
-    async def stream_complete(self, messages, *, temperature=None, max_tokens=None, num_ctx=None,
-                              timeout_s=None, tools=None, tool_choice=None, trace_id=None) -> AsyncIterator[str]:
+    async def stream_complete(
+        self,
+        messages,
+        *,
+        temperature=None,
+        max_tokens=None,
+        num_ctx=None,
+        timeout_s=None,
+        tools=None,
+        tool_choice=None,
+        trace_id=None,
+    ) -> AsyncIterator[str]:
         self.calls.append({"messages": messages, "stream": True, "trace_id": trace_id})
         for piece in ("第一段", "第二段", "尾段"):
             yield piece

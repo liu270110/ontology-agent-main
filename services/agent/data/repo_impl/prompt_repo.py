@@ -110,13 +110,17 @@ class PgPromptRepository:
         row.name = template.name
         row.status = template.status.value
         stored = (
-            await self._db.execute(
-                select(PromptVersionORM.version).where(
-                    PromptVersionORM.template_id == template.id,
-                    PromptVersionORM.tenant_id == self._tenant_id,
+            (
+                await self._db.execute(
+                    select(PromptVersionORM.version).where(
+                        PromptVersionORM.template_id == template.id,
+                        PromptVersionORM.tenant_id == self._tenant_id,
+                    )
                 )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
         known = set(stored)
         for version in template.versions:
             if version.version not in known:  # 版本不可变：已存在版本只跳过、不覆写
@@ -185,9 +189,11 @@ class PgPromptRepository:
     # ── 内部 ────────────────────────────────────────────────────────────────
     async def _load_versions_full(self, template_id: uuid.UUID) -> list[PromptVersion]:
         """全量版本行（含 content JSONB → 领域值对象；详情/解析/钉死消费面）。"""
-        stmt = select(PromptVersionORM).where(
-            PromptVersionORM.template_id == template_id, PromptVersionORM.tenant_id == self._tenant_id
-        ).order_by(PromptVersionORM.version)
+        stmt = (
+            select(PromptVersionORM)
+            .where(PromptVersionORM.template_id == template_id, PromptVersionORM.tenant_id == self._tenant_id)
+            .order_by(PromptVersionORM.version)
+        )
         return [_version_to_domain(v) for v in (await self._db.execute(stmt)).scalars()]
 
     def _filter_stmt(

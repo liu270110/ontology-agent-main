@@ -132,9 +132,7 @@ async def test_软删与状态过滤真库生效(
     await repo.add(nominal)
     await repo.add(candidate)
     # 软删走仓储同会话同事务（行已 flush 可见；独立会话看不到未提交行）
-    await db.execute(
-        text("UPDATE orsi_capabilities SET deleted_at = now() WHERE id = :id"), {"id": str(nominal.id)}
-    )
+    await db.execute(text("UPDATE orsi_capabilities SET deleted_at = now() WHERE id = :id"), {"id": str(nominal.id)})
     # Act + Assert：软删行对读面不可见（列表与详情一致）
     _items, total = await repo.list(OrsiCapabilityFilter())
     assert total == 1 and (await repo.get(nominal.id)) is None

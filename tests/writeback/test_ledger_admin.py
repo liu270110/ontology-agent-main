@@ -234,9 +234,7 @@ async def test_dispose_redispatch_failed态_202受理pending_投递后台完成(
     assert "REDISPATCH: 上游修正参数后重发" in (marked.last_error or "")  # note 追加留痕
     assert f"by={ADMIN_ID}" in (marked.last_error or "")  # 处置人留痕（§3.3 全部留审计）
 
-    delivered = await dispatcher.run_redispatch_delivery(
-        tenant_id=TENANT_ID, ledger_id=uuid.UUID(result["ledger_id"])
-    )
+    delivered = await dispatcher.run_redispatch_delivery(tenant_id=TENANT_ID, ledger_id=uuid.UUID(result["ledger_id"]))
 
     assert delivered["status"] == "accepted"  # 投递段：成功落新状态
     assert delivered["attempts"] == 2  # 同幂等键新 attempt 计数（保留不抹）
@@ -261,9 +259,7 @@ async def test_dispose_redispatch_重发两_attempt均携同幂等键():
     await dispatcher.dispose(
         tenant_id=TENANT_ID, ledger_id=uuid.UUID(result["ledger_id"]), action="redispatch", actor_id=ADMIN_ID
     )
-    delivered = await dispatcher.run_redispatch_delivery(
-        tenant_id=TENANT_ID, ledger_id=uuid.UUID(result["ledger_id"])
-    )
+    delivered = await dispatcher.run_redispatch_delivery(tenant_id=TENANT_ID, ledger_id=uuid.UUID(result["ledger_id"]))
 
     assert delivered["status"] == "accepted"
     assert len(seen_keys) == 2 and len(set(seen_keys)) == 1  # 两次投递同幂等键（业务去重依据）
@@ -293,9 +289,7 @@ async def test_dispose_redispatch_unknown态_投递后受理_needs_human清位()
     )
     assert disposed["status"] == "pending" and disposed["needs_human"] is False  # unknown → pending 重开窗口
 
-    delivered = await dispatcher.run_redispatch_delivery(
-        tenant_id=TENANT_ID, ledger_id=uuid.UUID(result["ledger_id"])
-    )
+    delivered = await dispatcher.run_redispatch_delivery(tenant_id=TENANT_ID, ledger_id=uuid.UUID(result["ledger_id"]))
     assert delivered["status"] == "accepted"  # 投递段受理
     row = ledger.by_key(result["idempotency_key"])
     assert row is not None and row.needs_human is False  # needs_human 清位（回到自动管线）

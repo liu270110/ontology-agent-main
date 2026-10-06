@@ -185,8 +185,12 @@ async def test_approve_非waiting_tool态_拒409并4102段错误码():
     # Act / Assert：409 + 4102 段（api/01 §5.15 登记口径），零副作用
     with pytest.raises(GatewayError) as ei:
         await service.decide(
-            tenant_id=_TENANT, approver_id=_USER, task_id=task.id, run_id=task.runs[0].id,
-            decision="approve", param_hash=_HASH,
+            tenant_id=_TENANT,
+            approver_id=_USER,
+            task_id=task.id,
+            run_id=task.runs[0].id,
+            decision="approve",
+            param_hash=_HASH,
         )
     assert (ei.value.code, ei.value.status_code) == (4102, 409)
     assert "RUN_NOT_WAITING_TOOL" in ei.value.message
@@ -203,8 +207,12 @@ async def test_approve_参数哈希不一致_拒409防换参重放():
     # Act / Assert：409 + 3001（api/01 §5.15 复用号段），run 保持 waiting_tool
     with pytest.raises(GatewayError) as ei:
         await service.decide(
-            tenant_id=_TENANT, approver_id=_USER, task_id=task.id, run_id=task.runs[0].id,
-            decision="approve", param_hash="b" * 64,
+            tenant_id=_TENANT,
+            approver_id=_USER,
+            task_id=task.id,
+            run_id=task.runs[0].id,
+            decision="approve",
+            param_hash="b" * 64,
         )
     assert (ei.value.code, ei.value.status_code) == (3001, 409)
     assert task.runs[0].status is RunStatus.WAITING_TOOL
@@ -219,8 +227,13 @@ async def test_reject_run取消终态task失败_审计行含理由():
     service = _service(uow)
     # Act：reject（附理由）
     result = await service.decide(
-        tenant_id=_TENANT, approver_id=_USER, task_id=task.id, run_id=task.runs[0].id,
-        decision="reject", param_hash=_HASH, reason="目标写库不在本轮授权范围",
+        tenant_id=_TENANT,
+        approver_id=_USER,
+        task_id=task.id,
+        run_id=task.runs[0].id,
+        decision="reject",
+        param_hash=_HASH,
+        reason="目标写库不在本轮授权范围",
     )
     # Assert：run cancelled（waiting_tool 唯一合法失败终态）+ 结构化 error；task failed
     assert (result.decision, result.run_status) == ("reject", "cancelled")
@@ -263,8 +276,12 @@ async def test_审批中心联动_external_write自动出单_端口缺失或故�
     uow.repo.tasks[task.id] = task
     port = FakeTicketPort()
     result = await _service(uow, ticket_port=port).decide(
-        tenant_id=_TENANT, approver_id=_USER, task_id=task.id, run_id=task.runs[0].id,
-        decision="approve", param_hash=_HASH,
+        tenant_id=_TENANT,
+        approver_id=_USER,
+        task_id=task.id,
+        run_id=task.runs[0].id,
+        decision="approve",
+        param_hash=_HASH,
     )
     assert result.review_linkage == "created" and result.review_ticket_id is not None
     assert len(port.calls) == 1
@@ -277,8 +294,12 @@ async def test_审批中心联动_external_write自动出单_端口缺失或故�
     task2 = _waiting_task()
     uow2.repo.tasks[task2.id] = task2
     result2 = await _service(uow2).decide(
-        tenant_id=_TENANT, approver_id=_USER, task_id=task2.id, run_id=task2.runs[0].id,
-        decision="approve", param_hash=_HASH,
+        tenant_id=_TENANT,
+        approver_id=_USER,
+        task_id=task2.id,
+        run_id=task2.runs[0].id,
+        decision="approve",
+        param_hash=_HASH,
     )
     assert result2.review_linkage == "degraded" and result2.run_status == "running"
     data = next(e for e in uow2.repo.events if e.event_type == "run.approval_decision").data
@@ -288,8 +309,12 @@ async def test_审批中心联动_external_write自动出单_端口缺失或故�
     task3 = _waiting_task()
     uow3.repo.tasks[task3.id] = task3
     result3 = await _service(uow3, ticket_port=FakeTicketPort(error=RuntimeError("review 不可达"))).decide(
-        tenant_id=_TENANT, approver_id=_USER, task_id=task3.id, run_id=task3.runs[0].id,
-        decision="approve", param_hash=_HASH,
+        tenant_id=_TENANT,
+        approver_id=_USER,
+        task_id=task3.id,
+        run_id=task3.runs[0].id,
+        decision="approve",
+        param_hash=_HASH,
     )
     assert (result3.review_linkage, result3.run_status) == ("degraded", "running")
 
@@ -302,8 +327,12 @@ async def test_联动不触发条件_read级动作或显式create_ticket():
     uow.repo.tasks[task.id] = task
     port = FakeTicketPort()
     result = await _service(uow, ticket_port=port).decide(
-        tenant_id=_TENANT, approver_id=_USER, task_id=task.id, run_id=task.runs[0].id,
-        decision="approve", param_hash=_HASH,
+        tenant_id=_TENANT,
+        approver_id=_USER,
+        task_id=task.id,
+        run_id=task.runs[0].id,
+        decision="approve",
+        param_hash=_HASH,
     )
     assert (result.review_linkage, len(port.calls)) == ("skipped", 0)
     # Act：显式 create_ticket=true → 出单
@@ -313,8 +342,13 @@ async def test_联动不触发条件_read级动作或显式create_ticket():
     uow2.repo.tasks[task2.id] = task2
     port2 = FakeTicketPort()
     result2 = await _service(uow2, ticket_port=port2).decide(
-        tenant_id=_TENANT, approver_id=_USER, task_id=task2.id, run_id=task2.runs[0].id,
-        decision="approve", param_hash=_HASH, create_ticket=True,
+        tenant_id=_TENANT,
+        approver_id=_USER,
+        task_id=task2.id,
+        run_id=task2.runs[0].id,
+        decision="approve",
+        param_hash=_HASH,
+        create_ticket=True,
     )
     assert (result2.review_linkage, len(port2.calls)) == ("created", 1)
 

@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """LLM 改写管线（Jev 模式：大模型离线造数据，小模型在线判定）。
 
 在模板正例基础上让 LLM 同义改写句子并回传字符跨度，本模块做硬校验后入库：
@@ -14,6 +13,7 @@
   uv run python src/onto_train/llm_rewrite.py --dry-run
   ONTO_LLM_BASE_URL=... ONTO_LLM_MODEL=... uv run python src/onto_train/llm_rewrite.py --limit 200
 """
+
 from __future__ import annotations
 
 import argparse
@@ -31,7 +31,7 @@ ENTITY_LABELS: set[str] = set()
 for _g in ("ob2_top_classes", "gbt_entity_types"):
     _p = ROOT / "configs" / "labels.json"
     _labels = json.loads(_p.read_text(encoding="utf-8"))[_g]["labels"]
-    ENTITY_LABELS.update(l["label_en"] for l in _labels)
+    ENTITY_LABELS.update(item["label_en"] for item in _labels)
 
 PROMPT = """你是训练数据构造器。把下面句子改写成一句自然、多样的中文（标准文档领域），
 要求：
@@ -69,6 +69,7 @@ def validate(text: str, spans: list[dict]) -> list | None:
 
 
 def main() -> None:
+    global REJECTED  # 拒绝计数为模块级累计（与 validate 内 global 同一全局，先例行 51）
     ap = argparse.ArgumentParser()
     ap.add_argument("--limit", type=int, default=200)
     ap.add_argument("--dry-run", action="store_true")
@@ -79,10 +80,7 @@ def main() -> None:
     model = os.environ.get("ONTO_LLM_MODEL")
     api_key = os.environ.get("ONTO_LLM_API_KEY")
 
-    src = [
-        json.loads(l)
-        for l in (ROOT / "data" / "positives.jsonl").read_text(encoding="utf-8").splitlines()
-    ]
+    src = [json.loads(line) for line in (ROOT / "data" / "positives.jsonl").read_text(encoding="utf-8").splitlines()]
     sample = src[0]
     example_prompt = PROMPT.format(
         labels=", ".join(sorted(ENTITY_LABELS)),
@@ -118,7 +116,6 @@ def main() -> None:
             spans = []
             # 从 token 跨度还原字符跨度（改写前）
             text = s["text"]
-            toks = s["tokenized_text"]
             # 用原文重新映射（tokenized_text 与 text 同源）
             from onto_train.tokenizer_utils import tokenize_with_spans
 

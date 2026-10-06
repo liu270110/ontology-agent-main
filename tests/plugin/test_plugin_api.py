@@ -11,7 +11,6 @@ import uuid
 from typing import TYPE_CHECKING, Any
 
 import pytest
-from tests.plugin.helpers import publisher_signed_fields
 from starlette.requests import Request as StarletteRequest
 
 from services.gateway.app import create_app
@@ -38,6 +37,7 @@ from services.plugin.domain.model.plugin import PluginStatus
 from services.plugin.runtime import PluginRuntime
 from services.review.business.candidates import ReviewApprovalService, ReviewTicketService
 from services.review.data.governance import PgGovernanceTierReader
+from tests.plugin.helpers import publisher_signed_fields
 
 if TYPE_CHECKING:
     from tests.plugin.conftest import PluginSeed

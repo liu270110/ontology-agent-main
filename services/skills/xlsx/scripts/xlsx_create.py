@@ -59,6 +59,7 @@ Usage:
 
 Prints a JSON summary to stdout; exits non-zero on failure.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -101,8 +102,7 @@ def apply_cell(ws, coord, spec):
         if "note" in spec:
             note = spec["note"]
             if isinstance(note, dict):
-                cell.comment = Comment(note.get("text", ""),
-                                       note.get("author", "xlsx-skill"))
+                cell.comment = Comment(note.get("text", ""), note.get("author", "xlsx-skill"))
             else:
                 cell.comment = Comment(str(note), "xlsx-skill")
         if "format" in spec:
@@ -138,8 +138,7 @@ def apply_cell(ws, coord, spec):
 
 def ref_from_range(ws, rng):
     min_col, min_row, max_col, max_row = range_boundaries(rng)
-    return Reference(ws, min_col=min_col, min_row=min_row,
-                     max_col=max_col, max_row=max_row)
+    return Reference(ws, min_col=min_col, min_row=min_row, max_col=max_col, max_row=max_row)
 
 
 def add_chart(ws, spec):
@@ -159,12 +158,14 @@ def add_conditional(ws, spec):
     kind = spec.get("type", "cell_is")
     if kind == "color_scale":
         rule = ColorScaleRule(
-            start_type="min", start_color=spec.get("start_color", "FFF8696B"),
-            end_type="max", end_color=spec.get("end_color", "FF63BE7B"))
+            start_type="min",
+            start_color=spec.get("start_color", "FFF8696B"),
+            end_type="max",
+            end_color=spec.get("end_color", "FF63BE7B"),
+        )
     else:
         fill = PatternFill("solid", fgColor=spec.get("fill", "FFC7CE"))
-        rule = CellIsRule(operator=spec.get("operator", "greaterThan"),
-                          formula=spec.get("formula", ["0"]), fill=fill)
+        rule = CellIsRule(operator=spec.get("operator", "greaterThan"), formula=spec.get("formula", ["0"]), fill=fill)
     ws.conditional_formatting.add(rng, rule)
 
 
@@ -200,9 +201,9 @@ def build_sheet(ws, spec):
     for ch in spec.get("charts", []):
         add_chart(ws, ch)
     for dv_spec in spec.get("validations", []):
-        dv = DataValidation(type=dv_spec.get("type", "list"),
-                            formula1=dv_spec["formula1"],
-                            allow_blank=dv_spec.get("allow_blank", True))
+        dv = DataValidation(
+            type=dv_spec.get("type", "list"), formula1=dv_spec["formula1"], allow_blank=dv_spec.get("allow_blank", True)
+        )
         dv.add(dv_spec["range"])
         ws.add_data_validation(dv)
     for t_spec in spec.get("tables", []):
@@ -210,7 +211,8 @@ def build_sheet(ws, spec):
         table.tableStyleInfo = TableStyleInfo(
             name=t_spec.get("style", "TableStyleMedium9"),
             showRowStripes=t_spec.get("row_stripes", True),
-            showColumnStripes=t_spec.get("column_stripes", False))
+            showColumnStripes=t_spec.get("column_stripes", False),
+        )
         ws.add_table(table)
     prot = spec.get("protection")
     if prot:
@@ -245,8 +247,7 @@ def main(argv=None):
     if spec.get("full_calc_on_load"):
         wb.calculation.fullCalcOnLoad = True
     wb.save(args.output)
-    print(json.dumps({"ok": True, "output": args.output,
-                      "sheets": wb.sheetnames}, ensure_ascii=False))
+    print(json.dumps({"ok": True, "output": args.output, "sheets": wb.sheetnames}, ensure_ascii=False))
     return 0
 
 

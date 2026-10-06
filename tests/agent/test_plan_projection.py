@@ -186,6 +186,7 @@ async def test_并行段_整批推进_一发开跑一发终态():
     ]
     assert PlanUpdatedPayload.model_validate({"trace_id": "x", **events[-1].data})
 
+
 # ── 中断/取消终局扫描（R4 收敛面）───────────────────────────────────────
 
 
@@ -213,9 +214,7 @@ async def test_端到端_内核发射经observer产出PLAN_UPDATED事件():
     received: list[ChatEvent] = []
     tool = FakeTool()
     task: TaskRef = make_task()
-    dispatcher = make_tool_dispatcher(
-        tool, register_planning_strategy=(FakePlanner(make_candidate((make_step(),))),)
-    )
+    dispatcher = make_tool_dispatcher(tool, register_planning_strategy=(FakePlanner(make_candidate((make_step(),))),))
     dispatcher.register_hook(
         "on_kernel_event",
         ExecEventTranslator(

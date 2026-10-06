@@ -157,9 +157,7 @@ async def get_server(server_id: uuid.UUID, principal: McpReadDep, db: SessionDep
     response_model=RefreshOut,
     summary="重新探测并更新工具缓存（api/01 §5.7；失败落 failing 后 5003/502）",
 )
-async def refresh_server(
-    server_id: uuid.UUID, principal: McpWriteDep, request: Request, db: SessionDep
-) -> RefreshOut:
+async def refresh_server(server_id: uuid.UUID, principal: McpWriteDep, request: Request, db: SessionDep) -> RefreshOut:
     server, tools = await management.refresh_server(
         db, tenant_id=principal.tenant_id, server_id=server_id, client_factory=_factory(request)
     )

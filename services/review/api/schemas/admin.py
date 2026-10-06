@@ -102,6 +102,7 @@ class AdminReviewListOut(BaseModel):
 
 # ---------------------------------------------------------------- W1 缺口补齐批（2026-10-04）
 
+
 class AdminReviewDetailOut(AdminReviewOut):
     """审核工单详情（api/01 §5.8 W1 实装行 GET /admin/reviews/{ticket_id}；契约源=
     frontend/src/features/approvals/api.ts getReview → normalizeReview）。

@@ -29,14 +29,14 @@ def schema_hash(labels: dict) -> str:
     """按 labels.json 约定：四组标签的 iri 排序拼接后取哈希。"""
     iris: list[str] = []
     for g in ("ob2_top_classes", "gbt_entity_types", "gbt_object_properties", "ob2_action_properties"):
-        iris.extend(l["iri"] for l in labels[g]["labels"])
+        iris.extend(item["iri"] for item in labels[g]["labels"])
     return hashlib.sha256("|".join(sorted(iris)).encode("utf-8")).hexdigest()[:16]
 
 
 def load_jsonl(path: Path) -> list[dict]:
     if not path.exists():
         return []
-    return [json.loads(l) for l in path.read_text(encoding="utf-8").splitlines()]
+    return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()]
 
 
 def source_breakdown(rows: list[dict]) -> dict:

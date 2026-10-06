@@ -26,6 +26,7 @@ Spec format (UTF-8 JSON; coordinates in PDF points, origin bottom-left):
 The same spec (label_box/entry_box/page) is what pdf_form_layout.py validates,
 so lint the layout first, then build.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -36,13 +37,17 @@ import sys
 def _reconfigure_stdio() -> None:
     for stream in (sys.stdout, sys.stderr):
         try:
-            stream.reconfigure(encoding="utf-8")
+            if hasattr(
+                stream, "reconfigure"
+            ):  # TextIO 抽象面无 reconfigure(仅 TextIOWrapper);hasattr 兼运行时守卫与类型收窄
+                stream.reconfigure(encoding="utf-8")
         except Exception:
             pass
 
 
 def _page_size(spec: dict):
     from reportlab.lib.pagesizes import A4, letter
+
     ps = spec.get("page_size", "A4")
     if isinstance(ps, (list, tuple)) and len(ps) == 2:
         return float(ps[0]), float(ps[1])
@@ -80,22 +85,38 @@ def build_form(spec: dict, out_path: str) -> int:
             ex0, ey0, ex1, ey1 = (float(v) for v in f["entry_box"])
             ew, eh = ex1 - ex0, ey1 - ey0
             if f.get("label"):
-                lx, ly = (float(f["label_box"][0]), float(f["label_box"][1])) \
-                    if f.get("label_box") else (ex0 - 90, ey0 + 4)
+                lx, ly = (
+                    (float(f["label_box"][0]), float(f["label_box"][1])) if f.get("label_box") else (ex0 - 90, ey0 + 4)
+                )
                 c.setFont("Helvetica", float(f.get("label_size", 10)))
                 c.setFillColor(colors.black)
                 c.drawString(lx, ly + 2, str(f["label"]))
             tooltip = f.get("tooltip", "")
             if ftype == "text":
-                form.textfield(name=name, x=ex0, y=ey0, width=ew, height=eh,
-                               value=str(f.get("value", "")), tooltip=tooltip,
-                               borderWidth=0.5, forceBorder=True)
+                form.textfield(
+                    name=name,
+                    x=ex0,
+                    y=ey0,
+                    width=ew,
+                    height=eh,
+                    value=str(f.get("value", "")),
+                    tooltip=tooltip,
+                    borderWidth=0.5,
+                    forceBorder=True,
+                )
             elif ftype == "checkbox":
                 size = min(ew, eh)
-                form.checkbox(name=name, x=ex0, y=ey0, size=size,
-                              checked=bool(f.get("checked", False)),
-                              buttonStyle="check", tooltip=tooltip,
-                              borderWidth=0.5, forceBorder=True)
+                form.checkbox(
+                    name=name,
+                    x=ex0,
+                    y=ey0,
+                    size=size,
+                    checked=bool(f.get("checked", False)),
+                    buttonStyle="check",
+                    tooltip=tooltip,
+                    borderWidth=0.5,
+                    forceBorder=True,
+                )
             elif ftype == "radio":
                 options = f.get("options", [])
                 if not options:
@@ -107,32 +128,46 @@ def build_form(spec: dict, out_path: str) -> int:
                 c.setFont("Helvetica", 8)
                 for i, opt in enumerate(options):
                     ox = ex0 + i * slot
-                    form.radio(name=name, value=str(opt), x=ox, y=ey0, size=size,
-                               selected=(str(opt) == str(sel)), buttonStyle="circle",
-                               borderWidth=0.5, forceBorder=True)
+                    form.radio(
+                        name=name,
+                        value=str(opt),
+                        x=ox,
+                        y=ey0,
+                        size=size,
+                        selected=(str(opt) == str(sel)),
+                        buttonStyle="circle",
+                        borderWidth=0.5,
+                        forceBorder=True,
+                    )
                     c.drawString(ox + size + 2, ey0 + size / 3, str(opt))
             elif ftype == "dropdown":
                 options = [str(o) for o in f.get("options", [])]
                 value = str(f.get("value", options[0] if options else ""))
-                form.choice(name=name, x=ex0, y=ey0, width=ew, height=eh,
-                            options=options, value=value, tooltip=tooltip,
-                            borderWidth=0.5, forceBorder=True)
+                form.choice(
+                    name=name,
+                    x=ex0,
+                    y=ey0,
+                    width=ew,
+                    height=eh,
+                    options=options,
+                    value=value,
+                    tooltip=tooltip,
+                    borderWidth=0.5,
+                    forceBorder=True,
+                )
             else:
-                print(f"Warning: unknown field type {ftype!r} for {name!r}, skipped",
-                      file=sys.stderr)
+                print(f"Warning: unknown field type {ftype!r} for {name!r}, skipped", file=sys.stderr)
                 continue
             created.append({"name": name, "type": ftype, "page": pageno})
         c.showPage()
     c.save()
-    print(json.dumps({"output": out_path, "pages": page_count, "fields": created},
-                     ensure_ascii=False))
+    print(json.dumps({"output": out_path, "pages": page_count, "fields": created}, ensure_ascii=False))
     return 0
 
 
 def main() -> int:
     _reconfigure_stdio()
-    parser = argparse.ArgumentParser(
-        description="Create a fillable AcroForm PDF from a JSON spec (reportlab).")
+    parser = argparse.ArgumentParser(description="Create a fillable AcroForm PDF from a JSON spec (reportlab).")
     parser.add_argument("spec", help="Path to UTF-8 JSON form spec")
     parser.add_argument("-o", "--output", required=True, help="Output PDF path")
     args = parser.parse_args()

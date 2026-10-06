@@ -397,7 +397,9 @@ def _element_diff_from_domain(group: ElementDiff) -> ElementDiffOut:
         ]
 
     return ElementDiffOut(
-        added=_entries(group.added), removed=_entries(group.removed), modified=_entries(group.modified),
+        added=_entries(group.added),
+        removed=_entries(group.removed),
+        modified=_entries(group.modified),
         unchanged=group.unchanged,
     )
 

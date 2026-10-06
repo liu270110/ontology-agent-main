@@ -252,6 +252,7 @@ class AgentSlot(Protocol):
         total: int | None = None,
     ) -> str: ...  # pragma: no cover — Protocol 方法无实现（v1 返回子 Run 句柄 id）
 
+
 # label/index/total（40 篇 §8 R2，2026-10-04 批）：SUBRUN_STARTED 发射面元数据（子代理
 # 显示名 / 本批并行批次序号 / 批次总量）——仅进事件载荷与回执审计，不参与裁决，缺省 None
 # 向后兼容（既有实现可忽略；BuiltinAgentSlot/ChatAdapter 已同步签名）。

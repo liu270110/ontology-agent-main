@@ -395,8 +395,7 @@ class L2MarketStep:
                     artifact = self._artifact(proposal, plugin, version, tool, "action_iri", now)
                     return artifact, (
                         f"市场包 `{getattr(plugin, 'slug', plugin_id)}` 工具 `{tool['name']}` "
-                        f"语义标注精确命中 {action_iri}"
-                        + (f"（跳过并发消失件 {vanished} 件）" if vanished else "")
+                        f"语义标注精确命中 {action_iri}" + (f"（跳过并发消失件 {vanished} 件）" if vanished else "")
                     )
                 if keyword_match is None and tokens and self._keyword_hit(tool, plugin, tokens):
                     keyword_match = (plugin, version, tool)
@@ -405,8 +404,7 @@ class L2MarketStep:
             artifact = self._artifact(proposal, plugin, version, tool, "keyword", now)
             return artifact, (
                 f"市场包 `{getattr(plugin, 'slug', '')}` 工具 `{tool['name']}` 关键词命中"
-                f"（词元 {'+'.join(tokens)}）"
-                + (f"（跳过并发消失件 {vanished} 件）" if vanished else "")
+                f"（词元 {'+'.join(tokens)}）" + (f"（跳过并发消失件 {vanished} 件）" if vanished else "")
             )
         return (
             None,
@@ -420,11 +418,9 @@ class L2MarketStep:
             plugins = await market.list_market(status=_PUBLISHED_STATUS, limit=L2_MARKET_SCAN_LIMIT)
         except TypeError:  # 端口不收 status 参数（ duck-typed 面兼容位）：退化为客户端复滤
             plugins = await market.list_market(limit=L2_MARKET_SCAN_LIMIT)
-        return [
-            plugin
-            for plugin in plugins
-            if str(getattr(plugin, "status", "")) == _PUBLISHED_STATUS
-        ][:L2_MARKET_SCAN_LIMIT]
+        return [plugin for plugin in plugins if str(getattr(plugin, "status", "")) == _PUBLISHED_STATUS][
+            :L2_MARKET_SCAN_LIMIT
+        ]
 
     @staticmethod
     def _keyword_hit(tool: Mapping[str, Any], plugin: Any, tokens: Sequence[str]) -> bool:
@@ -526,7 +522,7 @@ def validate_llm_draft(raw: Any, seed_actions: frozenset[str]) -> list[str]:
     elif action_iri.strip() not in seed_actions:
         problems.append(f"action_iri 越界（不在种子行动类集内）: {action_iri.strip()}")
     try:
-        ToolExecutionMode(raw.get("execution_mode"))
+        ToolExecutionMode(str(raw.get("execution_mode")))  # str() 归一:None/非 str 同样落入 ValueError 分支(行为等价)
     except ValueError:
         problems.append(f"execution_mode 非法枚举值: {raw.get('execution_mode')!r}")
     description = raw.get("description")
@@ -655,9 +651,7 @@ async def draft_gap_proposal_detailed(
     action_iri, keywords = gap_action_context(proposal)
     attempts: list[DraftAttempt] = []
 
-    artifact = L1ComposeStep().run(
-        proposal, action_iri=action_iri, seed_actions=seeds, registry_iris=bound, now=moment
-    )
+    artifact = L1ComposeStep().run(proposal, action_iri=action_iri, seed_actions=seeds, registry_iris=bound, now=moment)
     if artifact is not None:
         attempts.append(DraftAttempt("L1", "hit", "同域既有行动类组合为计划模板（surface=O5）"))
     else:

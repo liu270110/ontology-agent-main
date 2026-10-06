@@ -8,6 +8,7 @@
 
 from __future__ import annotations
 
+import builtins
 from typing import Protocol, runtime_checkable
 from uuid import UUID
 
@@ -29,7 +30,9 @@ class OntologyRepository(Protocol):
         self, *, status: OntologyStatus | None = None, offset: int = 0, limit: int = 20
     ) -> list[Ontology]: ...
 
-    async def search(self, query: str, *, limit: int = 20) -> list[Ontology]:
+    async def search(
+        self, query: str, *, limit: int = 20
+    ) -> builtins.list[Ontology]:  # 类内 list 方法遮蔽内置 list(38 行上方),显式消解
         """本体搜索（api/01 §5.3 search 行）：名称/描述/命名空间 IRI 片段匹配（M2 最小闭环口径）。"""
         ...
 

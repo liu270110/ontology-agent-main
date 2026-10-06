@@ -45,7 +45,7 @@ from typing import Any
 
 from rdflib import Graph, Literal, URIRef
 from rdflib.namespace import OWL, RDF, RDFS, SKOS
-from sqlalchemy import false, select
+from sqlalchemy import false, select, update
 
 from services.kb.business.conflict_triage import triage_conflicts
 from services.kb.business.pipeline_base import PipelineError, StepContext
@@ -359,13 +359,16 @@ async def run_extract(ctx: StepContext) -> None:
         raise PipelineError("409 候选审核端口未装配（review_tickets 候选登记必需）")
     catalog = await asyncio.to_thread(load_seed_catalog)  # rdflib 同步装载，不入事件循环
     async with ctx.session_factory() as session:  # 短事务：chunks + 既有候选键（幂等基准）
-        exists = (
+        doc_row = (
             await session.execute(
-                select(Document.id).where(Document.id == ctx.document_id, Document.tenant_id == ctx.tenant_id)
+                select(Document.id, Document.meta).where(
+                    Document.id == ctx.document_id, Document.tenant_id == ctx.tenant_id
+                )
             )
-        ).scalar_one_or_none()
-        if exists is None:
+        ).one_or_none()
+        if doc_row is None:
             raise PipelineError(f"404 文档不存在: {ctx.document_id}")
+        doc_meta = dict(doc_row.meta or {})
         chunk_rows = (
             await session.execute(
                 select(DocumentChunk.id, DocumentChunk.seq, DocumentChunk.content, DocumentChunk.meta)
@@ -406,6 +409,23 @@ async def run_extract(ctx: StepContext) -> None:
         if not isinstance(candidates, list):
             raise ModelUnavailableError(f"抽取输出缺 candidates 数组（chunk seq={chunk.seq}）")
         await _persist_candidates(ctx, chunk, candidates, existing, trace_id, template_ref)
+
+    # 空候选显式信号（2026-10-07 静态清账批单元四，09 篇分期表 v2 前置项）：零候选=文档在
+    # 抽取通道无产物——meta.extract_empty=true 随文档落账，文档仍走完 align/validate/indexed
+    # （空转既有契约不变，本函数不改变任何返回/异常语义），信号经详情 DTO 透出可检索
+    # （kb/api/kb.py _document_item_of）。判据=幂等去重账本 existing（既有键+本次新落键）：
+    # 重跑场景「前次有候选、本次零产出」如实记 false，不误报。
+    extract_empty = not existing
+    if doc_meta.get("extract_empty") is not extract_empty:  # 值未翻转不空写（幂等重跑省一短事务）
+        async with ctx.session_factory() as session, session.begin():  # 短事务：meta 信号落账
+            await session.execute(
+                update(Document)
+                .where(Document.id == ctx.document_id, Document.tenant_id == ctx.tenant_id)
+                .values(meta={**doc_meta, "extract_empty": extract_empty})
+            )
+    logger.info(
+        "extract done: document_id=%s candidates=%d extract_empty=%s", ctx.document_id, len(existing), extract_empty
+    )
 
 
 async def _persist_candidates(

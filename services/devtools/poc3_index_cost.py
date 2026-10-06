@@ -538,7 +538,10 @@ def pick_median_samples(items: list, n: int, key) -> list:
 def main(argv: list[str] | None = None) -> int:
     for stream in (sys.stdout, sys.stderr):
         try:
-            stream.reconfigure(encoding="utf-8", errors="replace")
+            if hasattr(
+                stream, "reconfigure"
+            ):  # TextIO 抽象面无 reconfigure(仅 TextIOWrapper);hasattr 兼运行时守卫与类型收窄
+                stream.reconfigure(encoding="utf-8", errors="replace")
         except (AttributeError, OSError):
             pass
     parser = argparse.ArgumentParser(description="PoC3 索引成本对比 harness（LazyGraphRAG vs 完整 GraphRAG）")
@@ -755,8 +758,10 @@ def main(argv: list[str] | None = None) -> int:
     for query_text, _intent in queries:
         t0 = time.perf_counter()
         bm_ranking = [cid for cid, _ in bm25.search(tokenize(query_text), RECALL_POOL)]
-        if query_vec_ok and query_embedder is not None:
-            q_vec = query_embedder.embed([query_text])[0]
+        if query_vec_ok and query_embedder is not None and chunk_vectors is not None:
+            q_vecs = query_embedder.embed([query_text])
+            assert q_vecs, "嵌入返回空(OllamaEmbedder 契约非空)"  # 收窄 list[list[float]] | None
+            q_vec = q_vecs[0]
             vec_scores = [(_cosine(q_vec, chunk_vectors[cid]), cid) for cid in range(len(chunks))]
             vec_scores.sort(reverse=True)
             vec_ranking = [cid for _, cid in vec_scores[:RECALL_POOL]]

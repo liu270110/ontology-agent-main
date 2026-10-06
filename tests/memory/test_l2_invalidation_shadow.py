@@ -77,9 +77,11 @@ async def test_invalidate_写影子行快照与reason_幂等不重复归档(mem_
         await db.commit()
         # Assert：主表墓碑 + 影子行（content 快照/reason/restored_at 空）
         assert out.status == FactStatus.INVALIDATED.value
-        rows = (await db.execute(
-            ShadowORM.__table__.select().where(ShadowORM.fact_id == written.fact_id)
-        )).mappings().all()
+        rows = (
+            (await db.execute(ShadowORM.__table__.select().where(ShadowORM.fact_id == written.fact_id)))
+            .mappings()
+            .all()
+        )
         assert len(rows) == 1
         row = rows[0]
         assert row["content"] == "城东馈线甲常载 80%"  # 失效时文本快照
@@ -91,17 +93,22 @@ async def test_invalidate_写影子行快照与reason_幂等不重复归档(mem_
             written.fact_id, FactInvalidateIn(reason="二次提交"), principal=mem_seed.principal, db=db
         )
         assert again.status == FactStatus.INVALIDATED.value
-        rows2 = (await db.execute(
-            ShadowORM.__table__.select().where(ShadowORM.fact_id == written.fact_id)
-        )).mappings().all()
+        rows2 = (
+            (await db.execute(ShadowORM.__table__.select().where(ShadowORM.fact_id == written.fact_id)))
+            .mappings()
+            .all()
+        )
         assert len(rows2) == 1 and rows2[0]["reason"] == "台账已更正"  # 幂等路径不写第二行
         await db.commit()
 
 
 async def test_invalidate_reason必填_领域与DTO双层拒绝(mem_seed):
     fact = L2Fact(
-        id=uuid4(), tenant_id=mem_seed.tenant_id, user_id=mem_seed.user_id,
-        content="待失效事实", category=FactCategory.FACT,
+        id=uuid4(),
+        tenant_id=mem_seed.tenant_id,
+        user_id=mem_seed.user_id,
+        content="待失效事实",
+        category=FactCategory.FACT,
     )
     # Act / Assert：领域层空 reason 拒绝（§11.1 无 reason 拒绝失效）
     with pytest.raises(ValueError, match="reason"):
@@ -132,9 +139,7 @@ async def test_restore_影子行回填restored_at_主表保持INVALIDATED_重复
             l1=_store(mem_seed),
         )
         await db.commit()
-        await invalidate_fact(
-            written.fact_id, FactInvalidateIn(reason="误失效"), principal=mem_seed.principal, db=db
-        )
+        await invalidate_fact(written.fact_id, FactInvalidateIn(reason="误失效"), principal=mem_seed.principal, db=db)
         await db.commit()
         # Act：restore（影子层可见性恢复）
         out = await restore_fact(written.fact_id, principal=mem_seed.principal, db=db)
@@ -208,10 +213,20 @@ async def test_restore_治理档_他人403_管理员放行_未知404(mem_seed):
 async def test_list_invalidated_active过滤与倒序(mem_seed):
     async with mem_seed.factory() as db:
         repo = mem_seed.repo(db)
-        f1 = L2Fact(id=uuid4(), tenant_id=mem_seed.tenant_id, user_id=mem_seed.user_id,
-                    content="归档甲", category=FactCategory.FACT)
-        f2 = L2Fact(id=uuid4(), tenant_id=mem_seed.tenant_id, user_id=mem_seed.user_id,
-                    content="归档乙", category=FactCategory.FACT)
+        f1 = L2Fact(
+            id=uuid4(),
+            tenant_id=mem_seed.tenant_id,
+            user_id=mem_seed.user_id,
+            content="归档甲",
+            category=FactCategory.FACT,
+        )
+        f2 = L2Fact(
+            id=uuid4(),
+            tenant_id=mem_seed.tenant_id,
+            user_id=mem_seed.user_id,
+            content="归档乙",
+            category=FactCategory.FACT,
+        )
         await repo.add(f1)
         await repo.add(f2)
         await db.commit()

@@ -305,12 +305,16 @@ async def test_账本sink投影_子Run行随STARTED_FINISHED生命周期迁移(p
     # 审计流并存不互替：kernel.* 锚点行照常投影 task_events
     async with factory() as db:
         types = (
-            await db.execute(
-                select(TaskEventORM.event_type).where(
-                    TaskEventORM.task_id == task.id, TaskEventORM.event_type.like("kernel.subrun%")
+            (
+                await db.execute(
+                    select(TaskEventORM.event_type).where(
+                        TaskEventORM.task_id == task.id, TaskEventORM.event_type.like("kernel.subrun%")
+                    )
                 )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
     assert sorted(types) == ["kernel.subrun_finished", "kernel.subrun_started"]
 
 

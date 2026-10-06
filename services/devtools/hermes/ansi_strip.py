@@ -8,15 +8,15 @@ import re
 _ANSI_ESCAPE_RE = re.compile(
     r"\x1b"
     r"(?:"
-        r"\[[\x30-\x3f]*[\x20-\x2f]*[\x40-\x7e]"     # CSI sequence
-        r"|\][\s\S]*?(?:\x07|\x1b\\)"                  # OSC (BEL or ST terminator)
-        r"|[PX^_][\s\S]*?(?:\x1b\\)"                   # DCS/SOS/PM/APC strings
-        r"|[\x20-\x2f]+[\x30-\x7e]"                    # nF escape sequences
-        r"|[\x30-\x7e]"                                 # Fp/Fe/Fs single-byte
+    r"\[[\x30-\x3f]*[\x20-\x2f]*[\x40-\x7e]"  # CSI sequence
+    r"|\][\s\S]*?(?:\x07|\x1b\\)"  # OSC (BEL or ST terminator)
+    r"|[PX^_][\s\S]*?(?:\x1b\\)"  # DCS/SOS/PM/APC strings
+    r"|[\x20-\x2f]+[\x30-\x7e]"  # nF escape sequences
+    r"|[\x30-\x7e]"  # Fp/Fe/Fs single-byte
     r")"
-    r"|\x9b[\x30-\x3f]*[\x20-\x2f]*[\x40-\x7e]"       # 8-bit CSI
-    r"|\x9d[\s\S]*?(?:\x07|\x9c)"                       # 8-bit OSC
-    r"|[\x80-\x9f]",                                    # Other 8-bit C1 controls
+    r"|\x9b[\x30-\x3f]*[\x20-\x2f]*[\x40-\x7e]"  # 8-bit CSI
+    r"|\x9d[\s\S]*?(?:\x07|\x9c)"  # 8-bit OSC
+    r"|[\x80-\x9f]",  # Other 8-bit C1 controls
     re.DOTALL,
 )
 # Fast-path checks: skip the full regex when no candidate bytes are present.
@@ -40,7 +40,7 @@ _CONTROL_CHARS_RE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
 # emoji sequences.
 _UNICODE_TAG_SUB_RE = re.compile(
     r"(\U0001F3F4[\U000E0020-\U000E007E]+\U000E007F)"  # valid emoji tag seq (kept)
-    r"|[\U000E0000-\U000E007F]"                        # any other tag char (stripped)
+    r"|[\U000E0000-\U000E007F]"  # any other tag char (stripped)
 )
 
 

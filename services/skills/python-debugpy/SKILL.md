@@ -72,7 +72,7 @@ Easiest. Edit the file:
 ```python
 def compute(x, y):
     result = some_helper(x)
-    breakpoint()           # <-- drops into pdb here
+    breakpoint()  # <-- drops into pdb here
     return result + y
 ```
 
@@ -113,6 +113,7 @@ debuggers into a production environment):
 
 ```python
 import pdb, sys
+
 try:
     run_the_thing()
 except Exception:
@@ -130,8 +131,14 @@ Or set a global hook in a repl/jupyter:
 
 ```python
 import sys
+
+
 def excepthook(etype, value, tb):
-    import pdb; pdb.post_mortem(tb)
+    import pdb
+
+    pdb.post_mortem(tb)
+
+
 sys.excepthook = excepthook
 ```
 
@@ -165,10 +172,11 @@ Add near the top of the entry point (or inside the function you want to debug):
 
 ```python
 import debugpy
+
 debugpy.listen(("127.0.0.1", 5678))
 print("debugpy listening on 5678, waiting for client...", flush=True)
 debugpy.wait_for_client()
-debugpy.breakpoint()       # optional: pause immediately once attached
+debugpy.breakpoint()  # optional: pause immediately once attached
 ```
 
 Start the process; it blocks on `wait_for_client()`.
@@ -213,10 +221,12 @@ HOST, PORT = "127.0.0.1", 5678
 s = socket.create_connection((HOST, PORT))
 seq = itertools.count(1)
 
+
 def send(msg):
     msg["seq"] = next(seq)
     body = json.dumps(msg).encode()
     s.sendall(f"Content-Length: {len(body)}\r\n\r\n".encode() + body)
+
 
 def recv():
     header = b""
@@ -228,13 +238,18 @@ def recv():
         body += s.recv(length - len(body))
     return json.loads(body)
 
+
 send({"type": "request", "command": "initialize", "arguments": {"adapterID": "python"}})
 print(recv())
 send({"type": "request", "command": "attach", "arguments": {}})
 print(recv())
-send({"type": "request", "command": "setBreakpoints",
-      "arguments": {"source": {"path": sys.argv[1]},
-                    "breakpoints": [{"line": int(sys.argv[2])}]}})
+send(
+    {
+        "type": "request",
+        "command": "setBreakpoints",
+        "arguments": {"source": {"path": sys.argv[1]}, "breakpoints": [{"line": int(sys.argv[2])}]},
+    }
+)
 print(recv())
 send({"type": "request", "command": "configurationDone"})
 # ... loop reading events and sending continue/stepIn/etc.
@@ -266,7 +281,8 @@ an in-place pip install into a running production environment.
 In your code:
 ```python
 from remote_pdb import set_trace
-set_trace(host="127.0.0.1", port=4444)   # blocks until connection
+
+set_trace(host="127.0.0.1", port=4444)  # blocks until connection
 ```
 
 Then from the terminal:
@@ -293,6 +309,7 @@ The interesting process is a child of the UI process. Options:
 ```python
 # in the child's entry function, near the top
 import debugpy
+
 debugpy.listen(("127.0.0.1", 5678))
 debugpy.wait_for_client()
 ```
@@ -301,7 +318,8 @@ Start the parent UI from the prepared debug environment. The UI will appear froz
 **B. Use `remote-pdb` at a specific handler:**
 ```python
 from remote_pdb import set_trace
-set_trace(host="127.0.0.1", port=4444)   # in the RPC handler you want to trap
+
+set_trace(host="127.0.0.1", port=4444)  # in the RPC handler you want to trap
 ```
 Trigger the matching action from the UI, then `nc 127.0.0.1 4444` in another terminal.
 
@@ -369,7 +387,9 @@ pytest tests/the_test.py                 # confirm it passes in isolation first
 **"My async handler deadlocks."**
 ```python
 # Add at handler entry
-import remote_pdb; remote_pdb.set_trace(host="127.0.0.1", port=4444)
+import remote_pdb
+
+remote_pdb.set_trace(host="127.0.0.1", port=4444)
 ```
 Trigger the handler. `nc 127.0.0.1 4444`, then `w` to see the suspended frame, `!import asyncio; asyncio.all_tasks()` to see what else is pending.
 

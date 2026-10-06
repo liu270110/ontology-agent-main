@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 本地版 Jev 演示：用开源的 GLiNER 实现 Jev(TypeSafe AI) 的两类核心能力。
 
@@ -13,6 +12,7 @@ Jev 是闭源 API（不开放权重），无法下载；社区公认的开源替
     python demo_jev.py
 首次运行会自动从 hf-mirror.com 下载模型（约 1.1GB，多语言版，支持中文）。
 """
+
 import json
 import os
 import time
@@ -21,8 +21,8 @@ import time
 os.environ.setdefault("HF_ENDPOINT", "https://hf-mirror.com")
 os.environ.setdefault("HF_HUB_DISABLE_XET", "1")
 
-import torch
 import jieba
+import torch
 from gliner import GLiNER
 
 MODEL_ID = "urchade/gliner_multi-v2.1"
@@ -55,7 +55,11 @@ def demo_extract(model):
 
     type_zh = {"person name": "人名", "time": "时间", "location": "地点", "meeting type": "会议类型"}
     result = [
-        {"type": type_zh.get(e["label"], e["label"]), "value": e["text"].replace(" ", ""), "confidence": round(e["score"], 3)}
+        {
+            "type": type_zh.get(e["label"], e["label"]),
+            "value": e["text"].replace(" ", ""),
+            "confidence": round(e["score"], 3),
+        }
         for e in entities
     ]
     print(f"输入: {text}")

@@ -145,9 +145,7 @@ async def kb_factory() -> AsyncIterator[async_sessionmaker[AsyncSession]]:
     await engine.dispose()
 
 
-async def _stored(
-    factory: async_sessionmaker[AsyncSession], chunk_id: uuid.UUID, column: str
-) -> list[float] | None:
+async def _stored(factory: async_sessionmaker[AsyncSession], chunk_id: uuid.UUID, column: str) -> list[float] | None:
     async with factory() as db:
         raw = (
             await db.execute(text(f"SELECT {column} FROM document_chunks WHERE id = :id"), {"id": chunk_id.hex})
@@ -157,9 +155,7 @@ async def _stored(
 
 async def _job(factory: async_sessionmaker[AsyncSession], job_id: uuid.UUID) -> KbReembedJob:
     async with factory() as db:
-        return (
-            (await db.execute(select(KbReembedJob).where(KbReembedJob.id == job_id))).scalar_one()
-        )
+        return (await db.execute(select(KbReembedJob).where(KbReembedJob.id == job_id))).scalar_one()
 
 
 async def _seed_doced_chunks(

@@ -213,9 +213,7 @@ async def kb_factory() -> AsyncIterator[async_sessionmaker[AsyncSession]]:
 
 async def _runs(factory: async_sessionmaker[AsyncSession]) -> list[KbMaintenanceRun]:
     async with factory() as db:
-        return (
-            (await db.execute(select(KbMaintenanceRun).order_by(KbMaintenanceRun.started_at))).scalars().all()
-        )
+        return (await db.execute(select(KbMaintenanceRun).order_by(KbMaintenanceRun.started_at))).scalars().all()
 
 
 async def _stored_embedding(factory: async_sessionmaker[AsyncSession], chunk_id: uuid.UUID) -> list[float] | None:
@@ -332,9 +330,7 @@ async def test_预算上限_超限顺延记deferred(kb_factory: async_sessionmak
     await _seed(kb_factory, [doc, *[_chunk(doc.id, seq=i) for i in range(3)]])
     settings = Settings(kb_nightly_max_items_per_run=1)
     # Act
-    report = await run_nightly(
-        kb_factory, now=NOW, embedder=_StubEmbedder(), lock=_StubLock(), settings=settings
-    )
+    report = await run_nightly(kb_factory, now=NOW, embedder=_StubEmbedder(), lock=_StubLock(), settings=settings)
     # Assert：只补 1 条；剩余 2 条顺延记 stats.deferred（§8.4 纪律 1）
     assert report.stats["reembedded"] == 1
     assert report.stats["reembed_deferred"] == 2 and report.stats["deferred"] == 2
@@ -374,9 +370,7 @@ async def test_催办与归档阈值集成_14天催_30天归档_入stats与结�
     # Assert：30 天自动归档走既有状态口径（rejected + meta.maintenance 留痕）
     assert report.stats["archived"] == 1
     async with kb_factory() as db:
-        archived = (
-            (await db.execute(select(KbFactORM).where(KbFactORM.subject == "归档对象"))).scalar_one()
-        )
+        archived = (await db.execute(select(KbFactORM).where(KbFactORM.subject == "归档对象"))).scalar_one()
     assert archived.status == "rejected"
     assert archived.meta["maintenance"]["action"] == "auto_archived"
     # Assert：3 天候选不受影响

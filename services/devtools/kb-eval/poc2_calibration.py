@@ -67,12 +67,27 @@ CANDIDATES_PATH: Final = Path(__file__).resolve().parent / "poc2_candidates.json
 BIN_WIDTH: Final = 0.1
 CONF_MISSING: Final = 0.5  # 候选缺 confidence 字段时的兜底值（结果中单独计数并标注）
 SEED_CLASS_NAMES: Final[dict[str, str]] = {  # 种子本体类清单（build_extraction_messages grounding 用）
-    "PowerDevice": "电力设备", "Feeder": "馈线", "Transformer": "变压器", "Substation": "变电站",
-    "Switch": "开关", "ProtectionDevice": "保护装置", "Meter": "计量表", "DistributionLine": "配电线路",
-    "LineSection": "线路区段", "Customer": "客户", "RepairCrew": "抢修班组", "CrewMember": "抢修人员",
-    "OutageOrder": "停电工单", "OutageReport": "停电分析报告", "OutageEvent": "停电事件",
-    "OutageConfirmed": "停电确认事件", "PowerRestored": "复电事件", "StormAlert": "风暴预警事件",
-    "RepairCompleted": "抢修完成事件", "DispatchRepair": "派发抢修", "IsolateFault": "故障隔离",
+    "PowerDevice": "电力设备",
+    "Feeder": "馈线",
+    "Transformer": "变压器",
+    "Substation": "变电站",
+    "Switch": "开关",
+    "ProtectionDevice": "保护装置",
+    "Meter": "计量表",
+    "DistributionLine": "配电线路",
+    "LineSection": "线路区段",
+    "Customer": "客户",
+    "RepairCrew": "抢修班组",
+    "CrewMember": "抢修人员",
+    "OutageOrder": "停电工单",
+    "OutageReport": "停电分析报告",
+    "OutageEvent": "停电事件",
+    "OutageConfirmed": "停电确认事件",
+    "PowerRestored": "复电事件",
+    "StormAlert": "风暴预警事件",
+    "RepairCompleted": "抢修完成事件",
+    "DispatchRepair": "派发抢修",
+    "IsolateFault": "故障隔离",
     "RestorePower": "恢复送电",
 }
 
@@ -192,7 +207,6 @@ def _build_messages(doc_text: str) -> list[dict]:
     人工终审所见的候选实例置信度分布，非流水线 schema 抽取质量（后者由 §10 端到端覆盖）。
     """
     from services.kb.business.kb_extraction import load_seed_catalog
-    from services.kb.business.prompts.extract_v2 import render_catalog
 
     catalog = load_seed_catalog()
     classes = ", ".join(label for _, label in _iter_class_labels(catalog))
@@ -200,12 +214,12 @@ def _build_messages(doc_text: str) -> list[dict]:
     system = (
         "你是实例级知识抽取器。从文档中抽取实例三元组（ABox）："
         "- subject：具体实例名（如「110kV城东变电站」「10kV滨河线」），不是类名；"
-        "- predicate：**只准用谓词白名单**——类型断言用 \"rdf:type\"（object=类名），"
+        '- predicate：**只准用谓词白名单**——类型断言用 "rdf:type"（object=类名），'
         f"其余用属性白名单中的值：{props}；白名单外的谓词一律不用；"
         f"- subject_type / object_type：必须从种子类白名单中选：{classes}；"
         "- confidence：0~1 自报置信度；evidence：原文逐字引语（禁止改写）。"
-        "只输出一个 JSON 对象：{\"triples\": [{\"subject\":…,\"subject_type\":…,\"predicate\":…,"
-        "\"object\":…,\"object_type\":…,\"confidence\":…,\"evidence\":…}]}，不要输出 JSON 以外的文字。"
+        '只输出一个 JSON 对象：{"triples": [{"subject":…,"subject_type":…,"predicate":…,'
+        '"object":…,"object_type":…,"confidence":…,"evidence":…}]}，不要输出 JSON 以外的文字。'
     )
     return [{"role": "system", "content": system}, {"role": "user", "content": "## 抽取文本" + chr(10) + doc_text}]
 
@@ -256,17 +270,20 @@ def _to_candidate(rel: dict[str, Any]) -> dict[str, Any]:
 def calibrate(candidates: list[dict[str, Any]], golden: dict[str, list[dict]], *, loose: bool) -> dict:
     """按 0.1 宽置信度分桶统计 precision 并计算 ECE；loose=True 用宽松包含口径判定。"""
     bins: list[dict] = [
-        {"bin": f"{i / 10:.1f}-{(i + 1) / 10:.1f}", "total": 0, "correct": 0, "conf_sum": 0.0}
-        for i in range(10)
+        {"bin": f"{i / 10:.1f}-{(i + 1) / 10:.1f}", "total": 0, "correct": 0, "conf_sum": 0.0} for i in range(10)
     ]
     for t in candidates:
         b = bins[min(9, max(0, int(t["confidence"] / BIN_WIDTH)))]
         b["total"] += 1
         b["conf_sum"] += t["confidence"]
         goldens = golden.get(t["doc_id"], [])
-        hit = _loose_hit(t, goldens) if loose else (
-            _key(t["subject"], t["predicate"], t["object"])
-            in {_key(g["subject"], g["predicate"], g["object"]) for g in goldens}
+        hit = (
+            _loose_hit(t, goldens)
+            if loose
+            else (
+                _key(t["subject"], t["predicate"], t["object"])
+                in {_key(g["subject"], g["predicate"], g["object"]) for g in goldens}
+            )
         )
         if hit:
             b["correct"] += 1
@@ -352,8 +369,15 @@ async def run() -> int:
             doc_id = path.stem
             if doc_id in done:  # 断点续跑：已完成文档直接复用（大文档单次 20+ 分钟，中断零浪费）
                 row = done[doc_id]
-                per_doc.append({"doc_id": doc_id, "extracted": len(row["cands"]),
-                                "golden": row["golden"], "hit": row["hit"], "resumed": True})
+                per_doc.append(
+                    {
+                        "doc_id": doc_id,
+                        "extracted": len(row["cands"]),
+                        "golden": row["golden"],
+                        "hit": row["hit"],
+                        "resumed": True,
+                    }
+                )
                 print(
                     f"[续用] {doc_id}: 候选 {len(row['cands'])} / 金标 {row['golden']} / 命中 {row['hit']}",
                     flush=True,
@@ -368,16 +392,11 @@ async def run() -> int:
                 continue
             doc_cands = [{**_to_candidate(r), "doc_id": doc_id} for r in rels]
             gset = {_key(r["subject"], r["predicate"], r["object"]) for r in golden.get(doc_id, [])}
-            hit_strict = sum(
-                1 for t in doc_cands
-                if _key(t["subject"], t["predicate"], t["object"]) in gset
-            )
-            row = {"doc_id": doc_id, "cands": doc_cands, "golden": len(golden.get(doc_id, [])),
-                   "hit": hit_strict}
+            hit_strict = sum(1 for t in doc_cands if _key(t["subject"], t["predicate"], t["object"]) in gset)
+            row = {"doc_id": doc_id, "cands": doc_cands, "golden": len(golden.get(doc_id, [])), "hit": hit_strict}
             ledger.write(json.dumps(row, ensure_ascii=False) + "\n")
             ledger.flush()
-            per_doc.append({"doc_id": doc_id, "extracted": len(doc_cands),
-                            "golden": row["golden"], "hit": hit_strict})
+            per_doc.append({"doc_id": doc_id, "extracted": len(doc_cands), "golden": row["golden"], "hit": hit_strict})
             print(f"[抽取] {doc_id}: 候选 {len(doc_cands)} / 金标 {row['golden']} / 严格命中 {hit_strict}", flush=True)
     await client.aclose()
 
@@ -389,15 +408,23 @@ async def run() -> int:
 
     strict = calibrate(candidates, golden, loose=False)
     loose = calibrate(candidates, golden, loose=True)
-    per_doc_report = [
-        {**p, "recall": round(p["hit"] / p["golden"], 4) if p.get("golden") else None} for p in per_doc
-    ]
+    per_doc_report = [{**p, "recall": round(p["hit"] / p["golden"], 4) if p.get("golden") else None} for p in per_doc]
     OUTPUT_PATH.write_text(
-        json.dumps({"strict": strict, "loose": loose, "per_doc": per_doc_report,
-                    "env": {"model": model, "base_url": base_url,
-                            "max_tokens": os.getenv("OA_LLM_CHAT_MAX_TOKENS", "4096"),
-                            "timeout": os.getenv("OA_LLM_CHAT_TIMEOUT_SECONDS", "120")}},
-                   ensure_ascii=False, indent=2),
+        json.dumps(
+            {
+                "strict": strict,
+                "loose": loose,
+                "per_doc": per_doc_report,
+                "env": {
+                    "model": model,
+                    "base_url": base_url,
+                    "max_tokens": os.getenv("OA_LLM_CHAT_MAX_TOKENS", "4096"),
+                    "timeout": os.getenv("OA_LLM_CHAT_TIMEOUT_SECONDS", "120"),
+                },
+            },
+            ensure_ascii=False,
+            indent=2,
+        ),
         encoding="utf-8",
     )
     print(_markdown_table("严格口径（全等）", strict))

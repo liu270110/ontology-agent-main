@@ -19,6 +19,7 @@ Checks (health-check tier, NOT full XSD schema validation):
 Output: {"ok": bool, "issues": [{"severity": "error"|"warning", ...}]}
 Exit code 1 when any error-severity issue is found (warnings exit 0).
 """
+
 from __future__ import annotations
 
 import argparse
@@ -34,11 +35,18 @@ R = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
 PR = "http://schemas.openxmlformats.org/package/2006/relationships"
 
 IMAGE_MAGIC = (
-    b"\x89PNG\r\n\x1a\n", b"\xff\xd8\xff", b"GIF87a", b"GIF89a",
-    b"BM", b"II*\x00", b"MM\x00*",
-    b"\x01\x00\x00\x00",              # EMF
-    b"\xd7\xcd\xc6\x9a", b"\x01\x00\x09\x00",  # WMF variants
-    b"<?xml", b"<svg",
+    b"\x89PNG\r\n\x1a\n",
+    b"\xff\xd8\xff",
+    b"GIF87a",
+    b"GIF89a",
+    b"BM",
+    b"II*\x00",
+    b"MM\x00*",
+    b"\x01\x00\x00\x00",  # EMF
+    b"\xd7\xcd\xc6\x9a",
+    b"\x01\x00\x09\x00",  # WMF variants
+    b"<?xml",
+    b"<svg",
 )
 
 
@@ -67,8 +75,7 @@ def validate(path: str) -> dict:
 
     for required in ("[Content_Types].xml", "word/document.xml"):
         if required not in names:
-            _issue(issues, "error", "missing-part",
-                   f"required part absent: {required}")
+            _issue(issues, "error", "missing-part", f"required part absent: {required}")
     if issues and any(i["severity"] == "error" for i in issues):
         return {"ok": False, "issues": issues}
 
@@ -80,8 +87,7 @@ def validate(path: str) -> dict:
         except etree.XMLSyntaxError as exc:
             _issue(issues, "error", "bad-rels-xml", f"{rels_name}: {exc}")
             continue
-        source_part = posixpath.normpath(
-            posixpath.join(posixpath.dirname(rels_name), ".."))
+        source_part = posixpath.normpath(posixpath.join(posixpath.dirname(rels_name), ".."))
         source_part = "" if source_part == "." else source_part
         ids = {}
         for rel in root.iter(f"{{{PR}}}Relationship"):
@@ -90,11 +96,9 @@ def validate(path: str) -> dict:
             ids[rid] = target
             if mode == "External":
                 continue
-            resolved = _rel_target(source_part + "/x" if source_part
-                                   else "x", target)
+            resolved = _rel_target(source_part + "/x" if source_part else "x", target)
             if resolved not in names:
-                _issue(issues, "error", "dangling-rel",
-                       f"{rels_name}: {rid} -> {target} (missing part)")
+                _issue(issues, "error", "dangling-rel", f"{rels_name}: {rid} -> {target} (missing part)")
         rel_ids_by_source[source_part or "_package"] = ids
 
     # --- r:id / r:embed references in document.xml -----------------------
@@ -104,8 +108,7 @@ def validate(path: str) -> dict:
         for attr in (f"{{{R}}}id", f"{{{R}}}embed", f"{{{R}}}link"):
             rid = el.get(attr)
             if rid and rid not in doc_rels:
-                _issue(issues, "error", "unresolved-reference",
-                       f"document.xml references {rid} with no relationship")
+                _issue(issues, "error", "unresolved-reference", f"document.xml references {rid} with no relationship")
 
     # --- embedded images decode ------------------------------------------
     for name in [n for n in names if n.startswith("word/media/")]:
@@ -113,27 +116,27 @@ def validate(path: str) -> dict:
         if not data:
             _issue(issues, "error", "empty-image", name)
         elif not any(data.startswith(m) for m in IMAGE_MAGIC):
-            _issue(issues, "warning", "unknown-image-format",
-                   f"{name}: unrecognized magic bytes")
+            _issue(issues, "warning", "unknown-image-format", f"{name}: unrecognized magic bytes")
 
     # --- styles referenced exist ------------------------------------------
     defined = set()
     if "word/styles.xml" in names:
         styles_root = etree.fromstring(zf.read("word/styles.xml"))
-        defined = {s.get(f"{{{W}}}styleId")
-                   for s in styles_root.iter(f"{{{W}}}style")}
-    for tag, attr in ((f"{{{W}}}pStyle", f"{{{W}}}val"),
-                      (f"{{{W}}}rStyle", f"{{{W}}}val"),
-                      (f"{{{W}}}tblStyle", f"{{{W}}}val")):
+        defined = {s.get(f"{{{W}}}styleId") for s in styles_root.iter(f"{{{W}}}style")}
+    for tag, attr in (
+        (f"{{{W}}}pStyle", f"{{{W}}}val"),
+        (f"{{{W}}}rStyle", f"{{{W}}}val"),
+        (f"{{{W}}}tblStyle", f"{{{W}}}val"),
+    ):
         for el in doc_root.iter(tag):
             sid = el.get(attr)
             if sid and sid not in defined:
-                _issue(issues, "error", "missing-style",
-                       f"style id referenced but not defined: {sid}")
+                _issue(issues, "error", "missing-style", f"style id referenced but not defined: {sid}")
 
     # --- python-docx can open it ------------------------------------------
     try:
         from docx import Document
+
         Document(path)
     except Exception as exc:  # noqa: BLE001 - triage tool, report anything
         _issue(issues, "error", "python-docx-open-failed", str(exc))
@@ -143,8 +146,7 @@ def validate(path: str) -> dict:
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser(
-        description="Health-check a .docx (not XSD schema validation).")
+    ap = argparse.ArgumentParser(description="Health-check a .docx (not XSD schema validation).")
     ap.add_argument("path", help="the .docx file to check")
     args = ap.parse_args()
     report = validate(args.path)

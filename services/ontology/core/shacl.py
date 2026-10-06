@@ -79,8 +79,10 @@ def validate(
         advanced=True,
         inference="none",
         debug=False,
-        focus_nodes=list(focus_nodes) if focus_nodes is not None else None,
-        use_shapes=list(use_shapes) if use_shapes is not None else None,
+        focus_nodes=[str(n) for n in focus_nodes]
+        if focus_nodes is not None
+        else None,  # pyshacl 入参 Iterable[str];URIRef 为 str 子类恒等
+        use_shapes=[str(n) for n in use_shapes] if use_shapes is not None else None,
     )
     violations = [
         ValidationViolation(

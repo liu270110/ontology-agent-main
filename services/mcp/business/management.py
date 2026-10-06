@@ -93,7 +93,11 @@ def _discovered_rows(report: ProbeReport) -> list[ProbeToolOut]:
 
 
 async def register_server(
-    db: AsyncSession, *, tenant_id: uuid.UUID, user_id: uuid.UUID, body: ServerCreateIn,
+    db: AsyncSession,
+    *,
+    tenant_id: uuid.UUID,
+    user_id: uuid.UUID,
+    body: ServerCreateIn,
     client_factory: ClientFactory | None = None,
 ) -> tuple[McpServerORM, list[McpToolORM]]:
     """上架：校验→重探（真实必要：登记必须验证可达并拉工具全集）→落库。
@@ -165,7 +169,10 @@ async def register_server(
 
 
 async def refresh_server(
-    db: AsyncSession, *, tenant_id: uuid.UUID, server_id: uuid.UUID,
+    db: AsyncSession,
+    *,
+    tenant_id: uuid.UUID,
+    server_id: uuid.UUID,
     client_factory: ClientFactory | None = None,
 ) -> tuple[McpServerORM, list[McpToolORM]]:
     """重新探测并更新工具缓存；失败推进 failing 状态后抛 5003/502（状态不因异常路径丢失）。"""
@@ -212,9 +219,7 @@ async def delete_server(
     return server, removed_tools, affected_agents
 
 
-async def set_tool_enabled(
-    db: AsyncSession, *, tenant_id: uuid.UUID, tool_id: str, enabled: bool
-) -> McpToolORM:
+async def set_tool_enabled(db: AsyncSession, *, tenant_id: uuid.UUID, tool_id: str, enabled: bool) -> McpToolORM:
     """工具级审核启停（外部默认不可信：纳管后 enabled=false，逐项开启）。"""
     tool = await mcp_repo.get_tool(db, tenant_id=tenant_id, tool_id=tool_id)
     if tool is None:

@@ -82,9 +82,7 @@ async def create_prompt(body: PromptCreateIn, principal: PromptWriteDep, uow: Uo
 @router.get("/{template_id}", summary="模板详情（含版本树：内容/checksum/溯源）")
 async def get_prompt(template_id: uuid.UUID, principal: PromptReadDep, uow: UowDep) -> dict:
     service = PromptLibraryService(uow)
-    found = await service.get(
-        tenant_id=principal.tenant_id, viewer_user_id=principal.user_id, template_id=template_id
-    )
+    found = await service.get(tenant_id=principal.tenant_id, viewer_user_id=principal.user_id, template_id=template_id)
     return {"data": prompt_detail_from_domain(found).model_dump(), "meta": {}}
 
 

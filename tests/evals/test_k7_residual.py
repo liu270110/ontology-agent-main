@@ -13,6 +13,7 @@
 - K7-c cell key 与 K6 cell_key 同构（content_key + "::rep<N>" 后缀）。
 门禁：tests/evals = K6 基线 12 + 本批 ≥8，全绿零回归。
 """
+
 from __future__ import annotations
 
 import importlib.util
@@ -44,27 +45,33 @@ def _load(name: str, path: Path):
     return mod
 
 
-ss_report = _load("k7_ss_report",
-                  EVALS_DIR / "session_search_schema" / "report.py")
+ss_report = _load("k7_ss_report", EVALS_DIR / "session_search_schema" / "report.py")
 rt_runner = _load("k7_readtool_runner", EVALS_DIR / "readtool" / "runner.py")
 rt_report = _load("k7_readtool_report", EVALS_DIR / "readtool" / "report.py")
-orch = _load("k7_deferral_orchestrator",
-             EVALS_DIR / "core_tool_deferral" / "orchestrator.py")
+orch = _load("k7_deferral_orchestrator", EVALS_DIR / "core_tool_deferral" / "orchestrator.py")
 
 
 # ── 共享小工厂 ──────────────────────────────────────────────────────
 
+
 def _row(task, arm, rep, ok, tok, calls):
     """session_search_schema 输出行（runner.append_line 的最小形态）。"""
-    return {"task": task, "arm": arm, "rep": rep, "ok": ok,
-            "n_tool_calls": calls, "bad_calls": 0, "total_tokens": tok,
-            "first_prompt_tokens": 10, "wall_s": 0.1}
+    return {
+        "task": task,
+        "arm": arm,
+        "rep": rep,
+        "ok": ok,
+        "n_tool_calls": calls,
+        "bad_calls": 0,
+        "total_tokens": tok,
+        "first_prompt_tokens": 10,
+        "wall_s": 0.1,
+    }
 
 
 def _write_jsonl(path: Path, rows) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text("".join(json.dumps(r, ensure_ascii=False) + "\n"
-                            for r in rows), encoding="utf-8")
+    path.write_text("".join(json.dumps(r, ensure_ascii=False) + "\n" for r in rows), encoding="utf-8")
 
 
 def _rt_task(tid, prompt):
@@ -72,27 +79,33 @@ def _rt_task(tid, prompt):
 
 
 def _rt_rec(task_id, score=1.0):
-    return {"task_id": task_id, "capability": "c", "score": score,
-            "api_turns": 2, "tool_calls": 3, "read_file_calls": 1,
-            "total_tokens": 100, "wall_s": 1.0, "error": None,
-            "final_response": f"final-{task_id}"}
+    return {
+        "task_id": task_id,
+        "capability": "c",
+        "score": score,
+        "api_turns": 2,
+        "tool_calls": 3,
+        "read_file_calls": 1,
+        "total_tokens": 100,
+        "wall_s": 1.0,
+        "error": None,
+        "final_response": f"final-{task_id}",
+    }
 
 
 RT_TASKS = [_rt_task("t1", "p1"), _rt_task("t2", "p2")]
 
 
 def _rt_run_battery(fn, out_dir, store, reps, **kw):
-    return rt_runner.run_battery(fn, "m1", "nous", "baseline", 1.0,
-                                 ["file"], RT_TASKS, out_dir, store,
-                                 reps=reps, **kw)
+    return rt_runner.run_battery(fn, "m1", "nous", "baseline", 1.0, ["file"], RT_TASKS, out_dir, store, reps=reps, **kw)
 
 
 # ── K7-a：report (task,arm,rep) keep-first 去重 ─────────────────────
 
+
 def test_report_dedup_keep_first_metrics_match_clean_input(tmp_path):
     """含崩溃窗口重复行的汇总指标与无重复行输入完全一致（keep-first）。"""
-    clean = [_row("t1", "base", 0, 1, 100, 3),
-             _row("t1", "cand", 0, 0, 50, 2)]
+    clean = [_row("t1", "base", 0, 1, 100, 3), _row("t1", "cand", 0, 0, 50, 2)]
     dup = list(clean) + [_row("t1", "base", 0, 1, 999, 99)]  # 重复行 token 不同
     f_clean, f_dup = tmp_path / "clean.jsonl", tmp_path / "dup.jsonl"
     _write_jsonl(f_clean, clean)
@@ -103,17 +116,19 @@ def test_report_dedup_keep_first_metrics_match_clean_input(tmp_path):
         grand_dup, dups_dup = ss_report.summarize([f_dup])
 
     assert dups_clean == 0 and dups_dup == 1  # 后续重复行丢弃并计数
-    assert dict(grand_dup) == dict(grand_clean) == {
-        "base": [1, 1, 100, 3], "cand": [0, 1, 50, 2]}  # 999/99 未计入
+    assert dict(grand_dup) == dict(grand_clean) == {"base": [1, 1, 100, 3], "cand": [0, 1, 50, 2]}  # 999/99 未计入
 
 
 def test_report_dedup_warns_and_exempts_legacy_rows_without_rep(tmp_path):
     """同 key 后续行丢弃 → UserWarning 带计数；无 rep 的 legacy 行豁免。"""
-    dup_rows = [_row("t1", "base", 0, 1, 100, 3),
-                _row("t1", "base", 0, 1, 100, 3),
-                _row("t1", "base", 0, 1, 100, 3)]  # 同 cell 三行
-    legacy = [{"task": "t1", "arm": "base", "ok": 1, "n_tool_calls": 3,
-               "bad_calls": 0, "total_tokens": 100}] * 2  # 无 rep 字段
+    dup_rows = [
+        _row("t1", "base", 0, 1, 100, 3),
+        _row("t1", "base", 0, 1, 100, 3),
+        _row("t1", "base", 0, 1, 100, 3),
+    ]  # 同 cell 三行
+    legacy = [
+        {"task": "t1", "arm": "base", "ok": 1, "n_tool_calls": 3, "bad_calls": 0, "total_tokens": 100}
+    ] * 2  # 无 rep 字段
     f_dup, f_leg = tmp_path / "dup.jsonl", tmp_path / "legacy.jsonl"
     _write_jsonl(f_dup, dup_rows)
     _write_jsonl(f_leg, legacy)
@@ -127,6 +142,7 @@ def test_report_dedup_warns_and_exempts_legacy_rows_without_rep(tmp_path):
 
 
 # ── K7-b：readtool 逐 cell 断点续跑 + 兼容形态 ──────────────────────
+
 
 def test_readtool_resume_mid_rep_only_reruns_remaining(tmp_path):
     """rep 中途断（KeyboardInterrupt）→ 重跑只补剩余 cell → 幂等零调用。"""
@@ -143,11 +159,9 @@ def test_readtool_resume_mid_rep_only_reruns_remaining(tmp_path):
     with pytest.raises(KeyboardInterrupt):
         _rt_run_battery(flaky, out_dir, store, reps=2)
     # rep1 完整（2 行 + 聚合导出）；rep2 仅 t1 落盘、聚合未写
-    assert len((out_dir / "rep1.jsonl").read_text(encoding="utf-8")
-               .splitlines()) == 2
+    assert len((out_dir / "rep1.jsonl").read_text(encoding="utf-8").splitlines()) == 2
     assert (out_dir / "rep1.json").exists()
-    assert len((out_dir / "rep2.jsonl").read_text(encoding="utf-8")
-               .splitlines()) == 1
+    assert len((out_dir / "rep2.jsonl").read_text(encoding="utf-8").splitlines()) == 1
     assert not (out_dir / "rep2.json").exists()
     done, tomb = store.load()
     assert len(done) == 3 and not tomb
@@ -160,45 +174,41 @@ def test_readtool_resume_mid_rep_only_reruns_remaining(tmp_path):
 
     _rt_run_battery(ok, out_dir, store, reps=2)  # 续跑：只补 rep2 的 t2
     assert calls2["n"] == 1
-    assert len((out_dir / "rep2.jsonl").read_text(encoding="utf-8")
-               .splitlines()) == 2
+    assert len((out_dir / "rep2.jsonl").read_text(encoding="utf-8").splitlines()) == 2
     assert (out_dir / "rep2.json").exists()  # 聚合补导出（崩溃窗口自愈）
-    recs = {r["task_id"]: r
-            for r in json.loads(
-                (out_dir / "rep2.json").read_text(encoding="utf-8"))["records"]}
+    recs = {r["task_id"]: r for r in json.loads((out_dir / "rep2.json").read_text(encoding="utf-8"))["records"]}
     assert set(recs) == {"t1", "t2"}
     done, tomb = store.load()
     assert len(done) == 4 and not tomb
 
     _rt_run_battery(ok, out_dir, store, reps=2)  # 全 done：零调用（幂等）
     assert calls2["n"] == 1
-    assert len((out_dir / "rep2.jsonl").read_text(encoding="utf-8")
-               .splitlines()) == 2
+    assert len((out_dir / "rep2.jsonl").read_text(encoding="utf-8").splitlines()) == 2
 
 
-def test_readtool_legacy_bootstrap_tombstone_retry_and_report_compat(
-        tmp_path, monkeypatch):
+def test_readtool_legacy_bootstrap_tombstone_retry_and_report_compat(tmp_path, monkeypatch):
     """无 checkpoint 的历史 rep1.json：good→done、errored→墓碑；墓碑默认
     跳过、开关重跑后 jsonl 新记录覆盖旧 errored 记录；report.load_label
     读重导出的聚合 json 兼容。"""
     results_root = tmp_path / "results"
     out_dir = results_root / "baseline" / "m1"
     out_dir.mkdir(parents=True)
-    legacy = {"model": "m1", "provider": "nous", "label": "baseline",
-              "rep": 1, "records": [
-                  _rt_rec("t1", 1.0),
-                  dict(_rt_rec("t2", 0.0), error="TimeoutError: boom")]}
+    legacy = {
+        "model": "m1",
+        "provider": "nous",
+        "label": "baseline",
+        "rep": 1,
+        "records": [_rt_rec("t1", 1.0), dict(_rt_rec("t2", 0.0), error="TimeoutError: boom")],
+    }
     (out_dir / "rep1.json").write_text(json.dumps(legacy), encoding="utf-8")
     tasks_by_id = {t.task_id: t for t in RT_TASKS}
     store = _resume.CheckpointStore(out_dir)
 
-    rt_runner._bootstrap_done_from_legacy(out_dir, store, "baseline", "m1",
-                                          tasks_by_id)
+    rt_runner._bootstrap_done_from_legacy(out_dir, store, "baseline", "m1", tasks_by_id)
     done, tomb = store.load()
     assert done == {rt_runner.cell_key("t1", "baseline", "m1", "p1", 1)}
     assert set(tomb) == {rt_runner.cell_key("t2", "baseline", "m1", "p2", 1)}
-    assert tomb[rt_runner.cell_key(
-        "t2", "baseline", "m1", "p2", 1)]["reason"] == "TimeoutError: boom"
+    assert tomb[rt_runner.cell_key("t2", "baseline", "m1", "p2", 1)]["reason"] == "TimeoutError: boom"
 
     calls = {"n": 0}
 
@@ -210,12 +220,9 @@ def test_readtool_legacy_bootstrap_tombstone_retry_and_report_compat(
     assert calls["n"] == 0
     assert not (out_dir / "rep1.jsonl").exists()
 
-    _rt_run_battery(ok, out_dir, store, reps=1,
-                    retry_tombstones=True)  # 开关重跑 t2
+    _rt_run_battery(ok, out_dir, store, reps=1, retry_tombstones=True)  # 开关重跑 t2
     assert calls["n"] == 1
-    recs = {r["task_id"]: r
-            for r in json.loads(
-                (out_dir / "rep1.json").read_text(encoding="utf-8"))["records"]}
+    recs = {r["task_id"]: r for r in json.loads((out_dir / "rep1.json").read_text(encoding="utf-8"))["records"]}
     assert recs["t2"]["score"] == 0.9 and recs["t2"]["error"] is None
     assert recs["t1"]["score"] == 1.0  # 旧 good 记录保留
     done, tomb = store.load()
@@ -233,17 +240,17 @@ def test_readtool_crash_window_selfheal_and_jsonl_keep_first(tmp_path):
     重复行聚合时 keep-first。"""
     out_dir = tmp_path / "baseline" / "m1"
     out_dir.mkdir(parents=True)
-    rows = [dict(_rt_rec("t1"), total_tokens=111),
-            dict(_rt_rec("t2")),
-            dict(_rt_rec("t1"), total_tokens=999)]  # 崩溃窗口重复行
+    rows = [
+        dict(_rt_rec("t1"), total_tokens=111),
+        dict(_rt_rec("t2")),
+        dict(_rt_rec("t1"), total_tokens=999),
+    ]  # 崩溃窗口重复行
     with open(out_dir / "rep1.jsonl", "a", encoding="utf-8") as f:
         for r in rows:
             _resume.append_line(f, r)
     store = _resume.CheckpointStore(out_dir)
-    store.append({"key": rt_runner.cell_key("t1", "baseline", "m1", "p1", 1),
-                  "status": "ok"})
-    store.append({"key": rt_runner.cell_key("t2", "baseline", "m1", "p2", 1),
-                  "status": "ok"})
+    store.append({"key": rt_runner.cell_key("t1", "baseline", "m1", "p1", 1), "status": "ok"})
+    store.append({"key": rt_runner.cell_key("t2", "baseline", "m1", "p2", 1), "status": "ok"})
 
     calls = {"n": 0}
 
@@ -261,22 +268,21 @@ def test_readtool_crash_window_selfheal_and_jsonl_keep_first(tmp_path):
 
 # ── K7-c：core_tool_deferral CheckpointStore 收编 ───────────────────
 
+
 def _deferral_tasks(n):
-    return {f"s{i}": {"id": f"s{i}", "prompt": f"p{i}", "timeout": 5}
-            for i in range(n)}
+    return {f"s{i}": {"id": f"s{i}", "prompt": f"p{i}", "timeout": 5} for i in range(n)}
 
 
-def test_deferral_concurrent_checkpoint_completeness_4t_100(
-        tmp_path, monkeypatch):
+def test_deferral_concurrent_checkpoint_completeness_4t_100(tmp_path, monkeypatch):
     """线程池 4 线程并发写 checkpoint：100 条全落、无交错损坏、全量跳过。"""
     results = tmp_path / "results"
     results.mkdir()
     tasks_by_id = _deferral_tasks(10)
     store = _resume.CheckpointStore(results)
     lock = threading.Lock()
-    cells = orch.plan_cells(store, str(results), "org/m1",
-                            [f"s{i}" for i in range(10)],
-                            ["base", "pr"], 5, tasks_by_id=tasks_by_id)
+    cells = orch.plan_cells(
+        store, str(results), "org/m1", [f"s{i}" for i in range(10)], ["base", "pr"], 5, tasks_by_id=tasks_by_id
+    )
     assert len(cells) == 100  # 10 任务 × 2 arm × 5 rep
 
     def fake_run_cell(cell, model, py):
@@ -286,15 +292,17 @@ def test_deferral_concurrent_checkpoint_completeness_4t_100(
     monkeypatch.setattr(orch, "run_cell", fake_run_cell)
     orch.run_battery(cells, store, lock, "org/m1", "unused-py", parallel=4)
 
-    lines = (results / ".checkpoint.jsonl").read_text(
-        encoding="utf-8").splitlines()
+    lines = (results / ".checkpoint.jsonl").read_text(encoding="utf-8").splitlines()
     assert len(lines) == 100  # 100 条全落
     assert all(json.loads(x)["status"] == "ok" for x in lines)  # 无交错损坏
     done, tomb = store.load()
     assert len(done) == 100 and not tomb
-    assert orch.plan_cells(store, str(results), "org/m1",
-                           [f"s{i}" for i in range(10)], ["base", "pr"], 5,
-                           tasks_by_id=tasks_by_id) == []  # 全部跳过
+    assert (
+        orch.plan_cells(
+            store, str(results), "org/m1", [f"s{i}" for i in range(10)], ["base", "pr"], 5, tasks_by_id=tasks_by_id
+        )
+        == []
+    )  # 全部跳过
 
 
 def test_deferral_tombstone_semantics_k6_aligned(tmp_path, monkeypatch):
@@ -305,8 +313,7 @@ def test_deferral_tombstone_semantics_k6_aligned(tmp_path, monkeypatch):
     tasks_by_id = _deferral_tasks(2)  # s0/s1；本测试只用 s1
     store = _resume.CheckpointStore(results)
     lock = threading.Lock()
-    cells = orch.plan_cells(store, str(results), "m1", ["s1"],
-                            ["base", "pr"], 2, tasks_by_id=tasks_by_id)
+    cells = orch.plan_cells(store, str(results), "m1", ["s1"], ["base", "pr"], 2, tasks_by_id=tasks_by_id)
     assert len(cells) == 4
 
     def fake(cell, model, py):
@@ -327,12 +334,11 @@ def test_deferral_tombstone_semantics_k6_aligned(tmp_path, monkeypatch):
     assert tomb[kp2]["reason"] == "wall timeout"
     assert orch.cell_key("pr", "s1", "m1", "p1", 1) not in done | set(tomb)
 
-    plan = orch.plan_cells(store, str(results), "m1", ["s1"], ["base", "pr"],
-                           2, tasks_by_id=tasks_by_id)
+    plan = orch.plan_cells(store, str(results), "m1", ["s1"], ["base", "pr"], 2, tasks_by_id=tasks_by_id)
     assert [(c[0], c[2]) for c in plan] == [("pr", 1)]  # 墓碑默认跳过
-    plan_retry = orch.plan_cells(store, str(results), "m1", ["s1"],
-                                 ["base", "pr"], 2, retry_tombstones=True,
-                                 tasks_by_id=tasks_by_id)
+    plan_retry = orch.plan_cells(
+        store, str(results), "m1", ["s1"], ["base", "pr"], 2, retry_tombstones=True, tasks_by_id=tasks_by_id
+    )
     assert len(plan_retry) == 4  # --retry-tombstones：全部放行重跑
 
 
@@ -343,28 +349,23 @@ def test_deferral_bootstrap_from_legacy_results(tmp_path):
     results.mkdir()
 
     def w(name, obj):
-        (results / name).write_text(
-            obj if isinstance(obj, str) else json.dumps(obj),
-            encoding="utf-8")
+        (results / name).write_text(obj if isinstance(obj, str) else json.dumps(obj), encoding="utf-8")
 
-    w("base__s1__rep1.json", {"error": None, "score": 1.0})   # good → done
-    w("pr__s1__rep1.json", {"error": "boom", "score": 0.0})   # errored → 墓碑
-    w("base__s2__rep1.json", {"error": "x", "score": 0.5})    # attempted → done
-    w("pr__s2__rep1.json", "{corrupt")                        # 损坏 → 重跑
+    w("base__s1__rep1.json", {"error": None, "score": 1.0})  # good → done
+    w("pr__s1__rep1.json", {"error": "boom", "score": 0.0})  # errored → 墓碑
+    w("base__s2__rep1.json", {"error": "x", "score": 0.5})  # attempted → done
+    w("pr__s2__rep1.json", "{corrupt")  # 损坏 → 重跑
     w("base__s1__rep1.json.transcript.json", {"error": None})  # 忽略
-    tasks_by_id = {"s1": {"id": "s1", "prompt": "p1"},
-                   "s2": {"id": "s2", "prompt": "p2"}}
+    tasks_by_id = {"s1": {"id": "s1", "prompt": "p1"}, "s2": {"id": "s2", "prompt": "p2"}}
     store = _resume.CheckpointStore(results)
 
     orch.bootstrap_from_results(str(results), store, "m1", tasks_by_id)
     done, tomb = store.load()
-    assert done == {orch.cell_key("base", "s1", "m1", "p1", 1),
-                    orch.cell_key("base", "s2", "m1", "p2", 1)}
+    assert done == {orch.cell_key("base", "s1", "m1", "p1", 1), orch.cell_key("base", "s2", "m1", "p2", 1)}
     assert set(tomb) == {orch.cell_key("pr", "s1", "m1", "p1", 1)}
     assert tomb[orch.cell_key("pr", "s1", "m1", "p1", 1)]["reason"] == "boom"
 
-    cells = orch.plan_cells(store, str(results), "m1", ["s1", "s2"],
-                            ["base", "pr"], 1, tasks_by_id=tasks_by_id)
+    cells = orch.plan_cells(store, str(results), "m1", ["s1", "s2"], ["base", "pr"], 1, tasks_by_id=tasks_by_id)
     assert [(c[0], c[1], c[2]) for c in cells] == [("pr", "s2", 1)]  # 只剩损坏
 
 

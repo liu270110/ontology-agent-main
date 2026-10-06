@@ -10,6 +10,7 @@ Usage:
   xlsx_to_csv.py book.xlsx out.csv --sheet Data --encoding utf-8-sig
   xlsx_to_csv.py book.xlsx out.csv --delimiter ';' --data-only
 """
+
 from __future__ import annotations
 
 import argparse
@@ -39,11 +40,9 @@ def main(argv=None):
     ap.add_argument("file", help="input .xlsx path")
     ap.add_argument("output", help="output CSV path")
     ap.add_argument("--sheet", help="sheet name (default: active)")
-    ap.add_argument("--encoding", default="utf-8",
-                    help="CSV output encoding (default utf-8)")
+    ap.add_argument("--encoding", default="utf-8", help="CSV output encoding (default utf-8)")
     ap.add_argument("--delimiter", default=",")
-    ap.add_argument("--data-only", action="store_true",
-                    help="cached formula results instead of formula strings")
+    ap.add_argument("--data-only", action="store_true", help="cached formula results instead of formula strings")
     args = ap.parse_args(argv)
 
     wb = load_workbook(args.file, data_only=args.data_only)
@@ -56,8 +55,7 @@ def main(argv=None):
             writer.writerow([to_text(v) for v in row])
             count += 1
 
-    print(json.dumps({"ok": True, "output": args.output, "sheet": ws.title,
-                      "rows": count}, ensure_ascii=False))
+    print(json.dumps({"ok": True, "output": args.output, "sheet": ws.title, "rows": count}, ensure_ascii=False))
     return 0
 
 

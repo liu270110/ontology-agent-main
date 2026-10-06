@@ -166,14 +166,10 @@ async def test_promoted迁移恒拒_携带或不携带工单引用均拒且状�
 async def test_promoted不可注册直达_构造期与DTO双层拒绝() -> None:
     # Arrange + Act + Assert（构造期）：PROMOTED 枚举值直达注册 → 红线拒绝
     with pytest.raises(OrsiPromotionBlocked):
-        OrsiCapability(
-            tenant_id=TENANT, **VALID_REGISTER_KW, name="x", status=OrsiCapabilityStatus.PROMOTED
-        )
+        OrsiCapability(tenant_id=TENANT, **VALID_REGISTER_KW, name="x", status=OrsiCapabilityStatus.PROMOTED)
     # Arrange + Act + Assert（DTO 层）：status 只开放 nominal|candidate
     with pytest.raises(ValueError, match="promoted"):
-        OrsiCapabilityRegisterIn(
-            face="O1", name="x", version="v1", source_channel="L0", status="promoted"
-        )
+        OrsiCapabilityRegisterIn(face="O1", name="x", version="v1", source_channel="L0", status="promoted")
 
 
 async def test_face枚举封闭_未局面编号拒绝() -> None:
@@ -181,14 +177,10 @@ async def test_face枚举封闭_未局面编号拒绝() -> None:
     service, _trail = _service()
     # Act + Assert：未局面编号（封闭八面 O1~O8，09 §13.2 扩面=代码变更=人工审批）
     with pytest.raises(ValueError, match="封闭八面"):
-        await service.register(
-            tenant_id=TENANT, face="O9", name="x", version="v1", source_channel=SourceChannel.L0
-        )
+        await service.register(tenant_id=TENANT, face="O9", name="x", version="v1", source_channel=SourceChannel.L0)
     # Assert：缺口轨/来源通道值域同样收口（Agent14 §4 值域）
     with pytest.raises(ValueError):
-        await service.register(
-            tenant_id=TENANT, face="O1", name="x", version="v1", source_channel="L9"
-        )
+        await service.register(tenant_id=TENANT, face="O1", name="x", version="v1", source_channel="L9")
 
 
 # ── 红线：注册/列表零副作用（行为断言） ─────────────────────────────────────

@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import builtins
 from typing import Protocol, runtime_checkable
 from uuid import UUID
 
@@ -36,7 +37,9 @@ class AgentRepository(Protocol):
         """适配器绑定行只读投影（详情/健康检查）；未命中返回 None。"""
         ...
 
-    async def list_adapters(self) -> list[AgentAdapterInfo]:
+    async def list_adapters(
+        self,
+    ) -> builtins.list[AgentAdapterInfo]:  # 类内 list 方法遮蔽内置 list,显式消解(ontology_repo 同款)
         """适配器绑定行全量只读（adapter-schemas 下发用例；平台级表无租户列，不过滤）。"""
         ...
 

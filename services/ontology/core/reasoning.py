@@ -63,9 +63,7 @@ def entail(graph: Graph, *, scope: str = SCOPE_ENTAILMENT) -> ReasonReport:
     from owlrl import DeductiveClosure, OWLRL_Semantics  # 局部导入：owlrl 装载较重，惰性化
 
     DeductiveClosure(OWLRL_Semantics, rdfs_closure=True, axiomatic_triples=False).expand(expanded)
-    conclusions = [
-        triple for triple in set(expanded) - set(graph) if _is_meaningful(triple, declared, scope)
-    ]
+    conclusions = [triple for triple in set(expanded) - set(graph) if _is_meaningful(triple, declared, scope)]
     counts: dict[str, int] = {}
     for _s, predicate, _o in conclusions:
         counts[str(predicate)] = counts.get(str(predicate), 0) + 1

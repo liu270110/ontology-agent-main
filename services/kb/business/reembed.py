@@ -202,12 +202,16 @@ async def plan_reembed(session: AsyncSession, tenant_id: uuid.UUID, new_model: s
     （可达性由 run_reembed 首批嵌入调用自然暴露）。
     """
     active = (
-        await session.execute(
-            select(KbReembedJob.id).where(
-                KbReembedJob.tenant_id == tenant_id, KbReembedJob.status.in_(ACTIVE_REEMBED_STATUSES)
+        (
+            await session.execute(
+                select(KbReembedJob.id).where(
+                    KbReembedJob.tenant_id == tenant_id, KbReembedJob.status.in_(ACTIVE_REEMBED_STATUSES)
+                )
             )
         )
-    ).scalars().first()
+        .scalars()
+        .first()
+    )
     if active is not None:
         raise ValueError(f"409 该租户已有活跃重嵌任务: {active}")
     job = KbReembedJob(tenant_id=tenant_id, status="planning", new_model=new_model, progress={})
@@ -271,9 +275,7 @@ async def run_reembed(
             )
             if cursor_hex is not None:
                 stmt = stmt.where(DocumentChunk.id > uuid.UUID(cursor_hex))
-            rows = (
-                (await session.execute(stmt.order_by(DocumentChunk.id).limit(batch_size))).all()
-            )
+            rows = (await session.execute(stmt.order_by(DocumentChunk.id).limit(batch_size))).all()
         if not rows:
             break
         vectors = await embedder.embed([content for _, content in rows])  # 事务外（03 §6.1）

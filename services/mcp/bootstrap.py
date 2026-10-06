@@ -124,11 +124,8 @@ def build_capability_registry(
     registry = CapabilityRegistry()
     # ① knowledge.search（检索降级链由 KnowledgeSearchService 内建：嵌入不可达 → BM25-only；
     #    知识活性埋点 usage_store 同 REST/chat 注入（§6.1 A3 激活：三路组合根一致））
-    search_fn = (
-        knowledge_search_fn
-        or KnowledgeSearchService(
-            session_factory, ollama_base_url=settings.ollama_base_url, usage_store=UsageStore(session_factory)
-        )
+    search_fn = knowledge_search_fn or KnowledgeSearchService(
+        session_factory, ollama_base_url=settings.ollama_base_url, usage_store=UsageStore(session_factory)
     )
     registry.register(KnowledgeCapabilityProvider(search_fn))
     # ② ontology（制品装载器=组合根注入参数；未注入工具结构化降级 5004，不阻塞其余能力）

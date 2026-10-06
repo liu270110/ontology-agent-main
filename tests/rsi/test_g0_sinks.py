@@ -128,9 +128,7 @@ async def test_dispatcher_默认无gap_sink_零侵入_错误语义不变() -> No
 async def test_unbound_action_sink_事件落store() -> None:
     store = InMemoryGapStore()
     sink = UnboundActionSink(store)
-    event = GapEvent(
-        tenant_id=TENANT, kind=GapKind.UNBOUND_ACTION, action_iri=ACTION, occurred_at=NOW, source="test"
-    )
+    event = GapEvent(tenant_id=TENANT, kind=GapKind.UNBOUND_ACTION, action_iri=ACTION, occurred_at=NOW, source="test")
     sink(event)
     assert sink.collected() == [event]
     assert store.load_events()[0].fingerprint == event.fingerprint

@@ -118,9 +118,7 @@ async def list_sessions(principal: PrincipalDep, db: SessionDep) -> DeviceSessio
     status_code=204,
     summary="下线本人设备会话（api/01 §5.15 ★；拉黑登录时 access+refresh jti）",
 )
-async def revoke_session(
-    request: Request, session_id: uuid.UUID, principal: PrincipalDep, db: SessionDep
-) -> Response:
+async def revoke_session(request: Request, session_id: uuid.UUID, principal: PrincipalDep, db: SessionDep) -> Response:
     row = await me_repo.revoke_session(
         db, tenant_id=principal.tenant_id, user_id=principal.user_id, session_id=session_id
     )
@@ -167,9 +165,7 @@ async def get_export(task_id: uuid.UUID, principal: PrincipalDep, db: SessionDep
 # ================================================================ totp（§5.9 + §5.15 ★）
 
 
-@totp_router.post(
-    "/setup", response_model=TotpSetupOut, summary="2FA 第一步：生成 secret 与 otpauth URI（已启用 409）"
-)
+@totp_router.post("/setup", response_model=TotpSetupOut, summary="2FA 第一步：生成 secret 与 otpauth URI（已启用 409）")
 async def totp_setup(principal: PrincipalDep, db: SessionDep) -> TotpSetupOut:
     user = await _load_user(db, principal)
     credential = await me_repo.get_totp_credential(db, tenant_id=principal.tenant_id, user_id=principal.user_id)

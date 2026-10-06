@@ -9,8 +9,6 @@ from __future__ import annotations
 import copy
 from typing import Any
 
-from tests.plugin.helpers import CHECKSUM, VALID_SERVER_JSON
-
 from services.plugin.business.gates import (
     MAX_FILE_BYTES,
     MAX_PACKAGE_BYTES,
@@ -23,6 +21,7 @@ from services.plugin.business.gates import (
     gate_static_scan,
     run_gates,
 )
+from tests.plugin.helpers import CHECKSUM, VALID_SERVER_JSON
 
 
 def _ctx(**overrides: Any) -> GateContext:

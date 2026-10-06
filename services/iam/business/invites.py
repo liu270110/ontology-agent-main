@@ -56,9 +56,7 @@ def _derived_status(invite: Invite, *, now: datetime) -> str:
 
 async def _active_invite_or_raise(session: AsyncSession, token: str) -> Invite:
     """hash 查找 → 过期/撤销校验；任一不过即 InviteInvalidError（防 token 枚举统一 410）。"""
-    invite = (
-        await session.execute(select(Invite).where(Invite.token_hash == _hash_token(token)))
-    ).scalar_one_or_none()
+    invite = (await session.execute(select(Invite).where(Invite.token_hash == _hash_token(token)))).scalar_one_or_none()
     if invite is None:
         raise InviteInvalidError("邀请链接不存在或已失效")
     if invite.revoked_at is not None:

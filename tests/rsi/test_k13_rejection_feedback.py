@@ -54,9 +54,7 @@ def _envelope_missing(*drop: str) -> dict:
     return env
 
 
-def _service(
-    *, entries: dict[str, str] | None = None, rejection_ledger_maxlen: int | None = None
-) -> RsiService:
+def _service(*, entries: dict[str, str] | None = None, rejection_ledger_maxlen: int | None = None) -> RsiService:
     """服务假体（闭包取数口同 K9 测试口径；maxlen 缺省走 Settings D2 通道）。"""
     trail = InMemoryAuditTrail()
 
@@ -90,9 +88,7 @@ async def _submit(
     )
 
 
-async def _submit_and_fail(
-    service: RsiService, *, target: str = TARGET, envelope: dict | None = None
-) -> Proposal:
+async def _submit_and_fail(service: RsiService, *, target: str = TARGET, envelope: dict | None = None) -> Proposal:
     """确定性落选：缺 eval_plan 键 → 0 级门禁 fail → REJECTED 终态。"""
     proposal = await _submit(service, target=target, envelope=envelope or _envelope_missing("eval_plan"))
     evaluated = await service.evaluate(proposal.id)

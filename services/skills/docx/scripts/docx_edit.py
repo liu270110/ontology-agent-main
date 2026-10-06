@@ -26,6 +26,7 @@ Field results (TOC entries, page numbers) are computed by Word or
 LibreOffice when the document is opened, not by python-docx; until then
 the fields show placeholder text.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -80,6 +81,7 @@ def cmd_style(doc, args) -> dict:
 def _run_format_key(r_el) -> str:
     """Canonical string for a run's w:rPr (None when absent)."""
     from lxml import etree
+
     rpr = r_el.find(_q("rPr"))
     return "" if rpr is None else etree.tostring(rpr).decode("utf-8")
 
@@ -98,17 +100,14 @@ def cmd_normalize(doc) -> dict:
             if kids:
                 prev = None
                 continue
-            if (prev is not None
-                    and _run_format_key(prev) == _run_format_key(r_el)):
+            if prev is not None and _run_format_key(prev) == _run_format_key(r_el):
                 pt = prev.find(_q("t"))
                 ct = r_el.find(_q("t"))
                 if pt is None:
                     pt = prev.makeelement(_q("t"), {})
                     prev.append(pt)
-                pt.text = (pt.text or "") + ((ct.text or "")
-                                             if ct is not None else "")
-                pt.set("{http://www.w3.org/XML/1998/namespace}space",
-                       "preserve")
+                pt.text = (pt.text or "") + ((ct.text or "") if ct is not None else "")
+                pt.set("{http://www.w3.org/XML/1998/namespace}space", "preserve")
                 r_el.getparent().remove(r_el)
                 merged += 1
             else:
@@ -119,9 +118,7 @@ def cmd_normalize(doc) -> dict:
 def _add_field(para, instr: str, placeholder: str) -> None:
     """Append a complex field (begin/instrText/separate/result/end)."""
     p = para._p
-    for ftype, extra in (("begin", None), (None, instr),
-                         ("separate", None), (None, placeholder),
-                         ("end", None)):
+    for ftype, extra in (("begin", None), (None, instr), ("separate", None), (None, placeholder), ("end", None)):
         r = p.makeelement(_q("r"), {})
         p.append(r)
         if ftype is not None:
@@ -144,16 +141,15 @@ def cmd_toc(doc, args) -> dict:
         para = paras[args.index].insert_paragraph_before("")
     else:
         para = doc.add_paragraph("")
-    _add_field(para, r' TOC \o "1-3" \h \z \u ',
-               "Table of contents - open in Word/LibreOffice and update "
-               "fields to populate.")
+    _add_field(
+        para, r' TOC \o "1-3" \h \z \u ', "Table of contents - open in Word/LibreOffice and update fields to populate."
+    )
     return {"toc_inserted_at": args.index}
 
 
 def cmd_page_numbers(doc, args) -> dict:
     footer = doc.sections[0].footer
-    para = footer.paragraphs[0] if footer.paragraphs \
-        else footer.add_paragraph()
+    para = footer.paragraphs[0] if footer.paragraphs else footer.add_paragraph()
     para.add_run("Page ")
     _add_field(para, " PAGE ", "1")
     para.add_run(" of ")
@@ -167,15 +163,13 @@ def main() -> int:
 
     def common(p):
         p.add_argument("path", help="input .docx")
-        p.add_argument("-o", "--output",
-                       help="output path (default: overwrite input)")
+        p.add_argument("-o", "--output", help="output path (default: overwrite input)")
 
     p = sub.add_parser("replace", help="find-and-replace text")
     common(p)
     p.add_argument("--find", required=True)
     p.add_argument("--replace", required=True)
-    p.add_argument("--body-only", action="store_true",
-                   help="skip headers/footers")
+    p.add_argument("--body-only", action="store_true", help="skip headers/footers")
 
     p = sub.add_parser("set-cell", help="set table cell text")
     common(p)
@@ -199,17 +193,14 @@ def main() -> int:
     p.add_argument("--index", type=int, required=True)
     p.add_argument("--style", required=True)
 
-    p = sub.add_parser("normalize",
-                       help="merge adjacent runs with identical formatting")
+    p = sub.add_parser("normalize", help="merge adjacent runs with identical formatting")
     common(p)
 
     p = sub.add_parser("toc", help="insert a TOC field (Word computes it)")
     common(p)
-    p.add_argument("--index", type=int, default=0,
-                   help="body paragraph index to insert before (default 0)")
+    p.add_argument("--index", type=int, default=0, help="body paragraph index to insert before (default 0)")
 
-    p = sub.add_parser("page-numbers",
-                       help="add PAGE/NUMPAGES fields to the footer")
+    p = sub.add_parser("page-numbers", help="add PAGE/NUMPAGES fields to the footer")
     common(p)
 
     args = ap.parse_args()

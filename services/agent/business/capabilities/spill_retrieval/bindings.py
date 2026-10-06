@@ -122,9 +122,7 @@ class SpillRetrievalBinding:
         try:
             text = await self._store.get(locator, tenant_id=str(ctx.tenant_id))
         except ValueError as exc:  # 越界/跨租户：store 侧防孤儿校验拒绝（K14-a）
-            logger.warning(
-                "spill.get locator 非法拒绝 tenant=%s trace_id=%s err=%s", ctx.tenant_id, ctx.trace_id, exc
-            )
+            logger.warning("spill.get locator 非法拒绝 tenant=%s trace_id=%s err=%s", ctx.tenant_id, ctx.trace_id, exc)
             return self._fail(
                 ErrorCode.PARAM_INVALID, f"locator 非法（越界或跨租户访问被拒）。{_INVALID_LOCATOR_GUIDANCE}"
             )
@@ -149,9 +147,7 @@ class SpillRetrievalBinding:
     def _int_param(value: Any, name: str) -> tuple[int, ToolResult | None]:
         """整型参数校验（schema 后纵深防御；bool 是 int 子类须显式排除）。"""
         if isinstance(value, bool) or not isinstance(value, int) or value < 0:
-            return 0, SpillRetrievalBinding._fail(
-                ErrorCode.PARAM_INVALID, f"{name} 须为 ≥0 整数，得到 {value!r}"
-            )
+            return 0, SpillRetrievalBinding._fail(ErrorCode.PARAM_INVALID, f"{name} 须为 ≥0 整数，得到 {value!r}")
         return value, None
 
     @staticmethod

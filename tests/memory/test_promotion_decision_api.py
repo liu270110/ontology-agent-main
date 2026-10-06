@@ -55,9 +55,7 @@ async def _seed_open_promotion(
 ) -> tuple[dict[str, Any], uuid.UUID]:
     """走权威提交路径造一单在审升级单（两写：promotions 行 + 审批工单 + 回填）；返回 (提交面, 记录 id)。"""
     rid = repo.seed_record(tenant, layer=2)
-    submitted = await PromotionReviewService(repo, review, port).submit(
-        tenant_id=tenant, record_id=rid, to_layer=3
-    )
+    submitted = await PromotionReviewService(repo, review, port).submit(tenant_id=tenant, record_id=rid, to_layer=3)
     return submitted, rid
 
 

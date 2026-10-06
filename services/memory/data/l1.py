@@ -126,7 +126,7 @@ class RedisL1Store:
         seen: set[str] = set()
         try:
             async for key in self._redis.scan_iter(match=f"{prefix}*", count=100):
-                sid_raw = key[len(prefix):].rsplit(":", 1)[0]  # 剥 blocks/window/state 后缀
+                sid_raw = key[len(prefix) :].rsplit(":", 1)[0]  # 剥 blocks/window/state 后缀
                 if sid_raw in seen:
                     continue
                 try:

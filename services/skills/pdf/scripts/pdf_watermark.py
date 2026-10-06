@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Stamp/watermark every page of a PDF with page 1 of another PDF."""
+
 from __future__ import annotations
 
 import argparse
@@ -10,16 +11,21 @@ import sys
 def main() -> int:
     for stream in (sys.stdout, sys.stderr):
         try:
-            stream.reconfigure(encoding="utf-8")
+            if hasattr(
+                stream, "reconfigure"
+            ):  # TextIO 抽象面无 reconfigure(仅 TextIOWrapper);hasattr 兼运行时守卫与类型收窄
+                stream.reconfigure(encoding="utf-8")
         except Exception:
             pass
     parser = argparse.ArgumentParser(
-        description="Overlay (stamp) or underlay (watermark) a one-page PDF onto every page.")
+        description="Overlay (stamp) or underlay (watermark) a one-page PDF onto every page."
+    )
     parser.add_argument("pdf", help="Input PDF path")
     parser.add_argument("--stamp", required=True, help="One-page PDF to apply (page 1 is used)")
     parser.add_argument("-o", "--output", required=True, help="Output PDF path")
-    parser.add_argument("--under", action="store_true",
-                        help="Place stamp under the page content (background watermark)")
+    parser.add_argument(
+        "--under", action="store_true", help="Place stamp under the page content (background watermark)"
+    )
     parser.add_argument("--password", help="Password if the input is encrypted")
     args = parser.parse_args()
 
@@ -42,8 +48,9 @@ def main() -> int:
         page.merge_page(stamp_page, over=not args.under)
     with open(args.output, "wb") as fh:
         writer.write(fh)
-    print(json.dumps({"output": args.output, "page_count": len(writer.pages),
-                      "mode": "under" if args.under else "over"}))
+    print(
+        json.dumps({"output": args.output, "page_count": len(writer.pages), "mode": "under" if args.under else "over"})
+    )
     return 0
 
 

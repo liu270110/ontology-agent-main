@@ -388,9 +388,7 @@ class GapCollector:
         """滑窗聚类 → 达标簇开缺口工单（同指纹 open draft 去重；返回开单 + 全簇摘要）。"""
         moment = now or self._now()
         window_start = moment - timedelta(days=window_days)
-        events = [
-            e for e in self._store.load_events() if window_start <= e.occurred_at <= moment
-        ]
+        events = [e for e in self._store.load_events() if window_start <= e.occurred_at <= moment]
         groups: dict[tuple[uuid.UUID, str], list[GapEvent]] = {}
         for event in events:
             groups.setdefault((event.tenant_id, event.fingerprint), []).append(event)

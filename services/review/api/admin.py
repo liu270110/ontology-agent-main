@@ -219,8 +219,10 @@ async def get_review_detail(
     """详情=列表同一查询面加 id 过滤 + payload/chain 全量（契约源=前端 getReview +
     ApprovalDetailModal；404 同 decision 口径）。零 ORM import 纪律同列表（text() 直查）。"""
     row = (
-        await db.execute(_DETAIL_STMT, {"tenant_id": str(principal.tenant_id), "ticket_id": str(ticket_id)})
-    ).mappings().first()
+        (await db.execute(_DETAIL_STMT, {"tenant_id": str(principal.tenant_id), "ticket_id": str(ticket_id)}))
+        .mappings()
+        .first()
+    )
     if row is None:
         raise GatewayError(404, "审核单不存在", status_code=404)
     payload = dict(row["payload"] or {})
@@ -260,13 +262,17 @@ async def batch_review(
     前端 apiFetch 双形态兼容）。装配未初始化（503）与 scope 门禁沿用 decision 同款依赖。"""
     approvals = _approvals(request)
     type_rows = (
-        await db.execute(
-            text("SELECT id, target_type FROM review_tickets WHERE tenant_id = :tenant_id AND id IN :ids").bindparams(
-                bindparam("ids", expanding=True)
-            ),
-            {"tenant_id": str(principal.tenant_id), "ids": [str(i) for i in body.ids]},
+        (
+            await db.execute(
+                text(
+                    "SELECT id, target_type FROM review_tickets WHERE tenant_id = :tenant_id AND id IN :ids"
+                ).bindparams(bindparam("ids", expanding=True)),
+                {"tenant_id": str(principal.tenant_id), "ids": [str(i) for i in body.ids]},
+            )
         )
-    ).mappings().all()
+        .mappings()
+        .all()
+    )
     target_types = {row["id"]: row["target_type"] for row in type_rows}
 
     succeeded: list[uuid.UUID] = []

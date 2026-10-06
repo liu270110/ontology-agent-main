@@ -75,12 +75,18 @@ def test_同事件不同格式归一同指纹() -> None:
     base = _failure_event(0)
     # 意图向量格式差：大小写 / 多余空白 / 全角空格（unmapped_intent 主键规范化）
     a = GapEvent(
-        tenant_id=TENANT, kind=GapKind.UNMAPPED_INTENT, intent_key="  Query 停电　范围 ",
-        occurred_at=NOW, source="s",
+        tenant_id=TENANT,
+        kind=GapKind.UNMAPPED_INTENT,
+        intent_key="  Query 停电　范围 ",
+        occurred_at=NOW,
+        source="s",
     )
     b = GapEvent(
-        tenant_id=TENANT, kind=GapKind.UNMAPPED_INTENT, intent_key="query 停电 范围",
-        occurred_at=NOW, source="s",
+        tenant_id=TENANT,
+        kind=GapKind.UNMAPPED_INTENT,
+        intent_key="query 停电 范围",
+        occurred_at=NOW,
+        source="s",
     )
     assert a.fingerprint == b.fingerprint
     # 失败模式格式差：错误码大小写与消息措辞不同 → 同指纹（只吃错误码段）
@@ -240,8 +246,12 @@ def test_jsonl_store落盘重载_两文件齐全(tmp_path) -> None:
     store = JsonlGapStore(tmp_path / "g0")
     event_a = _failure_event(0)
     event_b = GapEvent(
-        tenant_id=TENANT, kind=GapKind.UNMAPPED_INTENT, intent_key="导出 停电 报表",
-        occurred_at=NOW - timedelta(minutes=2), source="test", trace_ids=("trace-intent-1",),
+        tenant_id=TENANT,
+        kind=GapKind.UNMAPPED_INTENT,
+        intent_key="导出 停电 报表",
+        occurred_at=NOW - timedelta(minutes=2),
+        source="test",
+        trace_ids=("trace-intent-1",),
     )
     store.append_event(event_a)
     store.append_event(event_b)

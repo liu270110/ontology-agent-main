@@ -167,9 +167,7 @@ def test_投影_外部工具_保留server前缀命名():
     assert registered == ["weather.lookup"]  # registry 外部规则 {server}.{local}
     bindings = build_mcp_tool_bindings(registry)
     assert [b.meta.name for b in bindings] == ["mcp.weather.lookup"]
-    assert {b.meta.semantic_annotation["action_iri"] for b in bindings} == {
-        f"{MCP_ACTION_IRI_PREFIX}weather.lookup"
-    }
+    assert {b.meta.semantic_annotation["action_iri"] for b in bindings} == {f"{MCP_ACTION_IRI_PREFIX}weather.lookup"}
 
 
 def test_投影_绑定过内核注册面_行动类唯一不冲突():
@@ -329,9 +327,7 @@ async def test_调用_发现刷新撤销后_结构化5003不崩():
     ext_registry, _reg = _external_registry()
     binding = build_mcp_tool_bindings(ext_registry)[0]
     ext_registry.unregister_server("weather")  # 连接器重连/发现刷新撤销
-    result = await binding.invoke(
-        _make_call(action_iri=binding.meta.semantic_annotation["action_iri"]), make_ctx()
-    )
+    result = await binding.invoke(_make_call(action_iri=binding.meta.semantic_annotation["action_iri"]), make_ctx())
     assert result.ok is False
     assert result.error_code == int(ErrorCode.MCP_TARGET_UNAVAILABLE)
 

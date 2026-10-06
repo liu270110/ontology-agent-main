@@ -141,9 +141,7 @@ async def users_env(monkeypatch):
             await session.execute(text("DELETE FROM user_roles WHERE tenant_id = ANY(:ids)").bindparams(ids=tenant_ids))
             # C1 me 域表先于 users 清（漏列曾致 teardown FK 违例）
             for tbl in ("device_sessions", "totp_credentials", "totp_backup_codes", "user_preferences"):
-                await session.execute(
-                    text(f"DELETE FROM {tbl} WHERE user_id = ANY(:ids)").bindparams(ids=user_ids)
-                )
+                await session.execute(text(f"DELETE FROM {tbl} WHERE user_id = ANY(:ids)").bindparams(ids=user_ids))
             await session.execute(text("DELETE FROM users WHERE id = ANY(:ids)").bindparams(ids=user_ids))
             await session.execute(text("DELETE FROM tenants WHERE id = ANY(:ids)").bindparams(ids=tenant_ids))
             await session.commit()
@@ -282,10 +280,14 @@ async def test_PATCH_改名与角色全量替换_密码哈希不触碰(users_env
         assert row is not None and row.display_name == "新名"
         assert row.password_hash.startswith("pbkdf2:")  # CRUD 不触碰密码（只读比对格式）
         codes = (
-            await session.execute(
-                select(Role.code).join(UserRole, UserRole.role_id == Role.id).where(UserRole.user_id == uid)
+            (
+                await session.execute(
+                    select(Role.code).join(UserRole, UserRole.role_id == Role.id).where(UserRole.user_id == uid)
+                )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
         assert sorted(codes) == ["curator", "member"]
 
 
@@ -333,13 +335,17 @@ async def test_DELETE_软删幂等_不物理删_密码保留_审计留痕(users_
         assert len(bindings) == 1
         # 审计留痕（08 §3 网关中间件）：DELETE 动作落 audit_logs（路径模板归一 {id}）
         audit = (
-            await session.execute(
-                select(AuditLog)
-                .where(AuditLog.action == "DELETE /api/v1/admin/users/{id}", AuditLog.tenant_id == env["tenant_id"])
-                .order_by(AuditLog.created_at.desc())
-                .limit(1)
+            (
+                await session.execute(
+                    select(AuditLog)
+                    .where(AuditLog.action == "DELETE /api/v1/admin/users/{id}", AuditLog.tenant_id == env["tenant_id"])
+                    .order_by(AuditLog.created_at.desc())
+                    .limit(1)
+                )
             )
-        ).scalars().first()
+            .scalars()
+            .first()
+        )
         assert audit is not None and audit.result == "success" and audit.actor_id == env["admin_id"]
 
 
@@ -378,10 +384,14 @@ async def test_越权角色授予_409_superadmin不可授予_白名单外同拒(
     assert grant_guest.status_code == status.HTTP_409_CONFLICT, grant_guest.text
     async with env["factory"]() as session:
         codes = (
-            await session.execute(
-                select(Role.code).join(UserRole, UserRole.role_id == Role.id).where(UserRole.user_id == uid)
+            (
+                await session.execute(
+                    select(Role.code).join(UserRole, UserRole.role_id == Role.id).where(UserRole.user_id == uid)
+                )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
         assert codes == ["member"]
     # Act ③：super_admin 持有者受保护——不可停用/删改（先直插绑定再打）
     super_id = await _seed_user(env, email="super.holder@example.com", display_name="超管", roles=("super_admin",))

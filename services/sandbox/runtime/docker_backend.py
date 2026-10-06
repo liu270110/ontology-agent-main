@@ -84,9 +84,7 @@ class DockerBackend:
         # K5 门 3：宿主 env 直灌容器前过刷洗表（命中剥离+告警，docs/Agent/13 §10）
         env, stripped = sanitize_env(spec.env)
         if stripped:
-            logger.warning(
-                "沙箱 env 刷洗剥离宿主敏感变量: %s (instance=%s)", ",".join(stripped), spec.instance_id
-            )
+            logger.warning("沙箱 env 刷洗剥离宿主敏感变量: %s (instance=%s)", ",".join(stripped), spec.instance_id)
         name, volume = f"oa-sbx-{spec.instance_id}", f"oa-sbx-ws-{spec.instance_id}"
         await asyncio.to_thread(self._remove_stale_container, name)
         await asyncio.to_thread(self._remove_stale_volume, volume)

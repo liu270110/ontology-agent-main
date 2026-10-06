@@ -150,7 +150,7 @@ class ChatOrchestrator:
         self._run_registry = run_registry
         self._estop_probe_factory = estop_probe_factory
         # E-4 K1-c 判据投影端口（docs/Agent/13 §2）：实现位=business.OntologyCriterionProjection
-        #（组合根注入）；None=不注册 → 判据仅回执匹配（M3 口径，零行为变化面）。
+        # （组合根注入）；None=不注册 → 判据仅回执匹配（M3 口径，零行为变化面）。
         self._criterion_projection = criterion_projection
 
     async def stream_chat(self, command: ChatCommand) -> AsyncIterator[ChatEvent]:

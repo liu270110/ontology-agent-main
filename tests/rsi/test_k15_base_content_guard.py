@@ -51,9 +51,7 @@ def _service(entries: dict[str, str]) -> tuple[RsiService, InMemoryAuditTrail]:
     return RsiService(audit_trail=trail, entry_loader=loader), trail
 
 
-async def _submit(
-    service: RsiService, *, baseline_content: str | None = None
-) -> Proposal:
+async def _submit(service: RsiService, *, baseline_content: str | None = None) -> Proposal:
     return await service.submit(
         tenant_id=TENANT,
         type_str=ImprovementType.PROMPT_TEMPLATE.value,

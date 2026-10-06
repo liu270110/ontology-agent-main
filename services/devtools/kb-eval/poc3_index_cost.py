@@ -103,8 +103,9 @@ def phase_chunking(docs: list[tuple[str, str]]) -> dict:
     per_doc, all_chunks = [], []
     for stem, text in docs:
         chunks = chunk_document(text)
-        per_doc.append({"doc_id": stem, "chars": len(text), "chunks": len(chunks),
-                        "tokens": sum(c.token_count for c in chunks)})
+        per_doc.append(
+            {"doc_id": stem, "chars": len(text), "chunks": len(chunks), "tokens": sum(c.token_count for c in chunks)}
+        )
         all_chunks.extend(chunks)
     sizes = [c.token_count for c in all_chunks]
     total_tokens = sum(sizes)
@@ -177,8 +178,7 @@ async def _chat_once(base_url: str, model: str, prompt: str) -> dict:
     """单次 /api/chat（think 关闭；旧版不支持 think 字段则原样重试）。"""
     import httpx
 
-    payload = {"model": model, "messages": [{"role": "user", "content": prompt}],
-               "stream": False, "think": False}
+    payload = {"model": model, "messages": [{"role": "user", "content": prompt}], "stream": False, "think": False}
     async with httpx.AsyncClient(timeout=EXTRACT_TIMEOUT_S) as client:
         resp = await client.post(f"{base_url}/api/chat", json=payload)
         if resp.status_code == 400 and "think" in resp.text.lower():
@@ -195,15 +195,20 @@ async def phase_llm_extraction(base_url: str, sample_texts: list[str]) -> dict:
     chosen, choice_note = None, ""
     for model in LLM_CANDIDATES:
         try:
-            await _chat_once(base_url, model, "只输出JSON: {\"ok\": true}")
+            await _chat_once(base_url, model, '只输出JSON: {"ok": true}')
             chosen = model
             break
         except Exception as exc:  # noqa: BLE001 逐个候选探测
             choice_note += f"{model}: {exc}; "
     if chosen is None:
-        return {"status": "运行时未达，估算", "error": choice_note or "无可用模型",
-                "note": "外推改用假设值：单次抽取 8s / 输入 900 tok / 输出 400 tok（必须标注为估算）",
-                "assumed_call_seconds": 8.0, "assumed_prompt_tokens": 900, "assumed_completion_tokens": 400}
+        return {
+            "status": "运行时未达，估算",
+            "error": choice_note or "无可用模型",
+            "note": "外推改用假设值：单次抽取 8s / 输入 900 tok / 输出 400 tok（必须标注为估算）",
+            "assumed_call_seconds": 8.0,
+            "assumed_prompt_tokens": 900,
+            "assumed_completion_tokens": 400,
+        }
 
     samples = []
     for i, text in enumerate(sample_texts[:LLM_CALLS], 1):
@@ -211,15 +216,18 @@ async def phase_llm_extraction(base_url: str, sample_texts: list[str]) -> dict:
         t0 = time.perf_counter()
         data = await _chat_once(base_url, chosen, prompt)
         wall = time.perf_counter() - t0
-        samples.append({
-            "call": i, "wall_seconds": round(wall, 2),
-            "prompt_tokens": data.get("prompt_eval_count"),
-            "completion_tokens": data.get("eval_count"),
-            "content_head": (data.get("message", {}).get("content", "") or "")[:120],
-        })
-    prompt_tokens = [s["prompt_tokens"] or 0 for s in samples]
-    completion_tokens = [s["completion_tokens"] or 0 for s in samples]
-    walls = [s["wall_seconds"] for s in samples]
+        samples.append(
+            {
+                "call": i,
+                "wall_seconds": round(wall, 2),
+                "prompt_tokens": data.get("prompt_eval_count"),
+                "completion_tokens": data.get("eval_count"),
+                "content_head": (data.get("message", {}).get("content", "") or "")[:120],
+            }
+        )
+    prompt_tokens = [float(s["prompt_tokens"] or 0) for s in samples]
+    completion_tokens = [float(s["completion_tokens"] or 0) for s in samples]
+    walls = [float(s["wall_seconds"] or 0) for s in samples]
     return {
         "status": "实测",
         "model": chosen,
@@ -238,6 +246,10 @@ def extrapolate_full_graphrag(chunks: int, llm: dict) -> dict:
     call_s = llm.get("call_seconds_avg") if measured else llm.get("assumed_call_seconds", 8.0)
     prompt_t = llm.get("prompt_tokens_avg") if measured else llm.get("assumed_prompt_tokens", 900)
     completion_t = llm.get("completion_tokens_avg") if measured else llm.get("assumed_completion_tokens", 400)
+    # 实测键缺失兜底假设值(原实现 None 直接在乘法处崩溃;此处显式回落同源假设口径)
+    call_s = float(call_s) if call_s is not None else 8.0
+    prompt_t = float(prompt_t) if prompt_t is not None else 900.0
+    completion_t = float(completion_t) if completion_t is not None else 400.0
 
     entities = chunks * ENTITIES_PER_CHUNK
     l0 = max(3, round(entities / COMMUNITY_DIVIDERS[0]))
@@ -267,7 +279,8 @@ def extrapolate_full_graphrag(chunks: int, llm: dict) -> dict:
         "summary_tokens_est": summary_tokens,
         "index_seconds_est": round(extraction_seconds + summary_seconds, 1),
         "storage_extra_mb_est": storage_extra_mb,
-        "measured_basis": f"单次抽取实测 {call_s}s / {prompt_t}+{completion_t} tok" if measured
+        "measured_basis": f"单次抽取实测 {call_s}s / {prompt_t}+{completion_t} tok"
+        if measured
         else "单次抽取为假设值 8s / 900+400 tok（LLM 未达，估算口径）",
     }
 
@@ -287,7 +300,10 @@ def _parse_args() -> argparse.Namespace:
 async def main_async() -> int:
     for stream in (sys.stdout, sys.stderr):
         try:
-            stream.reconfigure(encoding="utf-8", errors="replace")
+            if hasattr(
+                stream, "reconfigure"
+            ):  # TextIO 抽象面无 reconfigure(仅 TextIOWrapper);hasattr 兼运行时守卫与类型收窄
+                stream.reconfigure(encoding="utf-8", errors="replace")
         except (AttributeError, OSError):
             pass
     args = _parse_args()
@@ -298,8 +314,10 @@ async def main_async() -> int:
     result: dict = {"generated_at": datetime.now(UTC).isoformat(), "ollama_base_url": base_url}
     chunking = phase_chunking(docs)
     result["chunking"] = chunking
-    print(f"[分块] {chunking['chunks_total']} chunks / {chunking['tokens_total_est']:,} est-tokens"
-          f"（中位 {chunking['chunk_tokens_median']:.0f}，最大 {chunking['chunk_tokens_max']}）")
+    print(
+        f"[分块] {chunking['chunks_total']} chunks / {chunking['tokens_total_est']:,} est-tokens"
+        f"（中位 {chunking['chunk_tokens_median']:.0f}，最大 {chunking['chunk_tokens_max']}）"
+    )
 
     # 重建 chunk 文本清单用于嵌入与抽样（与阶段 1 同口径）
     from services.semantic.knowledge.chunking import chunk_document
@@ -308,8 +326,10 @@ async def main_async() -> int:
 
     embed = await phase_embedding(base_url, chunk_texts, chunking["tokens_total_est"])
     result["embedding"] = embed
-    print(f"[嵌入] {embed['status']} | {embed.get('wall_seconds', '-')}s | "
-          f"{embed.get('est_tokens_per_s', embed.get('estimated_tokens_per_s'))} est-tokens/s")
+    print(
+        f"[嵌入] {embed['status']} | {embed.get('wall_seconds', '-')}s | "
+        f"{embed.get('est_tokens_per_s', embed.get('estimated_tokens_per_s'))} est-tokens/s"
+    )
 
     if args.skip_llm:
         llm = {"status": "跳过（--skip-llm）"}
@@ -318,9 +338,11 @@ async def main_async() -> int:
         samples = chunk_texts[::step][: args.samples]
         llm = await phase_llm_extraction(base_url, samples)
         result["llm_extraction_samples"] = llm
-        print(f"[抽取实测] {llm['status']} | 模型 {llm.get('model', '-')} | "
-              f"均值 {llm.get('call_seconds_avg', '-')}s / {llm.get('prompt_tokens_avg', '-')}+"
-              f"{llm.get('completion_tokens_avg', '-')} tok")
+        print(
+            f"[抽取实测] {llm['status']} | 模型 {llm.get('model', '-')} | "
+            f"均值 {llm.get('call_seconds_avg', '-')}s / {llm.get('prompt_tokens_avg', '-')}+"
+            f"{llm.get('completion_tokens_avg', '-')} tok"
+        )
 
     full = extrapolate_full_graphrag(chunking["chunks_total"], llm)
     result["full_graphrag_extrapolation"] = full
@@ -348,7 +370,8 @@ async def main_async() -> int:
             "time_x": round(full["index_seconds_est"] / max(lazy_seconds or 1, 1e-6), 1),
         },
         "per_query_lazy_est": {
-            "llm_calls": 1, "llm_tokens_est": 1500,
+            "llm_calls": 1,
+            "llm_tokens_est": 1500,
             "note": "查询时图遍历 + 1 次作答调用（输入含邻域 chunk，估算口径）",
         },
     }
@@ -372,8 +395,10 @@ async def main_async() -> int:
     print(f"| LLM 调用次数 | {lz['llm_calls']} | {fu['llm_calls']:,} |")
     print(f"| LLM token | 0 | {fu['llm_tokens_est']:,}（估算） |")
     print(f"| 嵌入 token（est 口径） | {lz['embed_tokens_est']:,} | {fu['embed_tokens_est']:,} |")
-    print(f"| 索引耗时 | {lz['index_seconds']}s（{'实测' if embed['status'] == '实测' else '估算'}）"
-          f" | {fu['index_seconds_est']}s（外推） |")
+    print(
+        f"| 索引耗时 | {lz['index_seconds']}s（{'实测' if embed['status'] == '实测' else '估算'}）"
+        f" | {fu['index_seconds_est']}s（外推） |"
+    )
     print(f"| 索引新增存储 | {lz['storage_mb']}MB 向量 | {fu['storage_mb_est']}MB（含实体/社区报告，估算） |")
     return 0
 

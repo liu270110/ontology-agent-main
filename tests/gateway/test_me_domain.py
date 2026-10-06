@@ -69,16 +69,21 @@ from tests.agent.pg_testdb import create_test_database, drop_test_database, prob
 _SECRET = "unit-test-secret-0123456789abcdef0123456789"  # ≥32 字节（RFC 7518 HS256 密钥长度下限）
 _PASSWORD = "ItPassword!1"
 _UA = (
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
-    "(KHTML, like Gecko) Chrome/126.0 Safari/537.36"
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36"
 )
 
 # 角色种子（=迁移 f3b9d7e1a5c2 种子面 + m1 种子 admin/curator/member 基线；me:write 三角色）
 _ROLES: dict[str, list[str]] = {
     "super_admin": ["tenant:read", "tenant:write", "user:read", "user:write", "admin:read", "admin:write", "me:write"],
     "admin": [
-        "tenant:read", "user:read", "user:write", "admin:read", "admin:write",
-        "me:write", "session:read", "session:write",
+        "tenant:read",
+        "user:read",
+        "user:write",
+        "admin:read",
+        "admin:write",
+        "me:write",
+        "session:read",
+        "session:write",
     ],
     "curator": ["kb:read", "kb:write", "review:read"],
     "member": ["session:read", "session:write", "session:chat", "dashboard:read", "me:write"],
@@ -92,9 +97,7 @@ def _fake_redis() -> fakeredis_aio.FakeRedis:
 
 async def _login_headers(client: AsyncClient, email: str, password: str, ua: str | None = None) -> dict[str, str]:
     headers = {"User-Agent": ua} if ua else {}
-    resp = await client.post(
-        "/api/v1/auth/login", json={"email": email, "password": password}, headers=headers
-    )
+    resp = await client.post("/api/v1/auth/login", json={"email": email, "password": password}, headers=headers)
     assert resp.status_code == status.HTTP_200_OK, resp.text
     return {"Authorization": f"Bearer {resp.json()['access_token']}"}
 
@@ -125,29 +128,58 @@ async def me_env(monkeypatch):
     async with factory() as session:
         for code, scopes in _ROLES.items():
             session.add(Role(code=code, name=code, scopes=scopes))
-        tenant = Tenant(name=f"me-it-{suffix}", slug=f"me-it-{suffix}", plan="free",
-                        settings={"governance_tier": "team"}, status="active")
+        tenant = Tenant(
+            name=f"me-it-{suffix}",
+            slug=f"me-it-{suffix}",
+            plan="free",
+            settings={"governance_tier": "team"},
+            status="active",
+        )
         session.add(tenant)
         await session.flush()
-        admin = User(tenant_id=tenant.id, email=admin_email, password_hash=hash_password(_PASSWORD),
-                     display_name="管理员甲", status="active")
-        plain = User(tenant_id=tenant.id, email=plain_email, password_hash=hash_password(_PASSWORD),
-                     display_name="普通乙", status="active")
-        guest = User(tenant_id=tenant.id, email=guest_email, password_hash=hash_password(_PASSWORD),
-                     display_name="访客丙", status="active")
+        admin = User(
+            tenant_id=tenant.id,
+            email=admin_email,
+            password_hash=hash_password(_PASSWORD),
+            display_name="管理员甲",
+            status="active",
+        )
+        plain = User(
+            tenant_id=tenant.id,
+            email=plain_email,
+            password_hash=hash_password(_PASSWORD),
+            display_name="普通乙",
+            status="active",
+        )
+        guest = User(
+            tenant_id=tenant.id,
+            email=guest_email,
+            password_hash=hash_password(_PASSWORD),
+            display_name="访客丙",
+            status="active",
+        )
         session.add_all([admin, plain, guest])
         await session.flush()
         role_rows = {r.code: r for r in (await session.execute(select(Role))).scalars()}
-        session.add_all([
-            UserRole(tenant_id=tenant.id, user_id=admin.id, role_id=role_rows["admin"].id),
-            UserRole(tenant_id=tenant.id, user_id=plain.id, role_id=role_rows["member"].id),
-            UserRole(tenant_id=tenant.id, user_id=guest.id, role_id=role_rows["guest"].id),
-        ])
+        session.add_all(
+            [
+                UserRole(tenant_id=tenant.id, user_id=admin.id, role_id=role_rows["admin"].id),
+                UserRole(tenant_id=tenant.id, user_id=plain.id, role_id=role_rows["member"].id),
+                UserRole(tenant_id=tenant.id, user_id=guest.id, role_id=role_rows["guest"].id),
+            ]
+        )
         await session.commit()
     env = {
-        "settings": settings, "factory": factory, "redis": fake_redis, "tenant_id": tenant.id,
-        "admin_id": admin.id, "admin_email": admin_email, "plain_id": plain.id,
-        "plain_email": plain_email, "guest_id": guest.id, "guest_email": guest_email,
+        "settings": settings,
+        "factory": factory,
+        "redis": fake_redis,
+        "tenant_id": tenant.id,
+        "admin_id": admin.id,
+        "admin_email": admin_email,
+        "plain_id": plain.id,
+        "plain_email": plain_email,
+        "guest_id": guest.id,
+        "guest_email": guest_email,
     }
 
     app = create_app(settings)
@@ -168,12 +200,14 @@ async def me_env(monkeypatch):
 # ---------------------------------------------------------------- 种子助手
 
 
-async def _seed_device(
-    env, *, user_id, name="Edge · Windows 11", access_jti=None, refresh_jti=None
-) -> DeviceSession:
+async def _seed_device(env, *, user_id, name="Edge · Windows 11", access_jti=None, refresh_jti=None) -> DeviceSession:
     row = DeviceSession(
-        tenant_id=env["tenant_id"], user_id=user_id, name=name, location="未知",
-        access_jti=access_jti or uuid.uuid4().hex, refresh_jti=refresh_jti or uuid.uuid4().hex,
+        tenant_id=env["tenant_id"],
+        user_id=user_id,
+        name=name,
+        location="未知",
+        access_jti=access_jti or uuid.uuid4().hex,
+        refresh_jti=refresh_jti or uuid.uuid4().hex,
     )
     async with env["factory"]() as session:
         session.add(row)
@@ -251,9 +285,7 @@ async def test_偏好写门禁_email拒改_空体422(me_env):
     guest_get = await client.get("/api/v1/me/preferences", headers=guest_headers)
     assert guest_get.status_code == status.HTTP_200_OK and guest_get.json()["display_name"] == "访客丙"
     # Assert ②：email 拒改（账号身份列 users.email 唯一事实源，DTO extra=forbid 拒收）→ 422+3001
-    email_put = await client.put(
-        "/api/v1/me/preferences", json={"email": "evil@test.local"}, headers=admin_headers
-    )
+    email_put = await client.put("/api/v1/me/preferences", json={"email": "evil@test.local"}, headers=admin_headers)
     assert email_put.status_code == status.HTTP_422_UNPROCESSABLE_CONTENT and email_put.json()["code"] == 3001
     # Assert ③：空体 422+3001
     empty = await client.put("/api/v1/me/preferences", json={}, headers=admin_headers)
@@ -307,7 +339,8 @@ async def test_下线全部设备会话_旧令牌全失效(me_env):
     client, env = me_env
     # Arrange：手工 login 保留 refresh 原文（轮换水位断言需要）
     login = await client.post(
-        "/api/v1/auth/login", json={"email": env["admin_email"], "password": _PASSWORD},
+        "/api/v1/auth/login",
+        json={"email": env["admin_email"], "password": _PASSWORD},
         headers={"User-Agent": _UA},
     )
     assert login.status_code == status.HTTP_200_OK
@@ -325,7 +358,8 @@ async def test_下线全部设备会话_旧令牌全失效(me_env):
     async with env["factory"]() as session:
         rows = (
             (await session.execute(select(DeviceSession).where(DeviceSession.user_id == env["admin_id"])))
-            .scalars().all()
+            .scalars()
+            .all()
         )
         assert len(rows) == 3 and all(r.revoked_at is not None for r in rows)
     assert await env["redis"].exists(f"auth:bl:{s2.access_jti}")
@@ -422,7 +456,8 @@ async def test_totp_setup_enable_全链(me_env):
     async with env["factory"]() as session:
         hash_rows = (
             (await session.execute(select(TotpBackupCode).where(TotpBackupCode.user_id == env["admin_id"])))
-            .scalars().all()
+            .scalars()
+            .all()
         )
     assert {r.code_hash for r in hash_rows} == {hashlib.sha256(c.encode()).hexdigest() for c in codes}
     cred = await _one(env["factory"], TotpCredential, user_id=env["admin_id"])
@@ -446,7 +481,8 @@ async def test_totp_backup_codes_disable(me_env):
     secret = (await client.post("/api/v1/auth/totp/setup", headers=headers)).json()["secret"]
     first = (
         await client.post(
-            "/api/v1/auth/totp/enable", json={"code": totp_domain._code_at(secret, int(time.time()) // 30)},
+            "/api/v1/auth/totp/enable",
+            json={"code": totp_domain._code_at(secret, int(time.time()) // 30)},
             headers=headers,
         )
     ).json()["backup_codes"]
@@ -466,7 +502,8 @@ async def test_totp_backup_codes_disable(me_env):
     async with env["factory"]() as session:
         rows = (
             (await session.execute(select(TotpBackupCode).where(TotpBackupCode.user_id == env["admin_id"])))
-            .scalars().all()
+            .scalars()
+            .all()
         )
     assert {r.code_hash for r in rows} == {hashlib.sha256(c.encode()).hexdigest() for c in second}
     # Assert ④：disable 密码错 → 401+1002
@@ -480,7 +517,8 @@ async def test_totp_backup_codes_disable(me_env):
     async with env["factory"]() as session:
         left = (
             (await session.execute(select(TotpBackupCode).where(TotpBackupCode.user_id == env["admin_id"])))
-            .scalars().all()
+            .scalars()
+            .all()
         )
     assert left == []
     assert await _one(env["factory"], TotpCredential, user_id=env["admin_id"]) is not None
@@ -498,6 +536,7 @@ async def test_写操作审计留痕(me_env):
     async with env["factory"]() as session:
         audit = (
             (await session.execute(select(AuditLog).where(AuditLog.action == "DELETE /api/v1/auth/sessions/all")))
-            .scalars().first()
+            .scalars()
+            .first()
         )
     assert audit is not None and audit.trace_id and audit.result == "success"

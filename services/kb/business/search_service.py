@@ -301,9 +301,7 @@ class KnowledgeSearchService:
         # F2：degraded = 静态路由降级 or 末轮运行时降级（去重保序防双计 mode_downgraded:*）——
         # 基础设施降级语义与 agentic 纠错降级（trace.degraded）分离但不再互相吞没。
         degraded = mode_reason is not None or bool(last_inner_reasons)
-        degraded_reasons = list(
-            dict.fromkeys(([mode_reason] if mode_reason is not None else []) + last_inner_reasons)
-        )
+        degraded_reasons = list(dict.fromkeys(([mode_reason] if mode_reason is not None else []) + last_inner_reasons))
         if source_context and hits:  # 软路由（§5.2）：仅对最终命中重排；空/None 零 SQL
             async with self._session_factory() as db:
                 hits = await rerank_hits_by_source_context(db, hits, source_context=source_context)

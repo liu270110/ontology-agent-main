@@ -36,6 +36,7 @@ Extras: `"footer_page_numbers": true` at the top level adds a
 inserts a Table of Contents field. Field results are computed by
 Word/LibreOffice when the file is opened, not by python-docx.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -130,10 +131,13 @@ def add_block(doc, block: dict) -> None:
         doc.add_paragraph().add_run().add_break(WD_BREAK.PAGE)
     elif btype == "toc":
         from docx_edit import _add_field
+
         para = doc.add_paragraph()
-        _add_field(para, r' TOC \o "1-3" \h \z \u ',
-                   "Table of contents - open in Word/LibreOffice and "
-                   "update fields to populate.")
+        _add_field(
+            para,
+            r' TOC \o "1-3" \h \z \u ',
+            "Table of contents - open in Word/LibreOffice and update fields to populate.",
+        )
     else:
         raise ValueError(f"unknown block type: {btype}")
 
@@ -141,7 +145,8 @@ def add_block(doc, block: dict) -> None:
 def main() -> int:
     ap = argparse.ArgumentParser(
         description="Create a .docx from a JSON spec.",
-        epilog="See the module docstring (top of this file) for the spec format.")
+        epilog="See the module docstring (top of this file) for the spec format.",
+    )
     ap.add_argument("spec", help="path to JSON spec file")
     ap.add_argument("output", help="path of .docx to write")
     args = ap.parse_args()
@@ -162,14 +167,14 @@ def main() -> int:
         add_block(doc, block)
     if spec.get("footer_page_numbers"):
         from docx_edit import _add_field
+
         para = doc.sections[0].footer.paragraphs[0]
         para.add_run("Page ")
         _add_field(para, " PAGE ", "1")
         para.add_run(" of ")
         _add_field(para, " NUMPAGES ", "1")
     doc.save(args.output)
-    print(json.dumps({"ok": True, "output": args.output,
-                      "blocks": len(spec.get("blocks", []))}))
+    print(json.dumps({"ok": True, "output": args.output, "blocks": len(spec.get("blocks", []))}))
     return 0
 
 

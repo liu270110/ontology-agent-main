@@ -188,13 +188,13 @@ async def _replace_roles(db: AsyncSession, *, user: User, codes: list[str]) -> N
         stripped = code.strip()
         if stripped and stripped not in unique:
             unique.append(stripped)
-    if (bad := [c for c in unique if c not in _GRANTABLE_ROLE_CODES]):
+    if bad := [c for c in unique if c not in _GRANTABLE_ROLE_CODES]:
         raise DomainError(f"3409 ROLE_NOT_GRANTABLE: 角色不在可授予白名单（super_admin 平台保留）: {'、'.join(bad)}")
     if not unique:
         raise DomainError("3001 PARAM_INVALID: roles 至少保留一个角色（防自锁全部权限）")
     role_rows = (await db.execute(select(Role).where(Role.code.in_(unique)))).scalars().all()
     found = {row.code for row in role_rows}
-    if (missing := [c for c in unique if c not in found]):
+    if missing := [c for c in unique if c not in found]:
         raise DomainError(f"3001 PARAM_INVALID: 未知角色码: {'、'.join(missing)}")
     old = (await db.execute(select(UserRole).where(UserRole.user_id == user.id))).scalars().all()
     for binding in old:

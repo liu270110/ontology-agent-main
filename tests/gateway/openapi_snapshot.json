@@ -10894,6 +10894,23 @@
         "title": "TenantCreatedOut",
         "type": "object"
       },
+      "TerminalExecIn": {
+        "additionalProperties": false,
+        "description": "POST /sessions/{id}/terminal/exec 请求体（mock 契约 {command}）。",
+        "properties": {
+          "command": {
+            "maxLength": 2000,
+            "minLength": 1,
+            "title": "Command",
+            "type": "string"
+          }
+        },
+        "required": [
+          "command"
+        ],
+        "title": "TerminalExecIn",
+        "type": "object"
+      },
       "ToggleOut": {
         "properties": {
           "tools": {
@@ -11691,6 +11708,235 @@
           "limit"
         ],
         "title": "WritebackLedgerPageOut",
+        "type": "object"
+      },
+      "WsExecOut": {
+        "additionalProperties": false,
+        "description": "POST /sessions/{id}/terminal/exec 响应（裸 DTO）。\n\nexit_code 语义：0=成功；非零=命令自身退出码；124=超时终止（5s 上限）；\n126=执行失败（OSError）；127=可执行文件缺失。白名单/参数越界不走本 DTO——\n4001 结构化拒绝（platform/errors TERMINAL_CMD_NOT_ALLOWED）。",
+        "properties": {
+          "command": {
+            "title": "Command",
+            "type": "string"
+          },
+          "exit_code": {
+            "title": "Exit Code",
+            "type": "integer"
+          },
+          "lines": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Lines",
+            "type": "array"
+          }
+        },
+        "required": [
+          "command",
+          "exit_code",
+          "lines"
+        ],
+        "title": "WsExecOut",
+        "type": "object"
+      },
+      "WsFileOut": {
+        "additionalProperties": false,
+        "description": "GET /sessions/{id}/workspace/file 响应（裸 DTO；≤1MB 内联，二进制 415/3004）。",
+        "properties": {
+          "content": {
+            "title": "Content",
+            "type": "string"
+          },
+          "language": {
+            "maxLength": 32,
+            "minLength": 1,
+            "title": "Language",
+            "type": "string"
+          },
+          "path": {
+            "title": "Path",
+            "type": "string"
+          }
+        },
+        "required": [
+          "path",
+          "language",
+          "content"
+        ],
+        "title": "WsFileOut",
+        "type": "object"
+      },
+      "WsNodeOut": {
+        "additionalProperties": false,
+        "description": "文件树节点（目录递归 children；文件带 size/updated_at）。",
+        "properties": {
+          "children": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/WsNodeOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Children"
+          },
+          "name": {
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "path": {
+            "maxLength": 2048,
+            "minLength": 1,
+            "title": "Path",
+            "type": "string"
+          },
+          "size": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Size"
+          },
+          "type": {
+            "enum": [
+              "dir",
+              "file"
+            ],
+            "title": "Type",
+            "type": "string"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          }
+        },
+        "required": [
+          "name",
+          "path",
+          "type"
+        ],
+        "title": "WsNodeOut",
+        "type": "object"
+      },
+      "WsResourceListOut": {
+        "additionalProperties": false,
+        "description": "GET /sessions/{id}/resources 响应（裸 {items} 列表——apiFetch 双形态归一同款）。",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/WsResourceOut"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "WsResourceListOut",
+        "type": "object"
+      },
+      "WsResourceOut": {
+        "additionalProperties": false,
+        "description": "会话资源条目（30 篇对象模型；type 四分组，M1 顶层产出=artifact）。",
+        "properties": {
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "size": {
+            "title": "Size",
+            "type": "integer"
+          },
+          "status": {
+            "enum": [
+              "ready",
+              "processing",
+              "error"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "type": {
+            "enum": [
+              "attachment",
+              "artifact",
+              "ontology_snapshot",
+              "export"
+            ],
+            "title": "Type",
+            "type": "string"
+          },
+          "uploaded_by": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Uploaded By",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "type",
+          "name",
+          "size",
+          "status",
+          "uploaded_by",
+          "created_at"
+        ],
+        "title": "WsResourceOut",
+        "type": "object"
+      },
+      "WsTreeOut": {
+        "additionalProperties": false,
+        "description": "GET /sessions/{id}/workspace/tree 响应（裸 DTO）。\n\nrecycle_in_minutes v1 恒 None（休眠回收随沙箱生命周期批，20 篇：会话关闭 30 分钟\n后回收）——前端 recycle != null 判空，None 即不渲染倒计时徽标。",
+        "properties": {
+          "recycle_in_minutes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recycle In Minutes"
+          },
+          "root": {
+            "$ref": "#/components/schemas/WsNodeOut"
+          }
+        },
+        "required": [
+          "root"
+        ],
+        "title": "WsTreeOut",
         "type": "object"
       },
       "services__iam__api__schemas__admin__AuditPageOut": {
@@ -20718,6 +20964,49 @@
         ]
       }
     },
+    "/api/v1/sessions/{session_id}/resources": {
+      "get": {
+        "operationId": "get_session_resources_api_v1_sessions__session_id__resources_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WsResourceListOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "会话资源列表（31 篇 #7，M1 顶层产出扫描）",
+        "tags": [
+          "workspace"
+        ]
+      }
+    },
     "/api/v1/sessions/{session_id}/rewind": {
       "post": {
         "description": "会话回退（docs/Agent/13 §2.3，G-07；api/01 登记随文档批）：\n\n- 锚点：仅用户消息 seq 可作锚——get_message_by_seq 不过滤软删行，重复同锚幂等\n  202/零新增软删；不存在或非用户轮 → 4106 SESSION_REWIND_INVALID（HTTP 409）；\n- 软删：seq>=before_seq 置 deleted_at（仓储 soft_delete_from，幂等），last_message_at\n  回退到边界前最后一条未删消息，检索面同点重算（被删正文退出检索面）；\n- L1 失效：事务提交后 RedisL1Store.delete_all 三键（就近取 app.state 单例注入；\n  无实例跳过并日志；失败仅告警——TTL 兜底过期，memory §4 底线）；\n- 审计：session.rewound → task_events（复用既有 append_event 路径，payload\n  before_seq/deleted_count/session_id；会话无任务载体时告警跳过，审计不阻断主流程）；\n- closed/archived 会话 4101 拒（状态机口径同 send_message）。",
@@ -20837,6 +21126,156 @@
         "summary": "运行中输入提交（followup/steer/inject 三通道；M4.5-A，§1.4）",
         "tags": [
           "control"
+        ]
+      }
+    },
+    "/api/v1/sessions/{session_id}/terminal/exec": {
+      "post": {
+        "operationId": "post_terminal_exec_api_v1_sessions__session_id__terminal_exec_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TerminalExecIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WsExecOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "会话受限终端执行（31 篇 #5，只读白名单）",
+        "tags": [
+          "workspace"
+        ]
+      }
+    },
+    "/api/v1/sessions/{session_id}/workspace/file": {
+      "get": {
+        "operationId": "get_workspace_file_api_v1_sessions__session_id__workspace_file_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Session Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "path",
+            "required": true,
+            "schema": {
+              "maxLength": 2048,
+              "minLength": 1,
+              "title": "Path",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WsFileOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "会话工作区文件读取（31 篇 #2，只读）",
+        "tags": [
+          "workspace"
+        ]
+      }
+    },
+    "/api/v1/sessions/{session_id}/workspace/tree": {
+      "get": {
+        "operationId": "get_workspace_tree_api_v1_sessions__session_id__workspace_tree_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WsTreeOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "会话工作区文件树（31 篇 #1）",
+        "tags": [
+          "workspace"
         ]
       }
     },

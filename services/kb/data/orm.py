@@ -38,6 +38,11 @@ class KbCollection(Base, PkMixin, TenantMixin, TimestampMixin):
     ontology_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("ontologies.id"))
     embedding_model: Mapped[str] = mapped_column(String(64), nullable=False)
     chunk_defaults: Mapped[dict] = mapped_column(JSONB, default=dict, nullable=False)
+    # 库设置（api/01 §5.4 追加行 GET/PUT /kb/collections/{id}/settings，B3-Q 转实）：JSONB
+    # 整体读写在 API 层（形状=chunk_size/chunk_overlap/extract_prompt_level/auto_extract，
+    # 空 {} 由 API 回落默认值 500/50/standard/true）；与 chunk_defaults（chunking 参数既有
+    # 留位列）分列，不混用语义。migration 只创建不执行（改表流程：mock+api/01 → 迁移）。
+    settings: Mapped[dict] = mapped_column(JSONB, default=dict, nullable=False)
     status: Mapped[str] = mapped_column(String(16), default="active", nullable=False)
     __table_args__ = (
         UniqueConstraint("tenant_id", "name", name="uk_kb_collections_tenant_id_name"),
@@ -60,6 +65,12 @@ class Document(Base, PkMixin, TenantMixin, TimestampMixin):
     valid_from: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))  # 双时间线（OntRAG §8.2）
     valid_to: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))  # 失效=封口不删除
     status: Mapped[str] = mapped_column(String(16), default="uploaded", nullable=False)  # 八态=04/03 §4
+    # 回收站软删面（api/01 §5.4 追加行，B3-Q 转实；契约=frontend kb-handlers.ts 回收站段）：
+    # deleted_at 非空即「在回收站」（expires_at=deleted_at+7d 由 API 投影层计算，不落列）；
+    # valid_to 仍为检索下线闸（三路检索 SQL 谓词不变），deleted_at 只是回收站可见性维度——
+    # 历史墓碑行（valid_to 非空而 deleted_at 空）不进回收站（升级前删除语义，保持不可见）。
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    deleted_reason: Mapped[str | None] = mapped_column(Text)  # 调用方口径（契约 v1 无入参，恒空留位）
     __table_args__ = (
         CheckConstraint("source_type IN ('upload','api')", name="ck_documents_source_type"),
         CheckConstraint(

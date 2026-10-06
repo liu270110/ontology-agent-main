@@ -25,7 +25,8 @@ export interface McpServerRow {
   desc: string
   transport: McpTransport
   url_masked: string
-  command?: string
+  /** live http 行恒 null（McpServerRow.command: str | None，pydantic 恒序列化） */
+  command?: string | null
   auth: string
   token_masked: string
   protocol: string
@@ -42,6 +43,7 @@ export interface McpServerRow {
   added_at: string
   tools: McpToolRow[]
 }
+
 
 export interface DiscoveredTool {
   tool_id: string

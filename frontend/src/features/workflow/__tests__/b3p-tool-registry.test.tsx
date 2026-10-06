@@ -73,12 +73,13 @@ describe('B3-P 工作流 · 工具节点注册表选取', () => {
     expect(screen.getByRole('option', { name: '未选择' })).toBeInTheDocument()
   }, 30_000)
 
-  it('② 成功：下拉=名称 · scope；历史值 scada.query 标记（已下架）；重选同步徽标与画布', async () => {
+  it('② 成功：下拉=名称 · 通道；历史值 scada.query 标记（已下架）；重选同步徽标与画布', async () => {
     const sel = await openToolNode()
 
-    // 注册表成功：真实 /tools 目录出现（名称 · scope 口径；danger 工具徽标口径=high-risk）
-    expect(await screen.findByRole('option', { name: 'ontology.reason · ontology:read' }, { timeout: 10_000 })).toBeInTheDocument()
-    expect(screen.getByRole('option', { name: 'crm.write · high-risk' })).toBeInTheDocument()
+    // 注册表成功：真实 /tools 目录出现（S1 口径=名称 · 来源通道；仅 listed 可选）
+    expect(await screen.findByRole('option', { name: 'ontology.reason · channel: L0' }, { timeout: 10_000 })).toBeInTheDocument()
+    // crm.write 为 deprecated（S1 状态机）→ 不进可选项
+    expect(screen.queryByRole('option', { name: /crm\.write/ })).not.toBeInTheDocument()
     // 历史工作流引用 scada.query（mock wf-021 既有值）不在注册表 → 头部插入（已下架）不丢数据
     expect(sel).toHaveValue('scada.query')
     expect(screen.getByRole('option', { name: 'scada.query（已下架）' })).toBeInTheDocument()
@@ -86,11 +87,11 @@ describe('B3-P 工作流 · 工具节点注册表选取', () => {
       '已下架 · 历史引用 scada.query',
     )
 
-    // 重选注册表工具 kb.search → 徽标 scope: kb.read + 画布节点 sub/label 同步
+    // 重选注册表工具 kb.search → 徽标 channel: L0 + 画布节点 sub/label 同步
     fireEvent.change(sel, { target: { value: 'kb.search' } })
-    expect(await screen.findByTestId('wf-param-tool-scope', {}, { timeout: 10_000 })).toHaveTextContent('scope: kb.read')
+    expect(await screen.findByTestId('wf-param-tool-scope', {}, { timeout: 10_000 })).toHaveTextContent('channel: L0')
     expect(screen.getByTestId('wf-node-tool-scada')).toHaveTextContent('工具 · kb.search')
-    expect(screen.getByTestId('wf-node-tool-scada')).toHaveTextContent('scope: kb.read')
+    expect(screen.getByTestId('wf-node-tool-scada')).toHaveTextContent('channel: L0')
   }, 30_000)
 
   it('③ 失败 → 「加载失败，点击重试」option 触发 refetch → 注册表恢复', async () => {
@@ -112,7 +113,7 @@ describe('B3-P 工作流 · 工具节点注册表选取', () => {
       () => expect(screen.getByRole('option', { name: '未选择' })).toBeInTheDocument(),
       { timeout: 10_000 },
     )
-    expect(screen.getByRole('option', { name: 'ontology.reason · ontology:read' })).toBeInTheDocument()
+    expect(screen.getByRole('option', { name: 'ontology.reason · channel: L0' })).toBeInTheDocument()
     expect(screen.queryByRole('option', { name: '加载失败，点击重试' })).not.toBeInTheDocument()
   }, 30_000)
 })

@@ -170,29 +170,30 @@ export function resumeRun(id: string, rid: string, body: { edits: { node_id: str
 
 // ---- 工具注册表（IX-GRP-07 工具节点「注册表选取」取数源） ----
 
-/** 工具注册表行（结构与 features/tools 的 ToolRow 同源——按 tests/architecture 域边界
- *  纪律在域内声明，不横向 import；仅取下拉选取所需字段子集） */
+/** 工具注册表行（S1 集市契约投影，services/tools/api/schemas/tool.py ToolOut 字段子集——
+ *  按 tests/architecture 域边界纪律在域内声明，不横向 import） */
 export interface WfToolRow {
   id: string
   name: string
-  desc: string
-  source: 'builtin' | 'plugin' | 'mcp' | 'http'
-  scopes: string[]
-  danger: boolean
-  enabled: boolean
+  action_iri: string
+  source_channel: 'L0' | 'L1' | 'L2' | 'L3'
+  semantic_annotation: Record<string, unknown>
+  version: string
+  status: 'draft' | 'in_review' | 'listed' | 'deprecated' | 'revoked'
+  health_hint: string | null
+  evidence_uri: string | null
 }
 
-/** scope 徽标口径：danger=true → high-risk（高危，橙色徽标）；否则取首个 scope；
- *  无 scope 声明 → read（与旧静态注册表口径一致） */
-export function toolScopeLabel(t: Pick<WfToolRow, 'danger' | 'scopes'>): string {
-  if (t.danger) return 'high-risk'
-  return t.scopes[0] ?? 'read'
+/** 通道徽标口径：来源通道 L0~L3（能力来源纯元数据标注；mock 旧 scope/danger 徽标随
+ *  S1 契约退役——无字段来源不造假，2026-10-05） */
+export function toolScopeLabel(t: Pick<WfToolRow, 'source_channel'>): string {
+  return `channel: ${t.source_channel}`
 }
 
-/** GET /tools —— 工具注册中心目录（契约=api/01 §5.6：名称+摘要；与 features/tools
- *  的 listTools 同端点同 mock，域内声明仅因横向 import 禁令） */
+/** GET /tools —— 工具集市目录（S1 {data,meta} 信封；api.list 归一，与 features/tools
+ *  的 listTools 同端点同形，域内声明仅因横向 import 禁令） */
 export function listToolRegistry() {
-  return api.get<{ items: WfToolRow[] }>('/tools')
+  return api.list<WfToolRow>('/tools')
 }
 
 export function abortRun(id: string, rid: string) {

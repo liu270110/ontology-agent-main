@@ -133,8 +133,9 @@ export function AgentDetailPage() {
     )
   }
 
-  // live 后端详情无 tools 字段（agents.json 实测，fe1-F2）：缺省空数组，工具面板/ToolPicker 不崩
-  const boundNames: string[] = agent.tools ?? []
+  // live 契约：详情无 tools 字段，白名单落在 config.tool_whitelist（PUT /tools 覆盖式写同键）；
+  // mock 富形状 tools 字段保留为过渡回退（fe1-F2 防御口径）
+  const boundNames: string[] = (agent.config?.tool_whitelist as string[] | undefined) ?? agent.tools ?? []
 
   return (
     <div className="mx-auto max-w-[1080px]" data-testid="agent-detail">

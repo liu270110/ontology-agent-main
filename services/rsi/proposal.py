@@ -16,6 +16,12 @@ K13 批（2026-10-05，docs/Agent/13 §19，G-13 落选回喂半环方案 A）�
 落选登记册条目（{proposal_id,type,reason,at}）与 ``Proposal.rejection_feedback`` 提交回显
 字段（submit() 受理成功时服务侧回填同 target 最近 rejected 上下文）——蓝本=reef cordis
 backend.py:1055-1057 rejected_proposals 有界入册+回喂。
+
+K15 批（2026-10-07，docs/Agent/13 §21，G-15 整内容比对第三道写冲突防线）追加：
+``Proposal.baseline_content`` 原文快照字段（submit() 受理时与 ``baseline_hash`` 同位双存
+条目原文；内存口径=阶段 A 条目为 prompt 模板/config，KB 级量级直存可接受）——apply 前
+hash 通道通过后整内容直比，兜住 hash 实现错/快照构造缺陷/hash 键序漂移等假性通过残余面，
+蓝本=openviking policy_updater.py:259-267 base-content guard。
 """
 
 from __future__ import annotations
@@ -129,6 +135,11 @@ class Proposal:
     source_trace_ids: tuple[str, ...] = ()  # 证据链：来源轨迹（09 §7 逐环可回链的起点）
     # K9-b 基线快照：创建时目标条目内容 sha256（entry_baseline_hash 口径）；None=旧提案无快照，apply 跳过基线校验
     baseline_hash: str | None = None
+    # K15-a 原文快照（docs/Agent/13 §21，G-15）：受理时条目原文与 baseline_hash 同位双存，
+    # apply 路径 hash 通道通过后整内容直比（第三道写冲突防线）。内存口径：阶段 A 条目=
+    # prompt 模板/config（KB 级），进程内候选池直存原文可接受；None=旧提案/未存原文（K9
+    # hash 通道语义不变）；rsi_proposals DDL 欠账清偿时同列落库。
+    baseline_content: str | None = None
     # K13-b 提交回显：submit() 受理成功时由服务侧回填同 target 最近 rejected 上下文
     # （有界截断，最旧→最新；构造时恒空——落选回喂的提交端可见面）
     rejection_feedback: tuple[RejectionRecord, ...] = ()

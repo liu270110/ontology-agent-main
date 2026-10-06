@@ -522,7 +522,7 @@ def validate_llm_draft(raw: Any, seed_actions: frozenset[str]) -> list[str]:
     elif action_iri.strip() not in seed_actions:
         problems.append(f"action_iri 越界（不在种子行动类集内）: {action_iri.strip()}")
     try:
-        ToolExecutionMode(raw.get("execution_mode"))
+        ToolExecutionMode(str(raw.get("execution_mode")))  # str() 归一:None/非 str 同样落入 ValueError 分支(行为等价)
     except ValueError:
         problems.append(f"execution_mode 非法枚举值: {raw.get('execution_mode')!r}")
     description = raw.get("description")

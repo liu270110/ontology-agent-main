@@ -39,7 +39,7 @@ def main() -> int:
         values = json.load(f)
 
     doc = Document(args.template)
-    filled = {}
+    filled: dict[str, int] = {}
     for para in iter_all_paragraphs(doc):
         # Normalize whitespace variants like {{ name }} first.
         for m in set(TOKEN_RE.findall(para.text)):

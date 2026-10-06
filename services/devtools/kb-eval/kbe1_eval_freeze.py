@@ -141,7 +141,7 @@ async def main(tei_base: str) -> int:
                         seq=ch.seq,
                         content=ch.content,
                         token_count=ch.token_count,
-                        meta={"heading": ch.heading} if getattr(ch, "heading", None) else {},
+                        meta={"heading": heading} if (heading := getattr(ch, "heading", None)) else {},
                     )
                 )
     # 嵌入（全量补缺；embedding 列直写）

@@ -37,7 +37,7 @@ def make_png(path: Path) -> None:
     path.write_bytes(png)
 
 
-def run(script: str, *args: str) -> dict:
+def run(script: str, *args: Path | str) -> dict:
     env = dict(os.environ)
     env["LC_ALL"] = "C"  # prove no locale-default text reads
     env["PYTHONIOENCODING"] = "utf-8"
@@ -250,7 +250,7 @@ def q(tag: str) -> str:
     return f"{{{W}}}{tag}"
 
 
-def run_raw(script: str, *args: str):
+def run_raw(script: str, *args: Path | str):
     env = dict(os.environ, LC_ALL="C", PYTHONIOENCODING="utf-8")
     return subprocess.run([sys.executable, str(SCRIPTS / script), *map(str, args)], capture_output=True, env=env)
 

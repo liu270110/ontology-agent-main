@@ -8,12 +8,16 @@ import csv
 import json
 import os
 import sys
+from typing import Any
 
 
 def _reconfigure_stdio() -> None:
     for stream in (sys.stdout, sys.stderr):
         try:
-            stream.reconfigure(encoding="utf-8")
+            if hasattr(
+                stream, "reconfigure"
+            ):  # TextIO 抽象面无 reconfigure(仅 TextIOWrapper);hasattr 兼运行时守卫与类型收窄
+                stream.reconfigure(encoding="utf-8")
         except Exception:
             pass
 
@@ -121,7 +125,7 @@ def read_fields(path: str, password: str | None) -> dict:
         ftype = FIELD_TYPES.get(str(field.get("/FT")), str(field.get("/FT")))
         value = field.get("/V")
         states = field.get("/_States_")
-        entry = {"type": ftype, "value": None if value is None else str(value)}
+        entry: dict[str, Any] = {"type": ftype, "value": None if value is None else str(value)}
         if states:
             entry["options"] = [str(s) for s in states]
         out[name] = entry

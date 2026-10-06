@@ -79,7 +79,10 @@ def build_overlay(args, page_width: float, page_height: float) -> bytes:
 def main() -> int:
     for stream in (sys.stdout, sys.stderr):
         try:
-            stream.reconfigure(encoding="utf-8")
+            if hasattr(
+                stream, "reconfigure"
+            ):  # TextIO 抽象面无 reconfigure(仅 TextIOWrapper);hasattr 兼运行时守卫与类型收窄
+                stream.reconfigure(encoding="utf-8")
         except Exception:
             pass
     parser = argparse.ArgumentParser(description="Stamp text or an image onto PDF pages.")

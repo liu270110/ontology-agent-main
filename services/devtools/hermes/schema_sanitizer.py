@@ -71,7 +71,8 @@ def unrename_tool_args(params_schema: Any, args: Any) -> Any:
     out = {}
     for key, value in args.items():
         orig = reverse.get(key, key)
-        sub = props.get(orig) if isinstance(props.get(orig), dict) else {}
+        sub_raw = props.get(orig)
+        sub: dict = sub_raw if isinstance(sub_raw, dict) else {}
         if isinstance(value, dict) and sub:
             value = unrename_tool_args(sub, value)
         elif isinstance(value, list) and isinstance(sub.get("items"), dict):

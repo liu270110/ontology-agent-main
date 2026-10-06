@@ -16,6 +16,7 @@ import threading
 import time
 import urllib.request
 from pathlib import Path
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -262,7 +263,7 @@ _PACKAGE_PARSERS = {"npm": _parse_npm_package, "PyPI": _parse_pypi_package}
 
 def _query_osv(package: str, ecosystem: str, version: str | None = None) -> list:
     """Query the OSV API; return only MAL-* advisories (regular CVEs ignored)."""
-    payload = {"package": {"name": package, "ecosystem": ecosystem}}
+    payload: dict[str, Any] = {"package": {"name": package, "ecosystem": ecosystem}}
     if version:
         payload["version"] = version
     req = urllib.request.Request(

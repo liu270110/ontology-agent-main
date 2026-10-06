@@ -158,8 +158,8 @@ def _map_normalized_positions(original: str, normalized: str, normalized_matches
             orig_idx += 1
     orig_to_norm.extend([len(normalized)] * (len(original) - orig_idx))
 
-    norm_to_orig_start = {}
-    norm_to_orig_end = {}
+    norm_to_orig_start: dict[int, int] = {}
+    norm_to_orig_end: dict[int, int] = {}
     for orig_pos, norm_pos in enumerate(orig_to_norm):
         norm_to_orig_start.setdefault(norm_pos, orig_pos)
         norm_to_orig_end[norm_pos] = orig_pos

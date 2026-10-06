@@ -49,10 +49,12 @@ def build_projection(tbox: Graph, task_graph: Graph, abox: Graph, feeder_prefix:
     proj = Graph()
     proj.parse(data=tbox.serialize(), format="turtle")
     proj += task_graph
-    from rdflib import URIRef
+    from rdflib import Node, URIRef
 
     keep = set()
-    frontier = [URIRef(feeder_prefix)]  # 必须是 URIRef：str 主语在 rdflib 按字面量匹配恒空（拷贝 07b 时引入的坑）
+    frontier: list[Node] = [
+        URIRef(feeder_prefix)
+    ]  # 必须是 URIRef：str 主语在 rdflib 按字面量匹配恒空（拷贝 07b 时引入的坑）
     for _ in range(2):
         nxt = []
         for node in frontier:
@@ -145,12 +147,14 @@ def main() -> int:
 
     out.write_text(json.dumps(results, ensure_ascii=False, indent=2), encoding="utf-8")
     print(json.dumps(results, ensure_ascii=False, indent=2))
-    if not results["equivalence"]["identical"]:
+    equivalence = results["equivalence"]
+    assert isinstance(equivalence, dict)  # 收窄 dict[str, object] 值面
+    ok = equivalence["identical"]  # 等价性是硬门
+    if not ok:
         for t in list(inc_set - full_set)[:3]:
             print("INC-ONLY:", t)
         for t in list(full_set - inc_set)[:3]:
             print("FULL-ONLY:", t)
-    ok = results["equivalence"]["identical"]  # 等价性是硬门
     print("PoC⑥ 等价性金标:", "PASS" if ok else "FAIL")
     return 0 if ok else 1
 

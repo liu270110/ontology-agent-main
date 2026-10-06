@@ -92,7 +92,8 @@ def step_of(d: dict) -> list:
 
 def unwrap(body: dict) -> dict:
     """兼容两种响应形态:契约信封 {data,...} 与裸 DTO。"""
-    return body.get("data") if isinstance(body.get("data"), dict) else body
+    data = body.get("data")
+    return data if isinstance(data, dict) else body
 
 
 def main() -> None:

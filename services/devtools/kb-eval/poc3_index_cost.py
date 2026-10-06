@@ -225,9 +225,9 @@ async def phase_llm_extraction(base_url: str, sample_texts: list[str]) -> dict:
                 "content_head": (data.get("message", {}).get("content", "") or "")[:120],
             }
         )
-    prompt_tokens = [s["prompt_tokens"] or 0 for s in samples]
-    completion_tokens = [s["completion_tokens"] or 0 for s in samples]
-    walls = [s["wall_seconds"] for s in samples]
+    prompt_tokens = [float(s["prompt_tokens"] or 0) for s in samples]
+    completion_tokens = [float(s["completion_tokens"] or 0) for s in samples]
+    walls = [float(s["wall_seconds"] or 0) for s in samples]
     return {
         "status": "实测",
         "model": chosen,
@@ -246,6 +246,10 @@ def extrapolate_full_graphrag(chunks: int, llm: dict) -> dict:
     call_s = llm.get("call_seconds_avg") if measured else llm.get("assumed_call_seconds", 8.0)
     prompt_t = llm.get("prompt_tokens_avg") if measured else llm.get("assumed_prompt_tokens", 900)
     completion_t = llm.get("completion_tokens_avg") if measured else llm.get("assumed_completion_tokens", 400)
+    # 实测键缺失兜底假设值(原实现 None 直接在乘法处崩溃;此处显式回落同源假设口径)
+    call_s = float(call_s) if call_s is not None else 8.0
+    prompt_t = float(prompt_t) if prompt_t is not None else 900.0
+    completion_t = float(completion_t) if completion_t is not None else 400.0
 
     entities = chunks * ENTITIES_PER_CHUNK
     l0 = max(3, round(entities / COMMUNITY_DIVIDERS[0]))
@@ -296,7 +300,10 @@ def _parse_args() -> argparse.Namespace:
 async def main_async() -> int:
     for stream in (sys.stdout, sys.stderr):
         try:
-            stream.reconfigure(encoding="utf-8", errors="replace")
+            if hasattr(
+                stream, "reconfigure"
+            ):  # TextIO 抽象面无 reconfigure(仅 TextIOWrapper);hasattr 兼运行时守卫与类型收窄
+                stream.reconfigure(encoding="utf-8", errors="replace")
         except (AttributeError, OSError):
             pass
     args = _parse_args()

@@ -285,7 +285,9 @@ def run_phase_in_child(
 ) -> tuple[dict | None, int]:
     """在独立子进程跑一个阶段，返回 (结果或 None, 子进程 RSS 峰值字节)；超时返回 (None, 峰值)。"""
     recv_conn, send_conn = ctx.Pipe(duplex=False)
-    proc = ctx.Process(target=_phase_worker, args=(phase, payload, use_tracemalloc, send_conn), daemon=True)
+    proc = ctx.Process(  # type: ignore[attr-defined]  # typeshed BaseContext 未声明动态 Process 属性,运行时存在
+        target=_phase_worker, args=(phase, payload, use_tracemalloc, send_conn), daemon=True
+    )
     t0 = time.perf_counter()
     proc.start()
     peak_rss = 0
@@ -630,7 +632,10 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
 def _reconfigure_stdout() -> None:
     for stream in (sys.stdout, sys.stderr):
         try:
-            stream.reconfigure(encoding="utf-8", errors="replace")
+            if hasattr(
+                stream, "reconfigure"
+            ):  # TextIO 抽象面无 reconfigure(仅 TextIOWrapper);hasattr 兼运行时守卫与类型收窄
+                stream.reconfigure(encoding="utf-8", errors="replace")
         except (AttributeError, OSError):
             pass
 

@@ -774,7 +774,10 @@ def main(argv: list[str] | None = None) -> int:
     """入口：装样例 → 装渠道（探测+预检）→ 跑满矩阵 → 汇总落 JSON。"""
     for stream in (sys.stdout, sys.stderr):
         try:
-            stream.reconfigure(encoding="utf-8", errors="replace")
+            if hasattr(
+                stream, "reconfigure"
+            ):  # TextIO 抽象面无 reconfigure(仅 TextIOWrapper);hasattr 兼运行时守卫与类型收窄
+                stream.reconfigure(encoding="utf-8", errors="replace")
         except (AttributeError, OSError):
             pass
     parser = argparse.ArgumentParser(description="PoC5 LLM 结构化输出兼容矩阵 harness")

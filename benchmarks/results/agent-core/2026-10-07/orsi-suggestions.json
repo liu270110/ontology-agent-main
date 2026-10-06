@@ -1,0 +1,172 @@
+{
+  "generated_from": "benchmarks\\results\\agent-core\\2026-10-07",
+  "scenarios": [
+    "cross_tenant_leak",
+    "invalid_retry_count",
+    "memory_cross_contamination",
+    "recovery_time_s",
+    "session_mutex_rate",
+    "side_effect_duplication"
+  ],
+  "suggestions": [
+    {
+      "suggestion_type": "orsi_capability_registration",
+      "auto_registered": false,
+      "proposal": {
+        "name": "bench.agent-core.cross_tenant_leak",
+        "face": "O5",
+        "status": "candidate",
+        "version": "1.0.0"
+      },
+      "evidence": {
+        "evidence_uri": "benchmarks/results/agent-core/2026-10-07/074529-cross_tenant_leak.json",
+        "run_status": "ok",
+        "smoke": true,
+        "benchmark_ref": "docs/Agent/16-基准对比体系设计 §2 + docs/评审/红队攻击性审查-2026-10-06",
+        "key_metrics": {
+          "attacks_leaked": 4,
+          "attacks_rejected": 8,
+          "attacks_total": 12,
+          "reject_rate": 0.666667
+        }
+      },
+      "capability_fingerprint": "c9677e74d7969cdc6ae61508d4374744b05e9e11b49f96755c0b120dac9b8664",
+      "fingerprint_note": "基准侧场景集哈希（场景集变=指纹变=能力需重评）；非注册面算法——正式注册时由 services/rsi 业务层重算，本值仅供人工比照",
+      "rationale": "指标实测数据佐证 cross_tenant_leak 能力面现状（16 篇 §3 ORSI 参考依据机制）"
+    },
+    {
+      "suggestion_type": "orsi_capability_registration",
+      "auto_registered": false,
+      "proposal": {
+        "name": "bench.agent-core.invalid_retry_count",
+        "face": "O5",
+        "status": "candidate",
+        "version": "1.0.0"
+      },
+      "evidence": {
+        "evidence_uri": "benchmarks/results/agent-core/2026-10-07/074529-invalid_retry_count.json",
+        "run_status": "ok",
+        "smoke": true,
+        "benchmark_ref": "docs/Agent/16-基准对比体系设计 §2 + docs/评审/红队攻击性审查-2026-10-06",
+        "key_metrics": {
+          "abandoned_correctly": true,
+          "abandoned_runs": 2,
+          "abort_threshold": 2,
+          "invalid_retry_count": 1,
+          "invocation_bound": 3,
+          "plan_steps_injected": 10,
+          "tool_invocations": 2,
+          "unbounded_retry": false
+        }
+      },
+      "capability_fingerprint": "ecadd52be15692a831329180e0cd246b74f2be6e2c5fc2a720c595bc4bb58ba8",
+      "fingerprint_note": "基准侧场景集哈希（场景集变=指纹变=能力需重评）；非注册面算法——正式注册时由 services/rsi 业务层重算，本值仅供人工比照",
+      "rationale": "指标实测数据佐证 invalid_retry_count 能力面现状（16 篇 §3 ORSI 参考依据机制）"
+    },
+    {
+      "suggestion_type": "orsi_capability_registration",
+      "auto_registered": false,
+      "proposal": {
+        "name": "bench.agent-core.memory_cross_contamination",
+        "face": "O6",
+        "status": "candidate",
+        "version": "1.0.0"
+      },
+      "evidence": {
+        "evidence_uri": "benchmarks/results/agent-core/2026-10-07/074529-memory_cross_contamination.json",
+        "run_status": "ok",
+        "smoke": true,
+        "benchmark_ref": "docs/Agent/16-基准对比体系设计 §2 + docs/评审/红队攻击性审查-2026-10-06",
+        "key_metrics": {
+          "leak_count": 0,
+          "probes_total": 18,
+          "unauthorized_accepted": 0
+        }
+      },
+      "capability_fingerprint": "e7cff2ba7a9f1121e4e00a557f91092b91fa6b1f4d63354bb0a41a40048f2d4e",
+      "fingerprint_note": "基准侧场景集哈希（场景集变=指纹变=能力需重评）；非注册面算法——正式注册时由 services/rsi 业务层重算，本值仅供人工比照",
+      "rationale": "指标实测数据佐证 memory_cross_contamination 能力面现状（16 篇 §3 ORSI 参考依据机制）"
+    },
+    {
+      "suggestion_type": "orsi_capability_registration",
+      "auto_registered": false,
+      "proposal": {
+        "name": "bench.agent-core.recovery_time_s",
+        "face": "O5",
+        "status": "candidate",
+        "version": "1.0.0"
+      },
+      "evidence": {
+        "evidence_uri": "benchmarks/results/agent-core/2026-10-07/074529-recovery_time_s.json",
+        "run_status": "ok",
+        "smoke": true,
+        "benchmark_ref": "docs/Agent/16-基准对比体系设计 §2 + docs/评审/红队攻击性审查-2026-10-06",
+        "key_metrics": {
+          "converged_rate": 1.0,
+          "iterations": 1,
+          "recovery_rate": 1.0,
+          "recovery_time_s_max": 0.0009,
+          "recovery_time_s_mean": 0.0009,
+          "recovery_time_s_p50": 0.0009,
+          "recovery_time_s_p95": 0.0009,
+          "zombie_tasks_total": 0
+        }
+      },
+      "capability_fingerprint": "6501c865a2304f169119d64fb6296a383ed400d668347abe33392dcaedca5cc6",
+      "fingerprint_note": "基准侧场景集哈希（场景集变=指纹变=能力需重评）；非注册面算法——正式注册时由 services/rsi 业务层重算，本值仅供人工比照",
+      "rationale": "指标实测数据佐证 recovery_time_s 能力面现状（16 篇 §3 ORSI 参考依据机制）"
+    },
+    {
+      "suggestion_type": "orsi_capability_registration",
+      "auto_registered": false,
+      "proposal": {
+        "name": "bench.agent-core.session_mutex_rate",
+        "face": "O5",
+        "status": "candidate",
+        "version": "1.0.0"
+      },
+      "evidence": {
+        "evidence_uri": "benchmarks/results/agent-core/2026-10-07/074529-session_mutex_rate.json",
+        "run_status": "ok",
+        "smoke": true,
+        "benchmark_ref": "docs/Agent/16-基准对比体系设计 §2 + docs/评审/红队攻击性审查-2026-10-06",
+        "key_metrics": {
+          "concurrency": 2,
+          "iterations": 3,
+          "mutex_broken_iterations": 0,
+          "mutex_held_iterations": 3,
+          "session_mutex_rate": 1.0
+        }
+      },
+      "capability_fingerprint": "b006c8f1c74c74a2776139e7af6fd27da8cb1eaacd4adf9da789a80d51febf99",
+      "fingerprint_note": "基准侧场景集哈希（场景集变=指纹变=能力需重评）；非注册面算法——正式注册时由 services/rsi 业务层重算，本值仅供人工比照",
+      "rationale": "指标实测数据佐证 session_mutex_rate 能力面现状（16 篇 §3 ORSI 参考依据机制）"
+    },
+    {
+      "suggestion_type": "orsi_capability_registration",
+      "auto_registered": false,
+      "proposal": {
+        "name": "bench.agent-core.side_effect_duplication",
+        "face": "O5",
+        "status": "candidate",
+        "version": "1.0.0"
+      },
+      "evidence": {
+        "evidence_uri": "benchmarks/results/agent-core/2026-10-07/074529-side_effect_duplication.json",
+        "run_status": "ok",
+        "smoke": true,
+        "benchmark_ref": "docs/Agent/16-基准对比体系设计 §2 + docs/评审/红队攻击性审查-2026-10-06",
+        "key_metrics": {
+          "duplication_rate": 1.0,
+          "expected_writes": 2,
+          "extra_writes": 2,
+          "runs": 2,
+          "total_external_writes": 4
+        }
+      },
+      "capability_fingerprint": "0eabf6586adccdd604d496be1afdc36bc503e1335b3c2dc91365e24813fa0f35",
+      "fingerprint_note": "基准侧场景集哈希（场景集变=指纹变=能力需重评）；非注册面算法——正式注册时由 services/rsi 业务层重算，本值仅供人工比照",
+      "rationale": "指标实测数据佐证 side_effect_duplication 能力面现状（16 篇 §3 ORSI 参考依据机制）"
+    }
+  ]
+}

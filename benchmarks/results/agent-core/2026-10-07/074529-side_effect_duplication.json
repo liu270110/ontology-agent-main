@@ -1,0 +1,68 @@
+{
+  "suite": "agent-core",
+  "scenario": "side_effect_duplication",
+  "benchmark_ref": "docs/Agent/16-基准对比体系设计 §2 + docs/评审/红队攻击性审查-2026-10-06",
+  "orsi_face_suggestion": "O5",
+  "smoke": true,
+  "started_at": "2026-10-06T23:45:41+00:00",
+  "params": {
+    "runs": 5,
+    "smoke_runs": 2,
+    "smoke": true
+  },
+  "metrics": {
+    "runs": 2,
+    "total_external_writes": 4,
+    "expected_writes": 2,
+    "extra_writes": 2,
+    "duplicated_rounds": [
+      1,
+      2
+    ],
+    "duplication_rate": 1.0
+  },
+  "samples": [
+    {
+      "round": 1,
+      "writes_attempt1": 1,
+      "writes_total": 2,
+      "resume_anchors": 1,
+      "resume_skipped": 0,
+      "attempt1_final": {
+        "name": "RUN_ERROR",
+        "data": {
+          "code": 3001
+        }
+      },
+      "attempt2_final": {
+        "name": "RUN_ERROR",
+        "data": {
+          "code": 3001
+        }
+      }
+    },
+    {
+      "round": 2,
+      "writes_attempt1": 1,
+      "writes_total": 2,
+      "resume_anchors": 1,
+      "resume_skipped": 0,
+      "attempt1_final": {
+        "name": "RUN_ERROR",
+        "data": {
+          "code": 3001
+        }
+      },
+      "attempt2_final": {
+        "name": "RUN_ERROR",
+        "data": {
+          "code": 3001
+        }
+      }
+    }
+  ],
+  "asserts": [],
+  "status": "ok",
+  "error": null,
+  "duration_s": 0.033
+}

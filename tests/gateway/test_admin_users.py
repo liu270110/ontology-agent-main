@@ -139,6 +139,11 @@ async def users_env(monkeypatch):
             tenant_ids = [tenant_id, *env["extra_tenant_ids"]]
             user_ids = [admin_id, plain_id, *env["extra_user_ids"]]
             await session.execute(text("DELETE FROM user_roles WHERE tenant_id = ANY(:ids)").bindparams(ids=tenant_ids))
+            # C1 me 域表先于 users 清（漏列曾致 teardown FK 违例）
+            for tbl in ("device_sessions", "totp_credentials", "totp_backup_codes", "user_preferences"):
+                await session.execute(
+                    text(f"DELETE FROM {tbl} WHERE user_id = ANY(:ids)").bindparams(ids=user_ids)
+                )
             await session.execute(text("DELETE FROM users WHERE id = ANY(:ids)").bindparams(ids=user_ids))
             await session.execute(text("DELETE FROM tenants WHERE id = ANY(:ids)").bindparams(ids=tenant_ids))
             await session.commit()

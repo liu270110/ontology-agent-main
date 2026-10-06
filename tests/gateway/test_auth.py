@@ -172,6 +172,10 @@ async def auth_env(monkeypatch):
     finally:
         await client.aclose()
         async with factory() as session:  # 每用例自清理（standards/01 §2.9）
+            await session.execute(text("DELETE FROM device_sessions WHERE user_id = :uid").bindparams(uid=user_id))
+            await session.execute(text("DELETE FROM totp_credentials WHERE user_id = :uid").bindparams(uid=user_id))
+            await session.execute(text("DELETE FROM totp_backup_codes WHERE user_id = :uid").bindparams(uid=user_id))
+            await session.execute(text("DELETE FROM user_preferences WHERE user_id = :uid").bindparams(uid=user_id))
             await session.execute(text("DELETE FROM users WHERE id = :uid").bindparams(uid=user_id))
             await session.execute(text("DELETE FROM tenants WHERE id = :tid").bindparams(tid=tenant_id))
             await session.commit()

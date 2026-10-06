@@ -33,7 +33,7 @@ class McpServerORM(Base, PkMixin, TenantMixin, TimestampMixin):
     __tablename__ = "mcp_servers"
 
     name: Mapped[str] = mapped_column(String(128), nullable=False)  # server 命名空间段（registry 保留段校验在用例层）
-    desc: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    desc: Mapped[str] = mapped_column("description", Text, nullable=False, default="")
     transport: Mapped[str] = mapped_column(String(16), nullable=False)  # streamable_http|stdio（McpTargetConfig 词表）
     url: Mapped[str | None] = mapped_column(String(512))  # streamable_http 必填（http/https）
     command: Mapped[str | None] = mapped_column(String(512))  # stdio 必填
@@ -74,7 +74,7 @@ class McpToolORM(Base, PkMixin, TenantMixin, TimestampMixin):
     )
     tool_id: Mapped[str] = mapped_column(String(64), nullable=False)  # 内容寻址短 id mt-<hash>（刷新稳定）
     name: Mapped[str] = mapped_column(String(256), nullable=False)  # 远端 tool 名
-    desc: Mapped[str] = mapped_column(Text, nullable=False, default="")  # 远端 description
+    desc: Mapped[str] = mapped_column("description", Text, nullable=False, default="")  # 远端 description
     write: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)  # 无 readOnlyHint 按写（默认不可信）
     read_only: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)  # annotations.readOnlyHint 投影
     adopted: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)  # 纳管勾选

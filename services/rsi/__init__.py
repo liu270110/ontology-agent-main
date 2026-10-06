@@ -27,6 +27,11 @@ K9 批（2026-10-05，docs/Agent/13 §15，G-9 并发漂移防线）追加：tra
 并发 CAS（StaleProposalError）、Proposal.baseline_hash 基线快照 + apply 路径漂移即拒
 （BaselineDriftError，entry_loader 注入当前条目内容取数口）——蓝本 prime-agent refine.rs
 「entry changed during refinement planning」即拒。
+
+K13 批（2026-10-05，docs/Agent/13 §19，G-13 落选回喂半环方案 A）追加：rejected 有界入册
+（RejectionRecord，key=target，容量 rsi_rejection_ledger_maxlen，0=关闭）+ submit() 提交
+回显（Proposal.rejection_feedback，同 target 最近 5 条）+ list_rejections() 只读查询面
+——蓝本 reef cordis backend.py:1055-1057 rejected_proposals 有界入册+回喂。
 """
 
 from __future__ import annotations
@@ -78,6 +83,7 @@ from services.rsi.proposal import (
     Proposal,
     ProposalError,
     ProposalStatus,
+    RejectionRecord,
     StaleProposalError,
     TriggerTrack,
     entry_baseline_hash,
@@ -139,6 +145,7 @@ __all__ = [
     "Proposal",
     "ProposalError",
     "ProposalStatus",
+    "RejectionRecord",
     "RsiApplyForbiddenError",
     "RsiAuditRecord",
     "RsiService",

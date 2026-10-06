@@ -13,6 +13,11 @@ platform-handlers.ts（system-logs 段）响应形状。铁律：extra="forbid"�
   "%Y-%m-%d %H:%M:%S" 格式化串（读时投影，非 ISO）；
 - 模型渠道 usage_30d/cost_30d：读时从 llm_calls 聚合（新渠道/零用量 '—'；本地渠道
   '本地推理 · 不计费'），非存储列。
+- F3 收尾批（2026-10-07，15 篇 §3）：groups PUT/PATCH（AdminGroupPutIn/PatchIn——members
+  为 ARRAY(Text) 展示位、全量替换即列写）、models PUT（ModelChannelPutIn——budget_daily
+  显式 null=清空）、costs（CostsOut——契约行无形状，本批登记）、stats（AdminStatsOut）、
+  rotate 复用 ApiKeyCreatedOut 形状（200 返回，旧 key 立即吊销——契约行「24h 宽限 rotated」
+  因 api_keys 无 rotated 状态列按详设收敛，差异登记见 admin_repo.rotate_api_key）。
 """
 
 from __future__ import annotations
@@ -134,6 +139,41 @@ class AnalyticsOverviewOut(BaseModel):
     policy: dict[str, bool]  # 预算降级三开关（租户 settings.llm_policy 覆写）
 
 
+# ================================================================ costs / stats（§5.8 ★，F3 收尾）
+
+
+class CostByModelOut(BaseModel):
+    """GET /admin/costs 按 model 分组行（tokens/cost 聚合 + pct=成本占比取整条宽）。"""
+
+    model_config = ConfigDict(extra="forbid")
+    model: str
+    tokens: int
+    cost: float  # cost_usd 合计直显（analytics cost_30d_yuan 同源 M1 口径，汇率换算待接）
+    pct: int
+
+
+class CostsOut(BaseModel):
+    """GET /admin/costs（api/01 §5.8 ★ 契约行有路径无形状——形状随本批登记，15 篇 §3：
+    llm_calls 30d 聚合，总量 + 按 model 分组；形状就近 ModelsTab usage 字段口径（同窗口
+    30d、同源 llm_calls，展示串格式化留前端）；pct=analytics attribution pct 同构）。"""
+
+    model_config = ConfigDict(extra="forbid")
+    window: dict[str, str]  # {from, to}（"%m-%d"，analytics window 同构）
+    total_tokens: int
+    total_cost: float
+    by_model: list[CostByModelOut]  # cost 降序
+
+
+class AdminStatsOut(BaseModel):
+    """GET /admin/stats（api/01 §5.8 契约行「平台统计」按 15 篇 §3 收敛为轻量计数：
+    users=本租户用户总数；sessions_30d/runs_30d=30 天窗口计数。）"""
+
+    model_config = ConfigDict(extra="forbid")
+    users: int
+    sessions_30d: int
+    runs_30d: int
+
+
 # ================================================================ groups（§5.10）
 
 
@@ -161,6 +201,27 @@ class AdminGroupCreateIn(BaseModel):
     description: str = ""
     role_template: str = "member"
     members: list[str] = Field(default_factory=list, max_length=256)
+
+
+class AdminGroupPutIn(BaseModel):
+    """PUT /admin/groups/{id}（§5.10 预登记；15 篇 §3 全量语义：四字段即组的新状态，
+    members 数组全量替换——user_groups.members 为 ARRAY(Text) 展示位列，无成员关联表）。"""
+
+    model_config = ConfigDict(extra="forbid")
+    name: str = Field(min_length=1, max_length=128)
+    description: str = ""
+    role_template: str = "member"
+    members: list[str] = Field(default_factory=list, max_length=256)
+
+
+class AdminGroupPatchIn(BaseModel):
+    """PATCH /admin/groups/{id}（部分语义：仅提供的字段更新；members 提供即该数组全量替换）。"""
+
+    model_config = ConfigDict(extra="forbid")
+    name: str | None = Field(default=None, min_length=1, max_length=128)
+    description: str | None = None
+    role_template: str | None = Field(default=None, min_length=1, max_length=32)
+    members: list[str] | None = Field(default=None, max_length=256)
 
 
 # ================================================================ roles matrix（§5.8 ★）
@@ -243,6 +304,18 @@ class ModelChannelCreateIn(BaseModel):
     priority: int = 4
     budget_daily: int | None = None
     name: str | None = Field(default=None, max_length=128)
+
+
+class ModelChannelPutIn(BaseModel):
+    """PUT /admin/models/{id}（api/01 §5.8 ★ 渠道配置更新；15 篇 §3 口径=别名/优先级/预算/
+    启停四字段，仅提供的字段更新，budget_daily 显式 null=清空预算（透传）；密钥类字段不
+    开放改写（08 §2.0 红线，渠道密钥轮换随 L7 渠道表批次）。"""
+
+    model_config = ConfigDict(extra="forbid")
+    name: str | None = Field(default=None, min_length=1, max_length=128)
+    priority: int | None = None
+    budget_daily: int | None = None
+    status: Literal["active", "disabled"] | None = None
 
 
 class ModelTestIn(BaseModel):

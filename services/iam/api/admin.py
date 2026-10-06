@@ -7,25 +7,36 @@
     GET    /admin/analytics/overview      数据分析聚合（p-analytics 轻量版，mock 预登记） admin:read   200
     GET    /admin/groups                  用户组列表（§5.10 预登记）                     group:read   200
     POST   /admin/groups                  建组                                           group:write  201
+    PUT    /admin/groups/{id}             组更新（members 全量替换；F3=15 篇 §3）        group:write  200/404
+    PATCH  /admin/groups/{id}             组部分更新（members 提供即全量替换；F3）       group:write  200/404
+    DELETE /admin/groups/{id}             解散组（有成员 409；F3）                       group:write  204/404、409
     GET    /admin/roles/matrix            角色-权限矩阵读                                admin:read   200
     PUT    /admin/roles/matrix            角色-权限矩阵写（覆写 upsert）                 admin:write  200
     GET    /admin/models                  模型渠道列表（§5.8 ★）                         admin:read   200
     POST   /admin/models                  新增渠道                                       admin:write  201
+    PUT    /admin/models/{id}             渠道配置更新（别名/预算/启停；F3）             admin:write  200/404
     POST   /admin/models/test             渠道连通测试（不落库）                         admin:write  200
     GET    /admin/models/{id}/impact      删除级联影响预查询                             admin:read   200/404
     DELETE /admin/models/{id}             删除渠道（api/01 204 口径）                    admin:write  204/404
+    GET    /admin/costs                   成本看板聚合（llm_calls 30d 按 model 分组；F3） admin:read  200
+    GET    /admin/stats                   平台统计轻量计数（users/sessions/runs；F3）    admin:read   200
     POST   /admin/tenants                 创建租户（管理员初始密码一次性返回）           admin:write  201
     GET    /admin/api-keys                Key 列表（只回前缀与元数据）                   admin:read   200
     POST   /admin/api-keys                签发（明文仅本次返回；scopes⊆owner）           admin:write  201
+    POST   /admin/api-keys/{id}/rotate    轮换（旧 key 吊销+同 name 新签发明文一次；F3） admin:write  200/404、409
     POST   /admin/api-keys/{id}/revoke    吊销（→revoked 终态，全走审计）                admin:write  202
     POST   /permission-requests           提交权限申请（认证后无额外 scope；第六类工单联动） 认证     201
     GET    /permission-requests           申请列表（?role=mine 免 review:read）          review:read  200
 
 scope 按契约行声明（预登记行=路径权威；group:read/write 为 §5.10 新 scope，11 篇 §2 字典登记
 随文档批，种子已随迁移 20261005_c5e9a1d3b7f5 并入 super_admin/admin）。审计纪律：全部写操作
-（POST/PUT/DELETE）由网关 AuditLogMiddleware 自动落 audit_logs（带 trace_id），本文件零审计代码
-（users.py 同款，08 §3）。业务逻辑薄壳（users.py 同量级）：查询编排与状态断言在仓储
-（iam.data.repo_impl.admin_repo），本文件只做门禁+DTO 投影。
+（POST/PUT/PATCH/DELETE）由网关 AuditLogMiddleware 自动落 audit_logs（带 trace_id），本文件
+零审计代码（users.py 同款，08 §3）。业务逻辑薄壳（users.py 同量级）：查询编排与状态断言在
+仓储（iam.data.repo_impl.admin_repo），本文件只做门禁+DTO 投影。
+
+F3 收尾批（2026-10-07，15 篇 §3 六端点）：rotate 契约行「24h 宽限 rotated」因 api_keys 无
+rotated 状态列按详设收敛为立即吊销（差异登记 admin_repo.rotate_api_key）；costs 契约行有
+路径无形状，形状=CostsOut 随批登记（就近 ModelsTab usage 口径：30d 窗口+llm_calls 同源）。
 
 已知形状差异见 schemas/admin.py 头注（mock 4041→live 404 统一码、mock 信封→live 裸体等）。
 """
@@ -47,6 +58,9 @@ from services.iam.api.schemas.admin import (
     AdminGroupCreateIn,
     AdminGroupListOut,
     AdminGroupOut,
+    AdminGroupPatchIn,
+    AdminGroupPutIn,
+    AdminStatsOut,
     AnalyticsOverviewOut,
     ApiKeyCreatedOut,
     ApiKeyCreateIn,
@@ -58,11 +72,13 @@ from services.iam.api.schemas.admin import (
     AuditPageOut,
     AuditRowOut,
     ChannelImpactOut,
+    CostsOut,
     MatrixPermissionOut,
     MatrixRoleOut,
     ModelChannelCreateIn,
     ModelChannelListOut,
     ModelChannelOut,
+    ModelChannelPutIn,
     ModelTestIn,
     ModelTestOut,
     RoleMatrixOut,
@@ -76,7 +92,7 @@ from services.iam.api.schemas.admin import (
     TraceDetailOut,
     TraceStepOut,
 )
-from services.iam.data.orm import Tenant, User
+from services.iam.data.orm import Tenant, User, UserGroup
 from services.iam.data.repo_impl import admin_repo
 from services.platform.deps import Principal, PrincipalDep, SessionDep, require_scope
 from services.platform.errors import GatewayError
@@ -214,6 +230,29 @@ async def get_analytics_overview(principal: AdminReadDep, db: SessionDep) -> Ana
     return AnalyticsOverviewOut(**snapshot)
 
 
+# ================================================================ costs / stats（§5.8 ★，F3 收尾）
+
+
+@router.get(
+    "/costs",
+    response_model=CostsOut,
+    summary="成本看板聚合（llm_calls 30d：总 tokens/cost + 按 model 分组降序与占比；§5.8 ★）",
+)
+async def get_costs(principal: AdminReadDep, db: SessionDep) -> CostsOut:
+    snapshot = await admin_repo.costs_summary(db, tenant_id=principal.tenant_id)
+    return CostsOut(**snapshot)
+
+
+@router.get(
+    "/stats",
+    response_model=AdminStatsOut,
+    summary="平台统计轻量计数（users=本租户用户总数；sessions/runs=30 天窗口；§5.8）",
+)
+async def get_stats(principal: AdminReadDep, db: SessionDep) -> AdminStatsOut:
+    snapshot = await admin_repo.platform_stats(db, tenant_id=principal.tenant_id)
+    return AdminStatsOut(**snapshot)
+
+
 # ================================================================ groups（§5.10 预登记）
 
 
@@ -263,6 +302,100 @@ async def create_group(body: AdminGroupCreateIn, principal: GroupWriteDep, db: S
         members=row.members,
         created_at=row.created_at,
     )
+
+
+async def _group_or_404(db: AsyncSession, *, tenant_id: uuid.UUID, group_id: uuid.UUID) -> UserGroup:
+    """本租户组查找（跨租户同口径 404 防枚举；users._tenant_user_or_404 同款判定）。"""
+    row = await admin_repo.get_group(db, tenant_id=tenant_id, group_id=group_id)
+    if row is None:
+        raise GatewayError(404, "组不存在", status_code=404)
+    return row
+
+
+async def _validate_group_name(db: AsyncSession, *, tenant_id: uuid.UUID, name: str, row: UserGroup) -> str:
+    """组名非空 + 租户内唯一（改名排除自身；POST 同规 422+3001）。"""
+    stripped = name.strip()
+    if not stripped:
+        raise GatewayError(3001, "组名必填", status_code=422)
+    taken = await admin_repo.group_name_taken(db, tenant_id=tenant_id, name=stripped, exclude_id=row.id)
+    if taken and stripped != row.name:
+        raise GatewayError(3001, f"组名已存在: {stripped}", status_code=422)
+    return stripped
+
+
+async def _validate_role_template(db: AsyncSession, template: str) -> str:
+    stripped = template.strip() or "member"
+    if not await admin_repo.role_code_exists(db, stripped):
+        raise GatewayError(3001, f"未知角色模板: {stripped}", status_code=422)
+    return stripped
+
+
+def _group_out(row: UserGroup) -> AdminGroupOut:
+    return AdminGroupOut(
+        id=row.id,
+        name=row.name,
+        description=row.description,
+        role_template=row.role_template,
+        members=row.members,
+        created_at=row.created_at,
+    )
+
+
+@router.put(
+    "/groups/{group_id}",
+    response_model=AdminGroupOut,
+    summary="组更新（全量语义：四字段即新状态，members 全量替换；§5.10 预登记，15 篇 §3）",
+)
+async def put_group(
+    group_id: uuid.UUID, body: AdminGroupPutIn, principal: GroupWriteDep, db: SessionDep
+) -> AdminGroupOut:
+    row = await _group_or_404(db, tenant_id=principal.tenant_id, group_id=group_id)
+    name = await _validate_group_name(db, tenant_id=principal.tenant_id, name=body.name, row=row)
+    template = await _validate_role_template(db, body.role_template)
+    row = await admin_repo.update_group(
+        db,
+        row,
+        name=name,
+        description=body.description,
+        role_template=template,
+        members=[m.strip() for m in body.members if m.strip()],
+    )
+    return _group_out(row)
+
+
+@router.patch(
+    "/groups/{group_id}",
+    response_model=AdminGroupOut,
+    summary="组部分更新（仅提供的字段生效；members 提供即该数组全量替换；§5.10 预登记，15 篇 §3）",
+)
+async def patch_group(
+    group_id: uuid.UUID, body: AdminGroupPatchIn, principal: GroupWriteDep, db: SessionDep
+) -> AdminGroupOut:
+    row = await _group_or_404(db, tenant_id=principal.tenant_id, group_id=group_id)
+    provided = body.model_fields_set
+    if "name" in provided and body.name is not None:
+        row.name = await _validate_group_name(db, tenant_id=principal.tenant_id, name=body.name, row=row)
+    if "description" in provided and body.description is not None:
+        row.description = body.description
+    if "role_template" in provided and body.role_template is not None:
+        row.role_template = await _validate_role_template(db, body.role_template)
+    if "members" in provided and body.members is not None:
+        row.members = [m.strip() for m in body.members if m.strip()]
+    await db.flush()
+    return _group_out(row)
+
+
+@router.delete(
+    "/groups/{group_id}",
+    status_code=204,
+    summary="解散组（有成员 409 先清空再解散；§5.10 预登记 204 口径，15 篇 §3）",
+)
+async def delete_group(group_id: uuid.UUID, principal: GroupWriteDep, db: SessionDep) -> Response:
+    row = await _group_or_404(db, tenant_id=principal.tenant_id, group_id=group_id)
+    if row.members:  # 有成员先 409（前端引导先移空；users 软删不同——组无引用面可物理删）
+        raise GatewayError(3409, "组内仍有成员，请先移空成员后再解散", status_code=409)
+    await admin_repo.delete_group(db, row)
+    return Response(status_code=204)
 
 
 # ================================================================ roles matrix（§5.8 ★）
@@ -351,6 +484,34 @@ async def create_model_channel(body: ModelChannelCreateIn, principal: AdminWrite
         name=body.name,
     )
     return _channel_out(row, {"cost": 0.0})
+
+
+@router.put(
+    "/models/{channel_id}",
+    response_model=ModelChannelOut,
+    summary="渠道配置更新（别名/优先级/预算/启停；仅提供的字段生效，budget_daily 显式 null=清空；§5.8 ★）",
+)
+async def put_model_channel(
+    channel_id: uuid.UUID, body: ModelChannelPutIn, principal: AdminWriteDep, db: SessionDep
+) -> ModelChannelOut:
+    row = await admin_repo.get_model_channel(db, tenant_id=principal.tenant_id, channel_id=channel_id)
+    if row is None:
+        raise GatewayError(404, "渠道不存在", status_code=404)  # 跨租户同口径 404（防枚举）
+    provided = body.model_fields_set
+    if "name" in provided and body.name is not None:
+        stripped = body.name.strip()
+        if not stripped:  # 别名落 name 列（nullable=False），空串 422 同 POST 组名口径
+            raise GatewayError(3001, "渠道别名不能为空", status_code=422)
+        row.name = stripped
+    if "priority" in provided and body.priority is not None:
+        row.priority = body.priority
+    if "budget_daily" in provided:
+        row.budget_daily = body.budget_daily  # 透传：显式 null=清空预算（15 篇 §3）
+    if "status" in provided and body.status is not None:
+        row.status = body.status  # DB CHECK 限 active/disabled
+    await db.flush()
+    usage = await admin_repo.channel_usage(db, tenant_id=principal.tenant_id, model_names=row.models)
+    return _channel_out(row, usage)
 
 
 @router.post("/models/test", response_model=ModelTestOut, summary="渠道连通测试（IX-ADM-05；body 不落库）")
@@ -498,6 +659,31 @@ async def revoke_api_key(key_id: uuid.UUID, principal: AdminWriteDep, db: Sessio
     if row is None:
         raise GatewayError(404, "Key 不存在", status_code=404)  # 跨租户同口径 404（防枚举）
     return ApiKeyRevokedOut(id=row.id, status="revoked")
+
+
+@router.post(
+    "/api-keys/{key_id}/rotate",
+    response_model=ApiKeyCreatedOut,
+    status_code=200,
+    summary="轮换 API Key（旧 key 立即吊销 + 同 name/scopes 新签发，明文仅本次返回；§5.8 ★，15 篇 §3）",
+)
+async def rotate_api_key(key_id: uuid.UUID, principal: AdminWriteDep, db: SessionDep) -> ApiKeyCreatedOut:
+    row = await admin_repo.get_api_key(db, tenant_id=principal.tenant_id, key_id=key_id)
+    if row is None:
+        raise GatewayError(404, "Key 不存在", status_code=404)  # 跨租户同口径 404（防枚举）
+    if row.revoked_at is not None:  # 已吊销无凭据可换（契约行 409*；重复吊销走 revoke 幂等）
+        raise GatewayError(3409, "已吊销的 Key 不可轮换", status_code=409)
+    new_row, plain = await admin_repo.rotate_api_key(db, row)
+    return ApiKeyCreatedOut(
+        id=new_row.id,
+        name=new_row.name,
+        prefix=new_row.key_prefix,
+        scopes=new_row.scopes,
+        status="active",
+        created_at=new_row.created_at,
+        last_used_at=new_row.last_used_at,
+        key=plain,  # 明文仅此一次（库只存哈希与前缀）
+    )
 
 
 # ================================================================ permission-requests（§5.10 预登记）

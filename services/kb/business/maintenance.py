@@ -233,9 +233,7 @@ async def _run(
         # ── 记账基线：扫描时候选总量（先于归档翻转）────────────────────────
         candidates_scanned = int(
             (
-                await session.execute(
-                    select(func.count()).select_from(KbFact).where(KbFact.status == _QUEUE_STATUS)
-                )
+                await session.execute(select(func.count()).select_from(KbFact).where(KbFact.status == _QUEUE_STATUS))
             ).scalar_one()
         )
 

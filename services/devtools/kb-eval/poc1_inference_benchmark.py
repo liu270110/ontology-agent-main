@@ -148,11 +148,11 @@ def _unit_lines(i: int) -> list[str]:
     order_no = f"BAD-{i:06d}" if i % SPEED_DEFECT_STEP == 7 else f"OO-{i % 100:02d}{i // 100 % 100:02d}{i % 100:02d}"
     ts = f"2026-04-{i % 28 + 1:02d}T08:{i % 60:02d}:00"
     return [
-        f"ex:dev{i} a {dev_cls} ; rdfs:label \"设备D-{i:06d}\" ; pw:inSection ex:sec{i % 64} .",
-        f"ex:order{i} a pw:OutageOrder ; rdfs:label \"工单O-{i:06d}\" ;"
-        f" pw:orderNo \"{order_no}\" ; pw:hasStatus \"{status}\" .",
-        f"ex:ev{i} a pw:OutageConfirmed ; rdfs:label \"事件E-{i:06d}\" ;"
-        f" pw:affectsFeeder ex:feeder{i % 6} ; pw:confirmedAt \"{ts}\"^^xsd:dateTime .",
+        f'ex:dev{i} a {dev_cls} ; rdfs:label "设备D-{i:06d}" ; pw:inSection ex:sec{i % 64} .',
+        f'ex:order{i} a pw:OutageOrder ; rdfs:label "工单O-{i:06d}" ;'
+        f' pw:orderNo "{order_no}" ; pw:hasStatus "{status}" .',
+        f'ex:ev{i} a pw:OutageConfirmed ; rdfs:label "事件E-{i:06d}" ;'
+        f' pw:affectsFeeder ex:feeder{i % 6} ; pw:confirmedAt "{ts}"^^xsd:dateTime .',
     ]
 
 
@@ -161,17 +161,15 @@ def build_graph(target: int) -> tuple[str, int]:
     tbox = build_tbox()
     # TBox 头部实例：6 馈线 + 3 变电站 + 4 班组 + 12 班组成员 + 16 区段 + 24 客户（固定小集合）
     heads = [
-        f"ex:feeder{k} a pw:Feeder ; rdfs:label \"馈线F-{k}\" ; pw:repairCrewAvailable"
+        f'ex:feeder{k} a pw:Feeder ; rdfs:label "馈线F-{k}" ; pw:repairCrewAvailable'
         f" {'true' if k % 2 == 0 else 'false'} ; pw:servesCustomer ex:cust{k % 24} ."
         for k in range(6)
     ]
-    heads += [f"ex:sub{k} a pw:Substation ; rdfs:label \"变电站S-{k}\" ." for k in range(3)]
-    heads += [
-        f"ex:crew{k} a pw:RepairCrew ; pw:crewLead ex:member{k} ." for k in range(4)
-    ]
-    heads += [f"ex:member{k} a pw:CrewMember ; rdfs:label \"人员M-{k}\" ." for k in range(12)]
-    heads += [f"ex:sec{k} a pw:LineSection ; rdfs:label \"区段L-{k}\" ." for k in range(64)]
-    heads += [f"ex:cust{k} a pw:Customer ; rdfs:label \"客户C-{k}\" ." for k in range(24)]
+    heads += [f'ex:sub{k} a pw:Substation ; rdfs:label "变电站S-{k}" .' for k in range(3)]
+    heads += [f"ex:crew{k} a pw:RepairCrew ; pw:crewLead ex:member{k} ." for k in range(4)]
+    heads += [f'ex:member{k} a pw:CrewMember ; rdfs:label "人员M-{k}" .' for k in range(12)]
+    heads += [f'ex:sec{k} a pw:LineSection ; rdfs:label "区段L-{k}" .' for k in range(64)]
+    heads += [f'ex:cust{k} a pw:Customer ; rdfs:label "客户C-{k}" .' for k in range(24)]
     body = "\n".join(heads)
     n = _count_triples(tbox + "\n" + body)
     units: list[str] = []
@@ -187,7 +185,7 @@ def build_graph(target: int) -> tuple[str, int]:
     pad: list[str] = []
     j = 0
     while n < target:
-        pad.append(f"ex:dev{i - 1 if i else 0} ex:note \"note-{j}\" .")
+        pad.append(f'ex:dev{i - 1 if i else 0} ex:note "note-{j}" .')
         n += 1
         j += 1
     graph_text = tbox + "\n" + body + "\n" + "\n".join(units) + "\n" + "\n".join(pad)
@@ -499,7 +497,10 @@ def run_scale(
         if result.parse.timeouts or result.materialize.timeouts:
             break
         res, rss = run_phase_in_child(
-            ctx, "parse", {"turtle": turtle}, timeout_s=min(PHASE_SHARE["parse"] * budget, remaining()),
+            ctx,
+            "parse",
+            {"turtle": turtle},
+            timeout_s=min(PHASE_SHARE["parse"] * budget, remaining()),
             label=f"{name}/parse#{rnd + 1}",
         )
         if res is None:
@@ -510,8 +511,12 @@ def run_scale(
         result.parse.rss_peak_bytes.append(rss)
 
         res, rss = run_phase_in_child(
-            ctx, "materialize", {"turtle": turtle}, use_tracemalloc=(rnd == 0 and trace_on),
-            timeout_s=min(PHASE_SHARE["materialize"] * budget, remaining()), label=f"{name}/owlrl#{rnd + 1}",
+            ctx,
+            "materialize",
+            {"turtle": turtle},
+            use_tracemalloc=(rnd == 0 and trace_on),
+            timeout_s=min(PHASE_SHARE["materialize"] * budget, remaining()),
+            label=f"{name}/owlrl#{rnd + 1}",
         )
         if res is None:
             result.materialize.timeouts += 1
@@ -533,8 +538,12 @@ def run_scale(
     if not result.timeout_phase:
         for run in range(shacl_runs):
             res, rss = run_phase_in_child(
-                ctx, "shacl", {"turtle": turtle}, use_tracemalloc=(run == 0 and trace_on),
-                timeout_s=min(PHASE_SHARE["shacl"] * budget, remaining()), label=f"{name}/shacl#{run + 1}",
+                ctx,
+                "shacl",
+                {"turtle": turtle},
+                use_tracemalloc=(run == 0 and trace_on),
+                timeout_s=min(PHASE_SHARE["shacl"] * budget, remaining()),
+                label=f"{name}/shacl#{run + 1}",
             )
             if res is None:
                 result.shacl.timeouts += 1

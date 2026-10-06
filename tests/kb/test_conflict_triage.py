@@ -169,9 +169,7 @@ def _fact(
     return row
 
 
-async def _seed(
-    factory: async_sessionmaker[AsyncSession], docs: list[Document], facts: list[KbFact]
-) -> None:
+async def _seed(factory: async_sessionmaker[AsyncSession], docs: list[Document], facts: list[KbFact]) -> None:
     """事务内批量播种（文档先行——版本链上溯与业务生效时间读取依赖）。"""
     async with factory() as db, db.begin():
         for doc in docs:
@@ -233,7 +231,11 @@ async def test_T1_版本演进_文档链自动承接无工单(factory: async_ses
     old_doc, new_doc = uuid.uuid4(), uuid.uuid4()
     old_fact = _fact(document_id=old_doc, subject="馈线F001", obj="100Ah", created_at=_T9(8, 0))
     cand = _fact(
-        document_id=new_doc, subject="馈线F001", obj="120Ah", status="candidate", created_at=_T9(9, 0),
+        document_id=new_doc,
+        subject="馈线F001",
+        obj="120Ah",
+        status="candidate",
+        created_at=_T9(9, 0),
         meta={"valid_from": "2024-03-01T00:00:00"},
     )
     await _seed(
@@ -271,10 +273,15 @@ async def test_T1_结构化源行事件链与单调性(factory: async_sessionmak
     """同 (source_system, external_id) 且 occurred_at 单调递增 → T1；递增不成立落 T2 工单。"""
     # Arrange：ERP 行事件链两行（occurred_at 递增）；另备一组递增不成立的同链对（旧行更新）
     doc_a, doc_b, doc_c = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
+
     def _line(doc_id: uuid.UUID, obj: str, occ: str, *, status: str = "authoritative", hh: int, mm: int) -> KbFact:
         return _fact(
-            document_id=doc_id, subject="设备DEV-001", predicate="localStatus", obj=obj,
-            status=status, created_at=_T9(hh, mm),
+            document_id=doc_id,
+            subject="设备DEV-001",
+            predicate="localStatus",
+            obj=obj,
+            status=status,
+            created_at=_T9(hh, mm),
             evidence={"source_ref": {"source_system": "erp", "external_id": "DEV-001", "occurred_at": occ}},
         )
 
@@ -311,7 +318,11 @@ async def test_T4_多源重复合并佐证(factory: async_sessionmaker[AsyncSess
     # Arrange：文档 A/B 无版本关系，双方确认同一参数
     doc_a, doc_b = uuid.uuid4(), uuid.uuid4()
     existing = _fact(
-        document_id=doc_a, subject="馈线F001", obj="50万", confidence=0.6, created_at=_T9(8, 0),
+        document_id=doc_a,
+        subject="馈线F001",
+        obj="50万",
+        confidence=0.6,
+        created_at=_T9(8, 0),
         evidence={
             "source_ref": {"document_id": str(doc_a), "doc_version": 1, "span": [10, 14]},
             "quote": "审批上限50万",
@@ -319,7 +330,12 @@ async def test_T4_多源重复合并佐证(factory: async_sessionmaker[AsyncSess
         },
     )
     cand = _fact(
-        document_id=doc_b, subject="馈线F001", obj="50万", status="candidate", confidence=0.9, created_at=_T9(9, 0),
+        document_id=doc_b,
+        subject="馈线F001",
+        obj="50万",
+        status="candidate",
+        confidence=0.9,
+        created_at=_T9(9, 0),
         evidence={"source_ref": {"document_id": str(doc_b), "doc_version": 1, "span": [30, 34]}},
     )
     await _seed(factory, [_doc(doc_a, title="制度A"), _doc(doc_b, title="制度B")], [existing, cand])
@@ -348,11 +364,18 @@ async def test_T3_限定差异_span落地双保留(factory: async_sessionmaker[A
     # Arrange：京沪地标（region）vs 国标（regulatory_domain），限定语均在原文 span 出现
     doc_a, doc_b = uuid.uuid4(), uuid.uuid4()
     existing = _fact(
-        document_id=doc_a, subject="台区T09", obj="120kVA", created_at=_T9(8, 0),
+        document_id=doc_a,
+        subject="台区T09",
+        obj="120kVA",
+        created_at=_T9(8, 0),
         meta={"scope": {"region": {"value": "110000", "span": [12, 18]}}},
     )
     cand = _fact(
-        document_id=doc_b, subject="台区T09", obj="100kVA", status="candidate", created_at=_T9(9, 0),
+        document_id=doc_b,
+        subject="台区T09",
+        obj="100kVA",
+        status="candidate",
+        created_at=_T9(9, 0),
         meta={"scope": {"regulatory_domain": {"value": "http://oa.local/gb", "span": [4, 9]}}},
     )
     await _seed(factory, [_doc(doc_a, title="北京地标"), _doc(doc_b, title="国标")], [existing, cand])
@@ -373,10 +396,18 @@ async def test_T3_span未落地_硬门禁落T2工单(factory: async_sessionmaker
     # Arrange：键不相交但值无源文回指
     doc_a, doc_b = uuid.uuid4(), uuid.uuid4()
     existing = _fact(
-        document_id=doc_a, subject="台区T09", obj="120kVA", created_at=_T9(8, 0), meta={"scope": {"region": "110000"}},
+        document_id=doc_a,
+        subject="台区T09",
+        obj="120kVA",
+        created_at=_T9(8, 0),
+        meta={"scope": {"region": "110000"}},
     )
     cand = _fact(
-        document_id=doc_b, subject="台区T09", obj="100kVA", status="candidate", created_at=_T9(9, 0),
+        document_id=doc_b,
+        subject="台区T09",
+        obj="100kVA",
+        status="candidate",
+        created_at=_T9(9, 0),
         meta={"scope": {"regulatory_domain": "http://oa.local/gb"}},
     )
     await _seed(factory, [_doc(doc_a, title="北京地标"), _doc(doc_b, title="国标")], [existing, cand])
@@ -396,16 +427,38 @@ async def test_T3_source_system豁免通道(factory: async_sessionmaker[AsyncSes
     # Arrange：localStatus（白名单）两系统异值；hasLimit（未声明 systemRelative）同景
     doc_a, doc_b, doc_c, doc_d = (uuid.uuid4() for _ in range(4))
     facts = [
-        _fact(document_id=doc_a, subject="设备D1", predicate="localStatus", obj="running", created_at=_T9(8, 0),
-              meta={"scope": {"source_system": "http://sys/erp"}}),
         _fact(
-            document_id=doc_b, subject="设备D1", predicate="localStatus", obj="idle",
-            status="candidate", created_at=_T9(9, 0), meta={"scope": {"source_system": "http://sys/crm"}},
+            document_id=doc_a,
+            subject="设备D1",
+            predicate="localStatus",
+            obj="running",
+            created_at=_T9(8, 0),
+            meta={"scope": {"source_system": "http://sys/erp"}},
         ),
-        _fact(document_id=doc_c, subject="设备D2", obj="100Ah", created_at=_T9(8, 0),
-              meta={"scope": {"source_system": "http://sys/erp"}}),
-        _fact(document_id=doc_d, subject="设备D2", obj="120Ah", status="candidate", created_at=_T9(9, 0),
-              meta={"scope": {"source_system": "http://sys/crm"}}),
+        _fact(
+            document_id=doc_b,
+            subject="设备D1",
+            predicate="localStatus",
+            obj="idle",
+            status="candidate",
+            created_at=_T9(9, 0),
+            meta={"scope": {"source_system": "http://sys/crm"}},
+        ),
+        _fact(
+            document_id=doc_c,
+            subject="设备D2",
+            obj="100Ah",
+            created_at=_T9(8, 0),
+            meta={"scope": {"source_system": "http://sys/erp"}},
+        ),
+        _fact(
+            document_id=doc_d,
+            subject="设备D2",
+            obj="120Ah",
+            status="candidate",
+            created_at=_T9(9, 0),
+            meta={"scope": {"source_system": "http://sys/crm"}},
+        ),
     ]
     await _seed(factory, [_doc(d, title=f"源{i}") for i, d in enumerate([doc_a, doc_b, doc_c, doc_d])], facts)
     tickets = _FakeTickets()
@@ -427,11 +480,19 @@ async def test_T2_真矛盾_建冲突工单与评分参考(factory: async_sessio
     # Arrange：A 说 50 万、B 说 100 万，无链无 scope
     doc_a, doc_b = uuid.uuid4(), uuid.uuid4()
     existing = _fact(
-        document_id=doc_a, subject="馈线F001", obj="50万", created_at=_T9(8, 0),
+        document_id=doc_a,
+        subject="馈线F001",
+        obj="50万",
+        created_at=_T9(8, 0),
         evidence={"source_ref": {"document_id": str(doc_a), "doc_version": 1}, "quote": "审批上限50万", "span": [2, 8]},
     )
     cand = _fact(
-        document_id=doc_b, subject="馈线F001", obj="100万", status="candidate", confidence=0.9, created_at=_T9(9, 0),
+        document_id=doc_b,
+        subject="馈线F001",
+        obj="100万",
+        status="candidate",
+        confidence=0.9,
+        created_at=_T9(9, 0),
         evidence={
             "source_ref": {"document_id": str(doc_b), "doc_version": 1},
             "quote": "上限调整为100万",
@@ -489,12 +550,21 @@ async def test_对象属性多值合法与无端口响亮失败(factory: async_s
     # Arrange：relation 型同主谓异宾语（连线多目标）；attribute 型真矛盾对（用于端口缺失断言）
     doc_a, doc_b, doc_c = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
     old_rel = _fact(
-        document_id=doc_a, subject="馈线F001", predicate="connectedTo", obj="台区T09",
-        fact_type="relation", created_at=_T9(8, 0)
+        document_id=doc_a,
+        subject="馈线F001",
+        predicate="connectedTo",
+        obj="台区T09",
+        fact_type="relation",
+        created_at=_T9(8, 0),
     )
     rel_cand = _fact(
-        document_id=doc_b, subject="馈线F001", predicate="connectedTo", obj="台区T10",
-        fact_type="relation", status="candidate", created_at=_T9(9, 0),
+        document_id=doc_b,
+        subject="馈线F001",
+        predicate="connectedTo",
+        obj="台区T10",
+        fact_type="relation",
+        status="candidate",
+        created_at=_T9(9, 0),
     )
     old_attr = _fact(document_id=doc_a, subject="台区T09", obj="100kVA", created_at=_T9(8, 0))
     attr_cand = _fact(document_id=doc_c, subject="台区T09", obj="120kVA", status="candidate", created_at=_T9(9, 30))
@@ -663,7 +733,9 @@ async def test_裁决_点选胜者封口败者连边(factory: async_sessionmaker
     report = await _run(
         factory,
         lambda db: apply_decision(
-            db, TENANT, ticket=ticket,
+            db,
+            TENANT,
+            ticket=ticket,
             decision={"resolution": "winner_a", "resolved_by": REVIEWER, "comment": "新制度为准"},
         ),
     )
@@ -727,7 +799,9 @@ async def test_裁决_待定不动事实与非法入参(factory: async_sessionma
         await _run(
             factory,
             lambda db: apply_decision(
-                db, TENANT, ticket=ticket,
+                db,
+                TENANT,
+                ticket=ticket,
                 decision={"resolution": "t3_coexist", "scope_a": {"foo": 1}, "scope_b": {"region": "110000"}},
             ),
         )

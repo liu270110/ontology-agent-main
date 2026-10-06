@@ -78,8 +78,12 @@ def diff_projections(
         label=lambda a: a.kind,
     )
     diff = ProjectionDiff(
-        base_version=base_version, target_version=target_version, classes=classes, properties=properties,
-        axioms=axioms, rules=rules,
+        base_version=base_version,
+        target_version=target_version,
+        classes=classes,
+        properties=properties,
+        axioms=axioms,
+        rules=rules,
     )
     # summary = 扁平计数（{group}_{bucket} → 条数），列表页徽标直接消费
     diff.summary = {

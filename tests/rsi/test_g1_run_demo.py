@@ -38,9 +38,7 @@ def _run(args: list[str], cwd: Path | None = None) -> subprocess.CompletedProces
 def test_run_g1_demo端到端_双簇三级起草(tmp_path: Path) -> None:
     store_dir = tmp_path / "store"
     report_path = tmp_path / "report.md"
-    proc = _run(
-        ["--demo", "--store-dir", str(store_dir), "--report", str(report_path)]
-    )
+    proc = _run(["--demo", "--store-dir", str(store_dir), "--report", str(report_path)])
     assert proc.returncode == 0, f"stdout={proc.stdout}\nstderr={proc.stderr}"
     assert "[demo] 注入合成缺口事件 12 条" in proc.stdout  # ⚠ 标注：非真实信号
     assert "种子域 unbound_action + 跨域 execution_failure" in proc.stdout
@@ -57,11 +55,7 @@ def test_run_g1_demo端到端_双簇三级起草(tmp_path: Path) -> None:
     assert "保持 draft" in report and "plugin 侧只读不装" in report
     assert "零幻觉上架" in report
     # 工单留痕：两簇各开一单（surface=O1 固定开单面）
-    records = [
-        line
-        for line in (store_dir / "gap_proposals.jsonl").read_text(encoding="utf-8").splitlines()
-        if line
-    ]
+    records = [line for line in (store_dir / "gap_proposals.jsonl").read_text(encoding="utf-8").splitlines() if line]
     assert len(records) == 2
 
 
@@ -120,9 +114,7 @@ async def test_open_ledger_repo返回零参可重复调用工厂(monkeypatch) ->
 
     monkeypatch.setattr("sqlalchemy.ext.asyncio.create_async_engine", fake_create_async_engine)
     monkeypatch.setattr("sqlalchemy.ext.asyncio.async_sessionmaker", fake_async_sessionmaker)
-    monkeypatch.setattr(
-        "services.writeback.data.repo_impl.writeback_repo.PgWritebackLedgerRepository", FakeRepo
-    )
+    monkeypatch.setattr("services.writeback.data.repo_impl.writeback_repo.PgWritebackLedgerRepository", FakeRepo)
 
     tenant = uuid.UUID("00000000-0000-0000-0000-000000000001")
     factory = run_g1._open_ledger_repo(SimpleNamespace(pg_dsn="postgresql+asyncpg://fake"), tenant)

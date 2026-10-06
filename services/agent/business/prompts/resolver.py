@@ -66,9 +66,7 @@ def parse_prompt_ref(ref: str) -> PromptRef:
         raise PromptError(f"3001 PARAM_INVALID: 非提示词钉死引用（须以 {PROMPT_REF_PREFIX} 开头）: {ref!r}")
     body = ref[len(PROMPT_REF_PREFIX) :]
     if "@" not in body:
-        raise PromptError(
-            f"3001 PARAM_INVALID: 钉死引用缺 @version 段（语法 prompt:{{id}}@{{version|head}}）: {ref!r}"
-        )
+        raise PromptError(f"3001 PARAM_INVALID: 钉死引用缺 @version 段（语法 prompt:{{id}}@{{version|head}}）: {ref!r}")
     raw_id, _, raw_version = body.partition("@")
     try:
         template_id = uuid.UUID(raw_id)
@@ -77,9 +75,7 @@ def parse_prompt_ref(ref: str) -> PromptRef:
     if raw_version == HEAD_MARKER:
         return PromptRef(template_id=template_id, version=None)
     if not raw_version.isdigit() or int(raw_version) < 1:
-        raise PromptError(
-            f"3001 PARAM_INVALID: 钉死引用版本段 {raw_version!r} 非法（正整数或 {HEAD_MARKER}）"
-        )
+        raise PromptError(f"3001 PARAM_INVALID: 钉死引用版本段 {raw_version!r} 非法（正整数或 {HEAD_MARKER}）")
     return PromptRef(template_id=template_id, version=int(raw_version))
 
 
@@ -99,9 +95,7 @@ def prompt_error_to_gateway(exc: PromptError) -> GatewayError:
     return GatewayError(code, str(exc), status_code=400 if 3000 <= code < 4000 else 409)
 
 
-def resolved_from_version(
-    *, template_id: uuid.UUID, slug: str, version: PromptVersion
-) -> ResolvedPrompt:
+def resolved_from_version(*, template_id: uuid.UUID, slug: str, version: PromptVersion) -> ResolvedPrompt:
     """聚合版本 → 消解回执（@head 在此消解为确定版本号——版本钉死红线）。"""
     return ResolvedPrompt(
         template_id=template_id,

@@ -142,9 +142,7 @@ async def invite_env(monkeypatch):
             await session.execute(text("DELETE FROM user_roles WHERE tenant_id = ANY(:ids)").bindparams(ids=tenant_ids))
             # C1 me 域表先于 users 清（漏列曾致 teardown FK 违例）
             for tbl in ("device_sessions", "totp_credentials", "totp_backup_codes", "user_preferences"):
-                await session.execute(
-                    text(f"DELETE FROM {tbl} WHERE user_id = ANY(:ids)").bindparams(ids=user_ids)
-                )
+                await session.execute(text(f"DELETE FROM {tbl} WHERE user_id = ANY(:ids)").bindparams(ids=user_ids))
             await session.execute(text("DELETE FROM users WHERE id = ANY(:ids)").bindparams(ids=user_ids))
             await session.execute(text("DELETE FROM tenants WHERE id = ANY(:ids)").bindparams(ids=tenant_ids))
             await session.commit()
@@ -267,9 +265,7 @@ async def test_匿名join_新邮箱建用户绑角色_再次join幂等不重复�
         assert joinee.display_name == "受邀新人" and joinee.password_hash.startswith("pbkdf2:")
         role = (await session.execute(select(Role).where(Role.code == "curator"))).scalar_one()
         bound = (
-            await session.execute(
-                select(UserRole).where(UserRole.user_id == joinee.id, UserRole.role_id == role.id)
-            )
+            await session.execute(select(UserRole).where(UserRole.user_id == joinee.id, UserRole.role_id == role.id))
         ).scalar_one_or_none()
         assert bound is not None
         invite = await session.get(Invite, uuid.UUID(created["id"]))
@@ -284,10 +280,14 @@ async def test_匿名join_新邮箱建用户绑角色_再次join幂等不重复�
         assert len(users) == 1
         role = (await session.execute(select(Role).where(Role.code == "curator"))).scalar_one()
         bindings = (
-            await session.execute(
-                select(UserRole).where(UserRole.user_id == users[0].id, UserRole.role_id == role.id)
+            (
+                await session.execute(
+                    select(UserRole).where(UserRole.user_id == users[0].id, UserRole.role_id == role.id)
+                )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
         assert len(bindings) == 1
         invite = await session.get(Invite, uuid.UUID(created["id"]))
         assert invite is not None and invite.used_count == 2
@@ -390,12 +390,16 @@ async def test_生成动作_审计留痕_audit_logs(invite_env):
     # Assert：audit_logs 有本租户的 POST /api/v1/invites 行（result=success）
     async with env["factory"]() as session:
         row = (
-            await session.execute(
-                select(AuditLog)
-                .where(AuditLog.action == "POST /api/v1/invites", AuditLog.tenant_id == env["tenant_id"])
-                .order_by(AuditLog.created_at.desc())
-                .limit(1)
+            (
+                await session.execute(
+                    select(AuditLog)
+                    .where(AuditLog.action == "POST /api/v1/invites", AuditLog.tenant_id == env["tenant_id"])
+                    .order_by(AuditLog.created_at.desc())
+                    .limit(1)
+                )
             )
-        ).scalars().first()
+            .scalars()
+            .first()
+        )
         assert row is not None
         assert row.result == "success" and row.actor_id == uuid.UUID(created["created_by"])

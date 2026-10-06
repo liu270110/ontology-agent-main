@@ -48,8 +48,7 @@ def test_frontmatter_两种变体解析():
     # Arrange：变体 A（无引号无版本）与变体 B（agentskills.io 带引号带版本）
     plain = "---\nname: my-skill\ndescription: 无引号描述\n---\n\n# 正文\n"
     quoted = (
-        '---\nname: quoted-skill\ndescription: "带引号描述."\n'
-        "version: 1.1.0\nauthor: x\nmetadata:\n  nested: y\n---\n"
+        '---\nname: quoted-skill\ndescription: "带引号描述."\nversion: 1.1.0\nauthor: x\nmetadata:\n  nested: y\n---\n'
     )
     # Act
     plain_fields = parse_frontmatter(plain)

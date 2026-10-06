@@ -193,9 +193,7 @@ class RsiService:
             proposal.transition(ProposalStatus.REJECTED)  # 门禁拒绝进终态（09 §5 状态机主链）
             # K13-a 落选入册：reason=gates verdict 摘要（evaluate_chain 0 级 fail 即短路，
             # 实际恒单条；全拒维度 join 以防后续级扩展出非短路 fail）。REJECTED 终态语义不变。
-            self._record_rejection(
-                proposal, reason=";".join(r.verdict for r in results if not r.passed)
-            )
+            self._record_rejection(proposal, reason=";".join(r.verdict for r in results if not r.passed))
             await self.audit_trail.record(
                 RsiAuditRecord(
                     action="rsi.evaluate",
@@ -378,9 +376,7 @@ class RsiService:
             at=datetime.now(UTC),
         )
         with self._rejection_lock:
-            bucket = self._rejections.setdefault(
-                proposal.target, deque(maxlen=self._rejection_maxlen)
-            )
+            bucket = self._rejections.setdefault(proposal.target, deque(maxlen=self._rejection_maxlen))
             # 同提案同因重复落选（如 apply 对漂移提案反复重试）不重复占册，
             # 防回显 5 条被同因占满（ocr 2026-10-06 评审建议，对齐专家 P2-1）。
             if bucket and bucket[-1].proposal_id == record.proposal_id and bucket[-1].reason == reason:

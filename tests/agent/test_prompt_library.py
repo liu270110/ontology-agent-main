@@ -110,9 +110,7 @@ def test_聚合_版本不可变_旧版本只读_追加不改写() -> None:
     v1_before = tpl.versions[0]
     v1_checksum, v1_text = v1_before.checksum, v1_before.system_prompt
     # Act：追加 v2（部分更新——system_prompt 承接 head，few_shot 替换）
-    v2 = tpl.draft_new_version(
-        system_prompt="你是电网运维分析专家（二级）。", created_by=OWNER
-    )
+    v2 = tpl.draft_new_version(system_prompt="你是电网运维分析专家（二级）。", created_by=OWNER)
     # Assert
     assert v2.version == 2 and len(tpl.versions) == 2
     assert tpl.versions[0] is v1_before  # 同一对象未被替换/改写
@@ -187,6 +185,7 @@ def test_聚合_模板槽位静态提取() -> None:
 
 # ══════════════════════════ 二、钉死解析器（纯单测）═══════════════════════════
 
+
 def test_解析器_钉死语法_版本与head() -> None:
     """AAA：prompt:{id}@3 → (id, 3)；@head → (id, None)；规范引用往返一致。"""
     tid = uuid.uuid4()
@@ -212,6 +211,7 @@ def test_解析器_领域错误到网关映射() -> None:
 
 
 # ══════════════════════════ 三、builtin 钉死引用接入（纯单测）══════════════════
+
 
 class RecordingModel:
     """仅 complete_structured 的端口桩：记录 system 入参（回退路径即消费 persona）。"""
@@ -414,9 +414,7 @@ async def test_api_slug冲突与参数校验(prompt_env) -> None:  # noqa: ANN00
 async def test_api_personal作用域_owner隔离(prompt_env) -> None:  # noqa: ANN001
     """AAA：personal 模板他人列表不可见、详情 404、变更 2002（仅 owner 可写）。"""
     owner, other, uow = prompt_env
-    created = await create_prompt(
-        body=_create_body("my-persona", scope="personal"), principal=owner, uow=uow
-    )
+    created = await create_prompt(body=_create_body("my-persona", scope="personal"), principal=owner, uow=uow)
     tid = created["data"]["id"]
     # Assert：他人不可见（列表 0 条；详情 404 不泄露存在性）
     assert (await list_prompts(principal=other, uow=uow, scope="personal"))["meta"]["total"] == 0

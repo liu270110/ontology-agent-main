@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """LoRA 冒烟（03 决议默认训练路线：嵌入表冻结，r=16，lr 1e-4）。
 
 与 smoke_train.py（全参对照）同数据同步数，只对比显存峰值与耗时：
@@ -7,6 +6,7 @@
 
 用法：uv run python src/onto_train/smoke_train_lora.py
 """
+
 from __future__ import annotations
 
 import argparse
@@ -47,7 +47,7 @@ def main() -> None:
     data_file = ROOT / "data" / "positives.jsonl"
     train_data = [
         {"tokenized_text": s["tokenized_text"], "ner": s["ner"]}
-        for s in (json.loads(l) for l in data_file.read_text(encoding="utf-8").splitlines())
+        for s in (json.loads(line) for line in data_file.read_text(encoding="utf-8").splitlines())
     ]
     print(f"[data] {len(train_data)} 条训练样本")
 

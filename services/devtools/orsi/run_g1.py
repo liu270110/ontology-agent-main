@@ -66,9 +66,7 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "--demo", action="store_true", help="注入 demo 合成缺口事件（两簇各 6 条，标注 demo，非真实信号）"
     )
     mode.add_argument("--live", action="store_true", help="读 OA_ 配置真库（骨架实装；真跑属部署面）")
-    parser.add_argument(
-        "--tenant-id", type=str, default=None, help="租户 UUID（--live 必填；demo 固定演示租户）"
-    )
+    parser.add_argument("--tenant-id", type=str, default=None, help="租户 UUID（--live 必填；demo 固定演示租户）")
     parser.add_argument(
         "--store-dir",
         type=str,
@@ -194,9 +192,7 @@ class DemoMarket:
             },
         )
 
-    async def list_market(
-        self, *, status: Any = None, offset: int = 0, limit: int = 20
-    ) -> list[_DemoMarketPlugin]:
+    async def list_market(self, *, status: Any = None, offset: int = 0, limit: int = 20) -> list[_DemoMarketPlugin]:
         _ = status
         return [self._plugin][offset : offset + limit]
 
@@ -367,9 +363,7 @@ def _render_report(
             surface_label = artifact.surface.value
             summary = _artifact_summary(artifact)
         else:
-            chain = " → ".join(
-                f"{a.level}:{a.outcome}" for a in attempts if a.outcome not in {"hit"}
-            ) or "—"
+            chain = " → ".join(f"{a.level}:{a.outcome}" for a in attempts if a.outcome not in {"hit"}) or "—"
             path_label = f"未命中（{chain}）"
             surface_label = "—"
             summary = "三级均未产出草案（工单保持 draft，如实降级）"

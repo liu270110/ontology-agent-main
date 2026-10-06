@@ -346,9 +346,26 @@ async def test_上架201_字段对齐mock_勾选纳管(mcp_env):
     # Assert：McpServerRow 逐字段（mock 形状）
     assert created["token_sentinel"] is True
     assert set(created) >= {
-        "id", "name", "desc", "transport", "url_masked", "command", "auth", "token_masked", "protocol",
-        "server_version", "status", "latency_ms", "consecutive_failures", "last_probe", "probes_24h",
-        "adopted_count", "discovered_count", "added_by", "added_at", "tools",
+        "id",
+        "name",
+        "desc",
+        "transport",
+        "url_masked",
+        "command",
+        "auth",
+        "token_masked",
+        "protocol",
+        "server_version",
+        "status",
+        "latency_ms",
+        "consecutive_failures",
+        "last_probe",
+        "probes_24h",
+        "adopted_count",
+        "discovered_count",
+        "added_by",
+        "added_at",
+        "tools",
     }
     uuid.UUID(created["id"])  # live id=UUID 串（mock 'mcp-crm-prod'→UUID 先例）
     assert created["name"] == "crm-prod" and created["desc"] == "客服工单系统"

@@ -3,6 +3,7 @@
 Runs each script as a subprocess under LC_ALL=C to prove all text I/O
 uses explicit UTF-8 rather than locale defaults. No network access.
 """
+
 from __future__ import annotations
 
 import csv
@@ -25,7 +26,11 @@ def run(script, *args, expect_ok=True):
     env.pop("PYTHONIOENCODING", None)
     proc = subprocess.run(
         [sys.executable, str(SCRIPTS / script), *map(str, args)],
-        capture_output=True, text=True, env=env, encoding="utf-8")
+        capture_output=True,
+        text=True,
+        env=env,
+        encoding="utf-8",
+    )
     if expect_ok:
         assert proc.returncode == 0, f"{script} failed: {proc.stderr}"
     return proc
@@ -38,27 +43,47 @@ SPEC = {
             "name": "Data",
             "rows": [
                 [
-                    {"value": "Region", "bold": True, "fill": "DDEBF7",
-                     "border": "thin", "align": "center", "valign": "center"},
+                    {
+                        "value": "Region",
+                        "bold": True,
+                        "fill": "DDEBF7",
+                        "border": "thin",
+                        "align": "center",
+                        "valign": "center",
+                    },
                     {"value": "Sales", "bold": True, "fill": "DDEBF7"},
                     {"value": "Growth", "bold": True},
                     {"value": "Audited", "bold": True},
                     {"value": "Closed", "bold": True},
                     {"value": "Status", "bold": True},
                 ],
-                ["North", 1500.5, {"value": 0.125, "format": "0.0%"}, True,
-                 {"value": "2026-01-31", "type": "date",
-                  "format": "yyyy-mm-dd"}, "Yes"],
-                ["South", 900, {"value": -0.03, "format": "0.0%"}, False,
-                 {"value": "2026-02-28", "type": "date",
-                  "format": "yyyy-mm-dd"}, "No"],
-                ["East", 2100, {"value": 0.4, "format": "0.0%"}, True,
-                 {"value": "2026-03-31", "type": "date",
-                  "format": "yyyy-mm-dd"}, "Yes"],
+                [
+                    "North",
+                    1500.5,
+                    {"value": 0.125, "format": "0.0%"},
+                    True,
+                    {"value": "2026-01-31", "type": "date", "format": "yyyy-mm-dd"},
+                    "Yes",
+                ],
+                [
+                    "South",
+                    900,
+                    {"value": -0.03, "format": "0.0%"},
+                    False,
+                    {"value": "2026-02-28", "type": "date", "format": "yyyy-mm-dd"},
+                    "No",
+                ],
+                [
+                    "East",
+                    2100,
+                    {"value": 0.4, "format": "0.0%"},
+                    True,
+                    {"value": "2026-03-31", "type": "date", "format": "yyyy-mm-dd"},
+                    "Yes",
+                ],
             ],
             "cells": {
-                "A6": {"value": "Total", "bold": True, "italic": True,
-                       "font_size": 12, "font_color": "1F4E78"},
+                "A6": {"value": "Total", "bold": True, "italic": True, "font_size": 12, "font_color": "1F4E78"},
                 "B6": {"formula": "SUM(B2:B4)", "format": "$#,##0.00"},
             },
             "column_widths": {"A": 18, "B": 14},
@@ -67,23 +92,23 @@ SPEC = {
             "freeze_panes": "A2",
             "autofilter": "A1:F4",
             "conditional_formats": [
-                {"range": "B2:B4", "type": "cell_is",
-                 "operator": "greaterThan", "formula": ["1000"],
-                 "fill": "C6EFCE"},
+                {"range": "B2:B4", "type": "cell_is", "operator": "greaterThan", "formula": ["1000"], "fill": "C6EFCE"},
                 {"range": "C2:C4", "type": "color_scale"},
             ],
             "charts": [
-                {"type": "bar", "title": "Sales by region", "anchor": "H2",
-                 "data": "B1:B4", "categories": "A2:A4"},
-                {"type": "line", "title": "Growth", "anchor": "H18",
-                 "data": "C1:C4", "categories": "A2:A4"},
-                {"type": "pie", "title": "Share", "anchor": "P2",
-                 "data": "B2:B4", "categories": "A2:A4",
-                 "titles_from_data": False},
+                {"type": "bar", "title": "Sales by region", "anchor": "H2", "data": "B1:B4", "categories": "A2:A4"},
+                {"type": "line", "title": "Growth", "anchor": "H18", "data": "C1:C4", "categories": "A2:A4"},
+                {
+                    "type": "pie",
+                    "title": "Share",
+                    "anchor": "P2",
+                    "data": "B2:B4",
+                    "categories": "A2:A4",
+                    "titles_from_data": False,
+                },
             ],
             "validations": [
-                {"range": "F2:F10", "type": "list",
-                 "formula1": '"Yes,No,Maybe"'},
+                {"range": "F2:F10", "type": "list", "formula1": '"Yes,No,Maybe"'},
             ],
         },
         {"name": "Notes", "rows": [["Zürich", "Фамилия", "12,5%"]]},
@@ -147,13 +172,11 @@ def test_read_sheets_json_formulas(workbook, tmp_path):
     assert "A8:C8" in data_info["merged"]
     assert data_info["freeze_panes"] == "A2"
 
-    dump = json.loads(
-        run("xlsx_read.py", workbook, "--json", "--sheet", "Data").stdout)
+    dump = json.loads(run("xlsx_read.py", workbook, "--json", "--sheet", "Data").stdout)
     assert dump["rows"][1][0] == "North"
     assert dump["rows"][1][4] == "2026-01-31T00:00:00"
 
-    notes = json.loads(
-        run("xlsx_read.py", workbook, "--json", "--sheet", "Notes").stdout)
+    notes = json.loads(run("xlsx_read.py", workbook, "--json", "--sheet", "Notes").stdout)
     assert notes["rows"][0] == ["Zürich", "Фамилия", "12,5%"]
 
     formulas = json.loads(run("xlsx_read.py", workbook, "--formulas").stdout)
@@ -163,8 +186,7 @@ def test_read_sheets_json_formulas(workbook, tmp_path):
     assert entry["cached"] is None
 
     csv_out = tmp_path / "data.csv"
-    run("xlsx_read.py", workbook, "--csv", "--sheet", "Notes",
-        "--out", csv_out)
+    run("xlsx_read.py", workbook, "--csv", "--sheet", "Notes", "--out", csv_out)
     text = csv_out.read_text(encoding="utf-8")
     assert "Zürich" in text and "Фамилия" in text
 
@@ -182,12 +204,12 @@ def test_csv_roundtrip_nonascii(tmp_path):
     wb = load_workbook(xlsx)
     ws = wb["Import"]
     assert ws["A2"].value == "Zürich"
-    assert ws["B2"].value == "12,5%"      # decimal comma stays a string
+    assert ws["B2"].value == "12,5%"  # decimal comma stays a string
     assert ws["C2"].value == "Фамилия"
-    assert ws["D2"].value is True          # bool inferred
+    assert ws["D2"].value is True  # bool inferred
     assert ws["E2"].value.date() == date(2026, 5, 1)  # date inferred
-    assert ws["B3"].value == 7             # int inferred
-    assert ws["A1"].font.bold is True      # styled header
+    assert ws["B3"].value == 7  # int inferred
+    assert ws["A1"].font.bold is True  # styled header
     assert ws.freeze_panes == "A2"
 
     back = tmp_path / "back.csv"
@@ -201,24 +223,37 @@ def test_csv_roundtrip_nonascii(tmp_path):
 
     # encoding override
     latin = tmp_path / "latin.csv"
-    run("xlsx_to_csv.py", xlsx, latin, "--sheet", "Import",
-        "--encoding", "utf-8-sig")
+    run("xlsx_to_csv.py", xlsx, latin, "--sheet", "Import", "--encoding", "utf-8-sig")
     assert latin.read_bytes().startswith(b"\xef\xbb\xbf")
 
 
 def test_edit_existing(workbook, tmp_path):
     edited = tmp_path / "edited.xlsx"
-    proc = run("xlsx_edit.py", workbook, "--sheet", "Notes",
-               "--out", edited,
-               "--copy-sheet", "Notes:Backup",
-               "--rename-sheet", "Data:Main",
-               "--set", "B1=Änderung",
-               "--set", "C1=99.5",
-               "--set", "D1=2026-12-24",
-               "--set", "E1==SUM(C1:C1)",
-               "--append", '["appended", 1, false]',
-               "--insert-rows", "1:1",
-               "--recalc")
+    proc = run(
+        "xlsx_edit.py",
+        workbook,
+        "--sheet",
+        "Notes",
+        "--out",
+        edited,
+        "--copy-sheet",
+        "Notes:Backup",
+        "--rename-sheet",
+        "Data:Main",
+        "--set",
+        "B1=Änderung",
+        "--set",
+        "C1=99.5",
+        "--set",
+        "D1=2026-12-24",
+        "--set",
+        "E1==SUM(C1:C1)",
+        "--append",
+        '["appended", 1, false]',
+        "--insert-rows",
+        "1:1",
+        "--recalc",
+    )
     result = json.loads(proc.stdout)
     assert result["ok"]
 
@@ -234,21 +269,25 @@ def test_edit_existing(workbook, tmp_path):
     assert ws["E1"].value == "=SUM(C1:C1)"
     assert wb.calculation.fullCalcOnLoad is True
     # appended row present
-    found = [r for r in ws.iter_rows(values_only=True)
-             if r and r[0] == "appended"]
+    found = [r for r in ws.iter_rows(values_only=True) if r and r[0] == "appended"]
     assert found and found[0][1] == 1 and found[0][2] is False
     # copy preserved data
     assert wb["Backup"]["A1"].value == "Zürich"
 
 
 def test_help_and_errors():
-    for script in ["xlsx_create.py", "xlsx_read.py", "xlsx_edit.py",
-                   "csv_to_xlsx.py", "xlsx_to_csv.py",
-                   "xlsx_restructure.py", "xlsx_recalc.py"]:
+    for script in [
+        "xlsx_create.py",
+        "xlsx_read.py",
+        "xlsx_edit.py",
+        "csv_to_xlsx.py",
+        "xlsx_to_csv.py",
+        "xlsx_restructure.py",
+        "xlsx_recalc.py",
+    ]:
         proc = run(script, "--help")
         assert "usage" in proc.stdout.lower()
-    bad = run("xlsx_read.py", "/nonexistent.xlsx", "--sheets",
-              expect_ok=False)
+    bad = run("xlsx_read.py", "/nonexistent.xlsx", "--sheets", expect_ok=False)
     assert bad.returncode != 0
     assert json.loads(bad.stderr)["ok"] is False
 
@@ -281,13 +320,10 @@ RESTRUCTURE_SPEC = {
             "freeze_panes": "A2",
             "autofilter": "A1:C4",
             "conditional_formats": [
-                {"range": "B2:B4", "type": "cell_is",
-                 "operator": "greaterThan", "formula": ["150"],
-                 "fill": "C6EFCE"},
+                {"range": "B2:B4", "type": "cell_is", "operator": "greaterThan", "formula": ["150"], "fill": "C6EFCE"},
             ],
             "validations": [
-                {"range": "C2:C4", "type": "list",
-                 "formula1": '"0.2,0.3,0.5"'},
+                {"range": "C2:C4", "type": "list", "formula1": '"0.2,0.3,0.5"'},
             ],
             "tables": [
                 {"name": "SalesTbl", "range": "A1:C4"},
@@ -317,8 +353,7 @@ def restructure_book(tmp_path):
 
 def test_restructure_insert_rows_shifts_everything(restructure_book):
     # merge A6:C6 gets pushed down; A1:A1 merge is before the insert point
-    proc = run("xlsx_restructure.py", restructure_book,
-               "--sheet", "Data", "--insert-rows", "3:2")
+    proc = run("xlsx_restructure.py", restructure_book, "--sheet", "Data", "--insert-rows", "3:2")
     report = json.loads(proc.stdout)
     assert report["ok"] and report["op"] == "insert"
 
@@ -326,8 +361,8 @@ def test_restructure_insert_rows_shifts_everything(restructure_book):
     data, summary = wb["Data"], wb["Summary"]
     # values physically moved
     assert data["A2"].value == "North"
-    assert data["A5"].value == "South"      # was row 3
-    assert data["A8"].value == "Total"      # was row 6
+    assert data["A5"].value == "South"  # was row 3
+    assert data["A8"].value == "Total"  # was row 6
     # same-sheet formulas rewritten (range expanded across insert point)
     assert data["B8"].value == "=SUM(B2:B6)"
     # absolute ref before insert point unchanged; relative arm shifted
@@ -358,17 +393,15 @@ def test_restructure_insert_rows_shifts_everything(restructure_book):
     assert wb.defined_names["SalesRange"].attr_text == "'Data'!$B$2:$B$6"
     # report is honest about limits
     assert "chart anchors" in report["not_shifted"]
-    assert any(f["cell"] == "B1" and f["sheet"] == "Summary"
-               for f in report["formulas"])
+    assert any(f["cell"] == "B1" and f["sheet"] == "Summary" for f in report["formulas"])
 
 
 def test_restructure_delete_rows_and_ref_errors(restructure_book):
-    run("xlsx_restructure.py", restructure_book,
-        "--sheet", "Data", "--delete-rows", "3")
+    run("xlsx_restructure.py", restructure_book, "--sheet", "Data", "--delete-rows", "3")
     wb = load_workbook(restructure_book)
     data, summary = wb["Data"], wb["Summary"]
-    assert data["A3"].value == "East"           # South deleted
-    assert data["B5"].value == "=SUM(B2:B3)"    # range clamped
+    assert data["A3"].value == "East"  # South deleted
+    assert data["B5"].value == "=SUM(B2:B3)"  # range clamped
     # single-cell ref into the deleted row becomes #REF!
     assert summary["B2"].value == "='Data'!#REF!"
     assert summary["B1"].value == "=SUM(Data!B2:B3)"
@@ -376,31 +409,36 @@ def test_restructure_delete_rows_and_ref_errors(restructure_book):
 
 
 def test_restructure_insert_cols(restructure_book):
-    proc = run("xlsx_restructure.py", restructure_book,
-               "--sheet", "Data", "--insert-cols", "B:1")
+    proc = run("xlsx_restructure.py", restructure_book, "--sheet", "Data", "--insert-cols", "B:1")
     report = json.loads(proc.stdout)
     assert report["axis"] == "cols" and report["index"] == 2
     wb = load_workbook(restructure_book)
     data, summary = wb["Data"], wb["Summary"]
-    assert data["C2"].value == 100              # Sales moved B->C
+    assert data["C2"].value == 100  # Sales moved B->C
     assert data["C6"].value == "=SUM(C2:C4)"
     assert data["D6"].value == "=$C$2*D2"
     assert summary["B1"].value == "=SUM(Data!C2:C4)"
     assert wb.defined_names["SalesRange"].attr_text == "'Data'!$C$2:$C$4"
     merged = [str(r) for r in data.merged_cells.ranges]
-    assert "F2:F4" in merged                    # merge shifted right
-    assert "A7:C7" in merged                    # merge expanded across col B
+    assert "F2:F4" in merged  # merge shifted right
+    assert "A7:C7" in merged  # merge expanded across col B
 
 
 # ---------------------------------------------------------------------------
 # Tables, defined names, hyperlinks, notes, protection (edit + read paths)
 # ---------------------------------------------------------------------------
 
+
 def test_tables_create_append_list(tmp_path):
-    spec = {"sheets": [{"name": "T",
-                        "rows": [["Item", "Qty"], ["a", 1], ["b", 2]],
-                        "tables": [{"name": "Stock", "range": "A1:B3",
-                                    "style": "TableStyleLight1"}]}]}
+    spec = {
+        "sheets": [
+            {
+                "name": "T",
+                "rows": [["Item", "Qty"], ["a", 1], ["b", 2]],
+                "tables": [{"name": "Stock", "range": "A1:B3", "style": "TableStyleLight1"}],
+            }
+        ]
+    }
     spec_path = tmp_path / "tspec.json"
     spec_path.write_text(json.dumps(spec), encoding="utf-8")
     book = tmp_path / "tables.xlsx"
@@ -412,17 +450,14 @@ def test_tables_create_append_list(tmp_path):
     assert tbl.tableStyleInfo.name == "TableStyleLight1"
 
     # --add-table + --table-append auto-extends the range
-    run("xlsx_edit.py", book, "--sheet", "T",
-        "--add-table", "Extra:D1:E2",
-        "--table-append", 'Stock=["c", 3]')
+    run("xlsx_edit.py", book, "--sheet", "T", "--add-table", "Extra:D1:E2", "--table-append", 'Stock=["c", 3]')
     wb = load_workbook(book)
     ws = wb["T"]
     assert ws.tables["Stock"].ref == "A1:B4"
     assert ws["A4"].value == "c" and ws["B4"].value == 3
     assert ws.tables["Extra"].ref == "D1:E2"
 
-    listing = json.loads(
-        run("xlsx_edit.py", book, "--sheet", "T", "--list-tables").stdout)
+    listing = json.loads(run("xlsx_edit.py", book, "--sheet", "T", "--list-tables").stdout)
     assert listing["tables"]["Stock"]["ref"] == "A1:B4"
     assert set(listing["tables"]) == {"Stock", "Extra"}
     # tables also appear in the read inventory
@@ -433,12 +468,16 @@ def test_tables_create_append_list(tmp_path):
 def test_names_hyperlinks_notes(tmp_path):
     spec = {
         "defined_names": {"Rate": "'D'!$B$1"},
-        "sheets": [{"name": "D", "cells": {
-            "A1": {"value": "docs",
-                   "hyperlink": "https://example.com/docs"},
-            "B1": {"value": 0.07, "note": "quarterly rate"},
-            "C1": {"value": 1, "note": {"text": "check", "author": "QA"}},
-        }}],
+        "sheets": [
+            {
+                "name": "D",
+                "cells": {
+                    "A1": {"value": "docs", "hyperlink": "https://example.com/docs"},
+                    "B1": {"value": 0.07, "note": "quarterly rate"},
+                    "C1": {"value": 1, "note": {"text": "check", "author": "QA"}},
+                },
+            }
+        ],
     }
     spec_path = tmp_path / "nspec.json"
     spec_path.write_text(json.dumps(spec), encoding="utf-8")
@@ -453,12 +492,22 @@ def test_names_hyperlinks_notes(tmp_path):
     assert wb.defined_names["Rate"].attr_text == "'D'!$B$1"
 
     # edit path: add/delete names, hyperlink, note, clear note
-    run("xlsx_edit.py", book, "--sheet", "D",
-        "--define-name", "Extra='D'!$C$1",
-        "--delete-name", "Rate",
-        "--hyperlink", "D1=https://example.com/more|More",
-        "--note", "D1=see more|Reviewer",
-        "--clear-note", "B1")
+    run(
+        "xlsx_edit.py",
+        book,
+        "--sheet",
+        "D",
+        "--define-name",
+        "Extra='D'!$C$1",
+        "--delete-name",
+        "Rate",
+        "--hyperlink",
+        "D1=https://example.com/more|More",
+        "--note",
+        "D1=see more|Reviewer",
+        "--clear-note",
+        "B1",
+    )
     wb = load_workbook(book)
     ws = wb["D"]
     assert "Rate" not in wb.defined_names
@@ -477,9 +526,15 @@ def test_names_hyperlinks_notes(tmp_path):
 
 
 def test_sheet_protection(tmp_path):
-    spec = {"sheets": [{"name": "P", "rows": [["locked", "open"]],
-                        "protection": {"password": "your-password",
-                                       "unlock": ["B1:B1"]}}]}
+    spec = {
+        "sheets": [
+            {
+                "name": "P",
+                "rows": [["locked", "open"]],
+                "protection": {"password": "your-password", "unlock": ["B1:B1"]},
+            }
+        ]
+    }
     spec_path = tmp_path / "pspec.json"
     spec_path.write_text(json.dumps(spec), encoding="utf-8")
     book = tmp_path / "prot.xlsx"
@@ -488,7 +543,7 @@ def test_sheet_protection(tmp_path):
     wb = load_workbook(book)
     ws = wb["P"]
     assert ws.protection.sheet is True
-    assert ws.protection.password           # hash stored
+    assert ws.protection.password  # hash stored
     assert ws["B1"].protection.locked is False
     assert ws["A1"].protection.locked is not False
     inv = json.loads(run("xlsx_read.py", book, "--sheets").stdout)
@@ -496,11 +551,9 @@ def test_sheet_protection(tmp_path):
 
     # edit path on a fresh unprotected sheet
     plain = tmp_path / "plain.xlsx"
-    spec_path.write_text(json.dumps(
-        {"sheets": [{"name": "P", "rows": [["a", "b"]]}]}), encoding="utf-8")
+    spec_path.write_text(json.dumps({"sheets": [{"name": "P", "rows": [["a", "b"]]}]}), encoding="utf-8")
     run("xlsx_create.py", spec_path, plain)
-    run("xlsx_edit.py", plain, "--sheet", "P",
-        "--protect", "your-password", "--unlock", "B1:B1")
+    run("xlsx_edit.py", plain, "--sheet", "P", "--protect", "your-password", "--unlock", "B1:B1")
     ws = load_workbook(plain)["P"]
     assert ws.protection.sheet is True and ws["B1"].protection.locked is False
 
@@ -509,9 +562,9 @@ def test_sheet_protection(tmp_path):
 # Headless recalculation (xlsx_recalc.py) — branches on soffice presence
 # ---------------------------------------------------------------------------
 
+
 def test_recalc_reports_json_both_ways(tmp_path):
-    spec = {"sheets": [{"name": "R", "rows": [[2], [3]],
-                        "cells": {"A3": {"formula": "SUM(A1:A2)"}}}]}
+    spec = {"sheets": [{"name": "R", "rows": [[2], [3]], "cells": {"A3": {"formula": "SUM(A1:A2)"}}}]}
     spec_path = tmp_path / "cspec.json"
     spec_path.write_text(json.dumps(spec), encoding="utf-8")
     book = tmp_path / "calc.xlsx"
@@ -521,7 +574,11 @@ def test_recalc_reports_json_both_ways(tmp_path):
     env = dict(os.environ, LC_ALL="C", LANG="C", PATH=str(tmp_path))
     proc = subprocess.run(
         [sys.executable, str(SCRIPTS / "xlsx_recalc.py"), str(book)],
-        capture_output=True, text=True, env=env, encoding="utf-8")
+        capture_output=True,
+        text=True,
+        env=env,
+        encoding="utf-8",
+    )
     assert proc.returncode == 0
     absent = json.loads(proc.stdout)
     assert absent["recalculated"] is False and "soffice" in absent["reason"]

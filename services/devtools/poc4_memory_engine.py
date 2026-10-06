@@ -256,9 +256,7 @@ def drop_collection_if_exists(cfg: PoCConfig, password: str) -> str:
     """清空 collection 表（幂等重跑基线）；返回动作说明（dropped / skipped）。"""
     import psycopg2
 
-    conn = psycopg2.connect(
-        host=cfg.pg_host, port=cfg.pg_port, dbname=cfg.pg_db, user=cfg.pg_user, password=password
-    )
+    conn = psycopg2.connect(host=cfg.pg_host, port=cfg.pg_port, dbname=cfg.pg_db, user=cfg.pg_user, password=password)
     try:
         with conn.cursor() as cur:
             cur.execute(f'DROP TABLE IF EXISTS "{cfg.collection}"')  # 标识符来自本地参数（受控），非外部输入
@@ -361,9 +359,7 @@ def run_mem0(cfg: PoCConfig, password: str, *, reset: bool, limit: int | None) -
             if any(all(k in text_n for k in keys) for keys in rec.gold_keyword_sets):
                 hit, rank, rule = True, idx, "keywords"
                 break
-        stale = bool(rec.stale_keywords) and any(
-            all(k in norm_text(t) for k in rec.stale_keywords) for t in top_texts
-        )
+        stale = bool(rec.stale_keywords) and any(all(k in norm_text(t) for k in rec.stale_keywords) for t in top_texts)
         recalls.append(
             RecallRecord(rec.query_id, rec.query, round(elapsed, 4), hit, rank, rule, stale, top_texts[:SEARCH_TOP_K])
         )
@@ -383,8 +379,7 @@ def run_mem0(cfg: PoCConfig, password: str, *, reset: bool, limit: int | None) -
         "config": cfg.sanitized(),
         "n_writes": len(writes),
         "writes": [
-            {"fact_id": w.fact_id, "seconds": w.seconds, "events": w.events, "memories": w.memories}
-            for w in writes
+            {"fact_id": w.fact_id, "seconds": w.seconds, "events": w.events, "memories": w.memories} for w in writes
         ],
         "write_latency_s": _latency_summary(write_seconds),
         "search_latency_s": _latency_summary(search_seconds),
@@ -425,9 +420,7 @@ def _pg_collection_stats(cfg: PoCConfig, password: str) -> dict[str, object]:
         with conn.cursor() as cur:
             cur.execute(sql.SQL("SELECT count(*) FROM {tbl}").format(tbl=sql.Identifier(cfg.collection)))
             rows = cur.fetchone()[0]
-            cur.execute(
-                "SELECT pg_total_relation_size(c.oid) FROM pg_class c WHERE c.relname = %s", (cfg.collection,)
-            )
+            cur.execute("SELECT pg_total_relation_size(c.oid) FROM pg_class c WHERE c.relname = %s", (cfg.collection,))
             total_bytes = cur.fetchone()[0]
             return {"pg_rows": rows, "pg_total_bytes": int(total_bytes), "pg_total_pretty": f"{total_bytes / MB:.2f}MB"}
     except Exception as exc:  # noqa: BLE001 — 统计失败仅记录

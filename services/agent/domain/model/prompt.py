@@ -95,9 +95,7 @@ def compute_checksum(
             "system_prompt": system_prompt,
             "template": template,
             "few_shot": [{"input": ex.input, "output": ex.output} for ex in few_shot],
-            "variables": [
-                {"name": v.name, "description": v.description, "required": v.required} for v in variables
-            ],
+            "variables": [{"name": v.name, "description": v.description, "required": v.required} for v in variables],
         },
         ensure_ascii=False,
         sort_keys=True,

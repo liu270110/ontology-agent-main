@@ -89,8 +89,12 @@ class PromptLibraryService:
     ) -> tuple[list[PromptTemplate], int]:
         async with self._uow.for_tenant(tenant_id) as tx:
             items = await tx.prompts.list(
-                scope=scope, name=name, status=PromptStatus.ACTIVE,
-                viewer_user_id=viewer_user_id, offset=offset, limit=limit,
+                scope=scope,
+                name=name,
+                status=PromptStatus.ACTIVE,
+                viewer_user_id=viewer_user_id,
+                offset=offset,
+                limit=limit,
             )
             total = await tx.prompts.count(
                 scope=scope, name=name, status=PromptStatus.ACTIVE, viewer_user_id=viewer_user_id
@@ -98,9 +102,7 @@ class PromptLibraryService:
         return items, total
 
     # ── GET /prompts/{id}：详情（含版本树）────────────────────────────────────
-    async def get(
-        self, *, tenant_id: uuid.UUID, viewer_user_id: uuid.UUID, template_id: uuid.UUID
-    ) -> PromptTemplate:
+    async def get(self, *, tenant_id: uuid.UUID, viewer_user_id: uuid.UUID, template_id: uuid.UUID) -> PromptTemplate:
         async with self._uow.for_tenant(tenant_id) as tx:
             found = await tx.prompts.get(template_id)
         self._check_visible(found, viewer_user_id=viewer_user_id)

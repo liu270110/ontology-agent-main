@@ -25,6 +25,7 @@ Usage:
   xlsx_read.py book.xlsx --notes
   xlsx_read.py book.xlsx --names
 """
+
 from __future__ import annotations
 
 import argparse
@@ -49,21 +50,22 @@ def sheet_rows(ws):
 def cmd_sheets(wb):
     info = []
     for ws in wb.worksheets:
-        info.append({
-            "name": ws.title,
-            "dimensions": ws.dimensions,
-            "max_row": ws.max_row,
-            "max_col": ws.max_column,
-            "merged": [str(r) for r in ws.merged_cells.ranges],
-            "charts": len(getattr(ws, "_charts", [])),
-            "freeze_panes": ws.freeze_panes,
-            "autofilter": ws.auto_filter.ref,
-            "tables": {t.displayName: t.ref for t in ws.tables.values()},
-            "protected": bool(ws.protection.sheet),
-        })
+        info.append(
+            {
+                "name": ws.title,
+                "dimensions": ws.dimensions,
+                "max_row": ws.max_row,
+                "max_col": ws.max_column,
+                "merged": [str(r) for r in ws.merged_cells.ranges],
+                "charts": len(getattr(ws, "_charts", [])),
+                "freeze_panes": ws.freeze_panes,
+                "autofilter": ws.auto_filter.ref,
+                "tables": {t.displayName: t.ref for t in ws.tables.values()},
+                "protected": bool(ws.protection.sheet),
+            }
+        )
     names = {name: dn.attr_text for name, dn in wb.defined_names.items()}
-    print(json.dumps({"sheets": info, "defined_names": names},
-                     ensure_ascii=False, indent=2))
+    print(json.dumps({"sheets": info, "defined_names": names}, ensure_ascii=False, indent=2))
 
 
 def cmd_notes(wb, sheet):
@@ -73,9 +75,14 @@ def cmd_notes(wb, sheet):
         for row in wb[name].iter_rows():
             for cell in row:
                 if cell.comment is not None:
-                    out.append({"sheet": name, "cell": cell.coordinate,
-                                "text": cell.comment.text,
-                                "author": cell.comment.author})
+                    out.append(
+                        {
+                            "sheet": name,
+                            "cell": cell.coordinate,
+                            "text": cell.comment.text,
+                            "author": cell.comment.author,
+                        }
+                    )
     print(json.dumps({"notes": out}, ensure_ascii=False, indent=2))
 
 
@@ -94,12 +101,14 @@ def cmd_formulas(path, sheet):
         for row in ws_f.iter_rows():
             for cell in row:
                 if isinstance(cell.value, str) and cell.value.startswith("="):
-                    out.append({
-                        "sheet": name,
-                        "cell": cell.coordinate,
-                        "formula": cell.value,
-                        "cached": jsonable(ws_v[cell.coordinate].value),
-                    })
+                    out.append(
+                        {
+                            "sheet": name,
+                            "cell": cell.coordinate,
+                            "formula": cell.value,
+                            "cached": jsonable(ws_v[cell.coordinate].value),
+                        }
+                    )
     print(json.dumps({"formulas": out}, ensure_ascii=False, indent=2))
 
 
@@ -114,8 +123,7 @@ def main(argv=None):
     mode.add_argument("--notes", action="store_true")
     mode.add_argument("--names", action="store_true")
     ap.add_argument("--sheet", help="sheet name (default: active)")
-    ap.add_argument("--data-only", action="store_true",
-                    help="return cached formula results (see module docstring)")
+    ap.add_argument("--data-only", action="store_true", help="return cached formula results (see module docstring)")
     ap.add_argument("--encoding", default="utf-8")
     ap.add_argument("--out", help="output file for --csv")
     args = ap.parse_args(argv)
@@ -142,8 +150,7 @@ def main(argv=None):
     else:  # --csv
         if args.out:
             with open(args.out, "w", newline="", encoding=args.encoding) as fh:
-                csv.writer(fh).writerows(
-                    [["" if v is None else v for v in r] for r in rows])
+                csv.writer(fh).writerows([["" if v is None else v for v in r] for r in rows])
             print(json.dumps({"ok": True, "out": args.out, "rows": len(rows)}))
         else:
             w = csv.writer(sys.stdout)

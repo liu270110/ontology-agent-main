@@ -10,7 +10,6 @@ import uuid
 from typing import TYPE_CHECKING
 
 import pytest
-from tests.plugin.helpers import publisher_signed_fields
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from services.platform.security import PLATFORM_SIG_PREFIX, PluginSigner
@@ -19,6 +18,7 @@ from services.plugin.data.repo_impl.plugin_repo import PgPluginRepository, PgToo
 from services.plugin.domain.model.plugin import Plugin, PluginKind, PluginStatus, PluginVersion
 from services.review.business.candidates import ReviewApprovalService, ReviewTicketService
 from services.review.data.governance import PgGovernanceTierReader
+from tests.plugin.helpers import publisher_signed_fields
 
 if TYPE_CHECKING:
     from tests.plugin.conftest import PluginSeed

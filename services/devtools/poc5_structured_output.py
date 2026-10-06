@@ -804,9 +804,7 @@ def main(argv: list[str] | None = None) -> int:
     ]
 
     channels: list[ChatClient] = []
-    local = ChatClient(
-        "local", local_base, local_model, None, vendor_extras=True, max_tokens=MAX_TOKENS_LOCAL
-    )
+    local = ChatClient("local", local_base, local_model, None, vendor_extras=True, max_tokens=MAX_TOKENS_LOCAL)
     ok, _ids = local.probe()
     if not ok:
         print(f"[跳过] 本地端点探测失败：{local_base}", flush=True)

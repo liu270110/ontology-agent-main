@@ -705,9 +705,7 @@ def run_decision_eval(cases: Sequence[DecisionCase] = DECISION_GOLD_CASES) -> De
     return DecisionReport(total=len(cases), correct=correct, matrix=matrix, mismatches=tuple(mismatches))
 
 
-def run_grade_eval(
-    cases: Sequence[GradeCase] = GRADE_GOLD_CASES, *, threshold: float | None = None
-) -> GradeReport:
+def run_grade_eval(cases: Sequence[GradeCase] = GRADE_GOLD_CASES, *, threshold: float | None = None) -> GradeReport:
     """跑评级金标：grade() 实测 vs 期望。threshold=None 用当前常量；否则临时替换模块常量扫描。"""
     token = agentic.GRADE_SCORE_THRESHOLD
     if threshold is not None:
@@ -784,10 +782,12 @@ def main() -> None:  # pragma: no cover - CLI 报告入口（tests 复算扫描�
     print(f"== agentic 阈值 PoC 标定 {CALIBRATION_VERSION}（{CALIBRATION_DATE}，合成金标·待真实语料校准）==")
 
     decision = run_decision_eval()
-    print(f"\n[判别金标] {decision.total} 条（必需={sum(1 for c in DECISION_GOLD_CASES if c.layer == '检索必需')}"
-          f"/无需={sum(1 for c in DECISION_GOLD_CASES if c.layer == '无需检索')}"
-          f"/灰区={sum(1 for c in DECISION_GOLD_CASES if c.layer == '边界灰区')}）"
-          f" 准确率 {decision.accuracy:.1%}（{decision.correct}/{decision.total}）")
+    print(
+        f"\n[判别金标] {decision.total} 条（必需={sum(1 for c in DECISION_GOLD_CASES if c.layer == '检索必需')}"
+        f"/无需={sum(1 for c in DECISION_GOLD_CASES if c.layer == '无需检索')}"
+        f"/灰区={sum(1 for c in DECISION_GOLD_CASES if c.layer == '边界灰区')}）"
+        f" 准确率 {decision.accuracy:.1%}（{decision.correct}/{decision.total}）"
+    )
     print(f"混淆矩阵（期望×实际）: {dict(sorted(decision.matrix.items()))}")
     for case_id, query, expected, actual in decision.mismatches:
         print(f"  误判 {case_id} {query!r}: 期望{expected} 实际{actual}")

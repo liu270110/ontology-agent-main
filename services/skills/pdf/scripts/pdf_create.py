@@ -16,6 +16,7 @@ Spec format (UTF-8 JSON):
   ]
 }
 """
+
 from __future__ import annotations
 
 import argparse

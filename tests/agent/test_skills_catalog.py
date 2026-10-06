@@ -231,8 +231,7 @@ def test_claude适配器_system块含技能目录段():
 def test_claude适配器_空目录段_与既有字节一致():
     turn = _make_turn(context_text="CTX")
     assert claude_adapter._build_system_block(turn)[0]["text"] == (
-        "你是 ontology-agent 平台对话助手：仅依据给定的记忆与知识证据回答，"
-        "证据不足时明确说明。\nCTX"
+        "你是 ontology-agent 平台对话助手：仅依据给定的记忆与知识证据回答，证据不足时明确说明。\nCTX"
     )
 
 
@@ -270,9 +269,7 @@ def test_组装_dir关闭_返回空串():
 
 
 def test_组装_目录不存在_降级空串不抛():
-    settings = SimpleNamespace(
-        skills_catalog_dir="no/such/dir", skills_catalog_include="", skills_catalog_exclude=""
-    )
+    settings = SimpleNamespace(skills_catalog_dir="no/such/dir", skills_catalog_include="", skills_catalog_exclude="")
     assert _build_skills_catalog_segment(settings) == ""
 
 

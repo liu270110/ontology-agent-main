@@ -96,9 +96,7 @@ async def _seed_tenant(factory: async_sessionmaker[AsyncSession]) -> uuid.UUID:
     return tenant_id
 
 
-async def _seed_task_with_subruns(
-    uow: AsyncUnitOfWork, tenant_id: uuid.UUID
-) -> tuple[Task, Run, list[Run]]:
+async def _seed_task_with_subruns(uow: AsyncUnitOfWork, tenant_id: uuid.UUID) -> tuple[Task, Run, list[Run]]:
     """建任务 + 根 Run + 三个子 Run，返回 (task, root, [sub_a, sub_b, sub_c])。
 
     - sub_a：depth 1，10:01 起，终态 completed（usage/ended_at 由 update_subrun_status 落列）；

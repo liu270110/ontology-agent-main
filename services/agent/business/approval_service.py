@@ -110,9 +110,7 @@ class RunApprovalService:
         self._ttl = timedelta(seconds=ticket_ttl_s)
 
     # ── 待审批动作视图（只读；轮询友好，恒 200 语义）────────────────────────
-    async def pending_view(
-        self, *, tenant_id: uuid.UUID, task_id: uuid.UUID, run_id: uuid.UUID
-    ) -> PendingApprovalView:
+    async def pending_view(self, *, tenant_id: uuid.UUID, task_id: uuid.UUID, run_id: uuid.UUID) -> PendingApprovalView:
         """run 处 waiting_tool 且票仓有锚点 → 投影锚点；否则 action 各字段为 None。"""
         async with self._uow.for_tenant(tenant_id) as tx:
             task = await tx.tasks.get(task_id)
@@ -170,8 +168,7 @@ class RunApprovalService:
             if anchor is None or str(anchor.get("run_id")) != str(run_id):
                 raise GatewayError(
                     4102,
-                    "4102 RUN_APPROVAL_ANCHOR_MISSING: 无属于本 Run 的待审批锚点"
-                    f"（task.payload.{PENDING_KEY} 未落行）",
+                    f"4102 RUN_APPROVAL_ANCHOR_MISSING: 无属于本 Run 的待审批锚点（task.payload.{PENDING_KEY} 未落行）",
                     status_code=409,
                 )
             if anchor.get("param_hash") != param_hash:

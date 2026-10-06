@@ -40,7 +40,9 @@ class CountingCompactionStrategy:
 
     def __init__(self, *, tokens: int = 50, fail: bool = False) -> None:
         self.meta = ExtensionMeta(
-            name="fixture.compactor", version="1.0.0", semantic_annotation={"rule_iri": "http://ontology.example/rule/压缩"}
+            name="fixture.compactor",
+            version="1.0.0",
+            semantic_annotation={"rule_iri": "http://ontology.example/rule/压缩"},
         )
         self.tokens = tokens
         self.fail = fail
@@ -71,9 +73,7 @@ class StableProvider:
     async def provide(
         self, task: Any, step: Any, ctx: Any, *, budget_tokens: int, timeout_ms: int = 3_000
     ) -> ContextBlock:
-        return ContextBlock(
-            source=self.meta.name, content="TBox 摘要（稳定前缀）", tokens=self.tokens, tier=1
-        )
+        return ContextBlock(source=self.meta.name, content="TBox 摘要（稳定前缀）", tokens=self.tokens, tier=1)
 
 
 def _kernel(
@@ -157,9 +157,7 @@ async def test_未超水位_零开销直通_压缩器不被调用(monkeypatch: A
     strategy = CountingCompactionStrategy()
     kernel, tools = _kernel(2, strategy=strategy)
     # Act
-    outcome = await kernel.run(
-        make_task(), make_ctx(), budget=Budget(max_tokens=1_000, max_steps=10, duration_s=30)
-    )
+    outcome = await kernel.run(make_task(), make_ctx(), budget=Budget(max_tokens=1_000, max_steps=10, duration_s=30))
     # Assert：零开销直通——压缩器零调用、零压缩/达帽事件；步序不受影响照常完成
     assert outcome.status == "completed"
     assert strategy.calls == 0
@@ -184,7 +182,7 @@ async def test_步间压缩达帽后不再压缩_警告事件每Run只发一次_
         make_task(), make_ctx(), budget=Budget(max_tokens=1_000, max_steps=10, duration_s=30), inbox=inbox
     )
     # Assert ①：帽内压缩恰一次（策略被调 1 次）；capped 警告每 Run 只发一次
-    #（首达帽=边界 2 发，边界 3/4 静默——P2 去重，不再每段边界刷事件）
+    # （首达帽=边界 2 发，边界 3/4 静默——P2 去重，不再每段边界刷事件）
     assert strategy.calls == 1
     capped = _events(kernel, "kernel.watermark_recheck_capped")
     assert len(capped) == 1
@@ -304,4 +302,6 @@ def test_tracker_max_tokens属性与compress_estimated回冲_下限零() -> None
     real_tracker.add_tokens(100)
     real_tracker.compress_estimated(10_000)  # 只动估算账：真实账分记不可回冲
     assert real_tracker.tokens_used == 100 and real_tracker.tokens_effective == 100
-    assert BudgetTracker(Budget(), clock=lambda: 0.0).max_tokens is None  # 无上限=A4 token 维不限（复判分母已解耦，见上）
+    assert (
+        BudgetTracker(Budget(), clock=lambda: 0.0).max_tokens is None
+    )  # 无上限=A4 token 维不限（复判分母已解耦，见上）

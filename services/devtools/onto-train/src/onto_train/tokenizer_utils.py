@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """分词一致性工具（03 决议红线：训练/推理两端禁止重分词）。
 
 GLiNER 按空格切词并只在词粒度上预测跨度；中文没有空格，必须：
@@ -9,6 +8,7 @@ GLiNER 按空格切词并只在词粒度上预测跨度；中文没有空格，�
 本模块是唯一允许调用 jieba 的地方；词典由 dictionaries/domain_terms.dic 固化，
 pin jieba==0.42.1，升级词典须重新生成全部数据集。
 """
+
 from __future__ import annotations
 
 from functools import lru_cache

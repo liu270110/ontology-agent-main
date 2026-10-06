@@ -251,9 +251,7 @@ class StatusHonoringMarket(FakeMarket):
         self.received_status: Any = "unset"
         self.received_limit: int | None = None
 
-    async def list_market(
-        self, *, status: Any = None, offset: int = 0, limit: int = 20
-    ) -> list[FakePlugin]:
+    async def list_market(self, *, status: Any = None, offset: int = 0, limit: int = 20) -> list[FakePlugin]:
         self.received_status = status
         self.received_limit = limit
         plugins = [plugin for plugin, _ in self._entries]
@@ -468,9 +466,7 @@ async def test_L3_编程错误照常上抛() -> None:
 async def test_envelope写回完整性_既有键保留() -> None:
     proposal = await _open_gap_ticket(SEED_DOMAIN_GAP_ACTION)
     keys_before = set(proposal.envelope)
-    await draft_gap_proposal(
-        proposal, seed_actions=SEED_ACTIONS, registry_iris=(), market=None, model=None, now=NOW
-    )
+    await draft_gap_proposal(proposal, seed_actions=SEED_ACTIONS, registry_iris=(), market=None, model=None, now=NOW)
     assert set(proposal.envelope) == keys_before | {"draft_artifact"}  # 只增不改
     assert proposal.envelope["gap"]["evidence"]["cluster_size"] == 6  # G0 证据原样
 

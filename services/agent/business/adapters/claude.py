@@ -32,10 +32,7 @@ def _build_system_block(turn: ChatTurn) -> list[dict[str, Any]]:
     技能目录段（竖线② L1）为进程级稳定前缀，置于 context_text 之前——轮间易变尾只在
     证据段，cache_control 前缀命中不受影响。
     """
-    text = (
-        "你是 ontology-agent 平台对话助手：仅依据给定的记忆与知识证据回答，"
-        "证据不足时明确说明。"
-    )
+    text = "你是 ontology-agent 平台对话助手：仅依据给定的记忆与知识证据回答，证据不足时明确说明。"
     if turn.skills_catalog:
         text = f"{text}\n{turn.skills_catalog}"
     text = f"{text}\n{turn.context_text}"

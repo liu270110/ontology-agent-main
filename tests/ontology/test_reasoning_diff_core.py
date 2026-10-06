@@ -99,8 +99,12 @@ def test_读模型差异_增删改清单与summary() -> None:
         ],
         properties=[ReadModelProperty(iri="http://x/supplies", kind="object", name="supplies")],
         axioms=[
-            ReadModelAxiom(kind="subClassOf", subject_iri="http://x/FaultOutage", object_iri="http://x/OutageEvent",
-                           expression="FaultOutage subClassOf OutageEvent"),
+            ReadModelAxiom(
+                kind="subClassOf",
+                subject_iri="http://x/FaultOutage",
+                object_iri="http://x/OutageEvent",
+                expression="FaultOutage subClassOf OutageEvent",
+            ),
         ],
         rules=[ReadModelRule(route="shacl", name="R001")],
     )
@@ -111,10 +115,18 @@ def test_读模型差异_增删改清单与summary() -> None:
         ],
         properties=[ReadModelProperty(iri="http://x/supplies", kind="object", name="supplies")],  # unchanged
         axioms=[
-            ReadModelAxiom(kind="subClassOf", subject_iri="http://x/FaultOutage", object_iri="http://x/OutageEvent",
-                           expression="FaultOutage subClassOf OutageEvent"),  # unchanged
-            ReadModelAxiom(kind="disjointWith", subject_iri="http://x/Transformer", object_iri="http://x/Meter",
-                           expression="Transformer disjointWith Meter"),  # added
+            ReadModelAxiom(
+                kind="subClassOf",
+                subject_iri="http://x/FaultOutage",
+                object_iri="http://x/OutageEvent",
+                expression="FaultOutage subClassOf OutageEvent",
+            ),  # unchanged
+            ReadModelAxiom(
+                kind="disjointWith",
+                subject_iri="http://x/Transformer",
+                object_iri="http://x/Meter",
+                expression="Transformer disjointWith Meter",
+            ),  # added
         ],
         rules=[ReadModelRule(route="engine", name="R001")],  # modified（route 改判）
     )
@@ -124,19 +136,25 @@ def test_读模型差异_增删改清单与summary() -> None:
     assert [e.key for e in diff.classes.removed] == ["http://x/Removed"]
     modified = diff.classes.modified
     assert len(modified) == 1 and modified[0].key == "http://x/Feeder"
-    assert [c.model_dump() for c in modified[0].changes] == [
-        {"field": "label", "before": "馈线", "after": "10kV 馈线"}
-    ]
+    assert [c.model_dump() for c in modified[0].changes] == [{"field": "label", "before": "馈线", "after": "10kV 馈线"}]
     assert diff.properties.unchanged == 1 and not diff.properties.added
     assert [a.key for a in diff.axioms.added] == ["http://x/Transformer disjointWith http://x/Meter"]
     assert [c.model_dump() for c in diff.rules.modified[0].changes] == [
         {"field": "route", "before": "shacl", "after": "engine"}
     ]
     assert diff.summary == {
-        "classes_added": 1, "classes_removed": 1, "classes_modified": 1,
-        "properties_added": 0, "properties_removed": 0, "properties_modified": 0,
-        "axioms_added": 1, "axioms_removed": 0, "axioms_modified": 0,
-        "rules_added": 0, "rules_removed": 0, "rules_modified": 1,
+        "classes_added": 1,
+        "classes_removed": 1,
+        "classes_modified": 1,
+        "properties_added": 0,
+        "properties_removed": 0,
+        "properties_modified": 0,
+        "axioms_added": 1,
+        "axioms_removed": 0,
+        "axioms_modified": 0,
+        "rules_added": 0,
+        "rules_removed": 0,
+        "rules_modified": 1,
     }
 
 
@@ -198,9 +216,7 @@ def test_select与ask放行并序列化() -> None:
 
 def test_行封顶_truncated与空白节点序列化() -> None:
     graph = Graph()
-    lines = "\n".join(
-        f'<http://x/n{n}> <http://x/v> "r{n}" .' for n in range(MAX_QUERY_ROWS + 10)
-    )
+    lines = "\n".join(f'<http://x/n{n}> <http://x/v> "r{n}" .' for n in range(MAX_QUERY_ROWS + 10))
     graph.parse(data=f"@prefix x: <http://x/> .\n{lines}", format="turtle")
     prepared, form = prepare_readonly("SELECT ?s WHERE { ?s <http://x/v> ?o }")
     result = execute_readonly(graph, prepared, form)

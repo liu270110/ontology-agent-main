@@ -643,8 +643,7 @@ async def _triage_one(ctx: _Ctx, cand_row: KbFact, *, note: str | None = None) -
                 TRIAGE_T4,
                 matched_fact_id=old["id"],
                 reason=(
-                    f"T4 主谓宾全同：佐证合并（source_ref ×{len(merged)}，"
-                    f"置信度上调 +{T4_CONFIDENCE_BOOST}），无工单"
+                    f"T4 主谓宾全同：佐证合并（source_ref ×{len(merged)}，置信度上调 +{T4_CONFIDENCE_BOOST}），无工单"
                 ),
             )
 

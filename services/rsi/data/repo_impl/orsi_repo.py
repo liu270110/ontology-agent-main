@@ -77,7 +77,8 @@ class PgOrsiCapabilityRepository:
                 await self._db.flush()
         except IntegrityError as exc:
             raise OrsiDuplicateFingerprint(
-                f"同指纹能力已注册（face={capability.face.value} fingerprint={capability.capability_fingerprint[:12]}…）"
+                f"同指纹能力已注册（face={capability.face.value} "
+                f"fingerprint={capability.capability_fingerprint[:12]}…）"
             ) from exc
         capability.id = row.id
         capability.created_at = row.created_at

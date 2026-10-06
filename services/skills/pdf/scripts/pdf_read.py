@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Read a PDF: per-page text, tables, metadata, or form fields. JSON to stdout."""
+
 from __future__ import annotations
 
 import argparse
@@ -68,12 +69,14 @@ def read_meta(path: str, password: str | None) -> dict:
     pages = []
     for idx, page in enumerate(reader.pages, start=1):
         box = page.mediabox
-        pages.append({
-            "page": idx,
-            "width": float(box.width),
-            "height": float(box.height),
-            "rotation": int(page.get("/Rotate", 0)),
-        })
+        pages.append(
+            {
+                "page": idx,
+                "width": float(box.width),
+                "height": float(box.height),
+                "rotation": int(page.get("/Rotate", 0)),
+            }
+        )
     # scanned-page heuristic: no extractable text but page has images
     likely_scanned = []
     try:
@@ -95,8 +98,10 @@ def read_meta(path: str, password: str | None) -> dict:
         "likely_scanned_pages": likely_scanned,
     }
     if likely_scanned:
-        out["note"] = ("Image-only pages detected: no text layer to extract. "
-                       "Use the references/ocr-extraction.md in this skill for OCR.")
+        out["note"] = (
+            "Image-only pages detected: no text layer to extract. "
+            "Use the references/ocr-extraction.md in this skill for OCR."
+        )
     return out
 
 

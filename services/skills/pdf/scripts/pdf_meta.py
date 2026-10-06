@@ -12,6 +12,7 @@ Metadata note: values are stored in the classic DocInfo dictionary
 (Title/Author/Subject/Keywords). XMP metadata, if present, is not
 rewritten and may disagree in sophisticated viewers.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -57,8 +58,7 @@ def main() -> int:
 
     if args.list_attachments:
         names = list(reader.attachments.keys())
-        json.dump({"attachment_count": len(names), "attachments": names}, sys.stdout,
-                  ensure_ascii=False, indent=2)
+        json.dump({"attachment_count": len(names), "attachments": names}, sys.stdout, ensure_ascii=False, indent=2)
         print()
         return 0
 
@@ -86,13 +86,13 @@ def main() -> int:
 
     if args.set_meta:
         meta = {}
-        for key, value in ((f"/{k.capitalize()}", getattr(args, k))
-                           for k in ("title", "author", "subject", "keywords")):
+        for key, value in (
+            (f"/{k.capitalize()}", getattr(args, k)) for k in ("title", "author", "subject", "keywords")
+        ):
             if value is not None:
                 meta[key] = value
         if not meta:
-            print("Error: --set-meta needs at least one of --title/--author/--subject/--keywords",
-                  file=sys.stderr)
+            print("Error: --set-meta needs at least one of --title/--author/--subject/--keywords", file=sys.stderr)
             return 4
         writer.add_metadata(meta)
         result = {"output": args.output, "set": {k.lstrip("/"): v for k, v in meta.items()}}

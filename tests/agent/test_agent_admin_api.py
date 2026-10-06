@@ -391,9 +391,7 @@ async def test_disable_enable_幂等_新会话拒绑_不改存量会话(agent_en
 async def test_debug_chat_单轮生成_桩断言入参与用量(agent_env):
     client, env = agent_env
     headers = await _login_headers(client, env["admin_email"], _PASSWORD)
-    agent = await _register_agent(
-        client, headers, config={"model": "glm-4.7", "num_ctx": 4096, "temperature": 0.5}
-    )
+    agent = await _register_agent(client, headers, config={"model": "glm-4.7", "num_ctx": 4096, "temperature": 0.5})
     stub: StubModelPort = env["model_port"]
 
     resp = await client.post(
@@ -428,9 +426,7 @@ async def test_debug_chat_LLM失败_结构化502_5002(agent_env):
     agent = await _register_agent(client, headers, system_prompt=None)
     env["model_port"].fail = ModelUnavailableError("模型服务不可达")  # 换剧本（app.state 持同对象，原位置败）
 
-    resp = await client.post(
-        f"/api/v1/agents/{agent['id']}/debug-chat", json={"message": "ping"}, headers=headers
-    )
+    resp = await client.post(f"/api/v1/agents/{agent['id']}/debug-chat", json={"message": "ping"}, headers=headers)
     # Assert：已登记 5xxx 结构化上抛（5002→502），不裸 500；错误体四字段统一形状
     assert resp.status_code == status.HTTP_502_BAD_GATEWAY, resp.text
     body = resp.json()
@@ -442,20 +438,14 @@ async def test_debug_chat_claude无key_同口径502_未知id404_空message422(ag
     headers = await _login_headers(client, env["admin_email"], _PASSWORD)
     claude = await _register_agent(client, headers, name="claude-调试", agent_tool="claude", system_prompt=None)
 
-    resp = await client.post(
-        f"/api/v1/agents/{claude['id']}/debug-chat", json={"message": "ping"}, headers=headers
-    )
+    resp = await client.post(f"/api/v1/agents/{claude['id']}/debug-chat", json={"message": "ping"}, headers=headers)
     # claude 无 key=注册成功调用拒绝（claude.py 契约）→ 5002 结构化，不裸 500
     assert resp.status_code == status.HTTP_502_BAD_GATEWAY
     assert resp.json()["code"] == int(ErrorCode.LLM_UNAVAILABLE)
 
-    missing = await client.post(
-        f"/api/v1/agents/{uuid.uuid4()}/debug-chat", json={"message": "ping"}, headers=headers
-    )
+    missing = await client.post(f"/api/v1/agents/{uuid.uuid4()}/debug-chat", json={"message": "ping"}, headers=headers)
     assert missing.status_code == status.HTTP_404_NOT_FOUND
 
-    empty = await client.post(
-        f"/api/v1/agents/{claude['id']}/debug-chat", json={"message": ""}, headers=headers
-    )
+    empty = await client.post(f"/api/v1/agents/{claude['id']}/debug-chat", json={"message": ""}, headers=headers)
     assert empty.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
     assert empty.json()["code"] == 3001

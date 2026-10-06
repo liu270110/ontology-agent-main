@@ -13,6 +13,7 @@ Text output is JSON: {"body": [...], "tables": [[...rows]], "headers": [...],
 "footers": [...]}. Body text is the accepted/as-is text (python-docx ignores
 deleted-in-revision text and shows inserted text).
 """
+
 from __future__ import annotations
 
 import argparse
@@ -29,9 +30,12 @@ def table_to_rows(table) -> list:
 
 
 def extract_text(doc) -> dict:
-    out = {"body": [p.text for p in doc.paragraphs],
-           "tables": [table_to_rows(t) for t in doc.tables],
-           "headers": [], "footers": []}
+    out = {
+        "body": [p.text for p in doc.paragraphs],
+        "tables": [table_to_rows(t) for t in doc.tables],
+        "headers": [],
+        "footers": [],
+    }
     for section in doc.sections:
         out["headers"].extend(p.text for p in section.header.paragraphs)
         out["footers"].extend(p.text for p in section.footer.paragraphs)
@@ -56,8 +60,7 @@ def extract_structure(doc) -> dict:
         "outline": outline,
         "paragraph_count": len(doc.paragraphs),
         "table_count": len(doc.tables),
-        "tables": [{"rows": len(t.rows), "cols": len(t.columns)}
-                   for t in doc.tables],
+        "tables": [{"rows": len(t.rows), "cols": len(t.columns)} for t in doc.tables],
         "section_count": len(doc.sections),
     }
 
@@ -96,8 +99,7 @@ def extract_images(path: str, outdir: str) -> list:
 
 def detect_revisions(path: str) -> dict:
     """Detect tracked changes and comments by scanning the raw XML parts."""
-    markers = {"insertions": b"<w:ins ", "deletions": b"<w:del ",
-               "format_changes": b"<w:rPrChange"}
+    markers = {"insertions": b"<w:ins ", "deletions": b"<w:del ", "format_changes": b"<w:rPrChange"}
     result = {k: False for k in markers}
     result["comments"] = False
     with zipfile.ZipFile(path) as zf:
@@ -109,8 +111,7 @@ def detect_revisions(path: str) -> dict:
                 for key, marker in markers.items():
                     if marker in data:
                         result[key] = True
-    result["has_tracked_changes"] = any(
-        result[k] for k in ("insertions", "deletions", "format_changes"))
+    result["has_tracked_changes"] = any(result[k] for k in ("insertions", "deletions", "format_changes"))
     return result
 
 
@@ -122,13 +123,11 @@ def main() -> int:
     g.add_argument("--structure", action="store_true", help="outline JSON")
     g.add_argument("--styles", action="store_true", help="styles used, JSON")
     g.add_argument("--images", metavar="DIR", help="extract images to DIR")
-    g.add_argument("--revisions", action="store_true",
-                   help="detect tracked changes / comments")
+    g.add_argument("--revisions", action="store_true", help="detect tracked changes / comments")
     args = ap.parse_args()
 
     if args.images:
-        print(json.dumps({"images": extract_images(args.path, args.images)},
-                         ensure_ascii=False))
+        print(json.dumps({"images": extract_images(args.path, args.images)}, ensure_ascii=False))
         return 0
     if args.revisions:
         print(json.dumps(detect_revisions(args.path), ensure_ascii=False))

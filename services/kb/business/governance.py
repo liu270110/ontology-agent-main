@@ -121,9 +121,7 @@ def detect_conflicts(cand: dict[str, Any], existing: list[dict[str, Any]]) -> Tr
     命中（确定性，不依赖哈希序）。无同键命中 → triage=none（新知识，无冲突面）。
     """
     key = (cand.get("subject"), cand.get("predicate"))
-    pool = [
-        f for f in existing if f.get("id") != cand.get("id") and (f.get("subject"), f.get("predicate")) == key
-    ]
+    pool = [f for f in existing if f.get("id") != cand.get("id") and (f.get("subject"), f.get("predicate")) == key]
     if not pool:
         return TriageResult(TRIAGE_NONE, reason=f"无比对键命中（subject={key[0]!r}, predicate={key[1]!r}）")
     for f in pool:  # T1 版本演进：lite=document_id 同源，自动建边新版遮蔽旧版，无需人工

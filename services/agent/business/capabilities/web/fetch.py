@@ -56,6 +56,7 @@ def _truncation_mark(locator: str | None) -> str:
         return _SPILL_MARK_FALLBACK
     return "\n…" + SPILL_MARKER_FMT.format(locator=locator) + "…"
 
+
 # HTTP 客户端工厂（组合根/tests 注入 MockTransport；入参=本次调用的钳制后超时秒）
 HttpClientFactory = Callable[[float], httpx.AsyncClient]
 

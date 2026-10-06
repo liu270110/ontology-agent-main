@@ -303,9 +303,7 @@ class ExternalMcpManager:
                 scopes = derive_required_scopes(name, local)
                 if not scopes:
                     # K3-2：空推导一律拒绝登记并告警（不阻塞同 server 其余 tool 的发现登记）
-                    logger.warning(
-                        "外部 tool required_scopes 推导为空，拒绝登记: server=%s tool=%r", name, local
-                    )
+                    logger.warning("外部 tool required_scopes 推导为空，拒绝登记: server=%s tool=%r", name, local)
                     continue
                 descriptors.append(
                     CapabilityDescriptor(

@@ -155,9 +155,7 @@ def vllm_port(monkeypatch: pytest.MonkeyPatch) -> OpenAICompatibleModelPort:
     monkeypatch.setenv("OA_LLM_BASE_URL", VLLM_BASE_URL)  # 文档化接缝：生产组合根同源读此 env
     # 生产同款占位 Bearer（services/gateway/app.py _LLM_KEY_PLACEHOLDER：本地渠道无密钥传 EMPTY）
     return _PatientModelPort(
-        OpenAICompatibleModelPort(
-            base_url=VLLM_BASE_URL, api_key="EMPTY", model=model, timeout_s=MODEL_TIMEOUT_S
-        ),
+        OpenAICompatibleModelPort(base_url=VLLM_BASE_URL, api_key="EMPTY", model=model, timeout_s=MODEL_TIMEOUT_S),
         MODEL_TIMEOUT_S,
     )
 
@@ -239,18 +237,12 @@ async def bench_env(
 
 async def _facts(kb_pg: async_sessionmaker[AsyncSession], tenant_id: uuid.UUID) -> list[KbFactORM]:
     async with kb_pg() as db:
-        return (
-            (await db.execute(select(KbFactORM).where(KbFactORM.tenant_id == tenant_id))).scalars().all()
-        )
+        return (await db.execute(select(KbFactORM).where(KbFactORM.tenant_id == tenant_id))).scalars().all()
 
 
 async def _tickets(kb_pg: async_sessionmaker[AsyncSession], tenant_id: uuid.UUID) -> list[ReviewTicketORM]:
     async with kb_pg() as db:
-        return (
-            (await db.execute(select(ReviewTicketORM).where(ReviewTicketORM.tenant_id == tenant_id)))
-            .scalars()
-            .all()
-        )
+        return (await db.execute(select(ReviewTicketORM).where(ReviewTicketORM.tenant_id == tenant_id))).scalars().all()
 
 
 async def test_utopia_bench_真模型_管线_审核_合并撤销_端到端(
@@ -279,22 +271,20 @@ async def test_utopia_bench_真模型_管线_审核_合并撤销_端到端(
     )
     known_gaps: list[dict[str, str]] = []
     for doc_id, report in failed.items():
-        bad = [
-            (s.step, s.error)
-            for s in report.steps
-            if s.status not in ("done", "skipped")
-        ]
+        bad = [(s.step, s.error) for s in report.steps if s.status not in ("done", "skipped")]
         assert bad, f"失败文档 {doc_id} 无失败步骤记录（状态机不一致）"
         for step, error in bad:
             assert step == "extract", f"失败文档 {doc_id} 败于 {step}（非模型输出侧，管线缺陷）: {error}"
             assert "ModelGateway" in (error or ""), f"失败文档 {doc_id} extract 非模型能力错误: {error}"
-            known_gaps.append({
-                "doc_id": doc_id,
-                "step": step,
-                "error_class": "model_output_invalid",
-                "error": (error or "")[:200],
-                "reason": "本机 4B 模型在叙事密集 chunk 复读失控（截断 JSON），生产 3 次重试语义耗尽",
-            })
+            known_gaps.append(
+                {
+                    "doc_id": doc_id,
+                    "step": step,
+                    "error_class": "model_output_invalid",
+                    "error": (error or "")[:200],
+                    "reason": "本机 4B 模型在叙事密集 chunk 复读失控（截断 JSON），生产 3 次重试语义耗尽",
+                }
+            )
     for report in completed.values():
         assert not report.degraded, "意外软降级（本场景无 embed 步）"
 
@@ -358,9 +348,9 @@ async def test_utopia_bench_真模型_管线_审核_合并撤销_端到端(
     assert outcome.decided == len(merge_ids), f"裁决行数 {outcome.decided} ≠ 该 subject 合规候选行数 {len(merge_ids)}"
     after_merge = {f.id: f for f in await _facts(kb_pg, bench_env["tenant_id"])}
     assert all(after_merge[fid].status == "authoritative" for fid in merge_ids), "合并后未置权威态"
-    assert all(
-        (after_merge[fid].meta or {})["review_queue"]["decision"] == "authoritative" for fid in merge_ids
-    ), "合并缺行内审计"
+    assert all((after_merge[fid].meta or {})["review_queue"]["decision"] == "authoritative" for fid in merge_ids), (
+        "合并缺行内审计"
+    )
 
     undo = await queue.batch_decide(
         bench_env["tenant_id"],
@@ -373,9 +363,9 @@ async def test_utopia_bench_真模型_管线_审核_合并撤销_端到端(
     assert undo.decided == outcome.decided, "撤销未覆盖全部合并行"
     after_undo = {f.id: f for f in await _facts(kb_pg, bench_env["tenant_id"])}
     assert all(after_undo[fid].status == "rejected" for fid in merge_ids), "撤销后未退出权威态"
-    assert all(
-        (after_undo[fid].meta or {})["review_queue"]["decision"] == "rejected" for fid in merge_ids
-    ), "撤销缺审计留痕"
+    assert all((after_undo[fid].meta or {})["review_queue"]["decision"] == "rejected" for fid in merge_ids), (
+        "撤销缺审计留痕"
+    )
 
     # ── 6) 判分数字（两组）：结构面 + 置信度×门禁 proxy 校准面（poc2 ECE 口径；proxy 正类=过门禁）
     status_summary = scoring.aggregate(

@@ -224,7 +224,10 @@ async def test_POST_lifecycle_下架恢复撤销_审计行留痕(tools_seed):
         )
         actions = [r["action"] for r in rows]
         assert actions == [
-            "tools.register", "tools.lifecycle.delist", "tools.lifecycle.restore", "tools.lifecycle.revoke"
+            "tools.register",
+            "tools.lifecycle.delist",
+            "tools.lifecycle.restore",
+            "tools.lifecycle.revoke",
         ]
         assert all(r["trace_id"] == "tools-it-trace" for r in rows)
         assert rows[1]["params_digest"]["reason"] == "版本过期" and rows[1]["params_digest"]["from"] == "listed"
@@ -327,9 +330,7 @@ async def test_POST_lifecycle_非登记人非admin_4604拒绝_无审计行(tools
         actions = (
             (
                 await db.execute(
-                    text(
-                        "SELECT action FROM audit_logs WHERE resource_id = :rid AND resource_type = 'tool_entry'"
-                    ),
+                    text("SELECT action FROM audit_logs WHERE resource_id = :rid AND resource_type = 'tool_entry'"),
                     {"rid": str(entry.id)},
                 )
             )

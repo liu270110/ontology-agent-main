@@ -110,7 +110,8 @@ class MemoryService:
             evidence = _evidence_ids(cmd.source_ref)
             if cmd.proof_count is None or cmd.proof_count < 1 or not evidence:
                 raise ObservationEvidenceError(
-                    "mem:Observation 必须携带证据链（source_ref supported_by/source_fact_ids 非空且 proof_count≥1，§11.2）"
+                    "mem:Observation 必须携带证据链"
+                    "（source_ref supported_by/source_fact_ids 非空且 proof_count≥1，§11.2）"
                 )
             if len(evidence) != cmd.proof_count:
                 raise ObservationEvidenceError(

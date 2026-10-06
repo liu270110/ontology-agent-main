@@ -47,6 +47,7 @@ def _norm(name: str) -> str:
 
     return re.sub(r"\s+", "", name).lower()
 
+
 # 迷你术语目录（synthetic 注入用）：别名/词表交互的确定性载体（真实种子目录另测）
 
 
@@ -179,9 +180,7 @@ async def test_K4c_rewrite_真实种子_词表兜底与规范面自命中不改�
 
 
 def _two_channel_stubs():
-    ids = {
-        name: uuid.uuid5(uuid.NAMESPACE_URL, name) for name in ("A", "B", "C")
-    }
+    ids = {name: uuid.uuid5(uuid.NAMESPACE_URL, name) for name in ("A", "B", "C")}
     doc = uuid.uuid4()
 
     def hit(name: str) -> SearchHit:

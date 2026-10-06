@@ -14,6 +14,7 @@ Usage:
   csv_to_xlsx.py data.csv out.xlsx --sheet-name Import --encoding cp1252
   csv_to_xlsx.py data.csv out.xlsx --delimiter ';' --no-infer
 """
+
 from __future__ import annotations
 
 import argparse
@@ -55,13 +56,10 @@ def main(argv=None):
     ap.add_argument("csv_file", help="input CSV path")
     ap.add_argument("output", help="output .xlsx path")
     ap.add_argument("--sheet-name", default="Sheet1")
-    ap.add_argument("--encoding", default="utf-8",
-                    help="CSV file encoding (default utf-8)")
+    ap.add_argument("--encoding", default="utf-8", help="CSV file encoding (default utf-8)")
     ap.add_argument("--delimiter", default=",")
-    ap.add_argument("--no-infer", action="store_true",
-                    help="keep every cell as a string")
-    ap.add_argument("--plain", action="store_true",
-                    help="skip header styling / freeze / autofilter")
+    ap.add_argument("--no-infer", action="store_true", help="keep every cell as a string")
+    ap.add_argument("--plain", action="store_true", help="skip header styling / freeze / autofilter")
     args = ap.parse_args(argv)
 
     with open(args.csv_file, newline="", encoding=args.encoding) as fh:
@@ -85,14 +83,11 @@ def main(argv=None):
         ws.freeze_panes = "A2"
         ws.auto_filter.ref = ws.dimensions
         for col_idx in range(1, ws.max_column + 1):
-            longest = max((len(str(r[col_idx - 1])) for r in rows
-                           if len(r) >= col_idx), default=DEFAULT_COL_WIDTH)
-            ws.column_dimensions[get_column_letter(col_idx)].width = \
-                min(longest + COL_PADDING, MAX_COL_WIDTH)
+            longest = max((len(str(r[col_idx - 1])) for r in rows if len(r) >= col_idx), default=DEFAULT_COL_WIDTH)
+            ws.column_dimensions[get_column_letter(col_idx)].width = min(longest + COL_PADDING, MAX_COL_WIDTH)
 
     wb.save(args.output)
-    print(json.dumps({"ok": True, "output": args.output,
-                      "rows": len(rows)}, ensure_ascii=False))
+    print(json.dumps({"ok": True, "output": args.output, "rows": len(rows)}, ensure_ascii=False))
     return 0
 
 

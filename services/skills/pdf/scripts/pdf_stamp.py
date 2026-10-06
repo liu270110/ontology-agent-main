@@ -12,6 +12,7 @@ Examples:
   pdf_stamp.py in.pdf -o out.pdf --image sig.png --x 400 --y 60 \
       --width 120 --pages 3
 """
+
 from __future__ import annotations
 
 import argparse
@@ -42,6 +43,7 @@ def parse_pages(spec: str, page_count: int) -> list[int]:
 def build_overlay(args, page_width: float, page_height: float) -> bytes:
     from reportlab.lib.colors import HexColor
     from reportlab.pdfgen import canvas
+
     buf = io.BytesIO()
     c = canvas.Canvas(buf, pagesize=(page_width, page_height))
     c.saveState()
@@ -65,6 +67,7 @@ def build_overlay(args, page_width: float, page_height: float) -> bytes:
             kwargs["height"] = float(args.height)
         if "width" in kwargs and "height" not in kwargs:
             from PIL import Image as PILImage
+
             with PILImage.open(args.image) as im:
                 kwargs["height"] = kwargs["width"] * im.height / im.width
         c.drawImage(args.image, 0, 0, mask="auto", **kwargs)
@@ -95,16 +98,16 @@ def main() -> int:
     parser.add_argument("--opacity", type=float, default=1.0, help="0.0-1.0 (default 1.0)")
     parser.add_argument("--width", type=float, help="Image width in points")
     parser.add_argument("--height", type=float, help="Image height in points")
-    parser.add_argument("--under", action="store_true",
-                        help="Place the stamp under existing content instead of over it")
+    parser.add_argument(
+        "--under", action="store_true", help="Place the stamp under existing content instead of over it"
+    )
     parser.add_argument("--password", help="Password if the input is encrypted")
     args = parser.parse_args()
 
     try:
         from pypdf import PdfReader, PdfWriter
     except ImportError:
-        print("Missing dependency: install with 'python3 -m pip install pypdf reportlab'",
-              file=sys.stderr)
+        print("Missing dependency: install with 'python3 -m pip install pypdf reportlab'", file=sys.stderr)
         return 2
 
     reader = PdfReader(args.pdf)
@@ -134,8 +137,12 @@ def main() -> int:
         writer.add_page(page)
     with open(args.output, "wb") as fh:
         writer.write(fh)
-    print(json.dumps({"output": args.output, "stamped_pages": sorted(pages),
-                      "kind": "text" if args.text else "image"}, ensure_ascii=False))
+    print(
+        json.dumps(
+            {"output": args.output, "stamped_pages": sorted(pages), "kind": "text" if args.text else "image"},
+            ensure_ascii=False,
+        )
+    )
     return 0
 
 

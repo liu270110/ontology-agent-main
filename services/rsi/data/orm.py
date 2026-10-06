@@ -12,7 +12,6 @@ from datetime import datetime
 from typing import Any
 
 from sqlalchemy import CheckConstraint, DateTime, String, UniqueConstraint
-from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from services.platform.db.base import Base, PkMixin, TenantMixin, TimestampMixin

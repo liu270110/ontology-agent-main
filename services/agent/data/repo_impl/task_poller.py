@@ -100,9 +100,7 @@ class RunQueuePoller:
             ).first()
             if queued_row is not None:
                 return WorkerClaim(kind="queued", tenant_id=queued_row[0], task_id=queued_row[1], run_id=queued_row[2])
-            resume_row = (
-                await db.execute(resume_stmt.order_by(TaskORM.created_at, TaskORM.id).limit(1))
-            ).first()
+            resume_row = (await db.execute(resume_stmt.order_by(TaskORM.created_at, TaskORM.id).limit(1))).first()
             if resume_row is not None:
                 return WorkerClaim(kind="resume", tenant_id=resume_row[0], task_id=resume_row[1], run_id=resume_row[2])
             retry = (await db.execute(retry_stmt.order_by(TaskORM.created_at, TaskORM.id).limit(1))).first()

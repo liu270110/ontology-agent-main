@@ -116,9 +116,7 @@ class AgentKernel:
             stuck_threshold if stuck_threshold is not None else get_settings().kernel_stuck_threshold
         )
         self._stuck_step_timeout_s = (
-            stuck_step_timeout_s
-            if stuck_step_timeout_s is not None
-            else get_settings().kernel_stuck_step_timeout_s
+            stuck_step_timeout_s if stuck_step_timeout_s is not None else get_settings().kernel_stuck_step_timeout_s
         )
         # B-① 并行段并发度：显式注入优先，缺省读 Settings（T6 唯一事实源；=1 退化为串行）
         self._tool_parallelism = (
@@ -276,7 +274,7 @@ class AgentKernel:
                         rc.tracker.check()  # A4 检查点：步前预算断言（超限优雅终止）
                         # A-1 循环记账（docs/Agent/13 §2 K1-a）：步前逐步记账——同签名连续
                         # 重复第 1 次注入 kernel.loop_nudge 软警告，达阈值抛 LoopDetectedError
-                        #（KernelError 家族 → run() 结构化终止，账本可追溯）
+                        # （KernelError 家族 → run() 结构化终止，账本可追溯）
                         register_step(rc, loop_guard, step, emit=self._emit)
                         # K12-a/b 心跳记账（docs/Agent/13 §18）：步边界刷新 Run 级进展快照，
                         # 停滞/单步超时判据命中发 kernel.run_stuck 观测事件（只观测不迁移）

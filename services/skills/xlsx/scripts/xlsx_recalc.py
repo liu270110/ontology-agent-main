@@ -22,6 +22,7 @@ Usage:
   xlsx_recalc.py book.xlsx --out recalced.xlsx
   xlsx_recalc.py book.xlsx --timeout 120
 """
+
 from __future__ import annotations
 
 import argparse
@@ -36,6 +37,7 @@ from pathlib import Path
 def count_cached(path):
     """Number of formula cells with a cached value present."""
     from openpyxl import load_workbook
+
     wb_f = load_workbook(path, data_only=False)
     wb_v = load_workbook(path, data_only=True)
     formulas = cached = 0
@@ -51,55 +53,67 @@ def count_cached(path):
 
 
 def main(argv=None):
-    ap = argparse.ArgumentParser(
-        description="Recalculate .xlsx formulas headlessly via LibreOffice.")
+    ap = argparse.ArgumentParser(description="Recalculate .xlsx formulas headlessly via LibreOffice.")
     ap.add_argument("file", help="path to .xlsx file")
     ap.add_argument("--out", help="output path (default: replace input)")
-    ap.add_argument("--timeout", type=int, default=180,
-                    help="seconds to wait for soffice (default 180)")
+    ap.add_argument("--timeout", type=int, default=180, help="seconds to wait for soffice (default 180)")
     args = ap.parse_args(argv)
 
     src = Path(args.file).resolve()
     if not src.exists():
-        print(json.dumps({"ok": False, "error": f"no such file: {src}"}),
-              file=sys.stderr)
+        print(json.dumps({"ok": False, "error": f"no such file: {src}"}), file=sys.stderr)
         return 1
 
     soffice = shutil.which("soffice")
     if not soffice:
-        print(json.dumps({
-            "ok": True, "recalculated": False,
-            "reason": "LibreOffice (soffice) not found on PATH",
-            "guidance": "Install LibreOffice (e.g. `apt install "
-                        "libreoffice-calc` or `brew install --cask "
-                        "libreoffice`), or open the file in Excel/"
-                        "LibreOffice once and re-save it.",
-        }, ensure_ascii=False))
+        print(
+            json.dumps(
+                {
+                    "ok": True,
+                    "recalculated": False,
+                    "reason": "LibreOffice (soffice) not found on PATH",
+                    "guidance": "Install LibreOffice (e.g. `apt install "
+                    "libreoffice-calc` or `brew install --cask "
+                    "libreoffice`), or open the file in Excel/"
+                    "LibreOffice once and re-save it.",
+                },
+                ensure_ascii=False,
+            )
+        )
         return 0
 
     with tempfile.TemporaryDirectory() as tmp:
         proc = subprocess.run(
-            [soffice, "--headless", "--calc", "--convert-to", "xlsx:Calc "
-             "MS Excel 2007 XML", "--outdir", tmp, str(src)],
-            capture_output=True, text=True, encoding="utf-8",
+            [soffice, "--headless", "--calc", "--convert-to", "xlsx:Calc MS Excel 2007 XML", "--outdir", tmp, str(src)],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
             timeout=args.timeout,
-            env={"HOME": tmp, "PATH": Path(soffice).parent.as_posix()
-                 + ":/usr/bin:/bin"})
+            env={"HOME": tmp, "PATH": Path(soffice).parent.as_posix() + ":/usr/bin:/bin"},
+        )
         produced = Path(tmp) / (src.stem + ".xlsx")
         if proc.returncode != 0 or not produced.exists():
-            print(json.dumps({"ok": False,
-                              "error": "soffice conversion failed",
-                              "stderr": proc.stderr.strip()[-500:]}),
-                  file=sys.stderr)
+            print(
+                json.dumps({"ok": False, "error": "soffice conversion failed", "stderr": proc.stderr.strip()[-500:]}),
+                file=sys.stderr,
+            )
             return 1
         formulas, cached = count_cached(produced)
         dest = Path(args.out).resolve() if args.out else src
         shutil.copyfile(produced, dest)
 
-    print(json.dumps({
-        "ok": True, "recalculated": True, "output": str(dest),
-        "formula_cells": formulas, "with_cached_values": cached,
-    }, ensure_ascii=False))
+    print(
+        json.dumps(
+            {
+                "ok": True,
+                "recalculated": True,
+                "output": str(dest),
+                "formula_cells": formulas,
+                "with_cached_values": cached,
+            },
+            ensure_ascii=False,
+        )
+    )
     return 0
 
 

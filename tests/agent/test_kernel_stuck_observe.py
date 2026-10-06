@@ -298,9 +298,7 @@ async def test_端到端串行停滞_置位一次_nudge注入_Run终态语义不
     assert outcome.status == str(RunStatus.FAILED)  # 只观测不迁移：终态仍是既有七态之一
     rc = kernel.last_run_context
     assert rc is not None and rc.is_stuck is True
-    stuck = [
-        e for e in (kernel.last_ledger.events if kernel.last_ledger else []) if e.event_type == STUCK_EVENT
-    ]
+    stuck = [e for e in (kernel.last_ledger.events if kernel.last_ledger else []) if e.event_type == STUCK_EVENT]
     assert len(stuck) == 1
     assert stuck[0].data["stall_count"] == 2
     assert stuck[0].data["trigger"] == "stall"
@@ -323,9 +321,7 @@ async def test_端到端_进展解除后再置位_两次事件() -> None:
     outcome = await kernel.run(make_task(), make_ctx(), budget=Budget(max_steps=10, duration_s=30))
 
     assert outcome.status == str(RunStatus.FAILED)
-    stuck = [
-        e for e in (kernel.last_ledger.events if kernel.last_ledger else []) if e.event_type == STUCK_EVENT
-    ]
+    stuck = [e for e in (kernel.last_ledger.events if kernel.last_ledger else []) if e.event_type == STUCK_EVENT]
     assert [e.data["step_seq"] for e in stuck] == [3, 6]  # 解除后可再次置位
     assert all(e.data["trigger"] == "stall" for e in stuck)
     rc = kernel.last_run_context
@@ -355,17 +351,13 @@ async def test_端到端_并行段_段级心跳一次_不误计段内步() -> No
         assert "kernel.group_started" in event_types  # 并行段路径确被走到
         assert outcome.status == str(RunStatus.FAILED)
     stuck_fire = [
-        e
-        for e in (kernel_fire.last_ledger.events if kernel_fire.last_ledger else [])
-        if e.event_type == STUCK_EVENT
+        e for e in (kernel_fire.last_ledger.events if kernel_fire.last_ledger else []) if e.event_type == STUCK_EVENT
     ]
     assert len(stuck_fire) == 1
     assert stuck_fire[0].data["stall_count"] == 2
     assert stuck_fire[0].data["step_seq"] == 4  # 第 3 个记账点=段 (4,5) 段首步
     stuck_quiet = [
-        e
-        for e in (kernel_quiet.last_ledger.events if kernel_quiet.last_ledger else [])
-        if e.event_type == STUCK_EVENT
+        e for e in (kernel_quiet.last_ledger.events if kernel_quiet.last_ledger else []) if e.event_type == STUCK_EVENT
     ]
     assert stuck_quiet == []  # 段级心跳：4 段=3 次停滞 < 4，不置位（逐步记账则 5 次必置位）
 
@@ -376,9 +368,7 @@ async def test_端到端_健康运行_默认配置_零事件() -> None:
     outcome = await kernel.run(make_task(), make_ctx(), budget=Budget(max_steps=10, duration_s=30))
 
     assert outcome.status == str(RunStatus.COMPLETED)
-    stuck = [
-        e for e in (kernel.last_ledger.events if kernel.last_ledger else []) if e.event_type == STUCK_EVENT
-    ]
+    stuck = [e for e in (kernel.last_ledger.events if kernel.last_ledger else []) if e.event_type == STUCK_EVENT]
     assert stuck == []
     rc = kernel.last_run_context
     assert rc is not None and rc.is_stuck is False and rc.stall_count == 0
@@ -391,8 +381,6 @@ async def test_端到端_单步超时_真实时钟触发_step_timeout() -> None:
     outcome = await kernel.run(make_task(), make_ctx(), budget=Budget(max_steps=10, duration_s=30))
 
     assert outcome.status == str(RunStatus.COMPLETED)  # 观测不迁移：超时判据不改变终态
-    stuck = [
-        e for e in (kernel.last_ledger.events if kernel.last_ledger else []) if e.event_type == STUCK_EVENT
-    ]
+    stuck = [e for e in (kernel.last_ledger.events if kernel.last_ledger else []) if e.event_type == STUCK_EVENT]
     assert len(stuck) >= 1
     assert all(e.data["trigger"] == "step_timeout" for e in stuck)

@@ -232,9 +232,7 @@ def test_kb_governance_5_tables_schema_roundtrip():
                 ),
                 {"t": table},
             ).fetchall()
-            actual = {
-                (c, dt, ml, is_nullable == "YES", d) for c, dt, ml, is_nullable, d in rows
-            }
+            actual = {(c, dt, ml, is_nullable == "YES", d) for c, dt, ml, is_nullable, d in rows}
             expected = _EXPECTED_COLUMNS[table]
             missing = expected - actual
             unexpected = actual - expected
@@ -301,8 +299,7 @@ def test_kb_governance_5_tables_schema_roundtrip():
     with engine.connect() as conn:
         count = conn.execute(
             text(
-                "SELECT count(*) FROM information_schema.tables "
-                "WHERE table_schema = 'public' AND table_name = ANY(:ts)"
+                "SELECT count(*) FROM information_schema.tables WHERE table_schema = 'public' AND table_name = ANY(:ts)"
             ),
             {"ts": list(_TABLES)},
         ).scalar()

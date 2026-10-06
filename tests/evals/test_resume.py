@@ -8,6 +8,7 @@
   零网络/零 git ref 提取——端到端断点续跑幂等、墓碑策略、历史输出引导。
 门禁基线：tests/evals 为 K6 新目录（此前 0），完成后 ≥10 用例全绿。
 """
+
 from __future__ import annotations
 
 import json
@@ -27,8 +28,8 @@ for _p in (EVALS_DIR, SESSION_DIR):  # _resume 与 runner 的平铺导入（from
 import _resume  # noqa: E402
 import runner as ss_runner  # noqa: E402
 
-
 # ── K6-a helper 单元 ────────────────────────────────────────────────
+
 
 def test_content_key_stable_and_hex():
     a = _resume.content_key("t1", "base", "m1", "prompt-1")
@@ -41,11 +42,9 @@ def test_content_key_stable_and_hex():
 def test_content_key_field_order_and_boundaries():
     k = _resume.content_key("t1", "base", "m1", "p")
     # 关键字实参任意顺序 → 同 key（拼接序在函数内固定）
-    assert _resume.content_key(
-        prompt="p", model="m1", arm="base", task_id="t1") == k
+    assert _resume.content_key(prompt="p", model="m1", arm="base", task_id="t1") == k
     # 分隔符防跨界碰撞：字段错位不共 key
-    assert _resume.content_key("t1x", "base", "m1", "p") != \
-        _resume.content_key("t1", "xbase", "m1", "p")
+    assert _resume.content_key("t1x", "base", "m1", "p") != _resume.content_key("t1", "xbase", "m1", "p")
 
 
 def test_content_key_changes_when_prompt_changes():
@@ -92,11 +91,13 @@ def test_truncated_tail_tolerated(tmp_path):
     d = tmp_path / "results"
     d.mkdir()
     (d / ".checkpoint.jsonl").write_text(
-        json.dumps({"key": "a", "status": "ok", "ts": "t"}) + "\n"
-        + json.dumps({"key": "b", "status": "tombstone",
-                      "reason": "r", "ts": "t"}) + "\n"
+        json.dumps({"key": "a", "status": "ok", "ts": "t"})
+        + "\n"
+        + json.dumps({"key": "b", "status": "tombstone", "reason": "r", "ts": "t"})
+        + "\n"
         + '{"key": "c", "statu',  # 崩溃截断的尾行
-        encoding="utf-8")
+        encoding="utf-8",
+    )
     store = _resume.CheckpointStore(d)
     with pytest.warns(UserWarning, match="截断"):
         done, tomb = store.load()
@@ -106,9 +107,7 @@ def test_truncated_tail_tolerated(tmp_path):
 def test_fsync_called_on_every_persist(tmp_path, monkeypatch):
     calls = []
     real_fsync = os.fsync
-    monkeypatch.setattr(
-        os, "fsync",
-        lambda fd: (calls.append(fd), real_fsync(fd))[1])
+    monkeypatch.setattr(os, "fsync", lambda fd: (calls.append(fd), real_fsync(fd))[1])
 
     store = _resume.CheckpointStore(tmp_path / "results")
     store.append({"key": "k1", "status": "ok"})
@@ -137,10 +136,19 @@ MINI_ARMS = {"base": object(), "cand": object()}  # run_one 被替换，arm 不�
 
 
 def _fake_result(task, arm, model):
-    return {"task": task, "arm": arm, "model": model, "ok": True,
-            "n_tool_calls": 1, "bad_calls": 0, "first_prompt_tokens": 10,
-            "total_tokens": 20, "wall_s": 0.1, "calls": [],
-            "final": f"final-{task}-{arm}"}
+    return {
+        "task": task,
+        "arm": arm,
+        "model": model,
+        "ok": True,
+        "n_tool_calls": 1,
+        "bad_calls": 0,
+        "first_prompt_tokens": 10,
+        "total_tokens": 20,
+        "wall_s": 0.1,
+        "calls": [],
+        "final": f"final-{task}-{arm}",
+    }
 
 
 def _battery(tmp_path, monkeypatch, fake, reps=2, **kw):
@@ -149,9 +157,17 @@ def _battery(tmp_path, monkeypatch, fake, reps=2, **kw):
     results = tmp_path / "results"
     outpath = results / "mini-model.jsonl"
     store = _resume.CheckpointStore(results)
-    ss_runner.run_battery(client=None, model="mini-model", arms=MINI_ARMS,
-                          tasks=MINI_TASKS, outpath=outpath, store=store,
-                          main_db=None, reps=reps, **kw)
+    ss_runner.run_battery(
+        client=None,
+        model="mini-model",
+        arms=MINI_ARMS,
+        tasks=MINI_TASKS,
+        outpath=outpath,
+        store=store,
+        main_db=None,
+        reps=reps,
+        **kw,
+    )
     return outpath, store
 
 
@@ -159,8 +175,7 @@ def test_runner_resume_after_interrupt(tmp_path, monkeypatch):
     """跑一半中断（KeyboardInterrupt 不落记录）→ 重跑只补剩余 → 再跑零调用。"""
     calls = {"n": 0}
 
-    def flaky(client, model, arm_name, arm_mod, task_id, prompt, oracle,
-              main_db, max_iters=8):
+    def flaky(client, model, arm_name, arm_mod, task_id, prompt, oracle, main_db, max_iters=8):
         calls["n"] += 1
         if calls["n"] == 4:  # 第 4 个 cell 执行中被中断
             raise KeyboardInterrupt
@@ -168,26 +183,24 @@ def test_runner_resume_after_interrupt(tmp_path, monkeypatch):
 
     with pytest.raises(KeyboardInterrupt):
         _battery(tmp_path, monkeypatch, flaky)
-    outpath, store = tmp_path / "results" / "mini-model.jsonl", \
-        _resume.CheckpointStore(tmp_path / "results")
+    outpath, store = tmp_path / "results" / "mini-model.jsonl", _resume.CheckpointStore(tmp_path / "results")
     done, tomb = store.load()
     assert len(done) == 3 and not tomb  # 中断前 3 个 cell 已 checkpoint
     assert len(outpath.read_text(encoding="utf-8").splitlines()) == 3
 
     calls2 = {"n": 0}
 
-    def ok(client, model, arm_name, arm_mod, task_id, prompt, oracle,
-           main_db, max_iters=8):
+    def ok(client, model, arm_name, arm_mod, task_id, prompt, oracle, main_db, max_iters=8):
         calls2["n"] += 1
         return _fake_result(task_id, arm_name, model)
 
     _battery(tmp_path, monkeypatch, ok)  # 续跑：只补剩余 5 个
-    rows = [json.loads(x) for x in
-            outpath.read_text(encoding="utf-8").splitlines()]
+    rows = [json.loads(x) for x in outpath.read_text(encoding="utf-8").splitlines()]
     assert calls2["n"] == 5
     assert len(rows) == 8
     assert {(r["task"], r["arm"], r["rep"]) for r in rows} == {
-        (t, a, rep) for t in MINI_TASKS for a in MINI_ARMS for rep in (0, 1)}
+        (t, a, rep) for t in MINI_TASKS for a in MINI_ARMS for rep in (0, 1)
+    }
     done, tomb = store.load()
     assert len(done) == 8 and not tomb
 
@@ -199,22 +212,18 @@ def test_runner_resume_after_interrupt(tmp_path, monkeypatch):
 def test_runner_tombstone_then_retry_flag(tmp_path, monkeypatch):
     """重试耗尽 → 墓碑（输出零行）；resume 默认跳过；--retry-tombstones 重跑。"""
 
-    def failing(client, model, arm_name, arm_mod, task_id, prompt, oracle,
-                main_db, max_iters=8):
+    def failing(client, model, arm_name, arm_mod, task_id, prompt, oracle, main_db, max_iters=8):
         raise ValueError("provider down")
 
-    outpath, store = _battery(tmp_path, monkeypatch, failing,
-                              max_attempts=2)
-    assert not outpath.exists() or \
-        not outpath.read_text(encoding="utf-8").splitlines()
+    outpath, store = _battery(tmp_path, monkeypatch, failing, max_attempts=2)
+    assert not outpath.exists() or not outpath.read_text(encoding="utf-8").splitlines()
     done, tomb = store.load()
     assert not done and len(tomb) == 8  # 2 任务 × 2 rep × 2 arm 全入墓碑
     assert all(v["reason"] == "ValueError: provider down" for v in tomb.values())
 
     calls = {"n": 0}
 
-    def ok(client, model, arm_name, arm_mod, task_id, prompt, oracle,
-           main_db, max_iters=8):
+    def ok(client, model, arm_name, arm_mod, task_id, prompt, oracle, main_db, max_iters=8):
         calls["n"] += 1
         return _fake_result(task_id, arm_name, model)
 
@@ -223,8 +232,7 @@ def test_runner_tombstone_then_retry_flag(tmp_path, monkeypatch):
 
     _battery(tmp_path, monkeypatch, ok, retry_tombstones=True)
     assert calls["n"] == 8  # 开关重跑：全部补齐
-    rows = [json.loads(x) for x in
-            outpath.read_text(encoding="utf-8").splitlines()]
+    rows = [json.loads(x) for x in outpath.read_text(encoding="utf-8").splitlines()]
     assert len(rows) == 8
     done, tomb = store.load()
     assert len(done) == 8 and not tomb  # 成功后墓碑清空
@@ -236,30 +244,31 @@ def test_runner_bootstrap_from_legacy_output(tmp_path, monkeypatch):
     results.mkdir()
     outpath = results / "mini-model.jsonl"
     legacy = [
-        {"task": "t1", "arm": "base", "model": "mini-model", "ok": True,
-         "rep": 0},
-        {"task": "t1", "arm": "cand", "model": "mini-model", "ok": True,
-         "rep": 1},
+        {"task": "t1", "arm": "base", "model": "mini-model", "ok": True, "rep": 0},
+        {"task": "t1", "arm": "cand", "model": "mini-model", "ok": True, "rep": 1},
     ]
     outpath.write_text(
-        json.dumps(legacy[0]) + "\n"
+        json.dumps(legacy[0])
+        + "\n"
         + "not-json\n"  # 历史损坏行：跳过（该 cell 会重跑一次）
-        + json.dumps(legacy[1]) + "\n",
-        encoding="utf-8")
+        + json.dumps(legacy[1])
+        + "\n",
+        encoding="utf-8",
+    )
     store = _resume.CheckpointStore(results)
     assert not store.exists()
-    ss_runner._bootstrap_done_from_output(outpath, store, "mini-model",
-                                          MINI_TASKS)
+    ss_runner._bootstrap_done_from_output(outpath, store, "mini-model", MINI_TASKS)
     assert store.exists()
-    expect = {ss_runner.cell_key("t1", "base", "mini-model", "prompt-1", 0),
-              ss_runner.cell_key("t1", "cand", "mini-model", "prompt-1", 1)}
+    expect = {
+        ss_runner.cell_key("t1", "base", "mini-model", "prompt-1", 0),
+        ss_runner.cell_key("t1", "cand", "mini-model", "prompt-1", 1),
+    }
     done, tomb = store.load()
     assert done == expect and not tomb
 
     calls = {"n": 0}
 
-    def ok(client, model, arm_name, arm_mod, task_id, prompt, oracle,
-           main_db, max_iters=8):
+    def ok(client, model, arm_name, arm_mod, task_id, prompt, oracle, main_db, max_iters=8):
         calls["n"] += 1
         return _fake_result(task_id, arm_name, model)
 

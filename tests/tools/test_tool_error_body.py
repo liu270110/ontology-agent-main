@@ -44,8 +44,13 @@ async def test_POST_tools_scope不足_四字段体code2001():
         # Act
         resp = await client.post(
             "/api/v1/tools",
-            json={"name": "it-x", "action_iri": "https://o.example/a", "source_channel": "L1",
-                  "semantic_annotation": {"action_iri": "https://o.example/a"}, "version": "1.0.0"},
+            json={
+                "name": "it-x",
+                "action_iri": "https://o.example/a",
+                "source_channel": "L1",
+                "semantic_annotation": {"action_iri": "https://o.example/a"},
+                "version": "1.0.0",
+            },
             headers=headers,
         )
         # Assert：403 + 2001 + 四字段同构（api/01 §4；trace_id=② 请求上下文回填）

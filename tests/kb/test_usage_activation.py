@@ -438,9 +438,7 @@ async def _seed_zero_ref_env(
             )  # 全零行（§6.1「计数缺行/全零」两形态之一）
         )
         session.add(
-            KbUsageCounter(
-                tenant_id=TENANT, kb_collection_id=KB, chunk_id=stale_hit, search_hits=3
-            )  # 活性命中行
+            KbUsageCounter(tenant_id=TENANT, kb_collection_id=KB, chunk_id=stale_hit, search_hits=3)  # 活性命中行
         )
     return {
         "stale_no_usage": stale_no_usage,
@@ -459,9 +457,7 @@ async def test_零引用清理候选_满期缺行或全零计数_只报告不动
     assert report.stats["zero_ref_candidates"] == 2  # 老缺行 + 老全零行；活性/未满期不计
     # 只报告不动数据（v1）：chunk 行与 usage 行原样保留
     async with kb_factory() as session:
-        chunk_ids = {
-            row[0] for row in (await session.execute(select(DocumentChunkORM.id))).all()
-        }
+        chunk_ids = {row[0] for row in (await session.execute(select(DocumentChunkORM.id))).all()}
         usage_rows = (await session.execute(select(KbUsageCounter))).scalars().all()
     assert chunk_ids == set(ids.values())
     assert {(u.chunk_id, u.search_hits) for u in usage_rows} == {

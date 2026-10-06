@@ -113,9 +113,9 @@ class ResumePoller:
         return self.queue.pop(0) if self.queue else None
 
 
-def make_resume_env(*, tickets: list[dict[str, Any]] | None = None, with_message: bool = True) -> tuple[
-    TaskRunWorker, FakeUow, CaptureOrchestrator, Task, Any
-]:
+def make_resume_env(
+    *, tickets: list[dict[str, Any]] | None = None, with_message: bool = True
+) -> tuple[TaskRunWorker, FakeUow, CaptureOrchestrator, Task, Any]:
     uow = FakeUow()
     session = Session(id=uuid.uuid4(), tenant_id=_TENANT, agent_id=uuid.uuid4(), user_id=uuid.uuid4())
     uow.session_repo.sessions[session.id] = session

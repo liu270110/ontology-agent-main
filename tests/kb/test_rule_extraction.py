@@ -167,8 +167,9 @@ class RuleStubModelPort:
 
 
 async def test_结构化抽取解析_模板id_系统自留字段剥离_风险恒真() -> None:
-    candidates = await extract_rule_candidates(CHUNK, load_seed_catalog(), RuleStubModelPort(STUB_PAYLOAD),
-                                               trace_id="trace-rule-1")
+    candidates = await extract_rule_candidates(
+        CHUNK, load_seed_catalog(), RuleStubModelPort(STUB_PAYLOAD), trace_id="trace-rule-1"
+    )
     assert [c.rule_id for c in candidates] == ["RD-001", "RD-002", "RD-003"]  # 模板 id（声明序）
     assert [c.kind for c in candidates] == ["state_transition", "exclusion", "invariant"]
     assert all(c.risk_flag is True for c in candidates)  # 底线 3：类型级恒真（注入 False 已剥离）

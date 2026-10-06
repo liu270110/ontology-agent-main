@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """KB-E1 评估冻结批执行器（OntRAG §10 验收量化；2026-09-29）。
 
 流程：
@@ -12,6 +11,7 @@
 
 用法：python services/devtools/kb-eval/kbe1_eval_freeze.py [--tei http://127.0.0.1:18002]
 """
+
 from __future__ import annotations
 
 import argparse
@@ -82,15 +82,14 @@ async def main(tei_base: str) -> int:
     from sqlalchemy import text
     from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
-    from services.platform.db import registry  # noqa: F401  全模块 ORM 入 metadata（FK 解析，tests 同款）
-
     from services.iam.data.orm import Tenant
+    from services.kb.business.retrieval_eval import load_golden_cases, run_retrieval_eval
+    from services.kb.business.search_service import KnowledgeSearchService
     from services.kb.data.orm import Document, DocumentChunk, KbCollection
     from services.kb.retrieval.chunking import chunk_document
     from services.kb.retrieval.embed import bm25_search, vector_search
-    from services.kb.business.retrieval_eval import load_golden_cases, run_retrieval_eval
-    from services.kb.business.search_service import KnowledgeSearchService
     from services.platform.config import Settings
+    from services.platform.db import registry  # noqa: F401  全模块 ORM 入 metadata（FK 解析，tests 同款）
 
     shim, shim_url = start_shim(tei_base)
     settings = Settings()
@@ -150,16 +149,27 @@ async def main(tei_base: str) -> int:
 
     embedder = OllamaEmbedder(shim_url, timeout=120.0)
     async with sf() as db:
-        rows = (await db.execute(text(
-            "select id, content from document_chunks where tenant_id = :t and embedding is null"
-        ), {"t": tenant_id})).mappings().all()
+        rows = (
+            (
+                await db.execute(
+                    text("select id, content from document_chunks where tenant_id = :t and embedding is null"),
+                    {"t": tenant_id},
+                )
+            )
+            .mappings()
+            .all()
+        )
         if rows:
             vecs: list[list[float]] = []
             for i in range(0, len(rows), 8):  # 小批量防 TEI 长耗时超时
                 vecs.extend(await embedder.embed([r["content"] for r in rows[i : i + 8]]))
-            await db.execute(text(
-                "update document_chunks set embedding = cast(:vec as vector) where id = :id"
-            ), [{"id": r["id"], "vec": f"[{','.join(f'{x:.6f}' for x in v)}]"} for r, v in zip(rows, vecs)])
+            await db.execute(
+                text("update document_chunks set embedding = cast(:vec as vector) where id = :id"),
+                [
+                    {"id": r["id"], "vec": f"[{','.join(f'{x:.6f}' for x in v)}]"}
+                    for r, v in zip(rows, vecs, strict=True)
+                ],
+            )
         await db.commit()
     ingest_s = time.perf_counter() - t0
     results["corpus_docs"] = len(files)
@@ -175,9 +185,11 @@ async def main(tei_base: str) -> int:
     # ── 3) 消融三组 + 引用率（同 30 例直查组件）───────────────────────────
     cases = load_golden_cases(GOLDEN)
     async with sf() as db:
-        title_rows = (await db.execute(text(
-            "select title, id from documents where tenant_id = :t"
-        ), {"t": tenant_id})).mappings().all()
+        title_rows = (
+            (await db.execute(text("select title, id from documents where tenant_id = :t"), {"t": tenant_id}))
+            .mappings()
+            .all()
+        )
     title_map = {r["title"]: r["id"] for r in title_rows}
     abl = {"bm25": {"hit": 0, "rr": 0.0, "n": 0}, "vector": {"hit": 0, "rr": 0.0, "n": 0}}
     cited = 0
@@ -204,23 +216,53 @@ async def main(tei_base: str) -> int:
     results["citation_rate_30"] = round(cited / n, 4)
     for chan in abl:
         m = abl[chan]
-        results[f"ablation_{chan}"] = {"hit_at_8": round(m["hit"] / max(m["n"], 1), 4), "mrr": round(m["rr"] / max(m["n"], 1), 4), "n": m["n"]}
-    print(f"[kbe1] 引用率(30例)={results['citation_rate_30']} 消融 bm25={results['ablation_bm25']} vector={results['ablation_vector']}")
+        results[f"ablation_{chan}"] = {
+            "hit_at_8": round(m["hit"] / max(m["n"], 1), 4),
+            "mrr": round(m["rr"] / max(m["n"], 1), 4),
+            "n": m["n"],
+        }
+    print(
+        f"[kbe1] 引用率(30例)={results['citation_rate_30']} "
+        f"消融 bm25={results['ablation_bm25']} vector={results['ablation_vector']}"
+    )
 
     # ── 4) 增量索引计时（d00 追加段落 → 重分片+重嵌）───────────────────────
     d00 = CORPUS / "d00_供电概况_城东片区.md"
-    mutated = d00.read_text(encoding="utf-8") + "\n\n## 增量测试附录（KB-E1）\n\n本节为增量重嵌计时探针：城东片区 2026 年秋季最大负荷率 81.5%。\n"
+    mutated = (
+        d00.read_text(encoding="utf-8")
+        + "\n\n## 增量测试附录（KB-E1）\n\n本节为增量重嵌计时探针：城东片区 2026 年秋季最大负荷率 81.5%。\n"
+    )
     t1 = time.perf_counter()
     doc_id = doc_ids[d00.stem]
     async with sf() as db, db.begin():
         await db.execute(text("delete from document_chunks where document_id = :d"), {"d": doc_id})
         for ch in chunk_document(mutated):
-            db.add(DocumentChunk(tenant_id=tenant_id, document_id=doc_id, seq=ch.seq, content=ch.content, token_count=ch.token_count, meta={}))
+            db.add(
+                DocumentChunk(
+                    tenant_id=tenant_id,
+                    document_id=doc_id,
+                    seq=ch.seq,
+                    content=ch.content,
+                    token_count=ch.token_count,
+                    meta={},
+                )
+            )
     async with sf() as db:
-        rows2 = (await db.execute(text("select id, content from document_chunks where document_id = :d and embedding is null"), {"d": doc_id})).mappings().all()
+        rows2 = (
+            (
+                await db.execute(
+                    text("select id, content from document_chunks where document_id = :d and embedding is null"),
+                    {"d": doc_id},
+                )
+            )
+            .mappings()
+            .all()
+        )
         vecs2 = await embedder.embed([r["content"] for r in rows2])
-        await db.execute(text("update document_chunks set embedding = cast(:vec as vector) where id = :id"),
-                         [{"id": r["id"], "vec": f"[{','.join(f'{x:.6f}' for x in v)}]"} for r, v in zip(rows2, vecs2)])
+        await db.execute(
+            text("update document_chunks set embedding = cast(:vec as vector) where id = :id"),
+            [{"id": r["id"], "vec": f"[{','.join(f'{x:.6f}' for x in v)}]"} for r, v in zip(rows2, vecs2, strict=True)],
+        )
         await db.commit()
     incr_s = time.perf_counter() - t1
     results["incremental_reindex_seconds"] = round(incr_s, 2)

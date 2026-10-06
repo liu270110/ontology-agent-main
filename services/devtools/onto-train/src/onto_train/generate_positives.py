@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """模板正例生成器（离线，无需 LLM）。
 
 依据 GB/T 48000.3 附录 D 实例化风格（标准实体→层次→对象→特性→约束逻辑→行动）
@@ -9,6 +8,7 @@
   {"id", "text", "tokenized_text", "ner": [[i, j, label_en], ...],
    "provenance": {"source": "template_v0.1", "template_id", "seed"}}
 """
+
 from __future__ import annotations
 
 import argparse
@@ -48,11 +48,11 @@ class SentenceBuilder:
         self.parts: list[str] = []
         self.spans: list[tuple[int, int, str]] = []  # (char_start, char_end, label)
 
-    def lit(self, s: str) -> "SentenceBuilder":
+    def lit(self, s: str) -> SentenceBuilder:
         self.parts.append(s)
         return self
 
-    def ent(self, s: str, label: str) -> "SentenceBuilder":
+    def ent(self, s: str, label: str) -> SentenceBuilder:
         start = sum(len(p) for p in self.parts)
         self.parts.append(s)
         self.spans.append((start, start + len(s), label))
@@ -63,71 +63,177 @@ class SentenceBuilder:
 
 
 TEMPLATES = {
-    "T01_std_issued": lambda r: SentenceBuilder()
-    .ent(r.choice(ORGS), "Stakeholder").lit("发布了").ent(r.choice(STDS), "Standard")
-    .lit("《").ent(r.choice(STD_NAMES), "Standard").lit("》。"),
-    "T02_clause_term": lambda r: SentenceBuilder()
-    .ent(r.choice(STDS), "Standard").lit(r.choice(LEVELS) + "规定了术语")
-    .ent(r.choice(TERMS), "Term").lit("。"),
-    "T03_object_characteristic": lambda r: SentenceBuilder()
-    .lit("本文件适用于").ent(r.choice(OBJS), "Technical Object")
-    .lit("，其").ent(r.choice(CHARS), "Characteristic").lit("按").ent(r.choice(FORMS), "Representation Form")
-    .lit("执行。"),
-    "T04_constraint_action": lambda r: SentenceBuilder()
-    .lit("容量恢复能力").ent(r.choice(CONSTRAINTS), "Constraint Logic")
-    .lit("，测试时").ent(r.choice(ACTIONS), "Action").lit("。"),
-    "T05_stage_law": lambda r: SentenceBuilder()
-    .lit("该标准处于").ent(r.choice(STAGES), "Development Stage")
-    .lit("阶段，并应符合").ent(r.choice(LAWS), "External Constraint").lit("的要求。"),
-    "T06_structure": lambda r: SentenceBuilder()
-    .ent(r.choice(STDS), "Standard").lit("的").ent("规范性附录", "Structural Element")
-    .lit("给出了").ent(r.choice(TERMS), "Term").lit("的").ent("资料性表述", "Structural Element").lit("。"),
-    "T07_cat_level": lambda r: SentenceBuilder()
-    .lit("该领域类别为").ent(r.choice(CATS), "Domain Category")
-    .lit("，标准层次单元为").ent(r.choice(LEVELS), "Hierarchy Level").lit("。"),
-    "T08_object_of_std": lambda r: SentenceBuilder()
-    .ent(r.choice(STD_NAMES), "Standard").lit("的标准化对象是")
-    .ent(r.choice(OBJS), "Technical Object").lit("。"),
-    "T09_term_def": lambda r: SentenceBuilder()
-    .ent(r.choice(STDS), "Standard").lit("定义了术语")
-    .ent(r.choice(TERMS), "Term").lit("并在").ent(r.choice(LEVELS), "Hierarchy Level").lit("中使用。"),
-    "T10_action_chain": lambda r: SentenceBuilder()
-    .lit("技术审查通过后，由").ent(r.choice(ORGS), "Stakeholder")
-    .ent(r.choice(ACTIONS), "Action").lit("，结果记入").ent(r.choice(FORMS), "Representation Form").lit("。"),
-    "T11_dev_stage_full": lambda r: SentenceBuilder()
-    .ent(r.choice(STDS), "Standard").lit("经历了征求意见和技术审查，当前处于")
-    .ent(r.choice(STAGES), "Development Stage").lit("阶段。"),
-    "T12_char_constraint": lambda r: SentenceBuilder()
-    .ent(r.choice(OBJS), "Technical Object").lit("的").ent(r.choice(CHARS), "Characteristic")
-    .ent(r.choice(CONSTRAINTS), "Constraint Logic").lit("。"),
-    "T13_std_chain": lambda r: SentenceBuilder()
-    .ent(r.choice(STDS), "Standard").lit("引用并替代旧版标准，其")
-    .ent(r.choice(LEVELS), "Hierarchy Level").lit("规定了").ent(r.choice(OBJS), "Technical Object")
-    .lit("的").ent(r.choice(CHARS), "Characteristic").lit("。"),
-    "T14_multi": lambda r: SentenceBuilder()
-    .ent(r.choice(ORGS), "Stakeholder").lit("归口的").ent(r.choice(STDS), "Standard")
-    .lit("适用于").ent(r.choice(OBJS), "Technical Object").lit("，要求")
-    .ent(r.choice(ACTIONS), "Action").lit("，依据").ent(r.choice(LAWS), "External Constraint").lit("。"),
-    "T15_unit_form": lambda r: SentenceBuilder()
-    .ent(r.choice(STDS), "Standard").lit("的某").ent("信息单元", "Information Unit")
-    .lit("以").ent(r.choice(FORMS), "Representation Form").lit("表述，涉及")
-    .ent(r.choice(TERMS), "Term").lit("。"),
-    "T16_std_object": lambda r: SentenceBuilder()
-    .ent(r.choice(STDS), "Standard").lit("的标准化对象是")
-    .ent(r.choice(OBJS), "Standardized Object").lit("，归口单位为")
-    .ent(r.choice(ORGS), "Stakeholder").lit("。"),
-    "T17_ob2_object_action": lambda r: SentenceBuilder()
-    .lit("按 OB2 建模法，").ent(r.choice(OBJS), "OB2 Object")
-    .lit("是对象，").ent(r.choice(ACTIONS), "OB2 Action")
-    .lit("是改变其状态的行为。"),
-    "T18_ob2_event_rule": lambda r: SentenceBuilder()
-    .ent(r.choice(["订单支付成功事件", "设备停电上报事件"]), "OB2 Event")
-    .lit("满足守卫规则").ent("R" + str(r.randint(1, 99)).zfill(3), "OB2 Rule")
-    .lit("的条件下触发。"),
-    "T19_ob2_chain": lambda r: SentenceBuilder()
-    .ent("状态越限事件", "OB2 Event").lit("触发")
-    .ent(r.choice(ACTIONS), "OB2 Action").lit("，结果回写")
-    .ent(r.choice(OBJS), "OB2 Object").lit("并记入").ent(r.choice(FORMS), "Representation Form").lit("。"),
+    "T01_std_issued": lambda r: (
+        SentenceBuilder()
+        .ent(r.choice(ORGS), "Stakeholder")
+        .lit("发布了")
+        .ent(r.choice(STDS), "Standard")
+        .lit("《")
+        .ent(r.choice(STD_NAMES), "Standard")
+        .lit("》。")
+    ),
+    "T02_clause_term": lambda r: (
+        SentenceBuilder()
+        .ent(r.choice(STDS), "Standard")
+        .lit(r.choice(LEVELS) + "规定了术语")
+        .ent(r.choice(TERMS), "Term")
+        .lit("。")
+    ),
+    "T03_object_characteristic": lambda r: (
+        SentenceBuilder()
+        .lit("本文件适用于")
+        .ent(r.choice(OBJS), "Technical Object")
+        .lit("，其")
+        .ent(r.choice(CHARS), "Characteristic")
+        .lit("按")
+        .ent(r.choice(FORMS), "Representation Form")
+        .lit("执行。")
+    ),
+    "T04_constraint_action": lambda r: (
+        SentenceBuilder()
+        .lit("容量恢复能力")
+        .ent(r.choice(CONSTRAINTS), "Constraint Logic")
+        .lit("，测试时")
+        .ent(r.choice(ACTIONS), "Action")
+        .lit("。")
+    ),
+    "T05_stage_law": lambda r: (
+        SentenceBuilder()
+        .lit("该标准处于")
+        .ent(r.choice(STAGES), "Development Stage")
+        .lit("阶段，并应符合")
+        .ent(r.choice(LAWS), "External Constraint")
+        .lit("的要求。")
+    ),
+    "T06_structure": lambda r: (
+        SentenceBuilder()
+        .ent(r.choice(STDS), "Standard")
+        .lit("的")
+        .ent("规范性附录", "Structural Element")
+        .lit("给出了")
+        .ent(r.choice(TERMS), "Term")
+        .lit("的")
+        .ent("资料性表述", "Structural Element")
+        .lit("。")
+    ),
+    "T07_cat_level": lambda r: (
+        SentenceBuilder()
+        .lit("该领域类别为")
+        .ent(r.choice(CATS), "Domain Category")
+        .lit("，标准层次单元为")
+        .ent(r.choice(LEVELS), "Hierarchy Level")
+        .lit("。")
+    ),
+    "T08_object_of_std": lambda r: (
+        SentenceBuilder()
+        .ent(r.choice(STD_NAMES), "Standard")
+        .lit("的标准化对象是")
+        .ent(r.choice(OBJS), "Technical Object")
+        .lit("。")
+    ),
+    "T09_term_def": lambda r: (
+        SentenceBuilder()
+        .ent(r.choice(STDS), "Standard")
+        .lit("定义了术语")
+        .ent(r.choice(TERMS), "Term")
+        .lit("并在")
+        .ent(r.choice(LEVELS), "Hierarchy Level")
+        .lit("中使用。")
+    ),
+    "T10_action_chain": lambda r: (
+        SentenceBuilder()
+        .lit("技术审查通过后，由")
+        .ent(r.choice(ORGS), "Stakeholder")
+        .ent(r.choice(ACTIONS), "Action")
+        .lit("，结果记入")
+        .ent(r.choice(FORMS), "Representation Form")
+        .lit("。")
+    ),
+    "T11_dev_stage_full": lambda r: (
+        SentenceBuilder()
+        .ent(r.choice(STDS), "Standard")
+        .lit("经历了征求意见和技术审查，当前处于")
+        .ent(r.choice(STAGES), "Development Stage")
+        .lit("阶段。")
+    ),
+    "T12_char_constraint": lambda r: (
+        SentenceBuilder()
+        .ent(r.choice(OBJS), "Technical Object")
+        .lit("的")
+        .ent(r.choice(CHARS), "Characteristic")
+        .ent(r.choice(CONSTRAINTS), "Constraint Logic")
+        .lit("。")
+    ),
+    "T13_std_chain": lambda r: (
+        SentenceBuilder()
+        .ent(r.choice(STDS), "Standard")
+        .lit("引用并替代旧版标准，其")
+        .ent(r.choice(LEVELS), "Hierarchy Level")
+        .lit("规定了")
+        .ent(r.choice(OBJS), "Technical Object")
+        .lit("的")
+        .ent(r.choice(CHARS), "Characteristic")
+        .lit("。")
+    ),
+    "T14_multi": lambda r: (
+        SentenceBuilder()
+        .ent(r.choice(ORGS), "Stakeholder")
+        .lit("归口的")
+        .ent(r.choice(STDS), "Standard")
+        .lit("适用于")
+        .ent(r.choice(OBJS), "Technical Object")
+        .lit("，要求")
+        .ent(r.choice(ACTIONS), "Action")
+        .lit("，依据")
+        .ent(r.choice(LAWS), "External Constraint")
+        .lit("。")
+    ),
+    "T15_unit_form": lambda r: (
+        SentenceBuilder()
+        .ent(r.choice(STDS), "Standard")
+        .lit("的某")
+        .ent("信息单元", "Information Unit")
+        .lit("以")
+        .ent(r.choice(FORMS), "Representation Form")
+        .lit("表述，涉及")
+        .ent(r.choice(TERMS), "Term")
+        .lit("。")
+    ),
+    "T16_std_object": lambda r: (
+        SentenceBuilder()
+        .ent(r.choice(STDS), "Standard")
+        .lit("的标准化对象是")
+        .ent(r.choice(OBJS), "Standardized Object")
+        .lit("，归口单位为")
+        .ent(r.choice(ORGS), "Stakeholder")
+        .lit("。")
+    ),
+    "T17_ob2_object_action": lambda r: (
+        SentenceBuilder()
+        .lit("按 OB2 建模法，")
+        .ent(r.choice(OBJS), "OB2 Object")
+        .lit("是对象，")
+        .ent(r.choice(ACTIONS), "OB2 Action")
+        .lit("是改变其状态的行为。")
+    ),
+    "T18_ob2_event_rule": lambda r: (
+        SentenceBuilder()
+        .ent(r.choice(["订单支付成功事件", "设备停电上报事件"]), "OB2 Event")
+        .lit("满足守卫规则")
+        .ent("R" + str(r.randint(1, 99)).zfill(3), "OB2 Rule")
+        .lit("的条件下触发。")
+    ),
+    "T19_ob2_chain": lambda r: (
+        SentenceBuilder()
+        .ent("状态越限事件", "OB2 Event")
+        .lit("触发")
+        .ent(r.choice(ACTIONS), "OB2 Action")
+        .lit("，结果回写")
+        .ent(r.choice(OBJS), "OB2 Object")
+        .lit("并记入")
+        .ent(r.choice(FORMS), "Representation Form")
+        .lit("。")
+    ),
 }
 
 

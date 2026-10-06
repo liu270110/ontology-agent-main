@@ -80,6 +80,4 @@ class McpToolORM(Base, PkMixin, TenantMixin, TimestampMixin):
     adopted: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)  # 纳管勾选
     enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)  # 审核开启（默认 false=不可信）
 
-    __table_args__ = (
-        UniqueConstraint("tenant_id", "tool_id", name="uk_mcp_tools_tenant_id_tool_id"),
-    )
+    __table_args__ = (UniqueConstraint("tenant_id", "tool_id", name="uk_mcp_tools_tenant_id_tool_id"),)

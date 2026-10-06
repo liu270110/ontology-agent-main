@@ -48,11 +48,13 @@ def load_sets():
     manifest = json.loads((ROOT / "data" / "manifest.json").read_text(encoding="utf-8"))
     dev_ids = set(manifest["splits"]["golden_dev_ids"])
     labels_cfg = json.loads((ROOT / "configs" / "labels.json").read_text(encoding="utf-8"))
-    domain_labels = [l["label_en"] for g in ("ob2_top_classes", "gbt_entity_types") for l in labels_cfg[g]["labels"]]
+    domain_labels = [
+        item["label_en"] for g in ("ob2_top_classes", "gbt_entity_types") for item in labels_cfg[g]["labels"]
+    ]
 
     rows = []
     for name in ("positives.jsonl", "positives_llm.jsonl"):
-        rows += [json.loads(l) for l in (ROOT / "data" / name).read_text(encoding="utf-8").splitlines()]
+        rows += [json.loads(line) for line in (ROOT / "data" / name).read_text(encoding="utf-8").splitlines()]
     dev = [r for r in rows if r["id"] in dev_ids]
 
     generic = []
@@ -103,7 +105,7 @@ def eval_model(model, dataset, labels):
     golds = [d["ner"] for d in dataset]
     best_f1, best_t = 0.0, 0.0
     for t in THRESHOLDS:
-        f1 = sum(f1_at(p, g, t) for p, g in zip(all_preds, golds)) / len(dataset)
+        f1 = sum(f1_at(p, g, t) for p, g in zip(all_preds, golds, strict=True)) / len(dataset)
         if f1 > best_f1:
             best_f1, best_t = f1, t
     return best_f1, best_t
@@ -133,9 +135,10 @@ def main() -> None:
         f"  回落 {gen_f1_base - gen_f1_s1:+.3f}  [门槛 ≤0.03]"
     )
     m2 = gen_f1_base - gen_f1_s1 <= 0.03
-    print(
-        f"\n结论: {'PASS 双指标达标' if m1 and m2 else 'FAIL ' + ('指标①未达 ' if not m1 else '') + ('指标②未达' if not m2 else '')}"
+    verdict = (
+        "PASS 双指标达标" if m1 and m2 else "FAIL " + ("指标①未达 " if not m1 else "") + ("指标②未达" if not m2 else "")
     )
+    print(f"\n结论: {verdict}")
 
 
 if __name__ == "__main__":

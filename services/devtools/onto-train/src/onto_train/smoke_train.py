@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """10-step 冒烟训练（03 决议 §5.3：nvidia-smi 实测峰值后再定全参/LoRA）。
 
 验证三件事：
@@ -10,6 +9,7 @@
   python src/onto_train/smoke_train.py                # GPU bf16
   python src/onto_train/smoke_train.py --cpu          # 无 GPU 时语法级验证
 """
+
 from __future__ import annotations
 
 import argparse
@@ -50,10 +50,8 @@ def main() -> None:
     from gliner.training import Trainer, TrainingArguments
 
     data_file = ROOT / "data" / "positives.jsonl"
-    train_data = [json.loads(l) for l in data_file.read_text(encoding="utf-8").splitlines()]
-    train_data = [
-        {"tokenized_text": s["tokenized_text"], "ner": s["ner"]} for s in train_data
-    ]
+    train_data = [json.loads(line) for line in data_file.read_text(encoding="utf-8").splitlines()]
+    train_data = [{"tokenized_text": s["tokenized_text"], "ner": s["ner"]} for s in train_data]
     print(f"[data] {len(train_data)} 条训练样本（{data_file.name}）")
 
     model = GLiNER.from_pretrained(MODEL_ID)

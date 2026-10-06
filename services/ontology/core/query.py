@@ -45,9 +45,7 @@ def prepare_readonly(sparql: str) -> tuple[Any, str]:
         raise SparqlRejected(f"SPARQL 语法错误: {exc}") from exc
     form = prepared.algebra.name
     if form not in READONLY_FORMS:
-        raise SparqlRejected(
-            f"只读面仅允许 SELECT/ASK 查询（得 {form}）——INSERT/DELETE 等改写与图构造语义被拒绝"
-        )
+        raise SparqlRejected(f"只读面仅允许 SELECT/ASK 查询（得 {form}）——INSERT/DELETE 等改写与图构造语义被拒绝")
     return prepared, ("select" if form == "SelectQuery" else "ask")
 
 

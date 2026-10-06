@@ -513,9 +513,7 @@ class ActionDispatcher:
         if entry is None:
             raise WritebackError(_NOT_FOUND, "台账行不存在（按所给键未命中或跨租户）")
         if entry.status is not LedgerStatus.PENDING:
-            logger.info(
-                "writeback redispatch skip (not pending): ledger=%s status=%s", entry.id, entry.status.value
-            )
+            logger.info("writeback redispatch skip (not pending): ledger=%s status=%s", entry.id, entry.status.value)
             return project_status(entry)
         binding = self._require_binding(entry.connector_id)
         await self._dispatch(tenant_id, entry, binding)  # 复用投递循环：同幂等键新 attempt

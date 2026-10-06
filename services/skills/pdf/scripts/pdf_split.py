@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Extract page ranges from a PDF, optionally rotating and/or compressing pages."""
+
 from __future__ import annotations
 
 import argparse
@@ -33,14 +34,15 @@ def main() -> int:
         except Exception:
             pass
     parser = argparse.ArgumentParser(
-        description="Split/extract pages from a PDF (pypdf). Pages are 1-based: '1-3,5,9-'.")
+        description="Split/extract pages from a PDF (pypdf). Pages are 1-based: '1-3,5,9-'."
+    )
     parser.add_argument("pdf", help="Input PDF path")
     parser.add_argument("--pages", required=True, help="1-based page spec, e.g. '1-3,5,9-'")
     parser.add_argument("-o", "--output", required=True, help="Output PDF path")
-    parser.add_argument("--rotate", type=int, default=0,
-                        help="Rotate extracted pages clockwise (multiple of 90)")
-    parser.add_argument("--compress", action="store_true",
-                        help="Deflate content streams (modest savings; does not recompress images)")
+    parser.add_argument("--rotate", type=int, default=0, help="Rotate extracted pages clockwise (multiple of 90)")
+    parser.add_argument(
+        "--compress", action="store_true", help="Deflate content streams (modest savings; does not recompress images)"
+    )
     parser.add_argument("--password", help="Password if the input is encrypted")
     args = parser.parse_args()
 

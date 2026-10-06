@@ -200,10 +200,7 @@ class PgOntologyRepository:
         if not rows:
             return []
         head_map = await self._head_map([r.id for r in rows])
-        return [
-            self._ontology_from_row(r, head_ref=head_map.get(r.id), active_changeset=None)
-            for r in rows
-        ]
+        return [self._ontology_from_row(r, head_ref=head_map.get(r.id), active_changeset=None) for r in rows]
 
     async def append_version(
         self,

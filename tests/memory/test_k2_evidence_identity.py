@@ -129,8 +129,15 @@ async def test_settle_source_ref带session_id_CONFLICT带冲突证据链():
         repo=repo,
         review_repo=repo,
         llm=_FakeLlm(
-            [{"record_type": "mem:FactClaim", "subject_iri": "http://e/s1", "content": "owner=李四",
-              "structured": {"attribute": "owner", "value": "李四"}, "confidence": 0.9}]
+            [
+                {
+                    "record_type": "mem:FactClaim",
+                    "subject_iri": "http://e/s1",
+                    "content": "owner=李四",
+                    "structured": {"attribute": "owner", "value": "李四"},
+                    "confidence": 0.9,
+                }
+            ]
         ),
         llm_model="m",
         confidence_threshold=0.8,
@@ -152,7 +159,9 @@ async def test_settle_ADD路径_source_ref占位空证据链_低置信进复核(
         repo=repo,
         review_repo=repo,
         llm=_FakeLlm(
-            [{"record_type": "mem:Preference", "content": "偏好结论先行", "confidence": 0.3}]  # 无 subject → ADD；低置信
+            [
+                {"record_type": "mem:Preference", "content": "偏好结论先行", "confidence": 0.3}
+            ]  # 无 subject → ADD；低置信
         ),
         llm_model="m",
         confidence_threshold=0.8,
@@ -186,8 +195,14 @@ async def test_sleep_time_reflection_证据链断言路径_固化带supported_by
     f1, f2 = _fact("owner", "张三"), _fact("owner", "张三")
     repo.rows[f1.id], repo.rows[f2.id] = f1, f2
     deps = Deps(
-        repo=repo, pipeline=None, gate=None, l1=None, llm_model="m",
-        half_life_days=30.0, observation_min_proof=2, deadline_hours=24,
+        repo=repo,
+        pipeline=None,
+        gate=None,
+        l1=None,
+        llm_model="m",
+        half_life_days=30.0,
+        observation_min_proof=2,
+        deadline_hours=24,
     )
     out = await sleep_time_reflection_task(deps, tenant_id=TENANT, now=NOW)
     assert out == {"observations": 1}
@@ -236,9 +251,7 @@ async def test_upsert_record_OBSERVATION管线来源_无证据链拒绝_自洽�
         )
     # Act / Assert：pipeline 来源但无证据链 → 拒绝（K2-b §11.2）
     with pytest.raises(ObservationEvidenceError, match="证据链"):
-        await svc.upsert_record(
-            _upsert(record_type=MemoryType.OBSERVATION), origin="pipeline", now=NOW
-        )
+        await svc.upsert_record(_upsert(record_type=MemoryType.OBSERVATION), origin="pipeline", now=NOW)
     with pytest.raises(ObservationEvidenceError, match="证据链"):
         await svc.upsert_record(
             _upsert(record_type=MemoryType.OBSERVATION, source_ref=[{"session_id": "s"}]),

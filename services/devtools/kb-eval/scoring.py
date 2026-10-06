@@ -114,9 +114,7 @@ class KnownGapLedger:
     def __contains__(self, key: object) -> bool:
         return key in self._gaps
 
-    def absorb(
-        self, items: Sequence[ScoredItem], key_of: Callable[[ScoredItem], str]
-    ) -> tuple[list[ScoredItem], int]:
+    def absorb(self, items: Sequence[ScoredItem], key_of: Callable[[ScoredItem], str]) -> tuple[list[ScoredItem], int]:
         """把命中缺口的项重打标 known_gap（项仍留在返回序列内，由 aggregate 剔出全部分母）；返回 (判分序列, 吸收数)。"""
         residual: list[ScoredItem] = []
         absorbed = 0

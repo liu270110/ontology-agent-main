@@ -171,9 +171,7 @@ class PgWritebackLedgerRepository:
         if needs_human is not None:
             where.append(WritebackLedgerORM.needs_human == needs_human)
         total = int(
-            (
-                await self._db.execute(select(func.count()).select_from(WritebackLedgerORM).where(*where))
-            ).scalar_one()
+            (await self._db.execute(select(func.count()).select_from(WritebackLedgerORM).where(*where))).scalar_one()
         )
         stmt = (
             select(WritebackLedgerORM)

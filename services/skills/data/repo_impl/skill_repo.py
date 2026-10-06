@@ -105,7 +105,9 @@ class PgSkillRepository:
         if query:
             escaped = query.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
             pattern = f"%{escaped}%"
-            conditions.append(SkillAssetORM.name.ilike(pattern, escape="\\") | SkillAssetORM.description.ilike(pattern, escape="\\"))  # noqa: E501
+            conditions.append(
+                SkillAssetORM.name.ilike(pattern, escape="\\") | SkillAssetORM.description.ilike(pattern, escape="\\")
+            )  # noqa: E501
         rows = (
             (
                 await self._db.execute(

@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Merge multiple PDFs into one, optionally adding a bookmark per source file."""
+
 from __future__ import annotations
 
 import argparse
@@ -17,8 +18,9 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Merge PDFs (pypdf).")
     parser.add_argument("inputs", nargs="+", help="Input PDF paths, in order")
     parser.add_argument("-o", "--output", required=True, help="Output PDF path")
-    parser.add_argument("--bookmarks", action="store_true",
-                        help="Add a top-level bookmark per input file (its basename)")
+    parser.add_argument(
+        "--bookmarks", action="store_true", help="Add a top-level bookmark per input file (its basename)"
+    )
     args = parser.parse_args()
 
     try:

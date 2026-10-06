@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 # MIT License. Shared helpers for the docx skill scripts.
 """Shared helpers: paragraph iteration and run-preserving text replacement."""
+
 from __future__ import annotations
 
 
@@ -10,9 +11,12 @@ def iter_all_paragraphs(doc, include_headers_footers: bool = True):
     if include_headers_footers:
         for section in doc.sections:
             for part in (
-                section.header, section.footer,
-                section.first_page_header, section.first_page_footer,
-                section.even_page_header, section.even_page_footer,
+                section.header,
+                section.footer,
+                section.first_page_header,
+                section.first_page_footer,
+                section.even_page_header,
+                section.even_page_footer,
             ):
                 if part is not None:
                     yield from _iter_container(part)
@@ -38,9 +42,12 @@ def iter_part_roots(doc):
     seen = set()
     for section in doc.sections:
         for part in (
-            section.header, section.footer,
-            section.first_page_header, section.first_page_footer,
-            section.even_page_header, section.even_page_footer,
+            section.header,
+            section.footer,
+            section.first_page_header,
+            section.first_page_footer,
+            section.even_page_header,
+            section.even_page_footer,
         ):
             if part is not None and id(part._element) not in seen:
                 seen.add(id(part._element))
@@ -77,8 +84,7 @@ def replace_in_paragraph(para, old: str, new: str) -> int:
         for i, r in enumerate(runs):
             r_start, r_end = pos, pos + len(r.text)
             if r_end > start and r_start < end:
-                spans.append((i, max(start, r_start) - r_start,
-                              min(end, r_end) - r_start))
+                spans.append((i, max(start, r_start) - r_start, min(end, r_end) - r_start))
             pos = r_end
         first = True
         for i, cs, ce in spans:

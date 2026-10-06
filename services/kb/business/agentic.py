@@ -291,9 +291,7 @@ def _replace_segment(query: str, term: str, target: str) -> str | None:
     return query[: match.start()] + target + query[match.end() :]
 
 
-def _containment_target(
-    norm_term: str, catalog: SeedCatalog, seed_hit: tuple[str, str] | None = None
-) -> str | None:
+def _containment_target(norm_term: str, catalog: SeedCatalog, seed_hit: tuple[str, str] | None = None) -> str | None:
     """一级字面包含归一（match_seed_class 命中 + 方向裁决）：返回规范标签或 None。
 
     match_seed_class 的 contains 命中不分方向——「查询词 ⊂ 标签」=简称待归一（返回标签）；
@@ -314,9 +312,7 @@ def _containment_target(
     return None
 
 
-def _is_canonical_seed_hit(
-    norm_term: str, seed_hit: tuple[str, str] | None, catalog: SeedCatalog
-) -> bool:
+def _is_canonical_seed_hit(norm_term: str, seed_hit: tuple[str, str] | None, catalog: SeedCatalog) -> bool:
     """「已是规范术语」守卫（F3）：词段无需归一 → True，二级简称改写跳过。
 
     两种形态都算已规范：exact 命中（含英文本地名，kb_extraction._norm 同形归一）；

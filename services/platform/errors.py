@@ -71,6 +71,14 @@ class ErrorCode(IntEnum):
     TOOL_LISTING_INVALID = 4601
     TOOL_NAME_TAKEN = 4602
     TOOL_ILLEGAL_TRANSITION = 4603
+    # 2026-10-07 F1 批登记（docs/Agent/15-下一波后端推进设计（主仓本地）§1.1：workflows 域
+    # 48xx 段三码；02 §7 表格回填随文档批）——4801=工作流图结构违规（边端点不存在/start
+    # 不唯一/end 不可达/DAG 有环，detail 结构化列违规项）；4802=节点校验违规（八类节点
+    # kind 非法或必填缺失，如 condition 节点必带确定性表达式、禁裸 LLM 语义分支）；
+    # 4803=非草稿改动（仅草稿可 PUT/DELETE，已发布版本不可变——27 篇 §3 候选非成品落法）。
+    WORKFLOW_GRAPH_INVALID = 4801
+    WORKFLOW_NODE_INVALID = 4802
+    WORKFLOW_NOT_DRAFT = 4803
     INTERNAL_ERROR = 5999
 
 

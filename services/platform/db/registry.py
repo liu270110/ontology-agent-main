@@ -86,6 +86,10 @@ from services.sandbox.data.orm import (  # noqa: F401
     SandboxSnapshot,
 )
 from services.tools.data.orm import ToolRegistryORM  # noqa: F401  工具集市登记表（docs/Agent/14 §5）
+from services.workflows.data.orm import (  # noqa: F401  工作流两表（docs/Agent/15 §1.2，F1 批）
+    WorkflowORM,
+    WorkflowVersionORM,
+)
 from services.writeback.data.orm import (  # noqa: F401
     OutboxEventORM,
     WritebackLedgerORM,

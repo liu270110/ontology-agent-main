@@ -15,6 +15,7 @@ from services.platform.schemas import PageMeta
 
 # 与 review_tickets CheckConstraint 同词汇表（database/01 DDL 权威；ORM=services/review/data/orm.py）
 # conflict = KB-G1a 冲突分诊 T2 工单（OntRAG §8.1 冲突分诊四型；KB-G1a 批扩展）
+# workflow_publish = 工作流发布审批（第七类对象候选，27 篇 §3/§5、X16；F1 批就近最小增）
 TargetTypeFilter = Literal[
     "ontology_candidate",
     "knowledge_instance",
@@ -22,6 +23,7 @@ TargetTypeFilter = Literal[
     "plugin_listing",
     "writeback_incident",
     "conflict",
+    "workflow_publish",
 ]
 StatusFilter = Literal["draft", "pending_review", "approved", "rejected", "published", "cancelled"]
 

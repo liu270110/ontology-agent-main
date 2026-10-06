@@ -161,6 +161,12 @@ class Settings(BaseSettings):
     kernel_stuck_threshold: int = Field(default=3, ge=0)
     kernel_stuck_step_timeout_s: float = Field(default=0.0, ge=0.0)
 
+    # K13 落选回喂半环（docs/Agent/13 §19，2026-10-05 第十一迭代）：RSI rejection ledger
+    # 每 target 有界容量（蓝本=reef max_rejected_history=25，docs/研究整理/12/22-reef.md §4.2）。
+    # 0=关闭落册（语义对齐 kernel_watermark_recheck_max 先例）。RsiService 构造参数显式
+    # 注入优先，缺省读此值（D2 纪律同上）。
+    rsi_rejection_ledger_maxlen: int = Field(default=25, ge=0)
+
     # 记忆域（06 篇 §4/§5.2/§5.5；计划 1 仅 L1 与检索参数）
     memory_l1_ttl_seconds: int = 24 * 3600  # L1 会话记忆块 TTL（会话活跃期）
     memory_search_top_k: int = 8  # 检索注入条数上限

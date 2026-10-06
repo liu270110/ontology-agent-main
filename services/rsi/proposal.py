@@ -11,6 +11,11 @@
 K9 批（2026-10-05，docs/Agent/13 §15，G-9 并发漂移防线）追加：``transition(expect)`` 乐观
 并发 CAS（StaleProposalError）与 ``baseline_hash`` 基线快照字段（创建时条目内容 sha256，
 apply 路径漂移即拒）——蓝本=prime-agent refine.rs:388-400 + planner.rs:368-379。
+
+K13 批（2026-10-05，docs/Agent/13 §19，G-13 落选回喂半环方案 A）追加：``RejectionRecord``
+落选登记册条目（{proposal_id,type,reason,at}）与 ``Proposal.rejection_feedback`` 提交回显
+字段（submit() 受理成功时服务侧回填同 target 最近 rejected 上下文）——蓝本=reef cordis
+backend.py:1055-1057 rejected_proposals 有界入册+回喂。
 """
 
 from __future__ import annotations
@@ -95,6 +100,23 @@ class StaleProposalError(ProposalError):
     """
 
 
+@dataclass(frozen=True, slots=True)
+class RejectionRecord:
+    """落选登记册条目（K13-a，G-13；蓝本=reef cordis backend.py:1055-1057 rejected 回喂，
+    docs/研究整理/12/22-reef.md §4.2）。
+
+    - proposal_id：落选候选 id；type：改进类型（ImprovementType.value）；
+    - reason：落选因由（门禁 fail=gates verdict 摘要 / baseline_drift=K9-b 基线漂移）；
+    - at：落册时刻（UTC）。REJECTED 均为吸收终态（09 §7 状态机不变），本条目只是
+      结构化回喂记账（key=target 有界 deque 承载于 service，只读面出口）。
+    """
+
+    proposal_id: uuid.UUID
+    type: str
+    reason: str
+    at: datetime
+
+
 @dataclass(slots=True)
 class Proposal:
     """候选改进项（09 §7 表要点；PG 行的阶段 A 进程内承载形）。"""
@@ -107,6 +129,9 @@ class Proposal:
     source_trace_ids: tuple[str, ...] = ()  # 证据链：来源轨迹（09 §7 逐环可回链的起点）
     # K9-b 基线快照：创建时目标条目内容 sha256（entry_baseline_hash 口径）；None=旧提案无快照，apply 跳过基线校验
     baseline_hash: str | None = None
+    # K13-b 提交回显：submit() 受理成功时由服务侧回填同 target 最近 rejected 上下文
+    # （有界截断，最旧→最新；构造时恒空——落选回喂的提交端可见面）
+    rejection_feedback: tuple[RejectionRecord, ...] = ()
     id: uuid.UUID = field(default_factory=uuid.uuid4)
     status: ProposalStatus = ProposalStatus.DRAFT
     eval_report: dict[str, Any] | None = None  # 三级门禁结论（evaluate 时回填）

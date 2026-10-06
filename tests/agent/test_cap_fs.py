@@ -336,3 +336,71 @@ async def test_写类操作落结构化审计日志_含路径与结果摘要(ws:
     message = audit_records[0].getMessage()
     assert "out/log.txt" in message  # 含路径
     assert '"created"' in message and "trace_id=trace-fs-cap-test" in message  # 含结果摘要与 trace
+
+
+# ── K14-c：截断产物换 spill locator（docs/Agent/13 §20，headroom §5 CCR 闭环）──
+
+
+async def test_K14c_read截断_附带locator_原文可兑换可分窗(ws: Path, tmp_path: Path):
+    from services.agent.business.capabilities.spill_retrieval import (
+        SPILL_GET_ACTION_IRI,
+        build_spill_retrieval_binding,
+    )
+    from services.agent.data.spill_store import LocalDirSpillStore
+
+    # Arrange：spill store 注入 + read 行窗截断（4 行文件只取 2 行）
+    ctx = _ctx()
+    store = LocalDirSpillStore(tmp_path / "spill")
+    binding = next(b for b in build_fs_bindings(ws, spill_store=store) if b.meta.name == "fs.read")
+    # Act
+    result = await binding.invoke(_call("read", {"path": "notes/a.txt", "limit": 2}), ctx)
+    # Assert：truncated 照旧 + 新增 spill_locator，本次调用全量产物（序列化 JSON）经该 locator 可兑换
+    assert result.ok is True and result.output["truncated"] is True
+    assert "spill_locator" in result.output
+    redeemed = await store.get(result.output["spill_locator"], tenant_id=str(ctx.tenant_id))
+    assert redeemed is not None and "第一行" in redeemed and '"total_lines": 4' in redeemed
+    # 兑换工具读同一 store：分窗取回落盘产物
+    tool = build_spill_retrieval_binding(store)
+    back = await tool.invoke(
+        ToolCall(
+            action_iri=SPILL_GET_ACTION_IRI,
+            execution_mode=ExecutionMode.READ,
+            parameters={"locator": result.output["spill_locator"]},
+            param_hash="test-hash",
+        ),
+        ctx,
+    )
+    assert back.ok is True
+    assert back.output["content"] == redeemed  # 全窗兑换=落盘产物原样
+    assert back.output["total_chars"] == len(redeemed) and back.output["truncated"] is False
+
+
+async def test_K14c_glob与grep截断_同样附带locator(ws: Path, tmp_path: Path):
+    from services.agent.data.spill_store import LocalDirSpillStore
+
+    ctx = _ctx()
+    store = LocalDirSpillStore(tmp_path / "spill")
+    bindings = {b.meta.name: b for b in build_fs_bindings(ws, spill_store=store)}
+    # glob：>1000 命中触发 GLOB_MAX_RESULTS 截断
+    bulk = ws / "bulk"
+    bulk.mkdir()
+    for i in range(1001):
+        (bulk / f"f{i:04d}.txt").write_text("x", encoding="utf-8")
+    glob_result = await bindings["fs.glob"].invoke(_call("glob", {"pattern": "bulk/*.txt"}), ctx)
+    assert glob_result.ok is True and glob_result.output["truncated"] is True
+    assert "spill_locator" in glob_result.output
+    # grep：>200 命中触发 GREP_MAX_MATCHES 截断
+    (ws / "many.txt").write_text("\n".join(f"命中{i}" for i in range(250)), encoding="utf-8")
+    grep_result = await bindings["fs.grep"].invoke(_call("grep", {"pattern": "命中", "path": "many.txt"}), ctx)
+    assert grep_result.ok is True and grep_result.output["truncated"] is True
+    assert "spill_locator" in grep_result.output
+
+
+async def test_K14c_spill关闭态_维持现状仅truncated布尔_向后兼容(ws: Path):
+    # Arrange：store=None（组合根 task_spill_dir 未配置的同款形态）
+    binding = next(b for b in build_fs_bindings(ws) if b.meta.name == "fs.read")
+    # Act
+    result = await binding.invoke(_call("read", {"path": "notes/a.txt", "limit": 2}), _ctx())
+    # Assert：零行为变化——只有 truncated 布尔，不落盘不附带 locator
+    assert result.ok is True and result.output["truncated"] is True
+    assert "spill_locator" not in result.output

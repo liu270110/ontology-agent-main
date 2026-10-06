@@ -663,6 +663,7 @@ def _document_item_of(
         pipeline=DocumentPipelineProgress(step=done, total=total_steps),
         error=err if doc.status == "failed" else None,
         degraded=[str(step) for step in (meta.get("degraded") or [])],  # 软降级如实透出（embed 不可达等）
+        extract_empty=bool(meta.get("extract_empty")),  # 抽取零候选信号如实透出（静态清账批单元四）
         created_at=doc.created_at,
         updated_at=doc.updated_at,
         indexed_today=(doc.status == "indexed" and doc.updated_at.date() == datetime.now(UTC).date()),

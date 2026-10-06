@@ -20,6 +20,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from services.iam.data.orm import Tenant as TenantORM
+from services.kb.api.kb import get_document
 from services.kb.business.kb_extraction import (
     SEED_TTL_PATH,
     StepContext,
@@ -29,7 +30,7 @@ from services.kb.business.kb_extraction import (
     run_extract,
     run_validate,
 )
-from services.kb.business.kb_pipeline import run_pipeline
+from services.kb.business.kb_pipeline import M2_FULL_STEPS, run_pipeline
 from services.kb.data.orm import Document as DocumentORM
 from services.kb.data.orm import DocumentChunk as DocumentChunkORM
 from services.kb.data.orm import KbCollection as KbCollectionORM
@@ -38,6 +39,7 @@ from services.kb.data.orm import KbPipelineStep as KbPipelineStepORM
 from services.kb.retrieval.embed import EmbeddingUnavailableError
 from services.platform.config import Settings
 from services.platform.db import registry as orm_registry  # noqa: F401  # 全模块 ORM 入 metadata（ontologies FK 解析）
+from services.platform.deps import Principal
 from services.platform.llm.gateway import FakeModelPort
 from services.platform.ports.model_port import ModelUnavailableError
 from services.review.business.candidates import ReviewTicketService
@@ -549,3 +551,69 @@ async def test_align_embed_unavailable_skips_tier2_degrades_not_fails(
     assert order.meta["align"]["status"] == "needs_review" and order.meta["align"]["tier"] is None
     assert order.meta["align"]["reason"] is None  # 各级均无着落（无异常上抛）
     assert facts["馈线F001"].meta["align"]["tier"] == 1  # 一级不受降级影响
+
+
+# ---------------------------------------------------------------- extract 空候选显式信号（2026-10-07 静态清账批单元四）
+
+
+def _detail_principal(env: dict) -> Principal:
+    return Principal(
+        {
+            "sub": str(uuid.uuid4()),
+            "tenant_id": str(env["tenant_id"]),
+            "roles": ["editor"],
+            "scopes": ["kb:read"],
+            "typ": "access",
+            "jti": uuid.uuid4().hex,
+        }
+    )
+
+
+async def test_extract_空候选_全流程indexed与详情信号(
+    kb_pg: async_sessionmaker[AsyncSession], extract_env: dict
+) -> None:
+    """空候选路径：零候选仍走完 align/validate/bm25 → indexed（空转既有契约不变）；文档 meta
+    与详情 DTO extract_empty=true（信号可见可检索）。embedder 未配置走软降级（BM25-only 同
+    degraded_doc 先例），不影响本信号断言。"""
+    empty_model = ScriptedModelPort(extract={"candidates": []})  # 每 chunk 恒零候选
+    report = await run_pipeline(
+        kb_pg,
+        tenant_id=extract_env["tenant_id"],
+        document_id=extract_env["document_id"],
+        embedder=None,
+        model=empty_model,  # type: ignore[arg-type]
+        review=extract_env["review"],
+        steps=M2_FULL_STEPS,
+        backoff=_instant_backoff,
+    )
+    assert report.document_status == "indexed"  # 空转既有契约：文档照常终态 indexed
+    async with kb_pg() as db:
+        detail = await get_document(extract_env["document_id"], _detail_principal(extract_env), db)
+        assert detail.data.status == "indexed"
+        assert detail.data.extract_empty is True  # 详情 DTO 透出零候选信号
+        facts = (
+            (await db.execute(select(KbFactORM).where(KbFactORM.tenant_id == extract_env["tenant_id"]))).scalars().all()
+        )
+    assert facts == []  # 零候选：kb_facts 无产物
+
+
+async def test_extract_有候选_信号false(kb_pg: async_sessionmaker[AsyncSession], extract_env: dict) -> None:
+    """有候选路径：FakeModelPort 正常产出 → extract_empty=false（不误报）。"""
+    report = await run_pipeline(
+        kb_pg,
+        tenant_id=extract_env["tenant_id"],
+        document_id=extract_env["document_id"],
+        embedder=None,
+        model=extract_env["model"],
+        review=extract_env["review"],
+        steps=M2_FULL_STEPS,
+        backoff=_instant_backoff,
+    )
+    assert report.document_status == "indexed"
+    async with kb_pg() as db:
+        detail = await get_document(extract_env["document_id"], _detail_principal(extract_env), db)
+        assert detail.data.extract_empty is False
+        facts = (
+            (await db.execute(select(KbFactORM).where(KbFactORM.tenant_id == extract_env["tenant_id"]))).scalars().all()
+        )
+    assert len(facts) >= 1  # 有候选

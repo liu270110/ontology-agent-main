@@ -168,6 +168,7 @@ class DocumentListItem(BaseModel):
     job_id: str | None = None  # lite 流水线进程内执行，无独立任务号
     error: str | None = None  # failed 步错误摘录
     degraded: list[str] = Field(default_factory=list)  # 软降级步清单（如实透出 meta["degraded"]，如 ["embed"]）
+    extract_empty: bool = False  # 抽取零候选信号（如实透出 meta["extract_empty"]；空转仍 indexed，静态清账批单元四）
     created_at: datetime
     updated_at: datetime
     indexed_today: bool = False  # 当日入库（前端规模统计带）

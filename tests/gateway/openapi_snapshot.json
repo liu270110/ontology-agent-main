@@ -3222,6 +3222,11 @@
             ],
             "title": "Error"
           },
+          "extract_empty": {
+            "default": false,
+            "title": "Extract Empty",
+            "type": "boolean"
+          },
           "id": {
             "format": "uuid",
             "title": "Id",
@@ -3381,6 +3386,11 @@
               }
             ],
             "title": "Error"
+          },
+          "extract_empty": {
+            "default": false,
+            "title": "Extract Empty",
+            "type": "boolean"
           },
           "id": {
             "format": "uuid",

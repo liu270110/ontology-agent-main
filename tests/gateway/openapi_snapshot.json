@@ -156,6 +156,56 @@
         "title": "AccessRequestOut",
         "type": "object"
       },
+      "AdapterSchemaListOut": {
+        "additionalProperties": false,
+        "description": "适配器 schema 列表（非分页静态清单：{items} 裸信封，mcp ServerListOut 同款）。",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/AdapterSchemaOut"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "title": "AdapterSchemaListOut",
+        "type": "object"
+      },
+      "AdapterSchemaOut": {
+        "additionalProperties": false,
+        "description": "适配器 config schema 下发单项（mock ADAPTER_SCHEMAS 逐字段；schema=JSON Schema，\nRJSF 渲染源——字段别名序列化，内部名 config_schema 避让 pydantic v1 遗留方法名）。",
+        "properties": {
+          "capability": {
+            "title": "Capability",
+            "type": "string"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "schema": {
+            "additionalProperties": true,
+            "title": "Schema",
+            "type": "object"
+          },
+          "vendor": {
+            "title": "Vendor",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "name",
+          "vendor",
+          "capability"
+        ],
+        "title": "AdapterSchemaOut",
+        "type": "object"
+      },
       "AdminGroupCreateIn": {
         "additionalProperties": false,
         "properties": {
@@ -926,6 +976,38 @@
           "config"
         ],
         "title": "AgentOut",
+        "type": "object"
+      },
+      "AgentStatusOut": {
+        "additionalProperties": false,
+        "description": "启停结果（enable：{id,status}；disable 附 terminated_sessions——恒 0，调试：语义=新会话\n拒绑，不强改 sessions，字段为前端 mock 形状占位）。status 取领域三态值（enabled/disabled/\ndegraded），前端 fe1-F2 双口径映射已收敛。",
+        "properties": {
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "terminated_sessions": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Terminated Sessions"
+          }
+        },
+        "required": [
+          "id",
+          "status"
+        ],
+        "title": "AgentStatusOut",
         "type": "object"
       },
       "AgentToolsIn": {
@@ -2540,6 +2622,85 @@
         "title": "ConflictTicketOut",
         "type": "object"
       },
+      "ConnectionTestIn": {
+        "additionalProperties": false,
+        "description": "预注册连接测试入参（注册向导「先测后注册」步；实例尚不存在故无 {id} 路径）。",
+        "properties": {
+          "api_key": {
+            "anyOf": [
+              {
+                "maxLength": 512,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Api Key"
+          },
+          "base_url": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Base Url",
+            "type": "string"
+          },
+          "model": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Model",
+            "type": "string"
+          },
+          "provider": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Provider",
+            "type": "string"
+          }
+        },
+        "required": [
+          "provider",
+          "base_url",
+          "model"
+        ],
+        "title": "ConnectionTestIn",
+        "type": "object"
+      },
+      "ConnectionTestOut": {
+        "additionalProperties": false,
+        "description": "连接测试结果：失败**结构化 200**（ok=false + error），不上 500（探测面非服务故障）。",
+        "properties": {
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "latency_ms": {
+            "title": "Latency Ms",
+            "type": "integer"
+          },
+          "model": {
+            "title": "Model",
+            "type": "string"
+          },
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "ok",
+          "latency_ms",
+          "model"
+        ],
+        "title": "ConnectionTestOut",
+        "type": "object"
+      },
       "ConsolidateIn": {
         "description": "POST /memory/consolidate：触发指定会话 L1→L2 沉淀（202 受理，后台执行）。",
         "properties": {
@@ -2612,6 +2773,60 @@
           "role"
         ],
         "title": "CreateInviteIn",
+        "type": "object"
+      },
+      "DebugChatIn": {
+        "additionalProperties": false,
+        "description": "调试对话入参（单轮；params 预留——当前仅消费 timeout_ms）。",
+        "properties": {
+          "message": {
+            "maxLength": 8192,
+            "minLength": 1,
+            "title": "Message",
+            "type": "string"
+          },
+          "params": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Params"
+          }
+        },
+        "required": [
+          "message"
+        ],
+        "title": "DebugChatIn",
+        "type": "object"
+      },
+      "DebugChatOut": {
+        "additionalProperties": false,
+        "description": "调试对话结果（usage=平台用量上下文形状 token_in/token_out/cache_read_tokens；桩不回填报\n空对象）。调试面不落 sessions/messages/tasks 行——响应不含 trace 会话语义字段。",
+        "properties": {
+          "latency_ms": {
+            "title": "Latency Ms",
+            "type": "integer"
+          },
+          "reply": {
+            "title": "Reply",
+            "type": "string"
+          },
+          "usage": {
+            "additionalProperties": true,
+            "title": "Usage",
+            "type": "object"
+          }
+        },
+        "required": [
+          "reply",
+          "latency_ms"
+        ],
+        "title": "DebugChatOut",
         "type": "object"
       },
       "DecisionIn": {
@@ -2763,6 +2978,110 @@
           "key"
         ],
         "title": "DiffEntryOut",
+        "type": "object"
+      },
+      "DiscoverIn": {
+        "additionalProperties": false,
+        "description": "POST /mcp/discover（frontend api.ts discoverServer body 逐字段）。",
+        "properties": {
+          "auth": {
+            "default": "none",
+            "maxLength": 64,
+            "title": "Auth",
+            "type": "string"
+          },
+          "command": {
+            "anyOf": [
+              {
+                "maxLength": 512,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Command"
+          },
+          "name": {
+            "maxLength": 32,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "token": {
+            "anyOf": [
+              {
+                "maxLength": 2048,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Token"
+          },
+          "transport": {
+            "maxLength": 16,
+            "minLength": 1,
+            "title": "Transport",
+            "type": "string"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "maxLength": 512,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url"
+          }
+        },
+        "required": [
+          "name",
+          "transport"
+        ],
+        "title": "DiscoverIn",
+        "type": "object"
+      },
+      "DiscoverOut": {
+        "additionalProperties": false,
+        "description": "POST /mcp/discover 响应（mock DISCOVER_REPLY 逐字段；不落库）。",
+        "properties": {
+          "latency_ms": {
+            "title": "Latency Ms",
+            "type": "integer"
+          },
+          "ok": {
+            "default": true,
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "protocol": {
+            "title": "Protocol",
+            "type": "string"
+          },
+          "server_version": {
+            "title": "Server Version",
+            "type": "string"
+          },
+          "tools": {
+            "items": {
+              "$ref": "#/components/schemas/ProbeToolOut"
+            },
+            "title": "Tools",
+            "type": "array"
+          }
+        },
+        "required": [
+          "latency_ms",
+          "protocol",
+          "server_version",
+          "tools"
+        ],
+        "title": "DiscoverOut",
         "type": "object"
       },
       "DocumentCreateIn": {
@@ -5144,6 +5463,183 @@
         "title": "MatrixRoleOut",
         "type": "object"
       },
+      "McpServerRow": {
+        "additionalProperties": false,
+        "description": "Server 行（mock McpServer 逐字段；tools 内嵌全量缓存行）。",
+        "properties": {
+          "added_at": {
+            "title": "Added At",
+            "type": "string"
+          },
+          "added_by": {
+            "title": "Added By",
+            "type": "string"
+          },
+          "adopted_count": {
+            "title": "Adopted Count",
+            "type": "integer"
+          },
+          "auth": {
+            "title": "Auth",
+            "type": "string"
+          },
+          "command": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Command"
+          },
+          "consecutive_failures": {
+            "title": "Consecutive Failures",
+            "type": "integer"
+          },
+          "desc": {
+            "title": "Desc",
+            "type": "string"
+          },
+          "discovered_count": {
+            "title": "Discovered Count",
+            "type": "integer"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "last_probe": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Probe"
+          },
+          "latency_ms": {
+            "title": "Latency Ms",
+            "type": "integer"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "probes_24h": {
+            "items": {
+              "$ref": "#/components/schemas/ProbeWindowOut"
+            },
+            "title": "Probes 24H",
+            "type": "array"
+          },
+          "protocol": {
+            "title": "Protocol",
+            "type": "string"
+          },
+          "server_version": {
+            "title": "Server Version",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "token_masked": {
+            "title": "Token Masked",
+            "type": "string"
+          },
+          "tools": {
+            "items": {
+              "$ref": "#/components/schemas/McpToolRow"
+            },
+            "title": "Tools",
+            "type": "array"
+          },
+          "transport": {
+            "enum": [
+              "streamable http",
+              "stdio"
+            ],
+            "title": "Transport",
+            "type": "string"
+          },
+          "url_masked": {
+            "title": "Url Masked",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "desc",
+          "transport",
+          "url_masked",
+          "auth",
+          "token_masked",
+          "protocol",
+          "server_version",
+          "status",
+          "latency_ms",
+          "consecutive_failures",
+          "probes_24h",
+          "adopted_count",
+          "discovered_count",
+          "added_by",
+          "added_at",
+          "tools"
+        ],
+        "title": "McpServerRow",
+        "type": "object"
+      },
+      "McpToolRow": {
+        "additionalProperties": false,
+        "description": "工具缓存行（mock McpTool 逐字段）。",
+        "properties": {
+          "adopted": {
+            "title": "Adopted",
+            "type": "boolean"
+          },
+          "desc": {
+            "title": "Desc",
+            "type": "string"
+          },
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "read_only": {
+            "title": "Read Only",
+            "type": "boolean"
+          },
+          "tool_id": {
+            "title": "Tool Id",
+            "type": "string"
+          },
+          "write": {
+            "title": "Write",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "tool_id",
+          "name",
+          "desc",
+          "write",
+          "read_only",
+          "adopted",
+          "enabled"
+        ],
+        "title": "McpToolRow",
+        "type": "object"
+      },
       "MemberListOut": {
         "additionalProperties": false,
         "properties": {
@@ -7042,6 +7538,56 @@
         "title": "PreferencesPutIn",
         "type": "object"
       },
+      "ProbeToolOut": {
+        "additionalProperties": false,
+        "description": "发现态工具行（mock DiscoveredTool 逐字段）。",
+        "properties": {
+          "desc": {
+            "title": "Desc",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "read_only": {
+            "title": "Read Only",
+            "type": "boolean"
+          },
+          "tool_id": {
+            "title": "Tool Id",
+            "type": "string"
+          },
+          "write": {
+            "title": "Write",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "tool_id",
+          "name",
+          "desc",
+          "write",
+          "read_only"
+        ],
+        "title": "ProbeToolOut",
+        "type": "object"
+      },
+      "ProbeWindowOut": {
+        "additionalProperties": false,
+        "description": "probes_24h 元素（mock {ok: boolean}）。",
+        "properties": {
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "ok"
+        ],
+        "title": "ProbeWindowOut",
+        "type": "object"
+      },
       "ProjectionDiffOut": {
         "additionalProperties": false,
         "description": "GET /ontologies/{id}/diff：两版本读模型差异（类/属性/公理/规则增删改清单，§6.2 分组口径）。\n\n口径注记：base/target 均为**发布版本**（query 参数，缺省 target=head、base=head 前一版本）；\n三元组级规范化 diff（RDFC-1.0，§6.2 ①②）与 changeset 候选图 diff 随 rebase 机制细化（§11 待办）。",
@@ -7818,6 +8364,34 @@
         "title": "RecordWriteEnvelope",
         "type": "object"
       },
+      "RefreshOut": {
+        "additionalProperties": false,
+        "description": "POST /mcp/servers/{id}/refresh 响应（mock 逐字段：latency_ms/tools/discovered_count）。",
+        "properties": {
+          "discovered_count": {
+            "title": "Discovered Count",
+            "type": "integer"
+          },
+          "latency_ms": {
+            "title": "Latency Ms",
+            "type": "integer"
+          },
+          "tools": {
+            "items": {
+              "$ref": "#/components/schemas/McpToolRow"
+            },
+            "title": "Tools",
+            "type": "array"
+          }
+        },
+        "required": [
+          "latency_ms",
+          "tools",
+          "discovered_count"
+        ],
+        "title": "RefreshOut",
+        "type": "object"
+      },
       "RefreshRequest": {
         "additionalProperties": false,
         "description": "POST /auth/refresh 请求体（匿名；body 携 refresh token，api/01 §5.9）。",
@@ -8562,6 +9136,259 @@
           "content"
         ],
         "title": "SendMessageIn",
+        "type": "object"
+      },
+      "ServerCreateIn": {
+        "additionalProperties": false,
+        "description": "POST /mcp/servers（frontend api.ts registerServer body 逐字段；adopt_tool_ids=\ndiscover 返回的 nd- 短 id 勾选集，空=全部不纳管——mock filter 同口径）。",
+        "properties": {
+          "adopt_tool_ids": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 256,
+            "title": "Adopt Tool Ids",
+            "type": "array"
+          },
+          "auth": {
+            "default": "none",
+            "maxLength": 64,
+            "title": "Auth",
+            "type": "string"
+          },
+          "command": {
+            "anyOf": [
+              {
+                "maxLength": 512,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Command"
+          },
+          "desc": {
+            "default": "",
+            "maxLength": 512,
+            "title": "Desc",
+            "type": "string"
+          },
+          "name": {
+            "maxLength": 32,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "token": {
+            "anyOf": [
+              {
+                "maxLength": 2048,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Token"
+          },
+          "transport": {
+            "maxLength": 16,
+            "minLength": 1,
+            "title": "Transport",
+            "type": "string"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "maxLength": 512,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url"
+          }
+        },
+        "required": [
+          "name",
+          "transport"
+        ],
+        "title": "ServerCreateIn",
+        "type": "object"
+      },
+      "ServerCreatedOut": {
+        "additionalProperties": false,
+        "description": "POST /mcp/servers 201 响应（=行 + token_sentinel，mock 同形）。",
+        "properties": {
+          "added_at": {
+            "title": "Added At",
+            "type": "string"
+          },
+          "added_by": {
+            "title": "Added By",
+            "type": "string"
+          },
+          "adopted_count": {
+            "title": "Adopted Count",
+            "type": "integer"
+          },
+          "auth": {
+            "title": "Auth",
+            "type": "string"
+          },
+          "command": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Command"
+          },
+          "consecutive_failures": {
+            "title": "Consecutive Failures",
+            "type": "integer"
+          },
+          "desc": {
+            "title": "Desc",
+            "type": "string"
+          },
+          "discovered_count": {
+            "title": "Discovered Count",
+            "type": "integer"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "last_probe": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Probe"
+          },
+          "latency_ms": {
+            "title": "Latency Ms",
+            "type": "integer"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "probes_24h": {
+            "items": {
+              "$ref": "#/components/schemas/ProbeWindowOut"
+            },
+            "title": "Probes 24H",
+            "type": "array"
+          },
+          "protocol": {
+            "title": "Protocol",
+            "type": "string"
+          },
+          "server_version": {
+            "title": "Server Version",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "token_masked": {
+            "title": "Token Masked",
+            "type": "string"
+          },
+          "token_sentinel": {
+            "default": false,
+            "title": "Token Sentinel",
+            "type": "boolean"
+          },
+          "tools": {
+            "items": {
+              "$ref": "#/components/schemas/McpToolRow"
+            },
+            "title": "Tools",
+            "type": "array"
+          },
+          "transport": {
+            "enum": [
+              "streamable http",
+              "stdio"
+            ],
+            "title": "Transport",
+            "type": "string"
+          },
+          "url_masked": {
+            "title": "Url Masked",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "desc",
+          "transport",
+          "url_masked",
+          "auth",
+          "token_masked",
+          "protocol",
+          "server_version",
+          "status",
+          "latency_ms",
+          "consecutive_failures",
+          "probes_24h",
+          "adopted_count",
+          "discovered_count",
+          "added_by",
+          "added_at",
+          "tools"
+        ],
+        "title": "ServerCreatedOut",
+        "type": "object"
+      },
+      "ServerListOut": {
+        "additionalProperties": false,
+        "description": "GET /mcp/servers 响应（mock ok({items}) 的 live 裸体）。",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/McpServerRow"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "ServerListOut",
+        "type": "object"
+      },
+      "ServerToolsListOut": {
+        "additionalProperties": false,
+        "description": "GET /mcp/servers/{id}/tools 响应（mock ok({items}) 的 live 裸体）。",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/McpToolRow"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "ServerToolsListOut",
         "type": "object"
       },
       "SessionBlocksEnvelope": {
@@ -9992,6 +10819,26 @@
           "version"
         ],
         "title": "ToolCreateIn",
+        "type": "object"
+      },
+      "ToolEnabledOut": {
+        "additionalProperties": false,
+        "description": "POST /mcp/tools/{tool_id}/enable|disable 响应（mock setMcpToolEnabled 逐字段）。",
+        "properties": {
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "tool_id": {
+            "title": "Tool Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "tool_id",
+          "enabled"
+        ],
+        "title": "ToolEnabledOut",
         "type": "object"
       },
       "ToolEnvelope": {
@@ -12297,6 +13144,70 @@
         ]
       }
     },
+    "/api/v1/agents/adapter-schemas": {
+      "get": {
+        "description": "枚举=agent_adapters 表行（按 agent_tool 去重）；无库表数据回落 pydantic 常量 schema\n（business._ADAPTER_REGISTRY，键集与领域 config 白名单同源）。",
+        "operationId": "list_adapter_schemas_api_v1_agents_adapter_schemas_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdapterSchemaListOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "适配器 config schema 下发（RJSF 渲染源；★ 预登记）",
+        "tags": [
+          "agents"
+        ]
+      }
+    },
+    "/api/v1/agents/connection-test": {
+      "post": {
+        "description": "注册向导「先测后注册」步（实例尚不存在故无 {id} 路径）：对目标 base_url/model 发一次\n1-token 最小补全（platform/llm 端口）；传输经 app.state.llm_probe_factory 注入（缺省真传输，\n测试注桩）。provider 当前仅登记（唯一 OpenAI 兼容通道，M0 口径）。",
+        "operationId": "connection_test_api_v1_agents_connection_test_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConnectionTestIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConnectionTestOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "预注册连接测试（一次最小补全；失败结构化 200 不上 500）",
+        "tags": [
+          "agents"
+        ]
+      }
+    },
     "/api/v1/agents/{agent_id}": {
       "delete": {
         "operationId": "delete_agent_api_v1_agents__agent_id__delete",
@@ -12420,6 +13331,148 @@
           }
         },
         "summary": "更新提示词/配置（改 agent_tool 视为重建，不支持）",
+        "tags": [
+          "agents"
+        ]
+      }
+    },
+    "/api/v1/agents/{agent_id}/debug-chat": {
+      "post": {
+        "description": "IX-AGT-02 调试窗：对该 agent 配置走一次单轮生成（复用编排器最小生成面\nChatAdapter.stream_chat，与 chat 主链同 builtin/claude 通道）。\n\n调试面声明：**不落 sessions/messages/tasks/runs 行**（调试对话不计正式历史，trace 随\n网关中间件留痕）；LLM 失败映射已登记 5xxx（5001→504，其余→502），不裸 500。",
+        "operationId": "debug_chat_api_v1_agents__agent_id__debug_chat_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "agent_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Agent Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DebugChatIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DebugChatOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "调试对话（单轮生成；调试面不落会话/消息/任务行）",
+        "tags": [
+          "agents"
+        ]
+      }
+    },
+    "/api/v1/agents/{agent_id}/disable": {
+      "post": {
+        "description": "agents.status → disabled（聚合方法唯一写路径，幂等=已在目标状态零操作）。\n\ndisabled 语义=**拒绝新会话绑定**（Agent.ensure_usable_for_new_session，创建会话端点强制\n409）——不级联改 sessions：存量会话与运行中 Run 跑完不中断（04 §10 degraded 同裁决），\nterminated_sessions 恒 0（前端 mock 形状占位字段）。",
+        "operationId": "disable_agent_api_v1_agents__agent_id__disable_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "agent_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Agent Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentStatusOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "禁用 agent（幂等；disabled=拒绝新会话绑定）",
+        "tags": [
+          "agents"
+        ]
+      }
+    },
+    "/api/v1/agents/{agent_id}/enable": {
+      "post": {
+        "description": "agents.status → enabled（状态机：disabled 仅 enable 出口；degraded 可自愈同款通道）。",
+        "operationId": "enable_agent_api_v1_agents__agent_id__enable_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "agent_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Agent Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentStatusOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "启用 agent（幂等；disabled/degraded 离场）",
         "tags": [
           "agents"
         ]
@@ -14383,6 +15436,354 @@
         "summary": "knowledge.search lite（bm25+向量+图三路 RRF；图=LazyGraphRAG lite 查询时扩展）",
         "tags": [
           "knowledge-base"
+        ]
+      }
+    },
+    "/api/v1/mcp/discover": {
+      "post": {
+        "operationId": "discover_api_v1_mcp_discover_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DiscoverIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DiscoverOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "预注册发现（连接目标+tools/list 预览，不落库；失败 5003/502）",
+        "tags": [
+          "mcp"
+        ]
+      }
+    },
+    "/api/v1/mcp/servers": {
+      "get": {
+        "operationId": "list_servers_api_v1_mcp_servers_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServerListOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "外部 Server 列表（最新在前；tools 内嵌全量缓存行）",
+        "tags": [
+          "mcp"
+        ]
+      },
+      "post": {
+        "operationId": "create_server_api_v1_mcp_servers_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ServerCreateIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServerCreatedOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "上架外部 Server（探测失败不上架 5003；adopt_tool_ids=discover 勾选集）",
+        "tags": [
+          "mcp"
+        ]
+      }
+    },
+    "/api/v1/mcp/servers/{server_id}": {
+      "delete": {
+        "operationId": "delete_server_api_v1_mcp_servers__server_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "server_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Server Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "下架 Server（api/01 §5.7 ★；级联其工具行，X-Removed-Tools/X-Affected-Agents 提示头）",
+        "tags": [
+          "mcp"
+        ]
+      },
+      "get": {
+        "operationId": "get_server_api_v1_mcp_servers__server_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "server_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Server Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/McpServerRow"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Server 详情（api/01 §5.7 ★；跨租户同口径 404）",
+        "tags": [
+          "mcp"
+        ]
+      }
+    },
+    "/api/v1/mcp/servers/{server_id}/refresh": {
+      "post": {
+        "operationId": "refresh_server_api_v1_mcp_servers__server_id__refresh_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "server_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Server Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RefreshOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "重新探测并更新工具缓存（api/01 §5.7；失败落 failing 后 5003/502）",
+        "tags": [
+          "mcp"
+        ]
+      }
+    },
+    "/api/v1/mcp/servers/{server_id}/tools": {
+      "get": {
+        "operationId": "list_server_tools_api_v1_mcp_servers__server_id__tools_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "server_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Server Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServerToolsListOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "该 Server 的工具清单（api/01 §5.7）",
+        "tags": [
+          "mcp"
+        ]
+      }
+    },
+    "/api/v1/mcp/tools/{tool_id}/disable": {
+      "post": {
+        "operationId": "disable_tool_api_v1_mcp_tools__tool_id__disable_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "tool_id",
+            "required": true,
+            "schema": {
+              "title": "Tool Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ToolEnabledOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "审核工具回退停用（enable 反向；api/01 §5.7 ★ 预登记）",
+        "tags": [
+          "mcp"
+        ]
+      }
+    },
+    "/api/v1/mcp/tools/{tool_id}/enable": {
+      "post": {
+        "operationId": "enable_tool_api_v1_mcp_tools__tool_id__enable_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "tool_id",
+            "required": true,
+            "schema": {
+              "title": "Tool Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ToolEnabledOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "审核开启外部工具（外部默认不可信；api/01 §5.7）",
+        "tags": [
+          "mcp"
         ]
       }
     },

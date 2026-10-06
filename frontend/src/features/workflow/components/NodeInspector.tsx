@@ -13,11 +13,12 @@ import { Select } from '@/components/select'
  *  （.field/.input 令牌类），不引 RJSF。 */
 
 /** 最终回退清单：工具下拉改拉 GET /tools 注册表（B3-P 转实）；仅当注册表请求失败时
- *  作为最后回退仍可选取（语境与 mocks/platform-handlers.ts 一致的 3 条），成功路径不使用。 */
+ *  作为最后回退仍可选取（S1 ToolOut 投影形状，语境与 mocks/platform-handlers.ts 一致
+ *  的 3 条），成功路径不使用。 */
 const TOOL_REGISTRY_FALLBACK: WfToolRow[] = [
-  { id: 'tool-scada-query', name: 'scada.query', desc: 'SCADA 遥测实时查询', source: 'http', scopes: [], danger: false, enabled: true },
-  { id: 'tool-grid-write', name: 'grid.write', desc: '电网回写（高危 scope，运行期审计）', source: 'http', scopes: ['grid:write'], danger: true, enabled: true },
-  { id: 'tool-kb-search', name: 'kb.search', desc: 'GraphRAG 知识检索', source: 'builtin', scopes: ['kb.read'], danger: false, enabled: true },
+  { id: '0b1e3a10-0000-4000-8000-00000000wf01', name: 'scada.query', action_iri: 'ont_grid_std#CL-024', source_channel: 'L3', semantic_annotation: { description: 'SCADA 遥测实时查询' }, version: '1.0.0', status: 'listed', health_hint: null, evidence_uri: null },
+  { id: '0b1e3a10-0000-4000-8000-00000000wf02', name: 'grid.write', action_iri: 'ont_grid_std#CL-025', source_channel: 'L3', semantic_annotation: { description: '电网回写（运行期审计）' }, version: '1.0.0', status: 'listed', health_hint: null, evidence_uri: null },
+  { id: '0b1e3a10-0000-4000-8000-00000000wf03', name: 'kb.search', action_iri: 'ont_core#CL-021', source_channel: 'L0', semantic_annotation: { description: 'GraphRAG 知识检索' }, version: '1.2.0', status: 'listed', health_hint: null, evidence_uri: null },
 ]
 
 const EXPR_TEMPLATES = [
@@ -118,13 +119,17 @@ function InspectorBody({
   const [expr, setExpr] = useState<string>(String(params.expression ?? ''))
   const [evalResult, setEvalResult] = useState<{ ok: boolean; value?: boolean; error?: string } | null>(null)
 
-  // 工具注册表（B3-P 转实）：工具节点下拉改拉 GET /tools；失败回退 TOOL_REGISTRY_FALLBACK
+  // 工具注册表（B3-P 转实）：工具节点下拉改拉 GET /tools（S1 {data,meta}）；失败回退 TOOL_REGISTRY_FALLBACK
   const toolsQuery = useQuery({ queryKey: ['tools', 'registry'], queryFn: listToolRegistry, enabled: node.kind === 'tool' })
-  const registry = toolsQuery.data?.items ?? TOOL_REGISTRY_FALLBACK
+  const registry = toolsQuery.data?.data ?? TOOL_REGISTRY_FALLBACK
+  // 仅 listed 可选（S1 状态机）；非 listed 保留在 registry 供历史引用解析
+  const selectable = registry.filter(t => t.status === 'listed')
   const curTool = String(params.tool ?? '')
-  // 历史工作流引用已下架工具：当前值在注册表（含回退清单）中解析不到 → 下拉头部插入「（已下架）」保留原值不丢数据
+  // 历史工作流引用已下架工具：当前值在注册表解析不到，或解析到但已非 listed（deprecated/
+  // revoked）→ 下拉头部插入「（已下架）」保留原值不丢数据
   const curEntry = registry.find(t => t.name === curTool || t.id === curTool)
-  const curDelisted = curTool !== '' && !curEntry
+  const curDelisted = curTool !== '' && (!curEntry || curEntry.status !== 'listed')
+  const toolDesc = (t: WfToolRow) => String(t.semantic_annotation.description ?? t.action_iri)
 
   const outgoing = useMemo(() => edges.filter(e => e.source === node.id), [edges, node.id])
   const patchParam = (patch: Record<string, unknown>) => onUpdate(node.id, { params: { ...params, ...patch } })
@@ -183,9 +188,9 @@ function InspectorBody({
             onChange={e => {
               const v = e.target.value
               if (v === '__retry') { void toolsQuery.refetch(); return }
-              const t = registry.find(x => x.name === v || x.id === v)
+              const t = selectable.find(x => x.name === v || x.id === v)
               patchParam({ tool: v })
-              onUpdate(node.id, { sub: `scope: ${t ? toolScopeLabel(t) : 'read'}`, label: `工具 · ${v}` })
+              onUpdate(node.id, { sub: t ? toolScopeLabel(t) : 'channel: —', label: `工具 · ${v}` })
             }}
           >
             {toolsQuery.isPending ? (
@@ -198,8 +203,8 @@ function InspectorBody({
                   <option value="">未选择</option>
                 )}
                 {curDelisted && <option value={curTool}>{curTool}（已下架）</option>}
-                {registry.map(t => (
-                  <option key={t.id} value={t.name} title={t.desc}>
+                {selectable.map(t => (
+                  <option key={t.id} value={t.name} title={toolDesc(t)}>
                     {t.name} · {toolScopeLabel(t)}
                   </option>
                 ))}
@@ -208,11 +213,9 @@ function InspectorBody({
           </Select>
           {typeof params.tool === 'string' && params.tool && !toolsQuery.isPending && (
             <div className="mt-1.5">
-              {curEntry ? (
+              {curEntry && curEntry.status === 'listed' ? (
                 <div data-testid="wf-param-tool-scope">
-                  <span className={`badge ${toolScopeLabel(curEntry) === 'high-risk' ? 'b-orange' : 'b-gray'}`}>
-                    scope: {toolScopeLabel(curEntry)}
-                  </span>
+                  <span className="badge b-gray">{toolScopeLabel(curEntry)}</span>
                 </div>
               ) : (
                 <div data-testid="wf-param-tool-delisted">

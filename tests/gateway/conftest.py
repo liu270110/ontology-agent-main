@@ -23,8 +23,12 @@ from services.agent.data.orm import Run as RunORM
 from services.agent.data.orm import Session as SessionORM
 from services.agent.data.orm import Task as TaskORM
 from services.agent.data.orm import TaskEvent as TaskEventORM
+from services.iam.data.orm import DeviceSession as DeviceSessionORM
 from services.iam.data.orm import Tenant as TenantORM
+from services.iam.data.orm import TotpBackupCode as TotpBackupCodeORM
+from services.iam.data.orm import TotpCredential as TotpCredentialORM
 from services.iam.data.orm import User as UserORM
+from services.iam.data.orm import UserPreferences as UserPreferenceORM
 from services.platform.config import Settings
 from services.platform.db.uow import AsyncUnitOfWork
 from services.platform.deps import Principal
@@ -99,6 +103,12 @@ async def seed(gateway_uow: AsyncUnitOfWork) -> AsyncIterator[tuple[Principal, u
             delete(TaskORM).where(TaskORM.tenant_id == tenant.id),
             delete(SessionORM).where(SessionORM.tenant_id == tenant.id),
             delete(AgentORM).where(AgentORM.id == agent.id),
+            # C1 me 域表先于 users 清（device_sessions/totp* 以 user_id 引用 users；
+            # user_preferences 以租户+用户为键——漏列曾致 24 例 teardown FK 违例）
+            delete(DeviceSessionORM).where(DeviceSessionORM.user_id == user.id),
+            delete(TotpCredentialORM).where(TotpCredentialORM.user_id == user.id),
+            delete(TotpBackupCodeORM).where(TotpBackupCodeORM.user_id == user.id),
+            delete(UserPreferenceORM).where(UserPreferenceORM.user_id == user.id),
             delete(UserORM).where(UserORM.id == user.id),
             delete(AgentAdapterORM).where(AgentAdapterORM.id == adapter.id),
             delete(TenantORM).where(TenantORM.id == tenant.id),

@@ -39,14 +39,14 @@ describe('S8 状态切片 · Agent 列表 · 失败重试', () => {
     expect(err).toHaveTextContent('加载失败')
     expect(err).toHaveTextContent('Agent 服务不可用')
     expect(screen.getByTestId('error-code')).toHaveTextContent('503')
-    expect(screen.queryByTestId('agent-card-agt-nanobot-01')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('agent-card-921b05c3-2161-44a8-8c65-f37698c0599a')).not.toBeInTheDocument()
     expect(screen.queryByTestId('skeleton-cards')).not.toBeInTheDocument()
     // 错误态不得误报空态
     expect(screen.queryByText('还没有注册的 Agent')).not.toBeInTheDocument()
 
     server.resetHandlers()
     fireEvent.click(screen.getByTestId('error-retry'))
-    expect(await screen.findByTestId('agent-card-agt-nanobot-01', {}, { timeout: 10_000 })).toBeInTheDocument()
+    expect(await screen.findByTestId('agent-card-921b05c3-2161-44a8-8c65-f37698c0599a', {}, { timeout: 10_000 })).toBeInTheDocument()
     await waitFor(() => expect(screen.queryByTestId('error-state')).not.toBeInTheDocument())
   }, 30_000)
 })

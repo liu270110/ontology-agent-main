@@ -80,6 +80,77 @@ class AgentHealthOut(BaseModel):
     latency_ms: int | None = None
 
 
+# ── 管理面扩展四端点（api/01 §5.1 ★ 预登记；契约源=mock platform-handlers.ts §5.1）──────
+
+
+class AdapterSchemaOut(BaseModel):
+    """适配器 config schema 下发单项（mock ADAPTER_SCHEMAS 逐字段；schema=JSON Schema，
+    RJSF 渲染源——字段别名序列化，内部名 config_schema 避让 pydantic v1 遗留方法名）。"""
+
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+    key: str
+    name: str
+    vendor: str
+    capability: str
+    config_schema: dict[str, Any] = Field(default_factory=dict, alias="schema")
+
+
+class AdapterSchemaListOut(BaseModel):
+    """适配器 schema 列表（非分页静态清单：{items} 裸信封，mcp ServerListOut 同款）。"""
+
+    model_config = ConfigDict(extra="forbid")
+    items: list[AdapterSchemaOut] = Field(default_factory=list)
+
+
+class ConnectionTestIn(BaseModel):
+    """预注册连接测试入参（注册向导「先测后注册」步；实例尚不存在故无 {id} 路径）。"""
+
+    model_config = ConfigDict(extra="forbid")
+    provider: str = Field(min_length=1, max_length=64)  # 当前仅登记（唯一 OpenAI 兼容通道）
+    base_url: str = Field(min_length=1, max_length=512)
+    api_key: str | None = Field(default=None, max_length=512)  # 本地渠道可缺省（占位 EMPTY）
+    model: str = Field(min_length=1, max_length=128)
+
+
+class ConnectionTestOut(BaseModel):
+    """连接测试结果：失败**结构化 200**（ok=false + error），不上 500（探测面非服务故障）。"""
+
+    model_config = ConfigDict(extra="forbid")
+    ok: bool
+    latency_ms: int
+    model: str
+    error: str | None = None
+
+
+class AgentStatusOut(BaseModel):
+    """启停结果（enable：{id,status}；disable 附 terminated_sessions——恒 0，调试：语义=新会话
+    拒绑，不强改 sessions，字段为前端 mock 形状占位）。status 取领域三态值（enabled/disabled/
+    degraded），前端 fe1-F2 双口径映射已收敛。"""
+
+    model_config = ConfigDict(extra="forbid")
+    id: uuid.UUID
+    status: str
+    terminated_sessions: int | None = None
+
+
+class DebugChatIn(BaseModel):
+    """调试对话入参（单轮；params 预留——当前仅消费 timeout_ms）。"""
+
+    model_config = ConfigDict(extra="forbid")
+    message: str = Field(min_length=1, max_length=8192)
+    params: dict[str, Any] | None = None
+
+
+class DebugChatOut(BaseModel):
+    """调试对话结果（usage=平台用量上下文形状 token_in/token_out/cache_read_tokens；桩不回填报
+    空对象）。调试面不落 sessions/messages/tasks 行——响应不含 trace 会话语义字段。"""
+
+    model_config = ConfigDict(extra="forbid")
+    reply: str
+    usage: dict[str, Any] = Field(default_factory=dict)
+    latency_ms: int
+
+
 def adapter_from_domain(a: AgentAdapterInfo) -> AgentAdapterOut:
     return AgentAdapterOut(id=a.id, agent_tool=a.agent_tool, version=a.version, health_endpoint=a.health_endpoint)
 

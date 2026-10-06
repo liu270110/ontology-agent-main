@@ -37,8 +37,9 @@ export function PlatformPage() {
   const installed = market.data?.items.filter(p => p.installed).length
   const marketCount =
     installed != null && market.data ? `已装 ${installed} · 共 ${market.data.items.length}` : undefined
+  // S1/S2 契约收口（2026-10-05）：tools/skills 概览改 api.list 归一（{data,meta}）→ 读 .data.length
   const toolsCount =
-    tools.data && skills.data ? `工具 ${tools.data.items.length} · 技能 ${skills.data.items.length}` : undefined
+    tools.data && skills.data ? `工具 ${tools.data.data.length} · 技能 ${skills.data.data.length}` : undefined
   const mcpCount = mcp.data ? `已接入 ${mcp.data.items.length}` : undefined
   // fe3 信封收口：agents 查询（listAgentOverview）改 api.list 归一（{data,meta}）——be2 后
   // 旧 .items.length 直接 'reading length' 崩溃；market/tools/skills/mcp 端点未改不动

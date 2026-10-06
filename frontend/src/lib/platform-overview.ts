@@ -21,14 +21,16 @@ export function listPluginOverview() {
   return api.get<{ items: PluginOverviewItem[] }>('/plugins')
 }
 
-/** GET /tools（api/01 §5.6）——工具目录计数 */
+/** GET /tools（S1 集市列表，{data,meta} 信封）——工具目录计数。
+ *  S1 契约收口（2026-10-05）：改走 api.list 三形态归一（与 features/tools listTools 同形，
+ *  queryKey ['tools'] 共享缓存两处 queryFn 形态必须一致），消费方读 .data.length。 */
 export function listToolOverview() {
-  return api.get<{ items: unknown[] }>('/tools')
+  return api.list<unknown>('/tools')
 }
 
-/** GET /skills（api/01 §5.6 skills 读取）——技能库计数 */
+/** GET /skills（S2 技能列表，{data,meta} 信封）——技能库计数（同上收口）。 */
 export function listSkillOverview() {
-  return api.get<{ items: unknown[] }>('/skills')
+  return api.list<unknown>('/skills')
 }
 
 /** GET /mcp/servers（api/01 §5.7）——已接入外部 Server 计数 */

@@ -74,6 +74,9 @@ from services.iam.api.me import router as me_domain_router  # me 域六端点（
 from services.iam.api.me import totp_router as totp_router  # totp 四端点（api/01 §5.9/§5.15）
 from services.iam.api.users import router as admin_users_router  # 用户管理 CRUD 四端点（api/01 §5.8，B8-WA 追认实装）
 from services.kb.api.kb import router as kb_router
+from services.mcp.api.management import (
+    router as mcp_management_router,  # mcp 管理域 8 端点（api/01 §5.7 + ★ 预登记，2026-10-05）
+)
 from services.memory.api.memory import router as memory_router
 from services.ontology.api.ontology import router as ontology_router
 from services.platform.db.uow import AsyncUnitOfWork
@@ -515,6 +518,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(skills_router, prefix=settings.api_prefix)  # S2 技能集市四端点（docs/Agent/14 §3）
     app.include_router(review_admin_router, prefix=settings.api_prefix)  # M5 条件四：审核工单审批决策（api/01 §5.8 ★）
     app.include_router(tools_market_router, prefix=settings.api_prefix)  # S1 工具集市四端点（docs/Agent/14 §3）
+    app.include_router(mcp_management_router, prefix=settings.api_prefix)  # mcp 管理域 8 端点（api/01 §5.7）
     app.include_router(orsi_router, prefix=settings.api_prefix)  # M4.6-S3：ORSI 注册表三端点（docs/Agent/14 §3）
     app.include_router(health_router, prefix=settings.api_prefix)  # M3 销项：readyz 聚合探活（health.py）
     app.include_router(writeback_ledger_router, prefix=settings.api_prefix)  # api/01 §5.8 ★：台账查询（writeback.api）

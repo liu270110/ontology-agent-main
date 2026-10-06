@@ -9,7 +9,10 @@ import { enableMcpTool, getServer, refreshServer, MCP_STATUS_LABEL, type McpServ
 
 /** IX-MCP-02 Server 详情抽屉（26 篇 §9.3；画板 ix-mcp-02）：480px——
  *  连接信息（传输/URL 脱敏/鉴权方式）+ 健康状态卡（最近探活/延迟/连续失败 + 24h 探活带）
- *  + 纳管工具列表（启停开关 + 跳 IX-TLS-01 详情）+ 刷新清单 / 编辑连接 / 移除（IX-MCP-03）。 */
+ *  + 纳管工具列表（启停开关 + 跳 IX-TLS-01 详情）+ 刷新清单 / 编辑连接 / 移除（IX-MCP-03）。
+ *  真调口径：refresh=POST /mcp/servers/{id}/refresh（失败 502+5003 落 failing）、启停=
+ *  POST /mcp/tools/{tool_id}/enable|disable、详情=GET /mcp/servers/{id}——失败 toast 透出
+ *  网关结构化错误文案（ApiError.message），不吞不伪装。 */
 
 export function ServerDetailSheet({
   serverId,
@@ -22,6 +25,7 @@ export function ServerDetailSheet({
 }) {
   const qc = useQueryClient()
   const [refreshing, setRefreshing] = useState(false)
+  const [refreshError, setRefreshError] = useState<string | null>(null)
 
   const { data: server } = useQuery({
     queryKey: ['mcp', 'detail', serverId],
@@ -37,16 +41,24 @@ export function ServerDetailSheet({
         description: res.enabled ? '外部工具逐项审核开启；annotations 仅作提示，不作授权依据' : '停用写审计，可再次开启',
       })
     },
+    onError: e => {
+      toast.error('工具启停失败', { description: e instanceof Error ? e.message : undefined })
+    },
   })
 
   const refresh = useMutation({
     mutationFn: () => refreshServer(serverId!),
     onSuccess: async res => {
       setRefreshing(false)
+      setRefreshError(null)
       void qc.invalidateQueries({ queryKey: ['mcp'] })
       toast.success(`清单已刷新 · 延迟 ${res.latency_ms}ms`, { description: `发现 ${res.discovered_count} 项` })
     },
-    onError: () => setRefreshing(false),
+    onError: e => {
+      // live 失败：502+5003（探测失败落 failing 后上抛）——错误态内联展示 + 重试
+      setRefreshing(false)
+      setRefreshError(e instanceof Error ? e.message : '刷新失败')
+    },
   })
 
   if (!serverId || !server) return null
@@ -94,7 +106,7 @@ export function ServerDetailSheet({
             <span className="badge b-gray ml-auto">连续失败 {server.consecutive_failures}</span>
           </div>
           <div className="mt-1 text-[11px] text-label-2">
-            最近探活 {server.last_probe.slice(11, 16)} · 延迟 {server.latency_ms || '—'}ms · 探活周期 60s
+            最近探活 {server.last_probe ? server.last_probe.slice(11, 16) : '—'} · 延迟 {server.latency_ms || '—'}ms · 探活周期 60s
           </div>
           {server.probes_24h.length > 0 && (
             <>
@@ -135,7 +147,24 @@ export function ServerDetailSheet({
             </button>
           </div>
           {notAdopted.length > 0 && (
-            <div className="mt-1 text-[11px] text-label-3">{notAdopted.length} 项写入类未纳管（需单独申请）；外部工具默认未启用，逐项审核开启。</div>
+            <div className="mt-1 text-[11px] text-label-3">{notAdopted.length} 项未纳管（需单独申请）；外部工具默认未启用，逐项审核开启。</div>
+          )}
+          {refreshError && (
+            <div className="mt-2 rounded-xl px-3 py-2 text-[11px]" style={{ background: 'var(--red-soft)' }} data-testid="mcp-refresh-error" role="alert">
+              <b className="text-red">刷新失败</b> <span className="ml-1">{refreshError}</span>
+              <button
+                type="button"
+                className="btn btn-g btn-sm ml-2 !px-2"
+                data-testid="mcp-refresh-retry"
+                onClick={() => {
+                  setRefreshError(null)
+                  setRefreshing(true)
+                  refresh.mutate()
+                }}
+              >
+                重试
+              </button>
+            </div>
           )}
           <div className="mt-2 space-y-1.5">
             {adopted.map(t => (

@@ -57,11 +57,11 @@ describe('B3-P 工作流 · 注册表失败回退（冷缓存）', () => {
     fireEvent.click(await screen.findByTestId('wf-node-tool-scada'))
     const sel = await screen.findByTestId('wf-param-tool', {}, { timeout: 10_000 })
 
-    // 冷缓存失败：data 为空 → 回退静态清单（最终兜底）+ 错误 option + 提示文案
+    // 冷缓存失败：data 为空 → 回退静态清单（最终兜底）+ 错误 option + 提示文案（S1 通道徽标口径）
     expect(await screen.findByRole('option', { name: '加载失败，点击重试' }, { timeout: 10_000 })).toBeInTheDocument()
-    expect(screen.getByRole('option', { name: 'scada.query · read' })).toBeInTheDocument()
-    expect(screen.getByRole('option', { name: 'grid.write · high-risk' })).toBeInTheDocument()
-    expect(screen.getByRole('option', { name: 'kb.search · kb.read' })).toBeInTheDocument()
+    expect(screen.getByRole('option', { name: 'scada.query · channel: L3' })).toBeInTheDocument()
+    expect(screen.getByRole('option', { name: 'grid.write · channel: L3' })).toBeInTheDocument()
+    expect(screen.getByRole('option', { name: 'kb.search · channel: L0' })).toBeInTheDocument()
     expect(screen.getByText('注册表暂不可用，以下为内置回退清单。')).toBeInTheDocument()
 
     // 恢复 mock → 选中重试 option → refetch 成功：注册表回归（回退清单无 ontology.reason，
@@ -69,7 +69,7 @@ describe('B3-P 工作流 · 注册表失败回退（冷缓存）', () => {
     // 历史值 scada.query 不在真实注册表 → 「（已下架）」标记接管（不丢数据）
     server.resetHandlers()
     fireEvent.change(sel, { target: { value: '__retry' } })
-    expect(await screen.findByRole('option', { name: 'ontology.reason · ontology:read' }, { timeout: 10_000 })).toBeInTheDocument()
+    expect(await screen.findByRole('option', { name: 'ontology.reason · channel: L0' }, { timeout: 10_000 })).toBeInTheDocument()
     await waitFor(() => expect(screen.queryByRole('option', { name: '加载失败，点击重试' })).not.toBeInTheDocument(), { timeout: 10_000 })
     expect(screen.getByRole('option', { name: 'scada.query（已下架）' })).toBeInTheDocument()
     expect(await screen.findByTestId('wf-param-tool-delisted', {}, { timeout: 10_000 })).toHaveTextContent(

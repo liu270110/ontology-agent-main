@@ -32,17 +32,17 @@ describe('S8 状态切片 · 工具注册表 · 加载骨架', () => {
     server.use(
       http.get('*/api/v1/tools', async () => {
         await delay(800)
+        // S1 live 投影形状（裸 {data,meta}；ToolOut 逐字段）
         return HttpResponse.json({
-          code: 0,
-          message: 'ok',
-          data: {
-            items: [
-              {
-                id: 'tool-s8', name: 'skeleton.tool', desc: '骨架验证工具', source: 'builtin',
-                provider: '内置测试', scopes: [], danger: false, enabled: true,
-              },
-            ],
-          },
+          data: [
+            {
+              id: '0b1e3a10-0000-4000-8000-00000000s801', tenant_id: 't-demo', name: 'skeleton.tool',
+              action_iri: 'ont_core#CL-900', source_channel: 'L0',
+              semantic_annotation: { label: '骨架验证', description: '骨架验证工具' },
+              version: '1.0.0', status: 'listed', health_hint: null, evidence_uri: null,
+            },
+          ],
+          meta: { page: 1, page_size: 20, total: 1 },
         })
       }),
     )
@@ -59,17 +59,18 @@ describe('S8 状态切片 · 技能库 · 加载骨架', () => {
     server.use(
       http.get('*/api/v1/skills', async () => {
         await delay(800)
+        // S2 live 投影形状（裸 {data,meta}；SkillOut 逐字段）
         return HttpResponse.json({
-          code: 0,
-          message: 'ok',
-          data: {
-            items: [
-              {
-                id: 'sk-s8', name: '骨架验证技能', summary: '骨架屏验证用技能',
-                version: 'v1', status: '未分发',
-              },
-            ],
-          },
+          data: [
+            {
+              id: '3f2a7c10-0000-4000-8000-00000000s801', name: '骨架验证技能',
+              description: '骨架屏验证用技能', source_uri: 'services/skills/skeleton/SKILL.md',
+              version: '1.0.0', status: 'listed', body_bytes: 100, origin: 'repo',
+              required_secrets: [], missing_secrets: [], unprovisioned: false,
+              created_at: null, updated_at: null,
+            },
+          ],
+          meta: { page: 1, page_size: 20, total: 1 },
         })
       }),
     )
@@ -78,7 +79,7 @@ describe('S8 状态切片 · 技能库 · 加载骨架', () => {
     fireEvent.click(await screen.findByTestId('tls-view-skills', {}, { timeout: 10_000 }))
 
     expect(await screen.findByTestId('skeleton-cards', {}, { timeout: 10_000 })).toBeInTheDocument()
-    expect(await screen.findByTestId('skill-card-sk-s8', {}, { timeout: 10_000 })).toBeInTheDocument()
+    expect(await screen.findByTestId('skill-card-3f2a7c10-0000-4000-8000-00000000s801', {}, { timeout: 10_000 })).toBeInTheDocument()
     expect(screen.queryByTestId('skeleton-cards')).not.toBeInTheDocument()
   }, 30_000)
 })

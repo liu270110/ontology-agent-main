@@ -1,0 +1,50 @@
+{
+  "suite": "agent-core",
+  "scenario": "invalid_retry_count",
+  "benchmark_ref": "docs/Agent/16-基准对比体系设计 §2 + docs/评审/红队攻击性审查-2026-10-06",
+  "orsi_face_suggestion": "O5",
+  "smoke": true,
+  "started_at": "2026-10-06T23:45:41+00:00",
+  "params": {
+    "runs": 5,
+    "plan_steps": 10,
+    "smoke_runs": 2,
+    "smoke": true
+  },
+  "metrics": {
+    "tool_invocations": 2,
+    "invalid_retry_count": 1,
+    "abort_threshold": 2,
+    "invocation_bound": 3,
+    "abandoned_correctly": true,
+    "plan_steps_injected": 10,
+    "unbounded_retry": false,
+    "per_run_invocations": [
+      2,
+      2
+    ],
+    "abandoned_runs": 2
+  },
+  "samples": [
+    {
+      "round": 1,
+      "invocations": 2,
+      "final_code": 5008,
+      "loop_nudges": 1,
+      "run_stuck_events": 0,
+      "abandoned_correctly": true
+    },
+    {
+      "round": 2,
+      "invocations": 2,
+      "final_code": 5008,
+      "loop_nudges": 1,
+      "run_stuck_events": 0,
+      "abandoned_correctly": true
+    }
+  ],
+  "asserts": [],
+  "status": "ok",
+  "error": null,
+  "duration_s": 0.012
+}

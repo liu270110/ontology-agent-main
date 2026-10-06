@@ -1,0 +1,21 @@
+# 场景数据文件示例 ②（docs/Agent/16 §1：场景=数据文件，schema 同 session_mutex_rate.yaml）
+version: 1
+scenario: recovery_time_s
+description: |
+  红队 A5/C 族：任务中断恢复。在途工具运行中 cancel（kill 中断的进程内模拟形态）→
+  断言取消清单收敛（在途工具中止、无僵尸内核任务）+ 恢复路径可走通；时延 p50/p95 落档。
+  真实 kill -9 进程屠杀形态登记后续批次（16 篇 §4 第一波口径）。
+params:
+  iterations: 3
+  slow_tool_sleep_s: 2.0   # 在途工具时长（中断点）
+  smoke_iterations: 1
+asserts:
+  - metric: converged_rate
+    op: "=="
+    value: 1.0
+  - metric: recovery_rate
+    op: "=="
+    value: 1.0
+  - metric: zombie_tasks_total
+    op: "=="
+    value: 0

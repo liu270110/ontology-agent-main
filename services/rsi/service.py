@@ -342,6 +342,10 @@ class RsiService:
             bucket = self._rejections.setdefault(
                 proposal.target, deque(maxlen=self._rejection_maxlen)
             )
+            # 同提案同因重复落选（如 apply 对漂移提案反复重试）不重复占册，
+            # 防回显 5 条被同因占满（ocr 2026-10-06 评审建议，对齐专家 P2-1）。
+            if bucket and bucket[-1].proposal_id == record.proposal_id and bucket[-1].reason == reason:
+                return
             bucket.append(record)
 
     def _recent_rejections(self, target: str) -> tuple[RejectionRecord, ...]:

@@ -219,3 +219,18 @@ async def test_maxlen0关闭落册_状态机不受影响() -> None:
 async def test_构造缺省读Settings_D2通道() -> None:
     assert RsiService()._rejection_maxlen == get_settings().rsi_rejection_ledger_maxlen
     assert REJECTION_LEDGER_MAXLEN == get_settings().rsi_rejection_ledger_maxlen == 25
+
+
+async def test_同提案同因重复落选不重复占册() -> None:
+    """ocr 2026-10-06 评审：apply 对漂移提案反复重试，同 proposal_id+同 reason 只落册一次。"""
+    service = _service()
+    proposal = await _submit(service)  # 受理成功的提案（未落选）
+
+    service._record_rejection(proposal, reason="baseline_drift")
+    service._record_rejection(proposal, reason="baseline_drift")  # 同因重复 → 去重
+    service._record_rejection(proposal, reason="gate:another")  # 异因仍落
+
+    records = service.list_rejections(TARGET)
+    drifts = [r for r in records if r.reason == "baseline_drift"]
+    assert len(drifts) == 1 and len(records) == 2
+    assert all(r.proposal_id == proposal.id for r in records)

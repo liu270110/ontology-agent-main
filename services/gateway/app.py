@@ -51,6 +51,7 @@ from services.agent.api.runs import router as runs_router  # 子 Run 快照（ap
 from services.agent.api.sessions import get_or_build_chat_orchestrator
 from services.agent.api.sessions import router as sessions_router
 from services.agent.api.tasks import router as tasks_router
+from services.agent.api.workspace import router as workspace_router  # 会话工作区面板四端点（31 篇，2026-10-07）
 from services.agent.business.task_worker import TaskRunWorker
 from services.agent.data.repo_impl.task_poller import RunQueuePoller
 from services.agent.domain.model.task import RunRetryPolicy
@@ -499,6 +500,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(totp_router, prefix=settings.api_prefix)  # totp 四端点（api/01 §5.9/§5.15，同上）
     app.include_router(agents_router, prefix=settings.api_prefix)  # M3.1：agents CRUD（api/01 §5.1）
     app.include_router(sessions_router, prefix=settings.api_prefix)
+    app.include_router(workspace_router, prefix=settings.api_prefix)  # 31 篇：工作区面板（tree/file/exec/resources）
     app.include_router(run_control_router, prefix=settings.api_prefix)  # M4.5-A：inbox 提交 + admin estop（§1.4）
     app.include_router(tasks_router, prefix=settings.api_prefix)
     app.include_router(runs_router, prefix=settings.api_prefix)  # 40 篇 R3：子 Run 快照（顶层 /runs 命名空间）

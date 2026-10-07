@@ -199,6 +199,8 @@ def _build_capability_bindings(settings: Any) -> tuple:
     不可出网）；fs 只读三件默认注册、写类（write/edit）默认关闭（kernel_capability_write，
     开启仍走内核 B5 审批路由）；terminal 绑定待沙箱会话供给批次接线（每 Run 一个沙箱
     会话句柄）。
+
+    K18-b（2026-10-07）注：本委托入口为预留入口，生产接线随 H-2 tool-calling 批。
     """
     from services.agent.api.sessions import build_capability_tool_bindings
 

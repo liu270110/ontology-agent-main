@@ -392,7 +392,26 @@ class ExecutionStage:
 
     @staticmethod
     def sandbox_spec(step: PlanStep) -> SandboxSpec:
-        """B4 出口控制：能力只能在参数里「请求」网络，规格由内核构造且恒 network_enabled=False。"""
+        """B4 出口控制：能力只能在参数里「请求」网络，规格由内核构造且恒 network_enabled=False。
+
+        env 通道（K18-a 门 3，方案=docs/Agent/13 §24）：parameters.env 非 None 时映射入
+        SandboxSpec.env，由 ExecutionBackend 适配层传入运行时 ProvisionSpec(env=spec.env)。
+        通道纪律：仅允许受控供给（凭证池/技能 secrets 经门 2 校验后注入），宿主 env 禁入；
+        运行时侧 sanitize_env（spec_from_mapping / docker_backend.create 双接线点）强制
+        刷洗。v1 无生产注入方（阶段 B），本批只打通通道。
+        """
         if step.parameters.get("network"):
             raise KernelContractError("v1 出口默认拒绝：network 请求被拒（B4 硬编码，DSec §6.5）")
-        return SandboxSpec(image=str(step.parameters.get("image", "platform/sandbox:default")))
+        raw_env = step.parameters.get("env")
+        if raw_env is not None and not isinstance(raw_env, dict):
+            raise KernelContractError("env 通道契约违规：parameters.env 必须是字符串映射（K18-a 门 3）")
+        if raw_env is not None:
+            # 嵌套值经 str() 会把 Python repr 垃圾静默送进容器 env——标量白名单外
+            # fail-closed（与上方非 dict 检查同款契约；ocr 2026-10-07 评审发现）。
+            bad = [str(k) for k, v in raw_env.items() if not isinstance(v, (str, int, float, bool))]
+            if bad:
+                raise KernelContractError(
+                    f"env 通道契约违规：env 值必须为标量（K18-a 门 3）：{','.join(bad)}"
+                )
+        env = {str(k): str(v) for k, v in raw_env.items()} if raw_env is not None else None
+        return SandboxSpec(image=str(step.parameters.get("image", "platform/sandbox:default")), env=env)

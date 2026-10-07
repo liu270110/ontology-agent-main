@@ -100,7 +100,14 @@ class StepResult(BaseModel):
 
 
 class SandboxSpec(BaseModel):
-    """沙箱规格（值对象 frozen）：镜像/配额/出口白名单——B4 硬编码项不可覆盖。"""
+    """沙箱规格（值对象 frozen）：镜像/配额/出口白名单——B4 硬编码项不可覆盖。
+
+    env 通道（K18-a 门 3，方案=docs/Agent/13 §24）：**仅允许受控供给**（凭证池/技能
+    secrets 经门 2 校验后注入），宿主 env 禁入；运行时侧 ProvisionSpec.env 必经
+    sanitize_env 强制刷洗（spec_from_mapping / docker_backend.create 双接线点），纵深
+    防御保持。缺省 None=无注入，向后兼容。v1 无生产注入方（skills 凭证供给=阶段 B），
+    本批只打通通道。
+    """
 
     model_config = ConfigDict(frozen=True)
 
@@ -109,6 +116,7 @@ class SandboxSpec(BaseModel):
     egress_whitelist: tuple[str, ...] = ()  # 白名单域名/IP（逐包放行，v1 演练契约面）
     cpu_limit: str = "1.0"
     memory_limit: str = "512m"
+    env: dict[str, str] | None = None  # K18-a 门 3 受控供给通道；缺省 None（向后兼容）
 
 
 class SandboxLease(BaseModel):

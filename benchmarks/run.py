@@ -3,12 +3,16 @@
 套件分发：rag（benchmarks/suites/rag/runner.py）、agent-core（suites/agent-core/runner.py，
 2026-10-07 恢复入口）、intent（suites/intent/runner.py，双档对照 A0 直觉/A1 本体约束）
 已实现；ontology-scale 随波次落地，此处显式报错不静默。
+2026-10-07 恢复入口——rag 批合并时误摘，红队修复批需 --suite agent-core 复验）与
+ontology-scale（suites/ontology-scale/runner.py，2026-10-07 G1/F3 落地——合成本体梯度
+三档×三指标）已实现；intent 随各自波次落地，此处显式报错不静默。
 
 示例（仓库根）：
     python benchmarks/run.py --suite rag --smoke          # 全链冒烟：进库+检索+基线+六维落盘
     python benchmarks/run.py --suite rag --tag v0.2.0     # 常规跑（优化后换 tag 留曲线）
     python benchmarks/run.py --suite agent-core --smoke --tag redteam-fix-verified
     python benchmarks/run.py --suite intent --smoke       # 意图双档对照：A0/A1×100 金标
+    python benchmarks/run.py --suite ontology-scale --smoke   # 三档全跑（10⁴ 档较慢，预算内 partial 如实落盘）
 """
 
 from __future__ import annotations
@@ -29,6 +33,10 @@ sys.path.insert(0, str(ROOT))
 from benchmarks.suites.rag.config import RagBenchSettings  # noqa: E402
 
 _IMPLEMENTED_SUITES = ("rag", "agent-core", "intent")
+_IMPLEMENTED_SUITES = ("rag", "agent-core", "ontology-scale")
+
+# 场景型套件（目录含连字符，runner.py 文件位加载；run_suite(smoke, only) 契约）
+_SCENARIO_SUITES = ("agent-core", "ontology-scale")
 
 _BENCH_ROOT = Path(__file__).resolve().parent
 
@@ -61,6 +69,13 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--kb-id", default=None, help="--skip-ingest 时的既有 collection id")
     parser.add_argument("--tenant-id", default=None, help="--skip-ingest 时的建库租户 id（collection 归属租户）")
+    # ontology-scale（BENCH_ONTO_SCALE_ Settings 的 CLI 覆盖面）
+    parser.add_argument("--tiers", default=None, help="ontology-scale：规模档 CSV（缺省 100,1000,10000）")
+    parser.add_argument("--tier-timeout", type=float, default=None, help="ontology-scale：单档墙钟预算秒（缺省 900）")
+    parser.add_argument("--latency-repeats", type=int, default=None, help="ontology-scale：校验时延采样次数（缺省 3）")
+    parser.add_argument(
+        "--onto-token-counter", choices=["vllm", "heuristic"], default=None, help="ontology-scale：token 计数后端"
+    )
     return parser
 
 
@@ -73,6 +88,8 @@ def main(argv: list[str] | None = None) -> int:
         return _run_agent_core(args)
     if args.suite == "intent":
         return _run_intent(args)
+    if args.suite in _SCENARIO_SUITES:
+        return _run_scenarios_suite(args)
     if args.skip_ingest and not (args.kb_id and args.tenant_id):
         print("--skip-ingest 须配 --kb-id 与 --tenant-id（collection 与建库租户）", file=sys.stderr)
         return 2
@@ -232,18 +249,25 @@ def _write_summary(
         )
     lines.append("")
     counts = manifest["status_counts"]
+    partial_note = f" partial={counts['partial']}" if "partial" in counts else ""
+    env_note = (
+        "环境=一次性私库+fakeredis+确定性桩（零真网）"
+        if suite == "agent-core"
+        else "环境=确定性合成（种子固定，零网络依赖；vLLM@18001 仅 token 计数）"
+        if suite == "ontology-scale"
+        else "环境=本地 kb+vLLM"
+    )
     lines.append(
         f"> 执行 {len(results)} 场景：ok={counts['ok']} "
-        f"assert_failed={counts['assert_failed']} error={counts['error']}；"
-        "环境=一次性私库+fakeredis+确定性桩（零真网）"
+        f"assert_failed={counts['assert_failed']} error={counts['error']}{partial_note}；{env_note}"
     )
     with summary_path.open("a", encoding="utf-8") as fh:
         fh.write("\n".join(lines) + "\n")
     return summary_path
 
 
-def _run_agent_core(args: argparse.Namespace) -> int:
-    """agent-core 六场景（红队 A/B/C/H 域）：一次性私库+fakeredis+确定性桩，结果 JSON+manifest+SUMMARY。"""
+def _run_scenarios_suite(args: argparse.Namespace) -> int:
+    """场景型套件统一执行（agent-core / ontology-scale 共用）：结果 JSON+manifest+SUMMARY。"""
     runner = _load_suite_runner(args.suite)
     date_dir = datetime.now().strftime("%Y-%m-%d")
     out_dir = _BENCH_ROOT / "results" / args.suite / date_dir
@@ -255,8 +279,19 @@ def _run_agent_core(args: argparse.Namespace) -> int:
     if sys.platform == "win32":  # psycopg 异步要求 Selector 循环（须在 asyncio.run 前固定）
         asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
+    overrides = (
+        {k: v for k, v in {
+            "tiers": [int(x) for x in args.tiers.split(",")] if args.tiers else None,
+            "tier_timeout_s": args.tier_timeout,
+            "latency_repeats": args.latency_repeats,
+            "token_counter": args.onto_token_counter,
+        }.items() if v is not None}
+        if args.suite == "ontology-scale"
+        else {}
+    )
+
     async def _run() -> tuple[list[dict[str, Any]], dict[str, Any]]:
-        return await runner.run_suite(smoke=args.smoke, only=args.scenario)
+        return await runner.run_suite(smoke=args.smoke, only=args.scenario, overrides=overrides)
 
     try:
         results, manifest = asyncio.run(_run())
@@ -271,15 +306,18 @@ def _run_agent_core(args: argparse.Namespace) -> int:
         print(f"[bench] {result['scenario']:<28} {result['status']:<14} {key}")
         if result["error"]:
             print(f"         error: {result['error']}")
+        if result.get("partial_note"):
+            print(f"         partial: {result['partial_note']}")
     manifest_path = out_dir / f"{clock}-manifest.json"
     manifest["tag"] = tag
     manifest["results_files"] = [f"{clock}-{r['scenario']}.json" for r in results]
     manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
     summary_path = _write_summary(runner, args.suite, tag, manifest, results)
     counts = manifest["status_counts"]
+    partial_note = f" partial={counts['partial']}" if "partial" in counts else ""
     print(
         f"[bench] 完成: ok={counts['ok']} assert_failed={counts['assert_failed']} error={counts['error']}"
-        f"；产物={manifest_path.parent}"
+        f"{partial_note}；产物={manifest_path.parent}"
     )
     print(f"[bench] SUMMARY（追加式）: {summary_path}")
     return 0 if counts["error"] == 0 else 1

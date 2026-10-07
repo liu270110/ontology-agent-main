@@ -1000,3 +1000,15 @@ async def test_extract_v3_non_integer_index_pruned_with_mark(
         assert [v["rule"] for v in fact.violations] == ["out_of_taxonomy"]
         assert "非整数" in fact.violations[0]["detail"]
         assert (fact.subject_type or "").startswith("非整数:")  # 哨兵串=失效形态:原值，终审可回溯
+
+
+def test_整值浮点2_0容错落穿映射为IRI():
+    """替代复核发现 1 回归钉：2.0（jsonschema 合法 integer）应映射回 IRI 而非被剪除。"""
+    from services.kb.business.kb_extraction import _map_class_indices, load_seed_catalog
+
+    catalog = load_seed_catalog()
+    prod_idx = dict(enumerate(catalog.classes, start=1))  # 与生产 enumerate 同源
+    target_iri = prod_idx[2][0] if isinstance(prod_idx[2], tuple) else prod_idx[2]
+    index = {2: target_iri}
+    out = _map_class_indices([{"ontology_class": 2.0}], index)
+    assert out == [{"ontology_class": target_iri}]  # 容错落穿：2.0 → int(2) → IRI

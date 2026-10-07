@@ -462,13 +462,14 @@ def _map_class_indices(candidates: list[Any], class_index: dict[int, str]) -> li
             if raw is None or (isinstance(raw, str) and not raw.strip()):
                 continue  # 未自报类：空 hint 原样透传（剪枝侧同口径）
             if isinstance(raw, bool) or not isinstance(raw, int):
-                # jsonschema 视 2.0 为合法 integer——整值浮点容错为 int（专家 P2：模型本意
-                # 2 号类不应因 2.0 形态被过严剪除；非整值浮点仍走哨兵留痕）。
+                # jsonschema 视 2.0 为合法 integer——整值浮点容错为 int 后须落穿映射
+                # （替代复核发现 1：转换后 continue 会使容错成死代码——2.0 仍被剪除）；
+                # 非整值浮点/文本走哨兵留痕（K21 管线）。
                 if isinstance(raw, float) and raw.is_integer():
                     raw = int(raw)
                 else:
                     cand[field_name] = f"非整数:{raw}"
-                continue
+                    continue
             iri = class_index.get(raw)
             if iri is None:
                 cand[field_name] = f"序号越界:{raw}"

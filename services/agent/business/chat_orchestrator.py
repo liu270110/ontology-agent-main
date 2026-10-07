@@ -44,6 +44,7 @@ from services.agent.business.kernel.hooks import HookName
 from services.agent.business.kernel.inbox import KernelInbox
 from services.agent.business.kernel.loop import AgentKernel
 from services.agent.domain.model.kernel_context import KernelEvent, TaskRef, TenantContext
+from services.agent.domain.model.step_state import StepStatus
 from services.agent.domain.model.task import RunStatus
 from services.memory.domain.repo.fact_repo import L1MemoryStore
 from services.platform.errors import ErrorCode
@@ -266,13 +267,20 @@ class ChatOrchestrator:
         # 在线忠实度抽检（08 §7.4 / 10 篇缺口②）：完成路径按采样率抽中 → 记录检查任务占位。
         # 仅 completed 带答案的对话参与抽样（LLM-as-judge 判定需答案+citations）；留痕失败
         # 只告警不阻断流尾（审计失败不阻塞主流程，02 §3 ⑥ 同款纪律）。
-        if self._sampler is not None and outcome.error_code is None and outcome.answer:
+        # 仅 completed 带答案的对话参与抽样（ocr 2026-10-07：W2-2b 挂起终局 error_code 亦为 None，
+        # 按状态收紧防对审批门前的未完成答案出忠实度裁决、污染审计数据面）
+        if self._sampler is not None and outcome.status == str(RunStatus.COMPLETED) and outcome.answer:
             if self._sampler.is_sampled(outcome.run_id):
                 try:
                     await self._faithfulness_hook(outcome)
                 except Exception as exc:  # noqa: BLE001 ——抽检留痕失败不阻断对话
                     logger.warning("faithfulness 抽检留痕失败（run=%s）: %s", command.run_id, exc)
         if outcome.error_code is None:
+            if outcome.status == str(RunStatus.WAITING_TOOL):
+                # W2-2b 审批挂起：run 未完成也未失败——不发 RUN_FINISHED/RUN_ERROR（流尾
+                # 即无终态事件）；APPROVAL_REQUIRED 已随挂起上 wire（转译已有），裁决时
+                # 由 approval_service 发 APPROVAL_RESOLVED（02 协议审批波 67/68）。
+                return
             yield ChatEvent(
                 name=ChatEventName.RUN_FINISHED,
                 data={"run_id": str(command.run_id), "usage": {**outcome.usage, "cost_ms": outcome.cost_ms}},
@@ -504,6 +512,16 @@ class ChatOrchestrator:
                 error_message="对话总预算超限（LLM_TIMEOUT）",
                 retryable=True,
             )
+        # W2-2b 审批挂起：内核结算出 waiting_tool 且**存在 waiting_approval 在途步**——
+        # 非失败终局（error_code=None；wire 无 RUN_ERROR/RUN_FINISHED，审批波
+        # APPROVAL_REQUIRED 即状态，裁决波 APPROVAL_RESOLVED 由审批服务发布）。
+        # blocked_by_trust 的 waiting_tool（步全终态、无在途步）维持既有失败映射（零行为
+        # 变化面）——以步态区分，不读开关（开关只守 ExecutionStage 挂起入口）。
+        if status == str(RunStatus.WAITING_TOOL) and any(
+            getattr(s, "status", None) is StepStatus.WAITING_APPROVAL
+            for s in (getattr(kernel_outcome, "terminal_states", None) or ())
+        ):
+            return outcome(status=status)
         code = box.error_code or getattr(kernel_outcome, "reason_code", None) or int(ErrorCode.INTERNAL_ERROR)
         reason = box.error_message or str(getattr(kernel_outcome, "reason", "")) or "对话失败"
         return outcome(

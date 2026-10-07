@@ -8,7 +8,11 @@
   都由 worker 监督分支裁决：前者退避建新 Run，后者 task.failed + 5005）；
 - ``orphan``（H-0c ①，2026-09-29 批）：task=running 且活跃 Run 卡在 running、
   ``updated_at`` 悬挂超阈值——worker 进程崩溃后的孤儿态兜底（租约制随多副本 D4）。
-  waiting_tool 不在回收面（审批/外部回执等待属合法长等，归 H-0b 审批批与 D4 租约）。
+  waiting_tool 不在回收面（审批/外部回执等待属合法长等，归 H-0b 审批批与 D4 租约）；
+- ``approval_timeout``（W2-2b，2026-10-07 批）：task=running 且活跃 Run waiting_tool、
+  ``updated_at`` 距今超审批 SLA——挂起等裁决的 30min fail-closed 兜底（11 篇 §6.2）。
+  消费面以 task.payload.approval_pending 锚点（run_id 全等）为裁决前提（worker 侧核），
+  工作流族等待（X16 审批节点/断点，无内核锚点）不进本面。
 """
 
 from __future__ import annotations
@@ -35,11 +39,11 @@ def _utcnow() -> datetime:
 class WorkerClaim:
     """认领工作项（跨租户投影）：kind 决定 worker 分支（执行 / 重试监督 / 孤儿回收）。"""
 
-    kind: str  # queued | retry | orphan
+    kind: str  # queued | retry | orphan | approval_timeout
     tenant_id: uuid.UUID
     task_id: uuid.UUID
     run_id: uuid.UUID
-    hang_s: float | None = None  # orphan 专属：running 悬挂时长（秒，审计可观测）
+    hang_s: float | None = None  # orphan/approval_timeout 专属：悬挂/挂起时长（秒，审计可观测）
 
 
 class RunQueuePoller:
@@ -145,6 +149,52 @@ class RunQueuePoller:
             return [
                 WorkerClaim(
                     kind="orphan",
+                    tenant_id=row[0],
+                    task_id=row[1],
+                    run_id=row[2],
+                    hang_s=round((now - row[3]).total_seconds(), 3),
+                )
+                for row in rows
+            ]
+
+    async def find_approval_timeouts(
+        self,
+        *,
+        older_than_s: float,
+        now: datetime | None = None,
+        tenant_id: uuid.UUID | None = None,
+        limit: int = _ORPHAN_SWEEP_BATCH,
+    ) -> list[WorkerClaim]:
+        """审批挂起 SLA 超时探测（W2-2b）：task=running 且活跃 Run waiting_tool、挂起超 SLA。
+
+        挂起判据 = ``now - runs.updated_at ≥ older_than_s``（wait_external 落行即起表；
+        等待期内无行更新即单调增长）。**只探测不裁决**：消费面（task_worker
+._expire_approval）再核 task.payload.approval_pending 锚点（run_id 全等）——工作流族
+        waiting_tool（X16 审批节点/断点，无内核锚点）与已裁决（approve→running）行不在
+        拒绝面。返回按挂起最久优先；``now`` 可注入时钟（测试确定性）。
+        """
+        now = now or _utcnow()
+        if now.tzinfo is None:
+            now = now.replace(tzinfo=UTC)
+        cutoff = now - timedelta(seconds=older_than_s)
+        async with self._session_factory() as db:
+            stmt = (
+                select(TaskORM.tenant_id, TaskORM.id, RunORM.id, RunORM.updated_at)
+                .join(RunORM, RunORM.id == TaskORM.active_run_id)
+                .where(
+                    TaskORM.status == "running",
+                    RunORM.status == "waiting_tool",
+                    RunORM.updated_at < cutoff,
+                )
+                .order_by(RunORM.updated_at, RunORM.id)
+                .limit(limit)
+            )
+            if tenant_id is not None:
+                stmt = stmt.where(TaskORM.tenant_id == tenant_id)
+            rows = (await db.execute(stmt)).all()
+            return [
+                WorkerClaim(
+                    kind="approval_timeout",
                     tenant_id=row[0],
                     task_id=row[1],
                     run_id=row[2],

@@ -183,6 +183,18 @@ class Settings(BaseSettings):
     # 显式构造参数优先（ExecutionStage 直传通道），未传运行期读这里（D2 纪律同上）。
     kernel_usage_floor_ratio: float = Field(default=0.5, gt=0.0, le=1.0)
 
+    # W2-2b 审批挂起语义（2026-10-07 批；docs/api/对账-对话执行事件后端提案 W2-2b +
+    # 11 篇 §6.2）：审批面步（externalWrite/code）缺回执时**挂起等待裁决**——步停
+    # waiting_approval（04 §3 合法在途态）、run 经结算落 waiting_tool（H-0b 核验链
+    # 要求的态），批准→resume 携票重放；kernel_approval_sla_minutes=挂起 SLA，
+    # 超时由 task worker 默认拒绝（fail-closed，B5 同码 2001；11 篇 §6.2
+    # action_confirm 初值 30min）。
+    # kernel_approval_suspend=False=回退旧行为（emit pending → 立即 FAILED 默认拒绝，
+    # 2026-10-07 前语义）；两值均经统一配置层（OA_KERNEL_APPROVAL_SUSPEND /
+    # OA_KERNEL_APPROVAL_SLA_MINUTES 覆盖）。
+    kernel_approval_suspend: bool = True
+    kernel_approval_sla_minutes: float = Field(default=30.0, gt=0)
+
     # M4.5-A 运行中输入面（docs/Agent/12-M4.5运行中输入面与模型韧性设计（主仓本地）§1.1/§1.2）：
     # kernel_inbox_max_per_run=KernelInbox 每 Run 待处理条目容量上限（三队列合计；
     # 超限 4203 INBOX_CAPACITY 结构化拒绝）；estop_ttl_seconds=紧急停止键 TTL（§1.2 定稿 24h）。

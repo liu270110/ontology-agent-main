@@ -14,7 +14,7 @@ import inspect
 import logging
 import uuid
 from collections.abc import AsyncIterator, Awaitable, Callable
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Annotated, Any, Protocol
 
 from fastapi import APIRouter, Depends, Query, Request, status
@@ -48,7 +48,7 @@ from services.agent.api.schemas.session import (
 from services.agent.business.chat_events import ChatCommand, ChatEvent, ChatOutcome, wire_data
 from services.agent.business.chat_group import stream_group_turn
 from services.agent.business.chat_orchestrator import build_chat_orchestrator
-from services.agent.business.exec_events import EXEC_PERSISTED_EVENTS, THINKING_PERSISTED_EVENTS
+from services.agent.business.exec_events import EXEC_EVENT_PERSIST_RULES
 from services.agent.domain.model.agent import AgentError
 from services.agent.domain.model.kernel_context import KernelEvent
 from services.agent.domain.model.session import MemberRole, Message, RoutingMode, SessionError, SessionStatus
@@ -239,6 +239,10 @@ def build_kernel_ledger_sink_factory(
                                 "param_hash": data.get("param_hash"),
                                 "action_iri": data.get("action_iri"),
                                 "execution_mode": data.get("execution_mode"),
+                                # W2-2b：挂起时刻（锚点行到达投影面的当下）——审批 SLA 起算
+                                # 参照与 pending 视图 waiting_since 投影（approval_service
+                                # 同键消费）；worker 侧 SLA 判据权威=runs.updated_at。
+                                "waiting_since": (event.occurred_at or datetime.now(tz=UTC)).isoformat(),
                             },
                         }
                         await tx.tasks.save(task)
@@ -292,33 +296,37 @@ def build_llm_event_emitter_factory(
 def build_exec_event_dual_write(
     uow: AsyncUnitOfWork, tenant_id: uuid.UUID
 ) -> Callable[[uuid.UUID, ChatEvent], Awaitable[None]]:
-    """40 篇 R2 双写钩子工厂（组合根，2026-10-04）：SSE 内联主路径执行结构事件 → task_events。
+    """40 篇 R2 双写钩子工厂（组合根，2026-10-04）：SSE 内联主路径回放关键事件 → task_events。
 
     现网用户聊天主路径事件只 hub.publish 不落 task_events（落库仅 task_worker 路径）——
-    本钩子为执行结构波（40 篇 §4.1）补回放根（40 篇 §4.5：否则「断线重连回放可重建」
-    验收不成立）。纪律：
-    - SUBRUN_UPDATED 设计为纯实时心跳**不落库**（EXEC_PERSISTED_EVENTS 之外，40 篇 §4.1
-      控回放窗口挤占），钩子内守卫直接跳过（含 SUBRUN_UPDATED 之外的任何非回放根事件）；
+    本钩子为回放关键事件补回放根（40 篇 §4.5：否则「断线重连回放可重建」验收不成立）。
+    纪律：
+    - 落库与否与 replay_root 一律从 EXEC_EVENT_PERSIST_RULES 统一规则表取（W2 复核残留③
+      2026-10-07 两执行路径单源收口，task_worker 落库路径同源同表）：表外事件直接跳过
+      （主干波/SUBRUN_UPDATED 心跳/THINKING_CONTENT 增量，40 篇 §4.1 控回放窗口挤占）；
+    - APPROVAL_REQUIRED 已收编入表（W2-2b 后=run 挂起事实，run 落 waiting_tool 无终态
+      事件收尾——必须落库可回放，断线重连经 task_events 回放还原挂起审批卡）；
     - 思考流（02 协议 THINKING_* 注记，reasoning 透传批 2026-10-07）：THINKING_START/END
-      落 task_events 账本（THINKING_PERSISTED_EVENTS），THINKING_CONTENT 纯实时不落库
-      （增量体量大、回放非必需——SUBRUN_UPDATED 同款豁免）；
-    - 落库走 R11 串行化+SAVEPOINT 重试（append_event replay_root=True，回放根不可吞——
-      重试耗尽上抛中断本连接流，运行侧经取消清单收敛，防半截回放）；
+      落 task_events 账本（表内回放根），THINKING_CONTENT 纯实时不落库（增量体量大、
+      回放非必需——SUBRUN_UPDATED 同款豁免）；
+    - 落库走 R11 串行化+SAVEPOINT 重试（表值恒 True=回放根不可吞——重试耗尽上抛中断本
+      连接流，运行侧经取消清单收敛，防半截回放）；
     - data=wire_data(event)（trace_id 只补缺，wire payload 与回放行同源一致）；
     - kernel.* 账本投影（build_kernel_ledger_sink_factory）与本钩子并存不互替：前者=
       内核审计流（event_type=kernel.*，全部锚点），后者=回放协议流（event_type=事件名，
-      仅执行结构事件，40 篇 §3.1）。
+      仅回放关键事件，40 篇 §3.1）。
     本函数是编排器事件流（业务层）与 UoW 之间的注入边界——同 build_kernel_ledger_sink_factory。
     """
 
     async def dual_write(task_id: uuid.UUID, event: ChatEvent) -> None:
-        if event.name not in EXEC_PERSISTED_EVENTS and event.name not in THINKING_PERSISTED_EVENTS:
-            return  # 非回放根事件（主干波/SUBRUN_UPDATED 心跳/THINKING_CONTENT 增量）不落库
+        root = EXEC_EVENT_PERSIST_RULES.get(event.name)
+        if root is None:
+            return  # 规则表外（主干波/SUBRUN_UPDATED 心跳/THINKING_CONTENT 增量）不落库
         async with uow.for_tenant(tenant_id) as tx:
             await tx.tasks.append_event(
                 task_id,
                 TaskEvent(task_id=task_id, event_type=event.name.value, data=wire_data(event)),
-                replay_root=True,
+                replay_root=root,  # 规则表单源（禁硬编码；表值恒 True=R11 回放根不可吞）
             )
 
     return dual_write
@@ -1075,11 +1083,16 @@ def build_chat_result_sink(uow: AsyncUnitOfWork) -> Callable[[ChatOutcome], Awai
                     ),
                 )
             finished = outcome.error_code is None
+            # W2-2b：审批挂起终局（waiting_tool 且无错误）既非 finished 亦非 error——
+            # 落 run.waiting 行（时间线可回放挂起点；run/task 行回写走 finalize 的
+            # wait_external 分支）。既有二态（run.finished/run.error）不变。
+            waiting = finished and outcome.status == RunStatus.WAITING_TOOL.value
+            event_type = "run.error" if not finished else ("run.waiting" if waiting else "run.finished")
             await tx.tasks.append_event(
                 outcome.task_id,
                 TaskEvent(
                     task_id=outcome.task_id,
-                    event_type="run.finished" if finished else "run.error",
+                    event_type=event_type,
                     data={
                         "run_id": str(outcome.run_id),
                         "status": outcome.status,

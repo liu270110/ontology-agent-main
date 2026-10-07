@@ -510,6 +510,42 @@ async def test_双写钩子_串行追加seq连续_R11重试路径可用(pg_env) 
     assert [(r.event_type, r.seq) for r in rows] == [("SUBRUN_STARTED", 1), ("SUBRUN_FINISHED", 2)]
 
 
+async def test_双写钩子_APPROVAL_REQUIRED落库_回放通道自动带出(pg_env) -> None:
+    """W2 复核残留③：APPROVAL_REQUIRED（W2-2b run 挂起事实）经双写钩子落 task_events。
+
+    此前 SSE 钩子守卫直接 return 不落库（worker 路径才落）——两路径口径分裂；收编入
+    EXEC_EVENT_PERSIST_RULES 后钩子落库且为回放根。回放完整性：GET /tasks/{id}/events
+    取数口=tx.tasks.list_events（无事件类型过滤），落库行自动随回放带出——断线重连
+    可还原挂起审批卡（waiting_since 供 30min SLA 倒计时续算，02 协议行 67）。
+    """
+    uow, factory = pg_env
+    tenant_id, task_id = await _seed_task(pg_env)
+    dual_write = build_exec_event_dual_write(uow, tenant_id)
+    required = _translator().translate(
+        _kernel_event(
+            KERNEL_APPROVAL_PENDING,
+            {
+                "step_seq": 1,
+                "param_hash": _APPROVAL_HASH,
+                "action_iri": "http://ontology.example/action/external_write",
+                "execution_mode": "external_write",
+            },
+        )
+    )
+    assert required is not None and required.name is ChatEventName.APPROVAL_REQUIRED
+    await dual_write(task_id, required)
+
+    async with uow.for_tenant(tenant_id) as tx:
+        rows = await tx.tasks.list_events(task_id)  # 回放通道取数口（tasks.py list_task_events 同源）
+    replay = [r for r in rows if r.event_type == "APPROVAL_REQUIRED"]
+    assert len(replay) == 1  # 落库即自动带出（回放侧零过滤、零补丁）
+    row = replay[0]
+    assert row.data["param_hash"] == _APPROVAL_HASH and row.data["step_seq"] == 1
+    assert row.data["task_id"] == str(TASK_ID) and row.data["run_id"] == str(RUN_ID)
+    assert row.data["waiting_since"]  # SLA 倒计时权威起点随行（02 协议行 67）
+    ApprovalRequiredPayload.model_validate(row.data)  # 回放行载荷过模型校验（形状冻结）
+
+
 def test_chat_command_task_type缺省chat() -> None:
     """40 篇 §4.2：ChatCommand.task_type 透传通道存在，缺省 chat（向后兼容）。"""
     command = ChatCommand(

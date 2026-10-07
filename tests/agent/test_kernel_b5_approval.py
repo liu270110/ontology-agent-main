@@ -1,7 +1,14 @@
 # tests/agent/test_kernel_b5_approval.py
-"""B5 审批路由负向测试（02 §2 B5）：参数哈希绑定、waiting_approval 支、超时默认拒绝。"""
+"""B5 审批路由负向测试（02 §2 B5）：参数哈希绑定、waiting_approval 支、超时默认拒绝。
+
+W2-2b（2026-10-07）：缺回执缺省行为改为**挂起等待裁决**（run 落 waiting_tool，见
+test_approval_suspend.py）；本文件断言的「立即 FAILED 默认拒绝」语义经
+``kernel_approval_suspend=False`` 显式钉住（=开关关回退面，行为与 2026-10-07 前逐字一致）。
+"""
 
 from __future__ import annotations
+
+import pytest
 
 from services.agent.business.kernel.budget import Budget
 from services.agent.business.kernel.gate_baseline import canonical_param_hash
@@ -21,11 +28,21 @@ from tests.agent.conftest import (
 )
 
 
+def _patch_suspend_off(monkeypatch: pytest.MonkeyPatch) -> None:
+    """钉 W2-2b 开关为关（默认拒绝语义回归面）：loop 与 execution 消费命名空间同源替换。"""
+    from services.platform.config import Settings
+
+    fake = Settings(kernel_approval_suspend=False)
+    monkeypatch.setattr("services.agent.business.kernel.loop.get_settings", lambda: fake)
+    monkeypatch.setattr("services.agent.business.kernel.execution.get_settings", lambda: fake)
+
+
 def _write_step() -> object:
     return make_step(seq=1, action_iri=WRITE_ACTION_IRI, mode=ExecutionMode.EXTERNAL_WRITE)
 
 
-async def test_external_write缺审批回执_waiting_approval后默认拒绝():
+async def test_external_write缺审批回执_waiting_approval后默认拒绝(monkeypatch: pytest.MonkeyPatch) -> None:
+    _patch_suspend_off(monkeypatch)
     tool = FakeTool(action_iri=WRITE_ACTION_IRI)
     planner = FakePlanner(make_candidate((_write_step(),)))  # type: ignore[arg-type]
     kernel = AgentKernel(make_tool_dispatcher(tool, register_planning_strategy=(planner,)))
@@ -41,8 +58,9 @@ async def test_external_write缺审批回执_waiting_approval后默认拒绝():
     assert any(s.status == StepStatus.WAITING_APPROVAL for s in ledger.steps)
 
 
-async def test_审批回执参数哈希绑定_换参重放视同未获审批_默认拒绝():
+async def test_审批回执参数哈希绑定_换参重放视同未获审批_默认拒绝(monkeypatch: pytest.MonkeyPatch) -> None:
     """持旧回执换新参数重放：参数哈希不匹配 ⇒ 内核不认该回执，走 waiting_approval→默认拒绝。"""
+    _patch_suspend_off(monkeypatch)
     tool = FakeTool(action_iri=WRITE_ACTION_IRI)
     planner = FakePlanner(
         make_candidate(

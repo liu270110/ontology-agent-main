@@ -39,9 +39,9 @@ from typing import Any, Protocol
 
 from services.agent.business.chat_events import ChatCommand, ChatEventName, ChatOutcome, wire_data
 from services.agent.business.exec_events import (
-    EXEC_PERSISTED_EVENTS,
     EXEC_REALTIME_ONLY_EVENTS,
     THINKING_REALTIME_ONLY_EVENTS,
+    is_replay_root_event,
 )
 from services.agent.business.resume_repair import plan_interrupted_closures
 from services.agent.domain.model.kernel_actions import ApprovalTicket
@@ -58,6 +58,50 @@ _WORKFLOW_TASK_TYPES = ("workflow_run", "workflow_test")  # X16 工作流分派�
 _STEP_VALIDATED_EVENT = "kernel.step_validated"
 _CONTINUATION_MAX_STEPS = 20  # 注记锚点上限（防超长上下文；超出截断留可观测）
 _REPAIR_PAGE_SIZE = 500  # 孤儿修复投影回放页长（对齐既有 limit=500 口径；after_seq 游标续页取全量）
+
+# W2-2b 审批超时步闭合的幂等守卫键（04 §3 步终态投影行；resume_repair._STEP_TERMINAL_EVENTS 同口径）
+_STEP_TERMINAL_EVENT_TYPES = frozenset({"kernel.step_validated", "kernel.step_failed", "kernel.approval_denied"})
+
+
+def _approval_timeout_step_closures(
+    *, task_id: uuid.UUID, step_seq: int, action_iri: Any, consistency: dict[str, Any]
+) -> list[TaskEvent]:
+    """审批超时的步 FAILED 合成闭合行（resume_repair 载荷形态同源，零 IO 纯函数）。
+
+    挂起结算已发 kernel.settled（Run 级收敛行），plan_interrupted_closures 据此把已扫描
+    步判 settled 不再合成——「挂起后超时」的在途步闭合由超时处理内联合成（本函数），
+    resume_repair 的孤儿回收语义保持不变（settled=优雅收敛口径不被改写）。
+    """
+    return [
+        TaskEvent(
+            task_id=task_id,
+            event_type="kernel.interrupted",
+            data={
+                "step_seq": step_seq,
+                "action_iri": action_iri,
+                "status": "failed",
+                "reason": "approval_timeout",
+                "residuals": [],
+                "reason_code": int(ErrorCode.SCOPE_INSUFFICIENT),
+                "interrupted": True,
+                **consistency,
+            },
+        ),
+        TaskEvent(
+            task_id=task_id,
+            event_type="kernel.step_failed",
+            data={
+                "step_seq": step_seq,
+                "action_iri": action_iri,
+                "trust_level": None,  # 无工具产出（挂起步从未执行，B5 不变式）
+                "claimed_trust_level": None,
+                "stage": "execution",
+                "interrupted": True,
+                "reason": "approval_timeout",
+                **consistency,
+            },
+        ),
+    ]
 
 
 def _utcnow() -> datetime:
@@ -128,6 +172,8 @@ class TaskRunWorker:
         poll_interval_s: float = 1.0,
         orphan_sweep_interval_s: float | None = None,  # None=取 Settings（组合根未传时的回填）
         orphan_running_timeout_s: float | None = None,
+        approval_suspend: bool | None = None,  # W2-2b：审批挂起开关（None=取 Settings）
+        approval_sla_s: float | None = None,  # W2-2b：审批 SLA 秒（None=取 Settings.sla_minutes×60）
         rng: Callable[[], float] = random.random,
         estop_store: Any | None = None,  # M4.5-A：EStopStore（None=不做 estop 前检，直跑形态）
         event_publisher: Callable[[uuid.UUID, str, dict[str, Any]], Awaitable[None]] | None = None,
@@ -137,7 +183,12 @@ class TaskRunWorker:
             from services.agent.domain.model.task import RunRetryPolicy
 
             policy = RunRetryPolicy()
-        if orphan_sweep_interval_s is None or orphan_running_timeout_s is None:
+        if (
+            orphan_sweep_interval_s is None
+            or orphan_running_timeout_s is None
+            or approval_suspend is None
+            or approval_sla_s is None
+        ):
             # 惰性取平台配置（chat_orchestrator 同款先例）：组合根不必显式接线即吃 OA_* 覆盖
             from services.platform.config import get_settings
 
@@ -148,6 +199,10 @@ class TaskRunWorker:
             orphan_running_timeout_s = (
                 settings.task_orphan_running_timeout_s if orphan_running_timeout_s is None else orphan_running_timeout_s
             )
+            approval_suspend = settings.kernel_approval_suspend if approval_suspend is None else approval_suspend
+            approval_sla_s = (
+                settings.kernel_approval_sla_minutes * 60.0 if approval_sla_s is None else approval_sla_s
+            )
         self._uow = uow
         self._poller = poller
         self._orchestrator_provider = orchestrator_provider
@@ -155,6 +210,8 @@ class TaskRunWorker:
         self._poll_interval_s = poll_interval_s
         self._orphan_sweep_interval_s = float(orphan_sweep_interval_s)
         self._orphan_running_timeout_s = float(orphan_running_timeout_s)
+        self._approval_suspend_enabled = bool(approval_suspend)  # W2-2b：False=不扫超时面（回退现状）
+        self._approval_sla_s = float(approval_sla_s)
         self._rng = rng
         self._estop_store = estop_store  # M4.5-A：submit 前 estop 前检（§1.2 生效点①）
         # 2026-10-05 修复：异步 202 路径实时推送——worker 消费的事件同步转发会话 SSE hub
@@ -215,11 +272,17 @@ class TaskRunWorker:
 
     # ── 孤儿回收 sweep（H-0c ①）──────────────────────────────────────────
     async def sweep_once(self) -> int:
-        """孤儿 running Run 回收一轮：悬挂超阈值 → run.fail(5006) + 审计行 + 重试衔接。
+        """孤儿 running Run + 审批 SLA 超时（W2-2b）回收一轮：fail 路径 + 审计行 + 衔接。
 
-        幂等护栏在 ``_recover_orphan``（状态机为准：run 非 running / task 非 RUNNING
-        即跳过）；单个回收失败 fail-soft 不影响同批其余项。返回本轮回收数。
+        幂等护栏在 ``_recover_orphan``/``_expire_approval``（状态机为准：run 态不符即
+        跳过）；单个回收失败 fail-soft 不影响同批其余项。返回本轮回收数。
         """
+        recovered = await self._sweep_orphans()
+        recovered += await self._sweep_approval_timeouts()
+        return recovered
+
+    async def _sweep_orphans(self) -> int:
+        """孤儿 running Run 回收一轮（H-0c ①既有面，原 sweep_once 本体）。"""
         finder = getattr(self._poller, "find_orphans", None)
         if finder is None:  # 轮询器未提供孤儿探测面（测试桩/旧形态）：no-op
             return 0
@@ -240,6 +303,172 @@ class TaskRunWorker:
                 self._orphan_running_timeout_s,
             )
         return recovered
+
+    async def _sweep_approval_timeouts(self) -> int:
+        """审批挂起 SLA 超时默认拒绝一轮（W2-2b；11 篇 §6.2 action_confirm fail-closed）。
+
+        开关关（kernel_approval_suspend=False）=不扫（回退现状：无挂起态产生，本面恒空）；
+        轮询器未提供探测面（测试桩/旧形态）=no-op。幂等裁决在 ``_expire_approval``。
+        """
+        if not self._approval_suspend_enabled:
+            return 0
+        finder = getattr(self._poller, "find_approval_timeouts", None)
+        if finder is None:
+            return 0
+        claims = await finder(older_than_s=self._approval_sla_s)
+        expired = 0
+        for claim in claims:
+            if claim.kind != "approval_timeout":
+                continue
+            try:
+                if await self._expire_approval(claim):
+                    expired += 1
+            except Exception:  # noqa: BLE001 ——fail-soft：单项失败不拖累整批（下轮重扫）
+                logger.exception("task worker 审批超时拒绝失败（run=%s，跳过，下轮重扫）", claim.run_id)
+        if expired:
+            logger.warning(
+                "审批挂起 SLA 超时默认拒绝：%d 个（sla=%ss，B5 fail-closed，W2-2b）", expired, self._approval_sla_s
+            )
+        return expired
+
+    async def _expire_approval(self, claim: Any) -> bool:
+        """单笔审批 SLA 超时默认拒绝：复刻 approval_service.decide **reject 分支落账形态**
+        （run.cancel + error 2001 + task.fail + 锚点消费），另加超时专属留痕。
+
+        为何不复用 decide()：decide 是「人工裁决」通道——必须携审批人、成功路径发
+        APPROVAL_RESOLVED/评审单联动/K19 回流，且 param_hash 需调用方传入；超时是
+        系统裁决（无审批人、无 wire 裁决波），独立最小函数同构其 reject 语义（B5
+        默认拒绝同码 2001，04 §3 waiting_tool 唯一合法失败出口=cancel）。
+
+        落账次序（B-② 「先修复账本、后落终态」纪律，同 _recover_orphan）：
+        步 FAILED 合成闭合（kernel.interrupted + kernel.step_failed，对齐 resume_repair
+        载荷形态——挂起结算已发 kernel.settled，plan_interrupted_closures 的「settled=
+        已收敛」判定对挂起后超时不适用，故在处理内联合成并自带终态行幂等守卫）→
+        run.cancel + 审计行 kernel.approval_timeout + run.error 行（RUN_ERROR 恢复终态）
+        → 锚点消费（decide 同口径）。护栏：task 非 RUNNING / 活跃指针不符 / run 非
+        waiting_tool（已裁决）/ 无本 Run 锚点（X16 工作流合法等待不误杀）→ 幂等跳过。
+        """
+        async with self._uow.for_tenant(claim.tenant_id) as tx:
+            task = await tx.tasks.get(claim.task_id)
+            if task is None or task.status is not TaskStatus.RUNNING or task.active_run_id != claim.run_id:
+                return False  # 已终局/被替换：跳过（状态机为准）
+            run = next((r for r in task.runs if r.id == claim.run_id), None)
+            if run is None or run.status is not RunStatus.WAITING_TOOL:
+                return False  # 已裁决（approve→running / reject→cancelled）或非挂起态：幂等跳过
+            anchor = (task.payload or {}).get("approval_pending")
+            if not isinstance(anchor, dict) or str(anchor.get("run_id")) != str(claim.run_id):
+                return False  # 无本 Run 内核审批锚点（X16 工作流审批节点/断点等待）：不在本面
+            rows = await self._load_all_events(tx, claim.task_id)
+            pending = next(
+                (
+                    r
+                    for r in rows
+                    if r.event_type == "kernel.approval_pending" and (r.data or {}).get("run_id") == str(claim.run_id)
+                ),
+                None,
+            )
+            if pending is None:
+                return False  # 投影行缺失（异常态）：保守不动，终态裁决归审批面
+            waiting_s = float(getattr(claim, "hang_s", 0.0) or 0.0)
+            consistency = {
+                "run_id": str(claim.run_id),
+                "trace_id": (pending.data or {}).get("trace_id"),  # 回声投影行 trace（resume_repair 同款）
+                "tenant_id": str(claim.tenant_id),
+            }
+            anchor_seq = anchor.get("step_seq")
+            has_terminal = any(
+                r.event_type in _STEP_TERMINAL_EVENT_TYPES
+                and (r.data or {}).get("step_seq") == anchor_seq
+                and (r.data or {}).get("run_id") == str(claim.run_id)
+                for r in rows
+            )
+            if isinstance(anchor_seq, int) and not has_terminal:  # 步 FAILED 合成闭合（幂等：有终态行不重复）
+                for row in _approval_timeout_step_closures(
+                    task_id=task.id,
+                    step_seq=anchor_seq,
+                    action_iri=anchor.get("action_iri"),
+                    consistency=consistency,
+                ):
+                    await tx.tasks.append_event(task.id, row)
+            reason = f"审批超时默认拒绝（B5 fail-closed，SLA {self._approval_sla_s / 60:.0f}min，W2-2b）"
+            run.cancel()  # waiting_tool→cancelled（04 §3 唯一合法失败出口；reject 分支同型）
+            run.error = {
+                "code": int(ErrorCode.SCOPE_INSUFFICIENT),
+                "message": reason,
+                "retryable": False,
+            }
+            task.fail()  # running→failed（04 §3；超时拒绝不可重试）
+            payload = dict(task.payload or {})
+            payload.pop("approval_pending", None)  # 锚点消费（裁决即收敛，decide 同口径）
+            task.payload = payload
+            await tx.tasks.save(task)
+            await tx.tasks.append_event(
+                task.id,
+                TaskEvent(
+                    task_id=task.id,
+                    event_type="kernel.approval_timeout",
+                    data={
+                        **consistency,
+                        "step_seq": anchor_seq,
+                        "param_hash": anchor.get("param_hash"),
+                        "action_iri": anchor.get("action_iri"),
+                        "execution_mode": anchor.get("execution_mode"),
+                        "waiting_s": waiting_s,
+                        "sla_s": self._approval_sla_s,
+                        "code": int(ErrorCode.SCOPE_INSUFFICIENT),
+                    },
+                ),
+            )
+            await tx.tasks.append_event(
+                task.id,
+                TaskEvent(
+                    task_id=task.id,
+                    event_type="run.error",  # RUN_ERROR 恢复 run 终态（落库行；SSE 事务外推）
+                    data={
+                        "run_id": str(claim.run_id),
+                        "code": int(ErrorCode.SCOPE_INSUFFICIENT),
+                        "message": reason,
+                        "retryable": False,
+                    },
+                ),
+            )
+        await self._publish_sse(
+            task.session_id,
+            "RUN_ERROR",
+            {
+                "run_id": str(claim.run_id),
+                "code": int(ErrorCode.SCOPE_INSUFFICIENT),
+                "message": reason,
+                "retryable": False,
+            },
+        )
+        logger.warning(
+            "task=%s run=%s 审批挂起超时默认拒绝（2001）：waiting=%.0fs ≥ SLA %.0fs，锚点已消费",
+            task.id,
+            claim.run_id,
+            waiting_s,
+            self._approval_sla_s,
+        )
+        return True
+
+    async def _load_all_events(self, tx: Any, task_id: uuid.UUID) -> list[TaskEvent]:
+        """任务级事件全量分页读取（ocr 整改 B-② 义务的履行点，_repair_orphan_projection
+        与审批超时闭合共用）：after_seq 游标续页取全量，防截断窗口漏行；游标未前进兜底终止。"""
+        rows: list[TaskEvent] = []
+        after_seq: int | None = None
+        while True:
+            batch = await tx.tasks.list_events(task_id, after_seq=after_seq, limit=_REPAIR_PAGE_SIZE)
+            if not batch:
+                break
+            rows.extend(batch)
+            tail_seq = batch[-1].seq
+            if len(batch) < _REPAIR_PAGE_SIZE or tail_seq is None or any(r.seq is None for r in batch):
+                break  # 末批不足页长 / 行 seq 缺失：终止分页，按已取回行如实处理
+            nxt = int(tail_seq)
+            if after_seq is not None and nxt <= after_seq:
+                break  # 游标未前进（仓储缺 after_seq 语义的兜底）：防死循环
+            after_seq = nxt
+        return rows
 
     async def _recover_orphan(self, claim: Any) -> bool:
         """单个孤儿 Run 对账回收：聚合 fail 路径 + 审计行；attempt<3 保持 task RUNNING
@@ -319,20 +548,7 @@ class TaskRunWorker:
         构造），传 None 由规划器回声投影行或省略；租户一致性取 claim（行级另有
         for_tenant 事务隔离兜底）。
         """
-        rows: list[TaskEvent] = []
-        after_seq: int | None = None
-        while True:
-            batch = await tx.tasks.list_events(claim.task_id, after_seq=after_seq, limit=_REPAIR_PAGE_SIZE)
-            if not batch:
-                break
-            rows.extend(batch)
-            tail_seq = batch[-1].seq
-            if len(batch) < _REPAIR_PAGE_SIZE or tail_seq is None or any(r.seq is None for r in batch):
-                break  # 末批不足页长 / 行 seq 缺失：终止分页，按已取回行如实处理
-            nxt = int(tail_seq)
-            if after_seq is not None and nxt <= after_seq:
-                break  # 游标未前进（仓储缺 after_seq 语义的兜底）：防死循环
-            after_seq = nxt
+        rows = await self._load_all_events(tx, claim.task_id)  # 任务级全量（B-② 输入契约）
         synthetic = plan_interrupted_closures(
             rows,
             run_id=claim.run_id,
@@ -722,7 +938,9 @@ class TaskRunWorker:
         SUBRUN_UPDATED 心跳纯实时不落库（40 篇 §4.1，控回放窗口挤占；SSE 双写钩子同口径）；
         THINKING_CONTENT 思考增量同款豁免（02 协议 THINKING_* 注记：增量体量大、回放非必
         需），THINKING_START/END 落账本；
-        执行结构事件按回放根重试追加（R11 replay_root=True，失败仍按本路径既有口径转义留痕）。
+        replay_root 从 EXEC_EVENT_PERSIST_RULES 统一规则表取（W2 复核残留③ 2026-10-07 两
+        路径单源：执行结构/APPROVAL_REQUIRED 挂起事实/思考块边界=回放根，R11 SAVEPOINT
+        重试；主干波表外恒 False），SSE 双写钩子同表同源——同一事件两路径落库同形；
         落库失败结构化转义留痕不阻断执行（审计不阻塞主流程，02 §3 ⑥ 纪律）。
         全部事件（含终态与心跳）经 _publish_sse 同步转发会话 hub——202 受理形态下订阅者
         唯一实时通道（2026-10-05 修复：此前只落库不推送，订阅者零帧）。
@@ -753,7 +971,7 @@ class TaskRunWorker:
                     await tx.tasks.append_event(
                         command.task_id,
                         TaskEvent(task_id=command.task_id, event_type=event.name.value, data=payload),
-                        replay_root=event.name in EXEC_PERSISTED_EVENTS,  # 执行结构=回放根（R11 重试）
+                        replay_root=is_replay_root_event(event.name),  # 规则表单源（W2 残留③两路径同表）
                     )
             except Exception as exc:  # 事件留痕失败不阻断执行（转义留痕，standards/01 §2.6）
                 logger.warning("task worker 事件落库失败（run=%s type=%s）: %s", command.run_id, event.name, exc)
@@ -794,7 +1012,7 @@ class TaskRunWorker:
                     await tx.tasks.append_event(
                         task_id,
                         TaskEvent(task_id=task_id, event_type=event.name.value, data=payload),
-                        replay_root=event.name in EXEC_PERSISTED_EVENTS,  # WORKFLOW_NODE_*=回放根（40 篇 §3.1）
+                        replay_root=is_replay_root_event(event.name),  # 规则表单源（WORKFLOW_NODE_* 表内=回放根）
                     )
             except Exception as exc:  # 事件留痕失败不阻断执行（转义留痕，standards/01 §2.6）
                 logger.warning("task worker 工作流事件落库失败（run=%s type=%s）: %s", run_id, event.name, exc)
@@ -881,9 +1099,18 @@ def finalize_outcome_on_task(task: Any, outcome: ChatOutcome) -> None:
 
     - 成功：run.complete(usage) + task.succeed()；
     - 失败：run.fail/timeout（error 结构化）；task 侧——**retryable 且 attempt<3 保持
-      RUNNING**（04 §3：重试期间不落 failed，监督者将继续），否则 task.fail()。
+      RUNNING**（04 §3：重试期间不落 failed，监督者将继续），否则 task.fail()；
+    - 审批挂起（W2-2b）：status=waiting_tool 且无错误 → run.wait_external()
+      （running→waiting_tool，approval_service 核验链要求的态）+ **task 保持 RUNNING**
+      （合法长等：不入重试监督、不落终态；恢复=approve→run.start()，04 §3）。
     """
     run = next((r for r in task.runs if r.id == outcome.run_id), None)
+    if outcome.status == RunStatus.WAITING_TOOL.value and outcome.error_code is None:
+        if run is not None and run.is_active:
+            if run.status is RunStatus.QUEUED:
+                run.start()  # 内联受理未认领形态：补认领再入等待（与完成路径同守卫）
+            run.wait_external()  # running→waiting_tool（04 §3；X16 工作流同款承载）
+        return
     if run is not None and run.is_active:
         if run.status is RunStatus.QUEUED:
             run.start()  # 内联 SSE 路径受理即执行：queued→running 补认领（防 worker 重复认领）

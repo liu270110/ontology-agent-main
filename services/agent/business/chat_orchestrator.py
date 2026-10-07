@@ -367,6 +367,12 @@ class ChatOrchestrator:
         control_probe: Callable[[], str | None] | None = None
         if self._run_registry is not None:
             inbox = KernelInbox()
+            # K26-c release 挂点（docs/Agent/13 §32）：fresh 箱 release_stale 为空转——
+            # v1 无跨 Run inbox 传递（旧 Run 终态即注销、resume 链仅携 resumed_validated
+            # 锚点不带旧 inbox），跨 Run 遗弃语义登记 M5+；本调用=durable ingress 对账口的
+            # 结构化落位：恢复链可持有旧 inbox 引用时对其实调（claimed 未 complete 重投回
+            # pending 可再 claim），重投不双份由 K26-a submit 去重保证。
+            inbox.release_stale()
             control_probe = self._estop_probe_factory(command.tenant_id) if self._estop_probe_factory else None
             self._run_registry.register(command.run_id, inbox=inbox, control_probe=control_probe)
         try:

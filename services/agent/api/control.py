@@ -92,6 +92,9 @@ async def submit_run_inbox(
     409+4105=Run 不在本进程（终态已注销/他副本执行/与该会话活跃 Run 不符）；
     429+4203=收件箱容量超限（每 Run 待处理上限，Settings.kernel_inbox_max_per_run）。
     受理即发布 INBOX_SPLICED 回执（用户可见；hub 未装配仅记日志不阻断）。
+    K26-a 幂等透传：同 dedupe_key（source+sha256(text)，12 篇 A 批口径）重投命中即
+    原样回执原 seq（202 同型回执，无 409——幂等不是冲突）；INBOX_SPLICED SSE 回执按
+    seq 可重复发布，消费方按 seq 幂等处理。
     """
     req = _require_request(request, "运行注册表")
     async with uow.for_tenant(principal.tenant_id) as tx:

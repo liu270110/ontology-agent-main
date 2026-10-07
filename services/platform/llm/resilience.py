@@ -139,11 +139,12 @@ class FailoverModelPort:
         system: str,
         user: str,
         json_schema: dict[str, Any],
-        timeout_s: float = 60.0,
+        timeout_s: float | None = None,
         trace_id: str | None = None,
         num_ctx: int | None = None,
     ) -> dict[str, Any]:
-        """结构化补全（重试/降级面）：每次尝试经韧性选择后透传 inner（审计在 inner 内逐尝试落）。"""
+        """结构化补全（重试/降级面）：每次尝试经韧性选择后透传 inner（审计在 inner 内逐尝试落；
+        None=构造期默认，组合实验批对齐 model_port 协议 docstring 语义）。"""
 
         async def call(port: ModelPort) -> dict[str, Any]:
             return await port.complete_structured(

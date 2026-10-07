@@ -248,7 +248,7 @@ class OpenAICompatibleModelPort:
         system: str,
         user: str,
         json_schema: dict,
-        timeout_s: float = 60.0,
+        timeout_s: float | None = None,
         trace_id: str | None = None,
         num_ctx: int | None = None,
     ) -> dict:
@@ -257,6 +257,10 @@ class OpenAICompatibleModelPort:
         num_ctx：上下文窗口注入参数（可选，向后兼容）——Ollama/vLLM 语义的 num_ctx 原样透传，
         OpenAI 官方端点不识别该字段时由服务端忽略（api/01 §6 无此参数的登记，属透传扩展）。
         调用后回填用量上下文（prompt/completion/cache-read tokens），供 llm_calls 审计消费。
+
+        超时口径（2026-10-08 组合实验批收口）：与 complete/streaming 同约定 ``None=构造期默认``
+        （model_port 协议 docstring 既有语义）——此前形参硬默认 60s 使 OA_LLM_TIMEOUT_S
+        到不了请求面，本地重推理档（docling 两级流水线 × qwen3 思考态）长 chunk 必超时。
         """
         body: dict = {
             "model": self._model,
@@ -269,7 +273,9 @@ class OpenAICompatibleModelPort:
         }
         if num_ctx is not None:
             body["num_ctx"] = num_ctx
-        resp = await self._post_chat_completions(body=body, timeout_s=timeout_s, trace_id=trace_id)
+        resp = await self._post_chat_completions(
+            body=body, timeout_s=self._resolve_timeout(timeout_s), trace_id=trace_id
+        )
         try:
             payload = resp.json()
             content = payload["choices"][0]["message"]["content"]

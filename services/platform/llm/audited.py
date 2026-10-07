@@ -59,10 +59,11 @@ class AuditedModelPort:
         system: str,
         user: str,
         json_schema: dict[str, Any],
-        timeout_s: float = 60.0,
+        timeout_s: float | None = None,
         trace_id: str | None = None,
         num_ctx: int | None = None,
     ) -> dict[str, Any]:
+        """透传面（None=inner 构造期默认，组合实验批对齐 model_port 协议 docstring 语义）。"""
         acquire = getattr(self._budget, "acquire", None) if self._budget is not None else None
         if acquire is not None:
             tenant = tenant_id_ctx.get()

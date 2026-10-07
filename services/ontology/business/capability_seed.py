@@ -405,7 +405,10 @@ def build_action_seed_rows(seed_graph: Graph | None = None) -> list[CapabilitySe
 def build_seed_rows() -> list[CapabilitySeedRow]:
     """A 档 21 项全量（16 工具 + 5 行动；排序=工具序 + 行动 IRI 序，输出确定性）。"""
     rows = [*build_tool_seed_rows(), *build_action_seed_rows()]
-    assert len(rows) == 21, f"A 档清单漂移：期望 21 项，得 {len(rows)}（06 §ONT-2.4 / 03 §2.4）"
+    if len(rows) != 21:  # 计数门禁走 DomainError（不用裸 assert：-O 下被剥除即失效）
+        raise DomainError(
+            f"4204 CAP_SEED_COUNT_DRIFT: A 档清单漂移：期望 21 项，得 {len(rows)}（06 §ONT-2.4 / 03 §2.4）"
+        )
     return rows
 
 
@@ -558,7 +561,6 @@ async def seed_capabilities(
     # published_by 恒 NULL 不写 users FK 列）
     version_created = False
     version_ref = ontology.head_version
-    changeset = ontology.active_changeset
     if version_ref is None or version_ref.checksum != checksum:
         changeset = ontology.open_changeset("能力本体种子（ONT-2 A 档 21 项）")
         changeset.record_gate(True, {"source": "platform_asset", "gate": gate.model_dump()})
@@ -588,7 +590,7 @@ async def seed_capabilities(
                 OntologyVersionORM.version == version_ref.version,
             )
         )
-    ).scalar_one()
+    ).scalar_one_or_none()
     if version_id is None:
         raise DomainError("4201 CAP_VERSION_MISSING: 版本行不存在（append_version 同事务前置失败）")
 

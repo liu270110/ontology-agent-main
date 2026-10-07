@@ -87,6 +87,11 @@ class KernelInbox:
         K26-a 幂等：同 dedupe_key 命中（pending/claimed 活动面或 completed 留痕）即回执
         原 seq——不新增条目、不占容量、不重复落审计；先查重后查容量（重投不因箱满被拒）。
         容量超限 4203 结构化拒绝、空文本契约拒绝。
+
+        跨队列遮蔽后果（K26 复核修 4 点明）：dedupe_key 不含 kind——pending **followup**
+        会遮蔽同 source|text 的 steer/inject 提交（回执引用的是那条永不被 claim_steerable
+        取走的 followup seq，steer 意图本 Run 内不生效）；同文跨通道改道须换 source 或改
+        文本（12 篇 A 批「同文跨通道同为重投」口径的已知取舍）。
         """
         if kind not in ("followup", "steer", "inject"):
             raise KernelContractError(f"inbox kind 非法: {kind!r}（三通道=followup/steer/inject）")

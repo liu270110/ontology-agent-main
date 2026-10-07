@@ -11,7 +11,9 @@
   resumed=true）、EXTERNAL_WRITE 恒不跳、计划变更全量重放 + kernel.resume_mismatch；
 - K26 durable ingress 三态+去重（docs/Agent/13 §32）：claim/complete 两段式生命周期、
   claimed 再 claim 不重复取、同键幂等回执原 seq（不双份/不占容量/不重复落审计）、
-  completed 命中行为、release_stale 重投、内核段边界消费闭环。
+  completed 命中行为、release_stale 重投、内核段边界消费闭环；
+- K26 复核护栏（§32 复核批）：emit 中途失败=零注入+估算账不入账（all-or-nothing）、
+  release 重投恰一份注入块、审计侧 at-least-once（失败 pass 已落账 seq 二次落）。
 """
 
 from __future__ import annotations
@@ -28,7 +30,13 @@ from services.agent.business.kernel.gate_baseline import canonical_param_hash
 from services.agent.business.kernel.inbox import KernelInbox
 from services.agent.business.kernel.loop import AgentKernel
 from services.agent.domain.model.kernel_actions import ApprovalTicket, ToolCall, ToolResult
-from services.agent.domain.model.kernel_context import ExtensionMeta, KernelEvent, TenantContext, TrustLevel
+from services.agent.domain.model.kernel_context import (
+    ContextBlock,
+    ExtensionMeta,
+    KernelEvent,
+    TenantContext,
+    TrustLevel,
+)
 from services.agent.domain.model.kernel_planning import PlanCandidate, PlanStep
 from services.agent.domain.model.step_state import StepStatus
 from services.platform.errors import ErrorCode
@@ -219,6 +227,61 @@ async def test_内核段边界claim_complete闭环_终局后completed命中不�
     assert inbox.pending_count == 0
     # Assert ③：complete 闭环后无 claimed 残留，release_stale 空转
     assert inbox.release_stale() == ()
+
+
+# ── K26 复核护栏：emit 中途失败窗口（复核修 1/修 2 不变量）──────────────────────
+async def test_部分失败护栏_emit中断零注入_估算账不入账_release重投恰一份(monkeypatch):
+    """emit 中途失败=零注入+估算账不入账（all-or-nothing）；release 重投后恰一份注入。
+
+    直调段边界拼接函数而非 run() 全流程：该失败窗口无法从 run() 确定性触达（异常
+    逃逸 run() 且 last_run_context 未回填），而护栏标的正是 _splice_inbox_blocks
+    自身的部分失败不变量（参考段边界用例形态、断言口径与 run() 用例一致）。
+    """
+    # Arrange：2 笔 steerable + 既有组装面基线块；ledger.append_event 在第 2 笔
+    # kernel.inbox_drained 落账后抛异常（模拟 emit 中途失败——失败 pass 已落账 seq 1/2）
+    import time as _time
+
+    from services.agent.business.kernel.compaction import estimate_tokens
+    from services.agent.business.kernel.run_context import RunContext
+
+    kernel = _kernel_with(make_candidate((make_step(seq=1),)), [_SlowTool()])
+    rc = RunContext(make_task(), make_ctx(), Budget(max_tokens=10_000), clock=_time.monotonic, approvals=())
+    baseline = ContextBlock(
+        source="fixture.baseline", content="组装基线", tokens=10, trust_level=TrustLevel.AGENT_ATTESTED
+    )
+    rc.context_blocks = (baseline,)
+    inbox = KernelInbox()
+    inbox.submit("steer", "第一笔", source="u")
+    inbox.submit("steer", "第二笔", source="u")
+    original_append = rc.ledger.append_event
+    armed, drained_seqs = [True], []
+
+    def flaky_append(event: KernelEvent) -> None:
+        original_append(event)
+        if event.event_type == "kernel.inbox_drained":
+            drained_seqs.append(event.data["seq"])
+            if armed[0] and len(drained_seqs) == 2:
+                raise RuntimeError("模拟 emit 中途失败（第 2 项 drained 落账后）")
+
+    monkeypatch.setattr(rc.ledger, "append_event", flaky_append)
+    # Act ①：首次拼接在第 2 项失败 → 异常上抛（由终止路径处置）
+    with pytest.raises(RuntimeError):
+        kernel._splice_inbox_blocks(rc, inbox)
+    # Assert ①：零注入（组装面原样=无部分注入）+ claimed 项留箱 + 估算账零入账（未翻倍）
+    assert rc.context_blocks == (baseline,)
+    assert inbox.pending_count == 2
+    assert inbox.claim_steerable() == ()  # claimed 留箱：不 complete 前不二次投递
+    assert rc.tracker.tokens_effective == 0
+    # Act ②：release_stale 重投（armed 解除=落账恢复）→ 二次拼接成功
+    armed[0] = False
+    assert [i.seq for i in inbox.release_stale()] == [1, 2]
+    kernel._splice_inbox_blocks(rc, inbox)
+    # Assert ②：每笔恰一份注入块（无双份）+ 估算账恰一轮（失败 pass 未预入账、未翻倍）
+    assert [b.content for b in rc.context_blocks if b.source == "user_steer"] == ["第一笔", "第二笔"]
+    assert rc.tracker.tokens_effective == estimate_tokens("第一笔") + estimate_tokens("第二笔")
+    assert inbox.pending_count == 0  # complete 收口
+    # Assert ③：审计侧 at-least-once——失败 pass 已落账的 seq 经重投二次落 kernel.inbox_drained
+    assert drained_seqs == [1, 2, 1, 2]
 
 
 # ── 段边界 steering/inject（§1.1 消费点）─────────────────────────────────────────

@@ -122,6 +122,11 @@ async def _publish_inbox_receipt(
 ) -> None:
     """SSE 回执（INBOX_SPLICED，用户可见）：hub 双形态（同步/协程 publish）同 sessions 先例；
     发布失败只告警不阻断（审计不阻塞主流程，02 §3 ⑥——账本侧 kernel.inbox_spliced 已留痕）。
+
+    K26 复核修 3（口径澄清，行为不动）：dedupe 命中路径（submit 幂等回执原 seq）同样
+    发布本回执——该笔**不新增**账本事件，既有 kernel.inbox_spliced 留痕属**原 submit**
+    受理（不背书本笔重收回执）；回执按 seq 重复发布、消费方按 seq 幂等处理（同
+    submit_run_inbox 契约声明），审计对账以账本事件为准、SSE 回执非凭证。
     """
     hub = getattr(request.app.state, "sse_hub", None)
     if hub is None:

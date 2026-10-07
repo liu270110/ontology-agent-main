@@ -50,11 +50,14 @@ def upgrade() -> None:
     op.execute(
         """
 DO $$
+DECLARE
+    prefixed CONSTANT text := 'ck_ontology_element_versions_ck_ont_elem_versions_element_type';
+    legacy   CONSTANT text := 'ck_ont_elem_versions_element_type';
 BEGIN
-    IF EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'ck_ontology_element_versions_ck_ont_elem_versions_element_type') THEN
-        ALTER TABLE ontology_element_versions DROP CONSTRAINT ck_ontology_element_versions_ck_ont_elem_versions_element_type;
-    ELSIF EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'ck_ont_elem_versions_element_type') THEN
-        ALTER TABLE ontology_element_versions DROP CONSTRAINT ck_ont_elem_versions_element_type;
+    IF EXISTS (SELECT 1 FROM pg_constraint WHERE conname = prefixed) THEN
+        EXECUTE format('ALTER TABLE ontology_element_versions DROP CONSTRAINT %I', prefixed);
+    ELSIF EXISTS (SELECT 1 FROM pg_constraint WHERE conname = legacy) THEN
+        EXECUTE format('ALTER TABLE ontology_element_versions DROP CONSTRAINT %I', legacy);
     END IF;
 END $$;
 """

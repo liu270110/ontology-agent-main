@@ -25,7 +25,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Callable, Sequence
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, Final
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -54,6 +54,28 @@ _MEMORY_STRIP_NOTE = "[记忆上下文已因疑似注入模式剥离 pattern_ids
 _EVIDENCE_STRIP_NOTE = "[检索证据已剔除 {count} 条疑似注入条目 pattern_ids={ids}]"
 
 _INJECTION_BLOCKED_EVENT = "context.injection_blocked"  # task_events.event_type（standards/01 §2.2 口径）
+
+# K31-a L2 命中索引渲染参数（Agent/13 §37；gemini-cli@08 §5 一行指针形态，渲染层仅形态——
+# 排序/top_k/B3 剥离双门控不动）。短句截断上限：正文前 80 字符（一行自足可读，无展开工具
+# 时索引行自带可用信息）；score 档位（确定性阈值，非 LLM）：≥0.6=●●●、≥0.3=●●、其余=●。
+_L2_SHORT_LIMIT: Final[int] = 80
+_L2_SCORE_BANDS: Final[tuple[tuple[float, str], ...]] = ((0.6, "●●●"), (0.3, "●●"), (0.0, "●"))
+
+
+def _l2_score_band(score: float) -> str:
+    """L2 命中行 score 档位标记（K31-a）：按 _L2_SCORE_BANDS 阈值取最高档。"""
+    for threshold, mark in _L2_SCORE_BANDS:
+        if score >= threshold:
+            return mark
+    return _L2_SCORE_BANDS[-1][1]
+
+
+def _l2_short_text(content: str) -> str:
+    """L2 命中行短句自足摘要（K31-a）：先 strip，超 80 字符截前 80（去尾空白）补省略号。"""
+    text = content.strip()
+    if len(text) <= _L2_SHORT_LIMIT:
+        return text
+    return text[:_L2_SHORT_LIMIT].rstrip() + "…"
 
 
 def _scan_threat_ids(text: str) -> list[str]:
@@ -284,6 +306,8 @@ class ChatContextAssembler:
     ) -> tuple[str, tuple[dict[str, Any], ...]]:
         """提示词注入文本：两段式，各带 B3 标界头（证据一律不可信外部输入）。
 
+        K31-a（13 §37）：L2 命中行=一行一指针索引形态（score 档位+短句自足摘要+短 id），
+        条数多时省 token、条数少时信息零损失；L1 blocks 保持现行全量（块小不值得索引）。
         F2 注入防御（15 §2.2）：scan_enabled 时记忆段渲染前 scope="context" 整段扫描，
         命中→该段整体替换为剥离占位（B3 标界头仍在）；证据 quote 逐条扫描，命中条剔除
         并计数（全剔除时段仅剩剥离占位行）。
@@ -293,7 +317,13 @@ class ChatContextAssembler:
         if memory is not None:
             lines.append(_MEMORY_HEADER)
             memory_lines = [f"- [{key}] {block.content}" for key, block in memory.l1.blocks.items()]
-            memory_lines += [f"- 相关事实: {hit.content}（score={hit.score}）" for hit in memory.l2]
+            # K31-a 索引渲染：一行一指针=[score 档位+短句（前 80 字符自足摘要）+短 id
+            # （uuid 前 8 位——未来展开工具预留锚，本批不建工具，13 §37）]。
+            memory_lines += [
+                f"- 相关事实[{_l2_score_band(hit.score)}] {_l2_short_text(hit.content)}"
+                f"（#{str(hit.fact_id)[:8]}）"
+                for hit in memory.l2
+            ]
             if scan_enabled:
                 pattern_ids = _scan_threat_ids("\n".join(block.content for block in memory.l1.blocks.values()))
                 if memory.l2:  # L2 命中内容并入同段扫描（同一记忆面，处置同整段剥离）

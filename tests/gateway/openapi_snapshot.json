@@ -10535,7 +10535,7 @@
                 "type": "null"
               }
             ],
-            "description": "具名工具集，会话工具表面门；None=平台现行全集",
+            "description": "具名工具集（None=现行全集）",
             "title": "Toolset"
           },
           "type": {
@@ -10549,6 +10549,135 @@
           "agent_id"
         ],
         "title": "SessionCreateIn",
+        "type": "object"
+      },
+      "SessionFeedbackIn": {
+        "additionalProperties": false,
+        "description": "会话反馈请求体（docs/Agent/19 §5 采集环，W9+B5 批：POST /sessions/{id}/feedback）。\n\noutcome=「任务是否完成」三元采集（completed 有帮助👍 / partial 部分解决 / failed 没解决👎）；\ncorrection_text=可选纠错文本（≤120 字）；tags=结构化标签（v1 收下落库，转化环 B6\nharvest 筛选面预留，前端 v1 不采集）。枚举/长度为契约常量（Pydantic fail-closed），\n非部署可变参数。幂等语义：同 (session_id, run_id, user_id) 重复反馈=更新（202）。",
+        "properties": {
+          "correction_text": {
+            "anyOf": [
+              {
+                "maxLength": 120,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Correction Text"
+          },
+          "outcome": {
+            "pattern": "^(completed|partial|failed)$",
+            "title": "Outcome",
+            "type": "string"
+          },
+          "run_id": {
+            "format": "uuid",
+            "title": "Run Id",
+            "type": "string"
+          },
+          "tags": {
+            "items": {
+              "maxLength": 32,
+              "minLength": 1,
+              "type": "string"
+            },
+            "maxItems": 8,
+            "title": "Tags",
+            "type": "array"
+          }
+        },
+        "required": [
+          "run_id",
+          "outcome"
+        ],
+        "title": "SessionFeedbackIn",
+        "type": "object"
+      },
+      "SessionFeedbackListOut": {
+        "additionalProperties": false,
+        "description": "反馈历史信封（api/01 §3.1 {data,meta}；会话内本用户行数=run 数天然有界，不分页）。",
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/SessionFeedbackOut"
+            },
+            "title": "Data",
+            "type": "array"
+          },
+          "meta": {
+            "additionalProperties": true,
+            "title": "Meta",
+            "type": "object"
+          }
+        },
+        "required": [
+          "data"
+        ],
+        "title": "SessionFeedbackListOut",
+        "type": "object"
+      },
+      "SessionFeedbackOut": {
+        "additionalProperties": false,
+        "properties": {
+          "correction_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Correction Text"
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
+          "outcome": {
+            "title": "Outcome",
+            "type": "string"
+          },
+          "run_id": {
+            "format": "uuid",
+            "title": "Run Id",
+            "type": "string"
+          },
+          "session_id": {
+            "format": "uuid",
+            "title": "Session Id",
+            "type": "string"
+          },
+          "tags": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Tags",
+            "type": "array"
+          },
+          "user_id": {
+            "format": "uuid",
+            "title": "User Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "session_id",
+          "run_id",
+          "user_id",
+          "outcome"
+        ],
+        "title": "SessionFeedbackOut",
         "type": "object"
       },
       "SessionListOut": {
@@ -23583,6 +23712,104 @@
           }
         },
         "summary": "SSE 订阅 / 断线重连（Last-Event-ID，02 §5）",
+        "tags": [
+          "sessions"
+        ]
+      }
+    },
+    "/api/v1/sessions/{session_id}/feedback": {
+      "get": {
+        "description": "本人反馈历史（19 §5 采集环读面；{data,meta} 信封）。\n\n会话经 ``get_session_owned``（A2 收口，非归属一律 404）；行级再按 user_id 过滤——\n群会话场景下只回本人行（反馈主体=用户本人，19 §5 口径）。",
+        "operationId": "list_session_feedback_api_v1_sessions__session_id__feedback_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionFeedbackListOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "会话反馈历史（本人查询自己的反馈）",
+        "tags": [
+          "sessions"
+        ]
+      },
+      "post": {
+        "description": "用户信号第一落点（docs/Agent/19 §5 数据飞轮·采集环，W9+B5 批）：\n\n- 归属双断言：会话经 ``get_session_owned``（A2 收口，非归属一律 404）；run 经\n  ``find_by_run`` 反查载体任务并断言 ``task.session_id == session_id``（跨会话 run\n  404，cancel 端点同款口径）；\n- 幂等：仓储 upsert（uk_session_feedback_session_run_user 兜底）——同 run 同用户重复\n  反馈=更新 outcome/tags/correction_text，恒 202 不产生重复行；\n- 审计：``session.feedback`` → task_events 就近落（run 归属断言已取任务载体，复用\n  append_event 直写通道=实现小者，rewind 审计先例）；审计 data 只留结构化最小面\n  （outcome/has_correction 布尔），纠错原文不进审计行（用户内容最小留痕）。",
+        "operationId": "submit_session_feedback_api_v1_sessions__session_id__feedback_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SessionFeedbackIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Submit Session Feedback Api V1 Sessions  Session Id  Feedback Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "会话反馈（19 §5 采集环：三元 outcome+可选纠错；同 run 同用户幂等更新）",
         "tags": [
           "sessions"
         ]

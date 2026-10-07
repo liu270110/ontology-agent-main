@@ -6,7 +6,7 @@ requires-python = ">=3.11"
 dependencies = [
   "cryptography>=42",
     "fastmcp>=2.12.5,<3",  # 4.x 需 starlette>=1.0 与 fastapi starlette<0.51 冲突——禁解锁
-    "fastapi>=0.115", "uvicorn[standard]>=0.30", "sqlalchemy[asyncio]>=2.0", "alembic>=1.13",  # asyncio extra 拉 greenlet（异步引擎缺它起不来，2026-10-03 实测）
+    "fastapi>=0.141,<0.142", "uvicorn[standard]>=0.30", "sqlalchemy[asyncio]>=2.0", "alembic>=1.13",  # fastapi 钉 0.141 线（openapi 快照随 0.141 产物刷新，K35 环境批）；asyncio extra 拉 greenlet（异步引擎缺它起不来，2026-10-03 实测）
   "psycopg[binary]>=3.1", "docker>=7.1", "pydantic>=2.7", "pydantic-settings>=2.2", "redis>=5,<6",  # <6 上限随 arq 元数据（redis[hiredis]<6,>=4.2.0）显式落本文件，防 redis 隐式越界（ocr 16f32b1b）
   "arq>=0.28,<1",  # memory 域分布式任务队列（services/memory/business/tasks.py；<1 防 0.x 小版本隐式破坏 WorkerSettings API，ocr 142e4219）
   "pyjwt>=2.8",  # M1 网关 JWT 签发/校验（08 §2.1 claims；HS256 起，RS256/JWKS 随 M3）

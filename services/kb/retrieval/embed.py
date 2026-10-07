@@ -180,8 +180,11 @@ class AclPushdown:
         return pushdown
 
 
-# §5 citations 全字段：minio_key 随 chunk 行一并取（出处指针；2026-09-27 任务 2.3 契约补全）
-_CHUNK_FIELDS = "c.id AS chunk_id, c.document_id, c.content, c.meta AS chunk_meta, d.title AS doc_name, d.minio_key"
+# §5 citations 全字段：minio_key 随 chunk 行一并取（出处指针；2026-09-27 任务 2.3 契约补全）；
+# summary=L0 前缀摘要随同一条 SQL 带回（G-14 零读直出，13 篇 §22 K16-c：零额外查询）
+_CHUNK_FIELDS = (
+    "c.id AS chunk_id, c.document_id, c.content, c.meta AS chunk_meta, d.title AS doc_name, d.minio_key, c.summary"
+)
 
 
 def _acl_filter(as_of: datetime | None, include_superseded: bool) -> str:
@@ -289,6 +292,7 @@ def _row_to_hit(row: RowMapping) -> dict:
         "doc_name": row["doc_name"],
         "minio_key": row["minio_key"],
         "span": span,
+        "summary": row["summary"],  # L0 前缀摘要（旧行 NULL → None，向后兼容）
     }
 
 
@@ -307,12 +311,33 @@ async def fetch_chunks_missing_embedding(
     return [(r[0], r[1]) for r in rows]
 
 
-async def set_chunk_embeddings(session: AsyncSession, items: Sequence[tuple[uuid.UUID, Sequence[float]]]) -> int:
-    """逐条回写 chunk 向量（embed 步专用；列不可用即抛降级异常）。返回写入行数。"""
+# L0 前缀摘要（G-14：openviking@23 §3 零读直出；13 篇 §22 K16-b——确定性优先，零 LLM 成本零审核）
+SUMMARY_PREFIX_LIMIT = 200
+
+
+def chunk_summary(content: str | None, *, limit: int = SUMMARY_PREFIX_LIMIT) -> str | None:
+    """确定性前缀摘要：取内容前 min(limit, len) 字符并 strip 首尾空白；空白/空内容 → None。
+
+    embed 步随向量同点生成、同 UPDATE 落列（set_chunk_embeddings）；存量行不回填——
+    重嵌入时自然生成（13 篇 §22 K16-b 边界）。检索读侧 _CHUNK_FIELDS 同 SQL 带回（零额外查询）。
+    """
+    if not content:
+        return None
+    return content[:limit].strip() or None
+
+
+async def set_chunk_embeddings(
+    session: AsyncSession, items: Sequence[tuple[uuid.UUID, Sequence[float], str | None]]
+) -> int:
+    """逐条回写 chunk 向量 + L0 前缀摘要（embed 步专用；同 UPDATE 落列，列不可用即抛降级异常）。
+
+    items 为 (chunk_id, vector, summary) 三元组；summary 由 kb_pipeline embed 步以
+    chunk_summary(content) 同点生成。返回写入行数。
+    """
     if not await vector_ready(session):
         raise EmbeddingUnavailableError("pgvector embedding 列不可用（迁移容错跳过）")
     result = await session.execute(
-        text("UPDATE document_chunks SET embedding = CAST(:vec AS vector) WHERE id = :chunk_id"),
-        [{"chunk_id": cid, "vec": vector_literal(vec)} for cid, vec in items],
+        text("UPDATE document_chunks SET embedding = CAST(:vec AS vector), summary = :summary WHERE id = :chunk_id"),
+        [{"chunk_id": cid, "vec": vector_literal(vec), "summary": summary} for cid, vec, summary in items],
     )
     return result.rowcount or 0

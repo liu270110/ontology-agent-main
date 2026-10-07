@@ -461,7 +461,9 @@ async def baseline(
         # 向量臂播种：活体嵌入服务在 → 全库真向量（pgvector 余弦真跑的前提；降级臂不播种）
         if embedder is not None and chunk_texts:
             vectors = await embedder.embed([content for _, content in chunk_texts])
-            await set_chunk_embeddings(db, [(cid, vec) for (cid, _), vec in zip(chunk_texts, vectors, strict=True)])
+            await set_chunk_embeddings(
+                db, [(cid, vec, None) for (cid, _), vec in zip(chunk_texts, vectors, strict=True)]
+            )
 
     ids: dict[str, object] = {
         "tenant_id": tenant.id,

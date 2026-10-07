@@ -77,6 +77,7 @@ from services.kb.retrieval.chunking import Chunk, chunk_document, estimate_token
 from services.kb.retrieval.embed import (
     EmbeddingUnavailableError,
     OllamaEmbedder,
+    chunk_summary,
     fetch_chunks_missing_embedding,
     set_chunk_embeddings,
 )
@@ -358,7 +359,12 @@ async def _run_chunk(ctx: StepContext) -> None:
 
 
 async def _run_embed(ctx: StepContext) -> None:
-    """向量化（bge-m3）：仅补缺失向量（§8.6 增量口径，未变块跳过）；不可用即抛降级异常。"""
+    """向量化（bge-m3）：仅补缺失向量（§8.6 增量口径，未变块跳过）；不可用即抛降级异常。
+
+    同点生成 L0 前缀摘要（G-14 openviking@23 §3；13 篇 §22 K16-b）：确定性前缀
+    chunk_summary(content) 随嵌入同 UPDATE 落列（零 LLM 成本零审核）；存量行不回填——
+    已 indexed 文档由步级 checkpoint 跳过（done 不再执行），重嵌入（embed 步再执行）时自然生成。
+    """
     if ctx.embedder is None:
         raise EmbeddingUnavailableError("未配置嵌入模型")
     async with ctx.session_factory() as session:  # 短事务：读缺失清单
@@ -366,9 +372,9 @@ async def _run_embed(ctx: StepContext) -> None:
     if not pending:
         return
     vectors = await ctx.embedder.embed([content for _, content in pending])  # HTTP 在事务外（03 §6.1）
-    pairs = [(chunk_id, vec) for (chunk_id, _), vec in zip(pending, vectors, strict=True)]
-    async with ctx.session_factory() as session, session.begin():  # 短事务：落向量
-        await set_chunk_embeddings(session, pairs)
+    triples = [(cid, vec, chunk_summary(content)) for (cid, content), vec in zip(pending, vectors, strict=True)]
+    async with ctx.session_factory() as session, session.begin():  # 短事务：落向量+摘要
+        await set_chunk_embeddings(session, triples)
 
 
 async def _run_bm25_index(ctx: StepContext) -> None:

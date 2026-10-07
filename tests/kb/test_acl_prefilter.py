@@ -242,7 +242,7 @@ async def acl_seeded(acl_pg: async_sessionmaker[AsyncSession]) -> AsyncIterator[
             )
         )
         if bool(probe.scalar()) and chunk_ids:
-            await set_chunk_embeddings(db, [(cid, _SEED_EMBEDDING) for cid in chunk_ids])
+            await set_chunk_embeddings(db, [(cid, _SEED_EMBEDDING, None) for cid in chunk_ids])
     env = {"tenant_id": tenant.id, "collection_id": collection.id, "doc_ids": doc_ids}
     yield env
     async with acl_pg() as db, db.begin():  # FK 逆序清理 + 撤临时列

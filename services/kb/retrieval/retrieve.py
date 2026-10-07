@@ -62,6 +62,9 @@ class SearchHit:
     minio_key: str | None = None
     span: list[int] | None = None
     channels: list[str] = field(default_factory=list)
+    # L0 前缀摘要（G-14 零读直出，13 篇 §22 K16-c）：bm25/vector 路随同一条 SQL 带回；
+    # glossary/graph 等其他路命中不带（默认 None，DTO 向后兼容）
+    summary: str | None = None
 
 
 # ---------------------------------------------------------------- evidence.graph_paths（§5 lite 形态）

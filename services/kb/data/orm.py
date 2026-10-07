@@ -106,6 +106,9 @@ class DocumentChunk(Base, PkMixin, TenantMixin):  # 只追加；向量在 pgvect
     document_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("documents.id"), nullable=False)
     seq: Mapped[int] = mapped_column(Integer, nullable=False)
     content: Mapped[str] = mapped_column(Text, nullable=False)
+    # L0 前缀摘要（G-14 零读直出，13 篇 §22 K16-a）：embed 步确定性生成落列；可空不回填，
+    # 存量行随重嵌入自然生成（读写走 embed.py：写=raw SQL UPDATE，读=_CHUNK_FIELDS 同 SQL 带回）
+    summary: Mapped[str | None] = mapped_column(Text)
     token_count: Mapped[int | None] = mapped_column(Integer)
     page_no: Mapped[int | None] = mapped_column(Integer)
     meta: Mapped[dict] = mapped_column(JSONB, default=dict, nullable=False)

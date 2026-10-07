@@ -1,12 +1,17 @@
 import { useState } from 'react'
 import { useDropzone } from 'react-dropzone'
+import { toast } from 'sonner'
 import { FileUp, TriangleAlert } from 'lucide-react'
 import { Modal } from '@/components/modal'
+import { isUnimplemented } from '@/lib/errors'
 import { importTurtle, preflightImport, type ImportPreflightRow, type OntoProject } from '../api'
 
 /** 导入 Turtle 弹窗（26 篇 §6.1 IX-OL-02；画板 ix-ol-02）：拖拽 .ttl + 目标版本单选
  *  + 冲突策略 + 预校验结果行（错误按行号就地定位）。导入本身走异步任务（任务中心跟踪）。
- *  端点为预登记待回填（26 篇 §14 #10，见交付报告 R 清单）。 */
+ *  端点为预登记待回填（26 篇 §14 #10，见交付报告 R 清单）。
+ *  P-002 断供收敛（2026-10-07）：预校验/提交两函数补 catch——404/1004（端点未上线）toast
+ *  建设中文案、其余错误透出原文；finally 恢复按钮态，不再裸抛 unhandled rejection；
+ *  弹窗顶部 fhint 注明端点状态。 */
 
 export function ImportTurtleDialog({
   open,
@@ -45,8 +50,18 @@ export function ImportTurtleDialog({
     try {
       const res = await preflightImport(project.id, { filename: file.name, strategy })
       setRows(res.rows)
+    } catch (e) {
+      // P-002：404/1004=导入管线端点未上线 → 统一建设中文案；其余错误透出原文（不吞不造）
+      toast.error(
+        isUnimplemented(e)
+          ? '导入管线端点未上线（建设中）'
+          : e instanceof Error
+            ? e.message
+            : String(e),
+      )
+      setRows(null)
     } finally {
-      setChecking(false)
+      setChecking(false) // 按钮态恢复（预校验钮解禁，可重试或改选文件）
     }
   }
 
@@ -57,6 +72,15 @@ export function ImportTurtleDialog({
       const res = await importTurtle(project.id)
       onQueued(res.job_id)
       onClose()
+    } catch (e) {
+      // P-002：同预校验口径——断供建设中文案，其余原文；finally 恢复提交钮
+      toast.error(
+        isUnimplemented(e)
+          ? '导入管线端点未上线（建设中）'
+          : e instanceof Error
+            ? e.message
+            : String(e),
+      )
     } finally {
       setSubmitting(false)
     }
@@ -90,6 +114,10 @@ export function ImportTurtleDialog({
     >
       <p className="text-xs text-label-3">
         目标：{project ? `${project.name} · ${project.namespace}` : '—'} · Turtle 1.1
+      </p>
+      {/* P-002 断供收敛：端点状态 fhint（预校验/提交为预登记待回填端点，未上线时操作给建设中文案） */}
+      <p className="fhint mt-1" data-testid="import-endpoint-hint">
+        端点状态：导入管线（预校验 / 提交）为预登记待回填——未上线时点击将提示「导入管线端点未上线（建设中）」。
       </p>
 
       {/* 拖拽区 */}

@@ -11,6 +11,9 @@ export interface ErrorStateProps {
   title?: string
   message?: string
   code?: string | number
+  /** 1004 特化分支的补充注记（P-001 断供收敛：如「端点随 B8 后端批交付」交付排期）——
+   *  仅 code=1004 分支渲染，缺省不出现（既有消费方零改动）。 */
+  note?: string
   onRetry?: () => void
   /** 重试按钮文案（默认「重试」；chat 基线场景用「重新加载」） */
   retryLabel?: string
@@ -24,6 +27,7 @@ export function ErrorState({
   title = '加载失败',
   message = '数据加载失败，请检查网络后重试。',
   code,
+  note,
   onRetry,
   retryLabel = '重试',
   secondaryAction,
@@ -38,6 +42,11 @@ export function ErrorState({
         <Construction size={28} aria-hidden style={{ color: 'var(--label-3)' }} />
         <div className="t">功能建设中</div>
         <div className="d">该功能的后端服务尚未上线，交付后此处将自动展示真实数据。</div>
+        {note && (
+          <div className="d text-[11px] text-label-3" data-testid="unimplemented-note">
+            {note}
+          </div>
+        )}
         {secondaryAction && <div className="acts">{secondaryAction}</div>}
       </div>
     )

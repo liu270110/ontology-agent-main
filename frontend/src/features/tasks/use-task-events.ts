@@ -16,17 +16,23 @@ export interface TaskEventStream {
   events: TaskEvent[]
   /** 流建立失败（401/404/5xx/网络）：非 null 时时间线不可用，消费方渲染错误态 */
   error: ApiError | Error | null
+  /** P-009 断流透出（2026-10-07）：读循环因服务端关闭连接（reader done；代理切断/后端重启）
+   *  而非宿主取消退出时置位——宿主可据此显「已断开，重连查看」提示。本批只做 hook 层透出
+   *  （TaskDetailDrawer UI 接线下批），置位不影响既有 events/error 语义。 */
+  streamClosed: boolean
 }
 
 export function useTaskEvents(taskId: string | null): TaskEventStream {
   const [events, setEvents] = useState<TaskEvent[]>([])
   const [error, setError] = useState<TaskEventStream['error']>(null)
+  const [streamClosed, setStreamClosed] = useState(false)
 
   useEffect(() => {
     // ocr 整改（fe2 发现2）：重置提到 if (!taskId) 之前——taskId→taskId 切换（抽屉复用
     // 同一 hook 实例）时 effect 重跑会先清空旧任务的 ApiError 与事件，不再泄漏到新任务时间线。
     setEvents([])
     setError(null)
+    setStreamClosed(false)
     if (!taskId) return
     let cancelled = false
     let reader: ReadableStreamDefaultReader<Uint8Array> | null = null
@@ -70,6 +76,9 @@ export function useTaskEvents(taskId: string | null): TaskEventStream {
             } catch { /* 半帧容错 */ }
           }
         }
+        // P-009 断流透出：循环正常退出且非宿主取消 = 服务端关流（done）——透出 streamClosed
+        // 供宿主显重连提示；异常/建流失败走 error 通道，不与此混淆。
+        if (!cancelled) setStreamClosed(true)
       } catch (e) {
         // 网络错误：非取消场景不再静默——置错误态（取消=组件卸载/换任务，保持静默）
         if (!cancelled) setError(e instanceof Error ? e : new Error(String(e)))
@@ -82,5 +91,5 @@ export function useTaskEvents(taskId: string | null): TaskEventStream {
     }
   }, [taskId])
 
-  return { events, error }
+  return { events, error, streamClosed }
 }

@@ -1,9 +1,13 @@
 import { Link } from 'react-router-dom'
 import { ArrowRight, type LucideIcon } from 'lucide-react'
 import { describeError } from '@/lib/errors'
+import { APPROX_COUNT_NOTE } from '../api'
 
 /** 启动台入口卡（模块化第一批自 DashboardPage 拆出，行为零变化）。
- *  卡片指标最小面（避免把整个 query 对象渗进展示组件）。 */
+ *  卡片指标最小面（避免把整个 query 对象渗进展示组件）。
+ *  P-010（2026-10-07）：MetricState 增 approx 标记——近似计数（列表首页长度估算，
+ *  见 api.ts countOntologies/countTodaySessions）显「近似」角标 + title 注明数据源，
+ *  与服务端精确计数（meta.total 类）可观测区分；不删卡片不删指标。 */
 
 export interface MetricState {
   isPending: boolean
@@ -11,6 +15,8 @@ export interface MetricState {
   /** 指标文本（数字已格式化，如「今日 3 次」） */
   text: string
   error?: unknown
+  /** 近似计数标记：true 时文本旁显「近似」小角标，容器 title 注明口径与交付排期 */
+  approx?: boolean
 }
 
 export interface LauncherCard {
@@ -26,6 +32,7 @@ export interface LauncherCard {
 export function LauncherCardView({ card }: { card: LauncherCard }) {
   const Icon = card.icon
   const m = card.metric
+  const approx = !!m?.approx && !m.isPending && !m.isError
   return (
     <Link
       to={card.to}
@@ -47,9 +54,22 @@ export function LauncherCardView({ card }: { card: LauncherCard }) {
       {m && (
         <div
           className={`mt-1 border-t border-separator pt-2 text-[11px] ${m.isError ? 'text-orange' : 'text-label-2'}`}
-          title={m.isError ? describeError(m.error) : undefined}
+          title={m.isError ? describeError(m.error) : approx ? APPROX_COUNT_NOTE : undefined}
         >
-          {m.isPending ? '指标加载中…' : m.isError ? '指标暂不可用' : m.text}
+          {m.isPending ? (
+            '指标加载中…'
+          ) : m.isError ? (
+            '指标暂不可用'
+          ) : (
+            <>
+              {m.text}
+              {approx && (
+                <span className="badge b-gray ml-1.5" data-testid="metric-approx" title={APPROX_COUNT_NOTE}>
+                  近似
+                </span>
+              )}
+            </>
+          )}
         </div>
       )}
     </Link>

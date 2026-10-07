@@ -36,3 +36,15 @@ export function describeError(e: unknown): string {
   if (e instanceof Error) return e.message
   return '未知错误'
 }
+
+/** 断供判定（P-001/P-002 断供收敛，2026-10-07 统一口径）：网关信封 code=1004（路由不存在=
+ *  端点待交付，40 号 §1）或裸 404（非信封 {detail:"Not Found"}，无业务码）→ 属「功能建设中」
+ *  优雅态而非真故障——消费方据此分流 ErrorState 1004 特化 / 建设中 toast，不与网络错误混淆。 */
+export function isUnimplemented(e: unknown): boolean {
+  if (!(e instanceof ApiError)) return false
+  if (e.code === 1004) return true
+  // 裸 404（网关无路由 {detail:"Not Found"}，client 层 code 回落 -1）才视为断供；
+  // 业务 404（live 统一错误体 code=404 / mock 4041「资源不存在」）是真故障，
+  // 与 describeError 的「404=资源缺失」口径一致（ocr 2026-10-07）
+  return e.httpStatus === 404 && e.code === -1
+}

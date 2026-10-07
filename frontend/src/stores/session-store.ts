@@ -361,7 +361,8 @@ interface SessionState {
   terminalLines: TerminalLine[]
   /** @引用 → 输入框草稿插入信号队列（MessageInput 按游标消费） */
   draftInserts: DraftInsert[]
-  /** run.usage 归约：本次回答上下文用量四分组（IX-CHT-04 真数据源；无帧时面板走演示回退） */
+  /** run.usage 归约：本次回答上下文用量四分组（IX-CHT-04 真数据源；无帧时面板走空态占位
+   *  ctx-panel-empty——P-006 演示回退已删，不再造演示数据） */
   usageGroups: RunUsageEventData['groups'] | null
   /** 上下文压缩回写（POST /sessions/{id}/compact 成功后 ContextMeter 以此覆盖 token 用量显示） */
   usageTokens: number | null

@@ -28,6 +28,8 @@ import { useDashboardQueries } from '../hooks'
  *  S-AD 切片（宿主 p-dashboard L192-193 / L228-235）：页头右上「上传文档 / 新建本体项目」
  *  快捷动作钮（kb 无 ?upload=1 消费、ontology 无新建直达参数 → 纯路由跳转）+
  *  新手引导三步卡（components/onboarding-card.tsx，判定复用本页查询缓存）。
+ *  P-010（2026-10-07）：今日对话/本体项目两指标为首页长度近似计数 → 卡片显「近似」角标
+ *  + title 注明数据源（APPROX_COUNT_NOTE），真实统计端点随 R5x 交付，卡片不删。
  *  模块化第一批：查询集中 hooks.ts（useDashboardQueries），启动台卡/最近会话/最近任务/
  *  控制台入口卡拆 components/，本文件只留编排与卡片装配。 */
 
@@ -64,7 +66,7 @@ export function DashboardPage() {
       desc: '与 Agent 一对一对话，引用与证据全程可追溯',
       to: '/chat',
       icon: MessageSquare,
-      metric: !todayQ.isPending && !todayQ.isError ? { isPending: false, isError: false, text: `今日 ${todayQ.data ?? 0} 次对话` } : undefined,
+      metric: !todayQ.isPending && !todayQ.isError ? { isPending: false, isError: false, text: `今日 ${todayQ.data ?? 0} 次对话`, approx: true } : undefined,
     },
     { testKey: 'group', title: '群聊', desc: '多 Agent 群组协作讨论与决议留痕', to: '/chat/group', icon: Users },
     {
@@ -90,7 +92,7 @@ export function DashboardPage() {
       to: '/ontology',
       icon: Box,
       roles: ['admin', 'ontologist', 'curator', 'super_admin'],
-      metric: !ontoQ.isPending && !ontoQ.isError ? { isPending: false, isError: false, text: `${ontoQ.data ?? 0} 个本体项目` } : undefined,
+      metric: !ontoQ.isPending && !ontoQ.isError ? { isPending: false, isError: false, text: `${ontoQ.data ?? 0} 个本体项目`, approx: true } : undefined,
     },
     { testKey: 'kb', title: '知识库', desc: '文档上传与知识抽取入库', to: '/kb', icon: BookOpen },
     { testKey: 'memory', title: '记忆管理', desc: '分层记忆查看与检索调优', to: '/memory', icon: Layers },

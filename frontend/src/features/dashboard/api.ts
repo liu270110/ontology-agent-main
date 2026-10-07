@@ -51,6 +51,12 @@ export async function countPendingReviews() {
   return { items: r.data, total: r.meta.total ?? r.data.length }
 }
 
+/** P-010 近似计数口径注记（2026-10-07）：countOntologies / countTodaySessions 暂取列表首页
+ *  长度估算（真实统计端点随 R5x 交付）——卡片指标处统一以此 title/角标「近似」标注数据源，
+ *  不删卡片不删指标（数字可用但非服务端精确值，诚实降级）。 */
+export const APPROX_COUNT_NOTE =
+  '近似计数：暂取列表首页长度估算（≤100 条内），真实统计端点随 R5x 后端批交付'
+
 /** 本体项目计数：live 列表无 total，取首页（≤100）长度近似；TODO(R5x): 后端统计端点交付后切换 */
 export async function countOntologies() {
   const r = await api.get<{ items: unknown[] }>('/ontologies?limit=100')

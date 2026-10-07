@@ -1,0 +1,324 @@
+{
+  "suite": "intent",
+  "scenario": "intent_dual_tier",
+  "tag": "smoke-probe",
+  "mode": "smoke",
+  "date": "2026-10-07T09:54:35",
+  "env": {
+    "commit": "c940b9943c044e2ca96267f5e81de254451edadc",
+    "python": "3.13.0",
+    "platform": "Windows-11-10.0.26200-SP0",
+    "model": {
+      "base_url": "http://127.0.0.1:18001",
+      "served_id": "local-main",
+      "model_root": "/models/qwen3-4b-awq",
+      "max_model_len": 16384
+    },
+    "sampling": {
+      "temperature": 0.0,
+      "max_tokens": 768
+    }
+  },
+  "config": {
+    "dataset_version": "v0",
+    "items": 2,
+    "out_of_scope_confidence_floor": 0.5,
+    "request_concurrency": 4
+  },
+  "dataset": {
+    "version": "v0",
+    "sha256": "ca00fe1c1e1c46822d365947d6e1aee574689637a0d3134b9103d187f4864c90",
+    "distribution": {
+      "clear": 2
+    }
+  },
+  "a1_mode": {
+    "kind": "semantic_annotation_enhanced_prompt",
+    "approximation": true,
+    "note": "平台 A1 档（OntRAG AgenticRAG 三档装配：A0 服务端代跑/A1 细粒度工具循环/A2 内核原生）尚未在意图面落地——本 run 以「行动类语义标注增强提示」作 A1 近似：候选集经平台真实语义标注（action_iri/执行级/capability/描述/参数 schema）+ 候选集封闭约束条注入；E2 差值在此口径下成立，外推须带此口径。",
+    "injection_point": "services.agent.business.adapters.builtin.render_tool_schema_section",
+    "constraint_rules": "benchmarks.suites.intent.action_catalog.A1_CONSTRAINT_RULES",
+    "candidate_classes": 17,
+    "annotation_provenance": [
+      {
+        "name": "ask_user",
+        "action_iri": "http://ontology.example/action/ask_user",
+        "execution_mode": "external_write",
+        "source_module": "services.agent.business.capabilities.ask_user.bindings",
+        "description_is_gloss": false
+      },
+      {
+        "name": "chat_answer",
+        "action_iri": "http://ontology.example/action/chat_answer",
+        "execution_mode": "read",
+        "source_module": "services.agent.business.adapters.base",
+        "description_is_gloss": true
+      },
+      {
+        "name": "file_edit",
+        "action_iri": "http://ontology.example/action/file_edit",
+        "execution_mode": "write",
+        "source_module": "services.agent.business.capabilities.fs.bindings",
+        "description_is_gloss": false
+      },
+      {
+        "name": "file_glob",
+        "action_iri": "http://ontology.example/action/file_glob",
+        "execution_mode": "read",
+        "source_module": "services.agent.business.capabilities.fs.bindings",
+        "description_is_gloss": false
+      },
+      {
+        "name": "file_grep",
+        "action_iri": "http://ontology.example/action/file_grep",
+        "execution_mode": "read",
+        "source_module": "services.agent.business.capabilities.fs.bindings",
+        "description_is_gloss": false
+      },
+      {
+        "name": "file_read",
+        "action_iri": "http://ontology.example/action/file_read",
+        "execution_mode": "read",
+        "source_module": "services.agent.business.capabilities.fs.bindings",
+        "description_is_gloss": false
+      },
+      {
+        "name": "file_write",
+        "action_iri": "http://ontology.example/action/file_write",
+        "execution_mode": "write",
+        "source_module": "services.agent.business.capabilities.fs.bindings",
+        "description_is_gloss": false
+      },
+      {
+        "name": "run_terminal",
+        "action_iri": "http://ontology.example/action/run_terminal",
+        "execution_mode": "code",
+        "source_module": "services.agent.business.capabilities.terminal.tool",
+        "description_is_gloss": true
+      },
+      {
+        "name": "spill_get",
+        "action_iri": "http://ontology.example/action/spill_get",
+        "execution_mode": "read",
+        "source_module": "services.agent.business.capabilities.spill_retrieval.bindings",
+        "description_is_gloss": false
+      },
+      {
+        "name": "subagent_interrupt",
+        "action_iri": "http://ontology.example/action/subagent_interrupt",
+        "execution_mode": "read",
+        "source_module": "services.agent.business.capabilities.subagent.tools",
+        "description_is_gloss": false
+      },
+      {
+        "name": "subagent_spawn",
+        "action_iri": "http://ontology.example/action/subagent_spawn",
+        "execution_mode": "read",
+        "source_module": "services.agent.business.capabilities.subagent.tools",
+        "description_is_gloss": false
+      },
+      {
+        "name": "subagent_wait",
+        "action_iri": "http://ontology.example/action/subagent_wait",
+        "execution_mode": "read",
+        "source_module": "services.agent.business.capabilities.subagent.tools",
+        "description_is_gloss": false
+      },
+      {
+        "name": "todo_read",
+        "action_iri": "http://ontology.example/action/todo_read",
+        "execution_mode": "read",
+        "source_module": "services.agent.business.capabilities.todo.bindings",
+        "description_is_gloss": false
+      },
+      {
+        "name": "todo_update",
+        "action_iri": "http://ontology.example/action/todo_update",
+        "execution_mode": "write",
+        "source_module": "services.agent.business.capabilities.todo.bindings",
+        "description_is_gloss": false
+      },
+      {
+        "name": "todo_write",
+        "action_iri": "http://ontology.example/action/todo_write",
+        "execution_mode": "write",
+        "source_module": "services.agent.business.capabilities.todo.bindings",
+        "description_is_gloss": false
+      },
+      {
+        "name": "web_fetch",
+        "action_iri": "http://ontology.example/action/web_fetch",
+        "execution_mode": "read",
+        "source_module": "services.agent.business.capabilities.web.fetch",
+        "description_is_gloss": true
+      },
+      {
+        "name": "web_search",
+        "action_iri": "http://ontology.example/action/web_search",
+        "execution_mode": "read",
+        "source_module": "services.agent.business.capabilities.web.search",
+        "description_is_gloss": true
+      }
+    ]
+  },
+  "tiers": {
+    "a0": {
+      "metrics": {
+        "intent_accuracy": 1.0,
+        "intent_accuracy_by_level": {
+          "clear": 1.0,
+          "ambiguous": 0.0
+        },
+        "clarification_trigger_rate": 0.0,
+        "out_of_scope_reject_rate": 0.0,
+        "parse_error_count": 0,
+        "counts": {
+          "map": 2,
+          "clarify": 0,
+          "reject": 0
+        },
+        "latency_p50_ms": 6713.0282999969495,
+        "cost_per_item_tokens": 360.0
+      },
+      "per_item": [
+        {
+          "item_id": "intent-001",
+          "ambiguity_level": "clear",
+          "expectation": "map",
+          "expected_action": "file_read",
+          "predicted_action": "file_read",
+          "confidence": 0.95,
+          "parse_error": false,
+          "correct": true,
+          "clarified": false,
+          "rejected": false,
+          "latency_ms": 7992.92,
+          "tokens": {
+            "prompt": 190,
+            "completion": 183
+          },
+          "raw_output": "<think>\n好的，用户让我帮忙读一下README.md的内容。首先，我需要确定用户的需求是什么。他们可能想要查看该文件的内容，以便了解项目的基本信息或使用方法。接下来，我需要检查可用的行动类列表，看看哪个最适合处理这个请求。\n\n查看行动类清单，发现有file_read这个动作，用于读取文件内容。用户明确提到了README.md，这通常是一个项目中的文档文件，所以使用file_read来获取内容是合适的。其他动作比如web_fetch或web_search可能不适用，因为用户是直接请求读取本地文件。而ask_user或chat_answer可能不是最直接的选择，因为用户已经明确指定了文件名。"
+        },
+        {
+          "item_id": "intent-002",
+          "ambiguity_level": "clear",
+          "expectation": "map",
+          "expected_action": "file_read",
+          "predicted_action": "file_read",
+          "confidence": 0.95,
+          "parse_error": false,
+          "correct": true,
+          "clarified": false,
+          "rejected": false,
+          "latency_ms": 6713.03,
+          "tokens": {
+            "prompt": 194,
+            "completion": 153
+          },
+          "raw_output": "<think>\n好的，用户请求是“打开 config/app.yaml 看看里面写了什么”。我需要确定这个请求对应的行动类名称。首先，用户想要查看一个文件的内容，具体是config/app.yaml。在提供的行动类清单中，file_read 是用于读取文件的。而file_grep是用于搜索文件中的内容，但用户这里只是想打开并查看内容，而不是搜索。因此，最合适的行动类应该是file_read。其他选项如web_fetch或web_search不适用，因为用户是在请求本地文件。所以，正确的行动类是file_read，置信度应该较高，比如0.95。\n</think>\n\n{\"action\": \"fil"
+        }
+      ]
+    },
+    "a1": {
+      "metrics": {
+        "intent_accuracy": 1.0,
+        "intent_accuracy_by_level": {
+          "clear": 1.0,
+          "ambiguous": 0.0
+        },
+        "clarification_trigger_rate": 0.0,
+        "out_of_scope_reject_rate": 0.0,
+        "parse_error_count": 0,
+        "counts": {
+          "map": 2,
+          "clarify": 0,
+          "reject": 0
+        },
+        "latency_p50_ms": 15226.804599999014,
+        "cost_per_item_tokens": 4202.5
+      },
+      "per_item": [
+        {
+          "item_id": "intent-001",
+          "ambiguity_level": "clear",
+          "expectation": "map",
+          "expected_action": "file_read",
+          "predicted_action": "file_read",
+          "confidence": 0.95,
+          "parse_error": false,
+          "correct": true,
+          "clarified": false,
+          "rejected": false,
+          "latency_ms": 15931.21,
+          "tokens": {
+            "prompt": 3911,
+            "completion": 297
+          },
+          "raw_output": "<think>\n好的，用户让我帮忙读一下README.md的内容。首先，我需要确定用户的需求是什么。他们可能想要查看该文件的内容，或者需要某些特定的信息。接下来，我需要检查可用的行动类，看看哪个最适合处理这个请求。\n\n查看工具列表，file_read 是用来读取工作区内的文本文件的。用户提到的README.md应该是在工作区内的文件，所以file_read是合适的。需要确认参数是否正确，比如路径是否正确，是否需要限制行数或者添加行号。用户没有特别说明，所以使用默认参数即可。\n\n另外，确保用户提供的路径是正确的，避免访问外部路径或不允许的目录。根据规则，路径必须是工作区内的相对路径，所以假设RE"
+        },
+        {
+          "item_id": "intent-002",
+          "ambiguity_level": "clear",
+          "expectation": "map",
+          "expected_action": "file_read",
+          "predicted_action": "file_read",
+          "confidence": 0.95,
+          "parse_error": false,
+          "correct": true,
+          "clarified": false,
+          "rejected": false,
+          "latency_ms": 15226.8,
+          "tokens": {
+            "prompt": 3915,
+            "completion": 282
+          },
+          "raw_output": "<think>\n好的，用户想要查看config/app.yaml文件的内容。首先，我需要确定用户的需求是什么。他们可能是在寻找某个配置文件中的特定信息，或者想了解文件的结构和内容。接下来，我需要检查可用的行动类，看看哪个最适合处理这个请求。\n\n根据提供的工具列表，file_read行动类用于读取工作区内的文本文件。这似乎是最直接的选择，因为用户明确提到了要查看特定文件的内容。其他行动类如file_grep用于搜索文本，file_edit用于编辑文件，但用户只是想查看内容，所以不需要编辑或搜索。\n\n需要确认的是，用户提到的config/app.yaml是否在工作区内。根据约束规则，文件路径必须是"
+        }
+      ]
+    }
+  },
+  "ontology_constraint_gain": {
+    "definition": "A1（本体约束/语义标注增强提示）− A0（行动类名清单直觉）于四指标差值",
+    "diff": {
+      "intent_accuracy": 0.0,
+      "intent_accuracy_clear": 0.0,
+      "intent_accuracy_ambiguous": 0.0,
+      "clarification_trigger_rate": 0.0,
+      "out_of_scope_reject_rate": 0.0
+    },
+    "a0": {
+      "intent_accuracy": 1.0,
+      "intent_accuracy_by_level": {
+        "clear": 1.0,
+        "ambiguous": 0.0
+      },
+      "clarification_trigger_rate": 0.0,
+      "out_of_scope_reject_rate": 0.0,
+      "parse_error_count": 0,
+      "counts": {
+        "map": 2,
+        "clarify": 0,
+        "reject": 0
+      },
+      "latency_p50_ms": 6713.0282999969495,
+      "cost_per_item_tokens": 360.0
+    },
+    "a1": {
+      "intent_accuracy": 1.0,
+      "intent_accuracy_by_level": {
+        "clear": 1.0,
+        "ambiguous": 0.0
+      },
+      "clarification_trigger_rate": 0.0,
+      "out_of_scope_reject_rate": 0.0,
+      "parse_error_count": 0,
+      "counts": {
+        "map": 2,
+        "clarify": 0,
+        "reject": 0
+      },
+      "latency_p50_ms": 15226.804599999014,
+      "cost_per_item_tokens": 4202.5
+    }
+  }
+}

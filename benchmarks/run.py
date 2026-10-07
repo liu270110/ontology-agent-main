@@ -1,13 +1,14 @@
 """benchmarks 统一入口（docs/Agent/16 §3）：python benchmarks/run.py --suite rag [--smoke]。
 
-套件分发：rag（benchmarks/suites/rag/runner.py）与 agent-core（suites/agent-core/runner.py，
-2026-10-07 恢复入口——rag 批合并时误摘，红队修复批需 --suite agent-core 复验）已实现；
-intent / ontology-scale 随各自波次落地，此处显式报错不静默。
+套件分发：rag（benchmarks/suites/rag/runner.py）、agent-core（suites/agent-core/runner.py，
+2026-10-07 恢复入口）、intent（suites/intent/runner.py，双档对照 A0 直觉/A1 本体约束）
+已实现；ontology-scale 随波次落地，此处显式报错不静默。
 
 示例（仓库根）：
     python benchmarks/run.py --suite rag --smoke          # 全链冒烟：进库+检索+基线+六维落盘
     python benchmarks/run.py --suite rag --tag v0.2.0     # 常规跑（优化后换 tag 留曲线）
     python benchmarks/run.py --suite agent-core --smoke --tag redteam-fix-verified
+    python benchmarks/run.py --suite intent --smoke       # 意图双档对照：A0/A1×100 金标
 """
 
 from __future__ import annotations
@@ -27,14 +28,16 @@ sys.path.insert(0, str(ROOT))
 
 from benchmarks.suites.rag.config import RagBenchSettings  # noqa: E402
 
-_IMPLEMENTED_SUITES = ("rag", "agent-core")
+_IMPLEMENTED_SUITES = ("rag", "agent-core", "intent")
 
 _BENCH_ROOT = Path(__file__).resolve().parent
 
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="benchmarks.run", description="ontology-agent 基准对比套件统一入口")
-    parser.add_argument("--suite", required=True, choices=_IMPLEMENTED_SUITES, help="套件名（已实现：rag/agent-core）")
+    parser.add_argument(
+        "--suite", required=True, choices=_IMPLEMENTED_SUITES, help="套件名（已实现：rag/agent-core/intent）"
+    )
     parser.add_argument("--tag", default=None, help="运行标签（默认读 BENCH_RAG_TAG，缺省 v0）")
     parser.add_argument("--smoke", action="store_true", help="全链冒烟（rag：进库+检索+基线+六维落盘）")
     parser.add_argument("--scenario", default=None, help="agent-core：只跑指定场景（缺省全量）")
@@ -68,6 +71,8 @@ def main(argv: list[str] | None = None) -> int:
         return 2
     if args.suite == "agent-core":
         return _run_agent_core(args)
+    if args.suite == "intent":
+        return _run_intent(args)
     if args.skip_ingest and not (args.kb_id and args.tenant_id):
         print("--skip-ingest 须配 --kb-id 与 --tenant-id（collection 与建库租户）", file=sys.stderr)
         return 2
@@ -120,6 +125,58 @@ def _console_digest(result: dict) -> dict:
             "cost_tokens_per_query": round(mt["cost_per_query_tokens"], 0),
         }
     return {"suite": result.get("suite"), "tag": result.get("tag"), "mode": result.get("mode"), "metrics": rows}
+
+
+# ---------------------------------------------------------------- intent 套件（16 篇 §2 intent 行：双档对照）
+
+
+def _run_intent(args: argparse.Namespace) -> int:
+    """intent 双档对照（A0 直觉/A1 本体约束）×金标集：四指标+ontology_constraint_gain 落盘。"""
+    from benchmarks.suites.intent.config import IntentBenchSettings
+    from benchmarks.suites.intent.runner import run_suite
+
+    overrides = {k: v for k, v in {"tag": args.tag}.items() if v is not None}
+    settings = IntentBenchSettings(**overrides)
+    print(
+        f"[bench] suite=intent tag={settings.tag} smoke={args.smoke} "
+        f"model={settings.vllm_base_url}({settings.vllm_model})"
+    )
+    if sys.platform == "win32":  # 与 run_backend.py 同款先例：Selector 循环在 asyncio.run 前固定
+        asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+    try:
+        result = asyncio.run(run_suite(settings, smoke=args.smoke, limit=args.limit))
+    except Exception as exc:  # noqa: BLE001 ——环境装配失败：退出码 1，错误如实上屏
+        print(f"[bench] 运行失败: {type(exc).__name__}: {exc}", file=sys.stderr)
+        return 1
+    gain = result["ontology_constraint_gain"]["diff"]
+    print(json.dumps(_intent_digest(result), ensure_ascii=False, indent=2))
+    print(
+        "\nontology_constraint_gain（A1−A0，E2 核心产出）：\n"
+        f"  intent_accuracy        {gain['intent_accuracy']:+.3f}\n"
+        f"  acc(clear)             {gain['intent_accuracy_clear']:+.3f}\n"
+        f"  acc(ambiguous)         {gain['intent_accuracy_ambiguous']:+.3f}\n"
+        f"  clarification_trigger  {gain['clarification_trigger_rate']:+.3f}\n"
+        f"  out_of_scope_reject    {gain['out_of_scope_reject_rate']:+.3f}"
+    )
+    print(f"\n结果 JSON: {result['artifacts']['result_json']}")
+    print(f"SUMMARY:   {result['artifacts']['summary_md']}")
+    return 0
+
+
+def _intent_digest(result: dict) -> dict:
+    """控制台摘要：双档四指标对比表（全量数据看结果 JSON）。"""
+    rows = {}
+    for tier in ("a0", "a1"):
+        mt = result["tiers"][tier]["metrics"]
+        rows[tier] = {
+            "intent_accuracy": round(mt["intent_accuracy"], 3),
+            "acc_clear": round(mt["intent_accuracy_by_level"]["clear"], 3),
+            "acc_ambiguous": round(mt["intent_accuracy_by_level"]["ambiguous"], 3),
+            "clarification_trigger_rate": round(mt["clarification_trigger_rate"], 3),
+            "out_of_scope_reject_rate": round(mt["out_of_scope_reject_rate"], 3),
+            "parse_errors": mt["parse_error_count"],
+        }
+    return {"suite": result.get("suite"), "tag": result.get("tag"), "mode": result.get("mode"), "tiers": rows}
 
 
 # ---------------------------------------------------------------- agent-core 套件（16 篇 §1/§3 文件位加载形态）

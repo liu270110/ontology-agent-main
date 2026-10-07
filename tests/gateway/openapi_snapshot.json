@@ -20606,7 +20606,7 @@
     },
     "/api/v1/tasks": {
       "get": {
-        "description": "偏移分页改 page/page_size（B1 批，api/01 §3.1；offset=(page-1)*page_size 内部换算）。",
+        "description": "偏移分页改 page/page_size（B1 批，api/01 §3.1；offset=(page-1)*page_size 内部换算）。\n\nA2 归属收口（红队 §5 修复批 2026-10-07）：恒带 user_id 归属过滤（repo 层经会话\nEXISTS 子查询）——列表只见本人会话的任务。",
         "operationId": "list_tasks_api_v1_tasks_get",
         "parameters": [
           {

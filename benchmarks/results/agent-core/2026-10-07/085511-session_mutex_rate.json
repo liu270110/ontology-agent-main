@@ -1,0 +1,70 @@
+{
+  "suite": "agent-core",
+  "scenario": "session_mutex_rate",
+  "benchmark_ref": "docs/Agent/16-基准对比体系设计 §2 + docs/评审/红队攻击性审查-2026-10-06",
+  "orsi_face_suggestion": "O5",
+  "smoke": true,
+  "started_at": "2026-10-07T00:55:15+00:00",
+  "params": {
+    "iterations": 20,
+    "concurrency": 2,
+    "smoke_iterations": 3,
+    "smoke": true
+  },
+  "metrics": {
+    "iterations": 3,
+    "mutex_held_iterations": 3,
+    "mutex_broken_iterations": 0,
+    "mutex_broken_rounds": [],
+    "session_mutex_rate": 1.0,
+    "reject_breakdown": {
+      "409": 3
+    },
+    "concurrency": 2
+  },
+  "samples": [
+    {
+      "round": 1,
+      "statuses": [
+        202,
+        409
+      ],
+      "accepted": 1
+    },
+    {
+      "round": 2,
+      "statuses": [
+        202,
+        409
+      ],
+      "accepted": 1
+    },
+    {
+      "round": 3,
+      "statuses": [
+        202,
+        409
+      ],
+      "accepted": 1
+    }
+  ],
+  "asserts": [
+    {
+      "metric": "session_mutex_rate",
+      "op": ">=",
+      "expected": 1.0,
+      "actual": 1.0,
+      "passed": true
+    },
+    {
+      "metric": "mutex_broken_iterations",
+      "op": "==",
+      "expected": 0.0,
+      "actual": 0,
+      "passed": true
+    }
+  ],
+  "status": "ok",
+  "error": null,
+  "duration_s": 1.191
+}

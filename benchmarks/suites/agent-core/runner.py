@@ -136,12 +136,12 @@ ORSI_FACE_SUGGESTION: dict[str, str] = {
     "recovery_time_s": "O5",
 }
 
-# 摘要关键指标（SUMMARY.md 单列展示）
+# 摘要关键指标（SUMMARY.md 单列展示；side_effect_duplication=C2 新口径键可见性）
 KEY_METRIC: dict[str, str] = {
     "session_mutex_rate": "session_mutex_rate",
     "cross_tenant_leak": "reject_rate",
     "memory_cross_contamination": "leak_count",
-    "side_effect_duplication": "extra_writes",
+    "side_effect_duplication": "idempotency_key_visible",
     "invalid_retry_count": "invalid_retry_count",
     "recovery_time_s": "recovery_time_s_p50",
 }
@@ -538,13 +538,19 @@ def bench_command(
     plan_hint: str = "bench 任务",
     approvals: tuple[Any, ...] = (),
     resumed: tuple[Any, ...] = (),
+    task_id: Any | None = None,
+    idempotency_key: str | None = None,
 ) -> ChatCommand:
-    """基准命令：租户/用户取种子 actor，scopes 对齐计划步 required_scopes。"""
+    """基准命令：租户/用户取种子 actor，scopes 对齐计划步 required_scopes。
+
+    C2 修复批（2026-10-07）：task_id/idempotency_key 可显式注入——场景④同一任务的两次
+    尝试共享 task_id，幂等键按 attempt 维（task_id:attempt）随命令下发（worker 语义对齐）。
+    """
     return ChatCommand(
         tenant_id=tenant.id,
         user_id=user.id,
         session_id=uuid.uuid4(),
-        task_id=uuid.uuid4(),
+        task_id=task_id if task_id is not None else uuid.uuid4(),
         run_id=uuid.uuid4(),
         agent_id=uuid.uuid4(),
         message=plan_hint,
@@ -553,6 +559,7 @@ def bench_command(
         scopes=("session:chat",),
         approvals=approvals,
         resumed_validated=resumed,
+        idempotency_key=idempotency_key,
     )
 
 
@@ -793,11 +800,14 @@ async def scenario_side_effect_dup(
     env: BenchEnv, params: dict[str, Any]
 ) -> tuple[dict[str, Any], list[dict[str, Any]]]:
     """④ C2：EXTERNAL_WRITE 假工具成功写入后，后继步强制失败→run 级重试（worker 语义：
-    新 run_id + 前序 validated 锚点 resumed_validated）→统计外部写执行次数（应 1/轮）。
+    新 run_id + 前序 validated 锚点 resumed_validated）→ 统计外部写执行次数与幂等键贯通。
 
-    编排层直调：假写工具（EXTERNAL_WRITE+参数哈希审批票）+假读工具（恒失败）；对账跳过
-    语义由内核 _reconcile_resumed_anchors 决定（EXTERNAL_WRITE 恒不跳——本场景量化该
-    形态的实际重复执行数，红队 C2「付款×2」疑点的数据回答）。
+    C2 修复批新口径（2026-10-07，红队审查 §5）：工具实现侧幂等=后续批，本场景以
+    「**重试轮写动作带相同 key**（attempt 维 idempotency_key=task_id:attempt，工单
+    param_hash 与工具调用参数同键）」为通过口径（键可见性验证）——每次尝试的审批票
+    按该次注入键后的参数签发（对齐 H-0b 工单流），写动作执行即证工单绑定含键。
+    写次数本身仍留样（对账跳过语义由内核 _reconcile_resumed_anchors 决定，
+    EXTERNAL_WRITE 恒不跳——重复执行数继续可观测，待工具侧幂等批收敛）。
     """
     runs = int(params.get("runs", 5))
     if params.get("smoke"):
@@ -805,9 +815,10 @@ async def scenario_side_effect_dup(
     write_iri = "http://ontology.example/action/bench_external_write"
     fail_iri = "http://ontology.example/action/bench_always_fail"
     write_counts: list[int] = []
+    key_observations: list[dict[str, Any]] = []
     samples: list[dict[str, Any]] = []
     for round_no in range(1, runs + 1):
-        # Arrange：两步剧本——写成功→读恒失败（强制 run 失败，触发重试）
+        # Arrange：两步剧本——写成功→读恒失败（强制 run 失败，触发重试）；任务 id 轮内共享
         write_params = {"target": f"db-row-{round_no}", "amount": 1}
         steps = (
             PlanStep(
@@ -835,30 +846,59 @@ async def scenario_side_effect_dup(
         orch, _adapter = build_bench_orchestrator(
             plan_steps=steps, extra_tools=(write_tool, fail_tool), l1=FakeL1Store(), max_rounds=len(steps) + 2
         )
-        ticket = ApprovalTicket(param_hash=canonical_param_hash(write_params))
+        task_id = uuid.uuid4()
+        key1, key2 = f"{task_id}:1", f"{task_id}:2"
+        # 工单按「注入键后」的参数签发（内核注入先于 param_hash，C2 工单绑定含键）
+        ticket1 = ApprovalTicket(param_hash=canonical_param_hash({**write_params, "idempotency_key": key1}))
+        ticket2 = ApprovalTicket(param_hash=canonical_param_hash({**write_params, "idempotency_key": key2}))
         tenant, user = env.tenants["bench-a"], env.users["owner"]
-        # Act ①：首次执行（写成功+后继步失败→run failed）
+        # Act ①：首次执行（写成功+后继步失败→run failed；命令携 attempt 维键 task:1）
         attach_capture(orch, ledger1)
-        events1 = await drain_stream(orch, bench_command(tenant=tenant, user=user, approvals=(ticket,)))
+        events1 = await drain_stream(
+            orch,
+            bench_command(
+                tenant=tenant, user=user, approvals=(ticket1,), task_id=task_id, idempotency_key=key1
+            ),
+        )
         writes_after_first = len(write_tool.calls)
-        # Act ②：run 级重试（worker 语义：新 run_id+validated 锚点；同票重放）
+        # Act ②：run 级重试（worker 语义：新 run_id+validated 锚点；键=task:2，同任务异 attempt）
         attach_capture(orch, ledger2)
         events2 = await drain_stream(
-            orch, bench_command(tenant=tenant, user=user, approvals=(ticket,), resumed=tuple(ledger1.anchors()))
+            orch,
+            bench_command(
+                tenant=tenant,
+                user=user,
+                approvals=(ticket2,),
+                resumed=tuple(ledger1.anchors()),
+                task_id=task_id,
+                idempotency_key=key2,
+            ),
         )
+        calls1 = [c for c in write_tool.calls if c.parameters.get("idempotency_key") == key1]
+        calls2 = [c for c in write_tool.calls if c.parameters.get("idempotency_key") == key2]
         write_counts.append(len(write_tool.calls))
+        key_observations.append(
+            {
+                "task_id": str(task_id),
+                "attempt1_key": key1 if calls1 else None,
+                "attempt2_key": key2 if calls2 else None,
+            }
+        )
         samples.append(
             {
                 "round": round_no,
+                "task_id": str(task_id),
                 "writes_attempt1": writes_after_first,
                 "writes_total": len(write_tool.calls),
+                "attempt1_key_visible": bool(calls1) and calls1[0].param_hash == ticket1.param_hash,
+                "attempt2_key_visible": bool(calls2) and calls2[0].param_hash == ticket2.param_hash,
                 "resume_anchors": len(ledger1.anchors()),
                 "resume_skipped": ledger2.count("kernel.step_resumed_validated"),
                 "attempt1_final": _event_digest(final_event(events1)),
                 "attempt2_final": _event_digest(final_event(events2)),
             }
         )
-    return metrics.side_effect_duplication(write_counts), samples
+    return metrics.side_effect_duplication(write_counts, key_observations=key_observations), samples
 
 
 async def scenario_invalid_retry(
@@ -1052,6 +1092,8 @@ _ALLOWED_METRIC_KEYS = frozenset(
         "unauthorized_accepted",
         "extra_writes",
         "duplication_rate",
+        "idempotency_key_visible",  # C2 新口径（红队 §5 修复批 2026-10-07）
+        "retry_key_consistent",
         "invalid_retry_count",
         "unbounded_retry",
         "abandoned_runs",

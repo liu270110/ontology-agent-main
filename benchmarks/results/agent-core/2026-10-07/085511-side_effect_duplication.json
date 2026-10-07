@@ -1,0 +1,92 @@
+{
+  "suite": "agent-core",
+  "scenario": "side_effect_duplication",
+  "benchmark_ref": "docs/Agent/16-基准对比体系设计 §2 + docs/评审/红队攻击性审查-2026-10-06",
+  "orsi_face_suggestion": "O5",
+  "smoke": true,
+  "started_at": "2026-10-07T00:55:18+00:00",
+  "params": {
+    "runs": 5,
+    "smoke_runs": 2,
+    "smoke": true
+  },
+  "metrics": {
+    "runs": 2,
+    "total_external_writes": 4,
+    "expected_writes": 2,
+    "extra_writes": 2,
+    "duplicated_rounds": [
+      1,
+      2
+    ],
+    "duplication_rate": 1.0,
+    "idempotency_key_visible": true,
+    "retry_key_consistent": true,
+    "key_rounds_with_both_keys": 2
+  },
+  "samples": [
+    {
+      "round": 1,
+      "task_id": "28a119e0-6b7b-4f9b-a904-3a5f8c365450",
+      "writes_attempt1": 1,
+      "writes_total": 2,
+      "attempt1_key_visible": true,
+      "attempt2_key_visible": true,
+      "resume_anchors": 1,
+      "resume_skipped": 0,
+      "attempt1_final": {
+        "name": "RUN_ERROR",
+        "data": {
+          "code": 3001
+        }
+      },
+      "attempt2_final": {
+        "name": "RUN_ERROR",
+        "data": {
+          "code": 3001
+        }
+      }
+    },
+    {
+      "round": 2,
+      "task_id": "7d98372c-5b70-460f-b4db-a2fd5ac9283a",
+      "writes_attempt1": 1,
+      "writes_total": 2,
+      "attempt1_key_visible": true,
+      "attempt2_key_visible": true,
+      "resume_anchors": 1,
+      "resume_skipped": 0,
+      "attempt1_final": {
+        "name": "RUN_ERROR",
+        "data": {
+          "code": 3001
+        }
+      },
+      "attempt2_final": {
+        "name": "RUN_ERROR",
+        "data": {
+          "code": 3001
+        }
+      }
+    }
+  ],
+  "asserts": [
+    {
+      "metric": "idempotency_key_visible",
+      "op": "==",
+      "expected": true,
+      "actual": true,
+      "passed": true
+    },
+    {
+      "metric": "retry_key_consistent",
+      "op": "==",
+      "expected": true,
+      "actual": true,
+      "passed": true
+    }
+  ],
+  "status": "ok",
+  "error": null,
+  "duration_s": 0.015
+}

@@ -161,13 +161,18 @@ class PgSessionRepository:
         self._db = db
         self._tenant_id = tenant_id
 
-    async def get(self, session_id: uuid.UUID) -> Session | None:
-        # with_for_update：串行化同会话并发追加，防 next_seq 重建竞态（04 §2.1 并发纪律）
-        stmt = (
-            select(SessionORM)
-            .where(SessionORM.id == session_id, SessionORM.tenant_id == self._tenant_id)
-            .with_for_update()
-        )
+    async def get(self, session_id: uuid.UUID, *, user_id: uuid.UUID | None = None) -> Session | None:
+        """取会话聚合（with_for_update 串行化同会话并发追加，04 §2.1 并发纪律）。
+
+        ``user_id``（红队审查 A2 修复批 2026-10-07）：可选**归属过滤**——传参即 SQL 级断言
+        ``sessions.user_id == user_id``，非归属会话与本租户不存在同形返回 None（404 判定
+        归调用方，防存在性探测，与 delete 端点先例一致）。默认 None 不滤——系统侧调用方
+        （worker/结果汇）显式不传，行为与修复前逐位一致。
+        """
+        stmt = select(SessionORM).where(SessionORM.id == session_id, SessionORM.tenant_id == self._tenant_id)
+        if user_id is not None:
+            stmt = stmt.where(SessionORM.user_id == user_id)
+        stmt = stmt.with_for_update()
         row = (await self._db.execute(stmt)).scalar_one_or_none()
         if row is None:
             return None
@@ -765,7 +770,14 @@ class PgTaskRepository:
         task_type: str | None = None,
         offset: int = 0,
         limit: int = 20,
+        user_id: uuid.UUID | None = None,
     ) -> list[Task]:
+        """任务列表（api/01 §3.1 信封）。
+
+        ``user_id``（红队审查 A2 修复批 2026-10-07）：可选归属过滤——经任务会话
+        EXISTS 子查询断言 ``sessions.user_id == user_id``（任务行不冗余 user 列，归属
+        以会话为锚）；None 不滤（系统侧调用方显式不传）。
+        """
         stmt = select(TaskORM).where(TaskORM.tenant_id == self._tenant_id)
         if session_id is not None:
             stmt = stmt.where(TaskORM.session_id == session_id)
@@ -773,6 +785,8 @@ class PgTaskRepository:
             stmt = stmt.where(TaskORM.status == status)
         if task_type is not None:
             stmt = stmt.where(TaskORM.type == task_type)
+        if user_id is not None:
+            stmt = stmt.where(TaskORM.session_id.in_(self._owned_session_ids(user_id)))
         stmt = stmt.order_by(TaskORM.created_at.desc(), TaskORM.id.desc()).offset(offset).limit(limit)
         rows = (await self._db.execute(stmt)).scalars().all()
         return [_task_to_domain(r, runs=[]) for r in rows]
@@ -783,6 +797,7 @@ class PgTaskRepository:
         session_id: uuid.UUID | None = None,
         status: str | None = None,
         task_type: str | None = None,
+        user_id: uuid.UUID | None = None,
     ) -> int:
         stmt = select(func.count()).select_from(TaskORM).where(TaskORM.tenant_id == self._tenant_id)
         if session_id is not None:
@@ -791,7 +806,15 @@ class PgTaskRepository:
             stmt = stmt.where(TaskORM.status == status)
         if task_type is not None:
             stmt = stmt.where(TaskORM.type == task_type)
+        if user_id is not None:
+            stmt = stmt.where(TaskORM.session_id.in_(self._owned_session_ids(user_id)))
         return int((await self._db.execute(stmt)).scalar_one())
+
+    def _owned_session_ids(self, user_id: uuid.UUID) -> Any:
+        """归属会话 id 子查询（A2 user_id 归属过滤的同源面，list/count 共用）。"""
+        return select(SessionORM.id).where(
+            SessionORM.tenant_id == self._tenant_id, SessionORM.user_id == user_id
+        )
 
     async def _load_runs(self, task_id: uuid.UUID) -> list[Run]:
         stmt = (

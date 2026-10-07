@@ -107,24 +107,40 @@ def memory_cross_contamination(probes: list[dict[str, Any]]) -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 
-def side_effect_duplication(write_counts: list[int]) -> dict[str, Any]:
-    """口径：含 EXTERNAL_WRITE 步的任务「强制失败→run 级重试」全链后，外部写动作的
-    执行总次数。16 篇 §2「重试后 EXTERNAL_WRITE 重复执行数（应 1）」——每轮写次数=1
-    为无重复；>1 即重复执行（付款×2 形态）。采集点=假工具 invoke 计数。
+def side_effect_duplication(
+    write_counts: list[int], *, key_observations: list[dict[str, Any]] | None = None
+) -> dict[str, Any]:
+    """口径（C2 修复批修订 2026-10-07）：含 EXTERNAL_WRITE 步的任务「强制失败→run 级重试」
+    全链后，外部写动作执行次数与**幂等键贯通可见性**。
 
-    extra_writes = Σ(write_counts) − 轮数（超出「每轮恰好一次」的净重复数）；
-    duplication_rate = 写次数>1 的轮数占比。
+    16 篇 §2 原口径「重复执行数应 1」按红队 §5 修法修订：工具实现侧幂等=后续批，本批
+    通过口径=「**重试轮写动作带相同 key**（attempt 维 idempotency_key=task_id:attempt，
+    审批工单 param_hash 与工具调用参数同键）」——键可见性验证（键可见+两尝试键齐备）。
+    写次数仍留样（extra_writes/duplication_rate 保留为观测面，不作为通过判据）。
+
+    key_observations 元素形状：{task_id, attempt1_key, attempt2_key}（采集点=假工具
+    ToolCall.parameters["idempotency_key"]，attempt1/2 各按其命令键过滤命中）。
     """
     runs = len(write_counts)
     total = sum(write_counts)
     duplicated_rounds = [i + 1 for i, n in enumerate(write_counts) if n > 1]
+    keys = key_observations or []
+    rounds_with_both_keys = sum(1 for k in keys if k.get("attempt1_key") and k.get("attempt2_key"))
+    format_ok = bool(keys) and all(
+        k.get("attempt1_key") == f"{k.get('task_id')}:1" and k.get("attempt2_key") == f"{k.get('task_id')}:2"
+        for k in keys
+    )
     return {
         "runs": runs,
         "total_external_writes": total,
-        "expected_writes": runs,  # 应 1/轮
+        "expected_writes": runs,  # 观测面：应 1/轮（工具侧幂等后续批收敛）
         "extra_writes": total - runs,
         "duplicated_rounds": duplicated_rounds,
         "duplication_rate": round(len(duplicated_rounds) / runs, 6) if runs else None,
+        # C2 新通过口径（红队 §5 修复批）：键贯通可见
+        "idempotency_key_visible": runs > 0 and rounds_with_both_keys == runs,
+        "retry_key_consistent": format_ok,
+        "key_rounds_with_both_keys": rounds_with_both_keys,
     }
 
 

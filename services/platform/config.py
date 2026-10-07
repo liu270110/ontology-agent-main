@@ -134,6 +134,13 @@ class Settings(BaseSettings):
     kernel_gate_timeout_s: float = Field(default=1.0, gt=0)
     kernel_sink_timeout_s: float = Field(default=5.0, gt=0)
 
+    # H5 预算伪造防线（红队审查 docs/评审/红队攻击性审查-2026-10-06 §5，2026-10-07 修复批）：
+    # 工具回传 usage 的启发式下界系数——估算值 max(执行时长×最小速率, 输出字符数/4) × 本
+    # 系数 = 入账下界；回传值低于下界即告警并按估算入账（kernel.usage_adjusted 事件，
+    # usage_estimated=true）。默认 0.5 温和（真低报才调整，正常抖动不误伤）；0<ratio≤1。
+    # 显式构造参数优先（ExecutionStage 直传通道），未传运行期读这里（D2 纪律同上）。
+    kernel_usage_floor_ratio: float = Field(default=0.5, gt=0.0, le=1.0)
+
     # M4.5-A 运行中输入面（docs/Agent/12-M4.5运行中输入面与模型韧性设计（主仓本地）§1.1/§1.2）：
     # kernel_inbox_max_per_run=KernelInbox 每 Run 待处理条目容量上限（三队列合计；
     # 超限 4203 INBOX_CAPACITY 结构化拒绝）；estop_ttl_seconds=紧急停止键 TTL（§1.2 定稿 24h）。

@@ -375,6 +375,7 @@ class ChatOrchestrator:
                 inbox=inbox,  # M4.5-A：段边界 steering/inject 拼接（§1.1）
                 control_gate=control_probe,  # M4.5-A：段边界 estop 闸门（§1.2，只挡新工作）
                 resumed_validated=tuple(command.resumed_validated or ()),  # M4.5-A：P-4 计划对账锚点（§1.3）
+                idempotency_key=command.idempotency_key,  # C2 EXTERNAL_WRITE 幂等锚（红队 §5 修复批）
             )
         finally:
             if self._run_registry is not None:  # 终态注销（显式 remove 防泄漏；异常路径同收）

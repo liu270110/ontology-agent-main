@@ -55,6 +55,7 @@ class RunContext:
         clock: Callable[[], float],
         approvals: tuple[ApprovalTicket, ...],
         ledger_sink: LedgerSink | None = None,
+        idempotency_key: str | None = None,
     ) -> None:
         self.task = task
         self.ctx = ctx
@@ -91,6 +92,11 @@ class RunContext:
         self.stuck_emitted = False
         # K12-c：当前 stuck 期已注入卡死引导 nudge（同款每期一次去重）。
         self.stuck_nudged = False
+        # C2 EXTERNAL_WRITE 幂等锚（红队审查 §5 修复批 2026-10-07）：attempt 维幂等键
+        # （key=task_id:attempt，worker 经 ChatCommand 注入、loop.run 透传）——执行阶段对
+        # EXTERNAL_WRITE 步注入工具调用参数与审批工单（param_hash 绑定），工具实现侧
+        # 幂等消费后续批接键。
+        self.idempotency_key: str | None = idempotency_key
 
     @property
     def is_stuck(self) -> bool:

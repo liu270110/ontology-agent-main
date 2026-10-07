@@ -26,6 +26,7 @@ from services.agent.api.deps import (
     SessionWriteDep,
     UowDep,
     domain_error,
+    get_session_owned,
 )
 from services.agent.api.schemas.session import (
     GroupMemberIn,
@@ -473,9 +474,7 @@ async def list_sessions(
 @router.get("/{session_id}", summary="会话详情与状态")
 async def get_session(session_id: uuid.UUID, principal: SessionReadDep, uow: UowDep) -> SessionOut:
     async with uow.for_tenant(principal.tenant_id) as tx:
-        session = await tx.sessions.get(session_id)
-    if session is None:
-        raise GatewayError(404, "会话不存在", status_code=404)
+        session = await get_session_owned(tx, principal, session_id)  # A2 归属收口（红队 §5）
     return from_domain(session)
 
 
@@ -484,9 +483,7 @@ async def close_session(session_id: uuid.UUID, principal: SessionWriteDep, uow: 
     """close=生命周期状态迁移唯一入口（api/01 §5.2 裁决注记；触发 L1 归档/L2 沉淀走事件，M3+）。"""
     try:
         async with uow.for_tenant(principal.tenant_id) as tx:
-            session = await tx.sessions.get(session_id)
-            if session is None:
-                raise GatewayError(404, "会话不存在", status_code=404)
+            session = await get_session_owned(tx, principal, session_id)  # A2 归属收口（红队 §5）
             session.close()  # 状态机断言在聚合方法内（04 §3）；created→closed 非法亦在此拒绝
             await tx.sessions.save_meta(session)
             # session.closed 消费方=memory_service（04 §6.1）；M1 进程内缓冲，M4 起 outbox 同事务落库
@@ -499,9 +496,7 @@ async def close_session(session_id: uuid.UUID, principal: SessionWriteDep, uow: 
 @router.get("/{session_id}/members", summary="群成员列表（27 篇 X15）")
 async def list_members(session_id: uuid.UUID, principal: SessionReadDep, uow: UowDep) -> MemberListOut:
     async with uow.for_tenant(principal.tenant_id) as tx:
-        session = await tx.sessions.get(session_id)
-        if session is None:
-            raise GatewayError(404, "会话不存在", status_code=404)
+        session = await get_session_owned(tx, principal, session_id)  # A2 归属收口（红队 §5）
     return MemberListOut(items=[member_from_domain(m) for m in session.members])
 
 
@@ -511,9 +506,7 @@ async def add_member(
 ) -> MemberListOut:
     try:
         async with uow.for_tenant(principal.tenant_id) as tx:
-            session = await tx.sessions.get(session_id)
-            if session is None:
-                raise GatewayError(404, "会话不存在", status_code=404)
+            session = await get_session_owned(tx, principal, session_id)  # A2 归属收口（红队 §5）
             member_agent = await tx.agents.get(body.agent_id)
             if member_agent is None:
                 raise GatewayError(404, "群成员 agent 不存在", status_code=404)
@@ -541,9 +534,7 @@ async def update_member(
 ) -> MemberListOut:
     try:
         async with uow.for_tenant(principal.tenant_id) as tx:
-            session = await tx.sessions.get(session_id)
-            if session is None:
-                raise GatewayError(404, "会话不存在", status_code=404)
+            session = await get_session_owned(tx, principal, session_id)  # A2 归属收口（红队 §5）
             role = MemberRole(body.routing_role) if body.routing_role else None
             session.update_member(
                 member_id,
@@ -562,9 +553,7 @@ async def update_member(
 async def remove_member(session_id: uuid.UUID, member_id: uuid.UUID, principal: SessionWriteDep, uow: UowDep) -> None:
     try:
         async with uow.for_tenant(principal.tenant_id) as tx:
-            session = await tx.sessions.get(session_id)
-            if session is None:
-                raise GatewayError(404, "会话不存在", status_code=404)
+            session = await get_session_owned(tx, principal, session_id)  # A2 归属收口（红队 §5）
             session.remove_member(member_id)
             await tx.sessions.save_meta(session)
     except SessionError as exc:
@@ -577,9 +566,7 @@ async def patch_session(
 ) -> SessionOut:
     try:
         async with uow.for_tenant(principal.tenant_id) as tx:
-            session = await tx.sessions.get(session_id)
-            if session is None:
-                raise GatewayError(404, "会话不存在", status_code=404)
+            session = await get_session_owned(tx, principal, session_id)  # A2 归属收口（红队 §5）
             if body.routing is not None:
                 session.set_routing(RoutingMode(body.routing))
             if body.title is not None:
@@ -617,9 +604,7 @@ async def rewind_session(
     """
     try:
         async with uow.for_tenant(principal.tenant_id) as tx:
-            session = await tx.sessions.get(session_id)
-            if session is None:
-                raise GatewayError(404, "会话不存在", status_code=404)
+            session = await get_session_owned(tx, principal, session_id)  # A2 归属收口（红队 §5）
             if session.status in (SessionStatus.CLOSED, SessionStatus.ARCHIVED):
                 raise SessionError("4101 SESSION_CLOSED: 会话已关闭，拒绝回退")
             anchor = await tx.sessions.get_message_by_seq(session_id, body.before_seq)
@@ -675,9 +660,9 @@ async def delete_session(session_id: uuid.UUID, principal: SessionWriteDep, uow:
       二次删除 404（前端 deleteSession 对 204 空体按成功放行，见 SessionList 注释）。
     """
     async with uow.for_tenant(principal.tenant_id) as tx:
-        session = await tx.sessions.get(session_id)
-        if session is None or session.user_id != principal.user_id:
-            raise GatewayError(404, "会话不存在", status_code=404)
+        # A2 归属收口（红队 §5）：删除口径不变（user_id 比对、非所有者 404 防存在性探测），
+        # 改经统一依赖 get_session_owned（repo 层 SQL 级过滤，与本端点原判逐位等价）。
+        await get_session_owned(tx, principal, session_id)
         await tx.tasks.delete_by_session(session_id)  # FK 逆序：task_events→runs→tasks
         await tx.sessions.delete_cascade(session_id)  # messages→session_members→sessions
         # session.deleted 消费方=审计/检索下线（04 §6.1）；进程内缓冲，M4 起 outbox 同事务落库
@@ -703,8 +688,7 @@ async def cancel_session_run(
     """
     try:
         async with uow.for_tenant(principal.tenant_id) as tx:
-            if await tx.sessions.get(session_id) is None:
-                raise GatewayError(404, "会话不存在", status_code=404)
+            await get_session_owned(tx, principal, session_id)  # A2 归属收口（红队 §5）
             task = (
                 await tx.tasks.find_by_run(body.run_id)
                 if body.run_id is not None
@@ -762,9 +746,7 @@ async def send_message(
     wants_sse = request is not None and _SSE_MEDIA_TYPE in request.headers.get("accept", "")
     try:
         async with uow.for_tenant(principal.tenant_id) as tx:
-            session = await tx.sessions.get(session_id)
-            if session is None:
-                raise GatewayError(404, "会话不存在", status_code=404)
+            session = await get_session_owned(tx, principal, session_id)  # A2 归属收口（红队 §5）
             seq = session.append_message("user", body.content)  # 4101：closed 后拒新消息（04 §2）
             if await tx.tasks.find_running_by_session(session_id) is not None:
                 raise TaskError("4102 TASK_ALREADY_RUNNING: 会话存在运行中的任务（03 篇 §3 预检）")
@@ -781,7 +763,9 @@ async def send_message(
                 type="chat",
                 session_id=session_id,
                 agent_id=session.agent_id,  # 任务归属 agent（api/01 §5.1 DELETE /agents 占用检查依据）
-                payload={"message_seq": seq},
+                # C4 trace 贯通（红队审查 §5 修复批 2026-10-07）：受理面记录网关原始 trace，
+                # worker 202 重放时回溯复用（无法回溯才用 worker 合成兜底）；直调无 Request=空串。
+                payload={"message_seq": seq, "origin_trace_id": _origin_trace(request)},
             )
             run = task.start_run()  # 聚合方法：pending→running + 活跃 Run（queued）
             if wants_sse:
@@ -835,13 +819,22 @@ async def stream_events(
     订阅检查（会话存在性）用短事务即用即弃，流内零事务（03 §6.1）。
     """
     async with uow.for_tenant(principal.tenant_id) as tx:
-        if await tx.sessions.get(session_id) is None:
-            raise GatewayError(404, "会话不存在", status_code=404)
+        await get_session_owned(tx, principal, session_id)  # A2 归属收口（红队 §5）
     header_id = request.headers.get("last-event-id", "").strip()
     effective = int(header_id) if header_id.isdigit() else last_event_id
     heartbeat_s = float(getattr(request.app.state.settings, "sse_heartbeat_seconds", 15))
     stream = _get_hub(request).open_stream(session_id, last_event_id=effective, heartbeat_s=heartbeat_s)
     return StreamingResponse(stream, media_type=_SSE_MEDIA_TYPE, headers=dict(_SSE_HEADERS))
+
+
+def _origin_trace(request: Request | None) -> str:
+    """C4 trace 贯通（红队审查 §5 修复批 2026-10-07）：取网关中间件注入的原始 trace。
+
+    request.state.trace_id 由 RequestID/trace 中间件写入（取/生成 X-Request-ID）；
+    端点直调（无 Request）与未注入形态返回空串——worker 侧空值即回退 worker 合成 trace。
+    """
+    state = getattr(request, "state", None)
+    return str(getattr(state, "trace_id", "") or "").strip()
 
 
 def _chat_stream_response(
@@ -965,10 +958,7 @@ async def list_messages(
     limit: Annotated[int, Query(ge=1, le=100)] = 20,
 ) -> MessagePageOut:
     async with uow.for_tenant(principal.tenant_id) as tx:
-        if await tx.sessions.get(session_id) is None:
-            from services.platform.errors import GatewayError
-
-            raise GatewayError(404, "会话不存在", status_code=404)
+        await get_session_owned(tx, principal, session_id)  # A2 归属收口（红队 §5）
         # 多取一条探测后续页（游标分页）；游标语义见 SessionRepository.list_messages
         rows = await tx.sessions.list_messages(session_id, before_id=before_id, limit=limit + 1)
     has_more = len(rows) > limit

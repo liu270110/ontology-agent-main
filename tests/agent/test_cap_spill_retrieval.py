@@ -57,7 +57,7 @@ async def test_get_同租户原文可取回_跨租户与越界拒绝_读不到�
     # arrange：tenant_a 落盘一份原文
     store = LocalDirSpillStore(tmp_path)
     tenant_a, tenant_b = uuid.uuid4(), uuid.uuid4()
-    locator = await store.put(f"spill/{tenant_a}/run-1/call-1.json", "原文ABC")
+    locator = await store.put(f"{tenant_a}/run-1/call-1.json", "原文ABC")
     # act + assert：同租户兑换成功
     assert await store.get(locator, tenant_id=str(tenant_a)) == "原文ABC"
     # 跨租户拒绝（租户归属校验：root 内但非本租户段）
@@ -69,7 +69,7 @@ async def test_get_同租户原文可取回_跨租户与越界拒绝_读不到�
     with pytest.raises(ValueError):
         await store.get(str(outside), tenant_id=str(tenant_a))
     # 读不到 ≠ 非法：root 内同租户但文件不存在 → None（双语义可区分）
-    missing = str(tmp_path / f"spill/{tenant_a}/run-1/missing.json")
+    missing = str(tmp_path / f"{tenant_a}/run-1/missing.json")
     assert await store.get(missing, tenant_id=str(tenant_a)) is None
 
 
@@ -77,6 +77,24 @@ async def test_get_空locator_结构化拒绝():
     store = LocalDirSpillStore(Path("."))  # root 不触达（空指针先拒）
     with pytest.raises(ValueError):
         await store.get("  ", tenant_id=str(uuid.uuid4()))
+
+
+async def test_get_位置断言_深层撞租户段被拒_首段非租户不放行(tmp_path: Path):
+    """红队 H1（docs/评审/红队攻击性审查-2026-10-06 §5，2026-10-07 修复批）：
+    旧判法「租户段出现在路径任意位置」可被深层目录撞 UUID 绕过——首段非租户的嵌套
+    路径即使中间恰含调用租户 UUID 也必须拒（位置断言 parts[0]==tenant）。"""
+    # Arrange：伪造深层撞段文件 root/<他段>/<调用租户uuid>/x.json（旧判法放行、新判法必须拒）
+    store = LocalDirSpillStore(tmp_path)
+    tenant = uuid.uuid4()
+    deep = tmp_path / f"collide-segment/{tenant}/x.json"
+    deep.parent.mkdir(parents=True, exist_ok=True)
+    deep.write_text("深层撞段机密", encoding="utf-8")
+    # Act + Assert：位置断言拒绝（旧判法会因「租户段在 parts 中」误放行）
+    with pytest.raises(ValueError, match="跨租户"):
+        await store.get(str(deep), tenant_id=str(tenant))
+    # 对照：首段=租户的合法键照常兑换（写侧键形={tenant}/{run}/{call}，H1 同源约束）
+    locator = await store.put(f"{tenant}/r/ok.txt", "合法原文")
+    assert await store.get(locator, tenant_id=str(tenant)) == "合法原文"
 
 
 # ── K14-b：spill.get 兑换工具 ─────────────────────────────────────────────────
@@ -87,7 +105,7 @@ async def test_兑换端到端_落盘换指针_分窗续读至末窗(tmp_path: P
     store = LocalDirSpillStore(tmp_path)
     tenant = uuid.uuid4()
     text = "".join(f"行{i:04d}；" for i in range(750))  # 6000 字符
-    locator = await store.put(f"spill/{tenant}/r/c.txt", text)
+    locator = await store.put(f"{tenant}/r/c.txt", text)
     binding = build_spill_retrieval_binding(store)
     ctx = _ctx(tenant)
     # act：全量兑换（缺省 offset/limit）
@@ -110,7 +128,7 @@ async def test_兑换读不到_结构化错误自带恢复指引(tmp_path: Path)
     # arrange：root 内同租户但文件不存在（已归档/清理形态）
     store = LocalDirSpillStore(tmp_path)
     tenant = uuid.uuid4()
-    missing = str(tmp_path / f"spill/{tenant}/r/gone.txt")
+    missing = str(tmp_path / f"{tenant}/r/gone.txt")
     binding = build_spill_retrieval_binding(store)
     # act
     result = await binding.invoke(_call({"locator": missing}), _ctx(tenant))
@@ -123,7 +141,7 @@ async def test_兑换读不到_结构化错误自带恢复指引(tmp_path: Path)
 async def test_兑换拒绝跨租户与越界locator_错误带指引(tmp_path: Path):
     store = LocalDirSpillStore(tmp_path)
     tenant_a, tenant_b = uuid.uuid4(), uuid.uuid4()
-    locator = await store.put(f"spill/{tenant_a}/r/secret.txt", "他租户机密")
+    locator = await store.put(f"{tenant_a}/r/secret.txt", "他租户机密")
     binding = build_spill_retrieval_binding(store)
     # 跨租户：B 租户兑换 A 租户指针 → 结构化拒绝（防孤儿，store 侧收口）
     cross = await binding.invoke(_call({"locator": locator}), _ctx(tenant_b))
@@ -139,7 +157,7 @@ async def test_兑换拒绝跨租户与越界locator_错误带指引(tmp_path: P
 async def test_兑换参数纵深防御_缺参_负offset_布尔limit全收口(tmp_path: Path):
     store = LocalDirSpillStore(tmp_path)
     tenant = uuid.uuid4()
-    locator = await store.put(f"spill/{tenant}/r/c.txt", "内容")
+    locator = await store.put(f"{tenant}/r/c.txt", "内容")
     binding = build_spill_retrieval_binding(store)
     ctx = _ctx(tenant)
     missing_param = await binding.invoke(_call({}), ctx)
@@ -155,7 +173,7 @@ async def test_兑换工具_只读免审批_limit硬钳防回灌爆量(tmp_path:
     store = LocalDirSpillStore(tmp_path)
     tenant = uuid.uuid4()
     text = "x" * (RETRIEVE_MAX_LIMIT_CHARS + 5_000)
-    locator = await store.put(f"spill/{tenant}/r/big.txt", text)
+    locator = await store.put(f"{tenant}/r/big.txt", text)
     binding = build_spill_retrieval_binding(store)
     # act + assert：execution_mode=read（B1 基线放行，无审批面）
     assert binding.execution_mode is ExecutionMode.READ

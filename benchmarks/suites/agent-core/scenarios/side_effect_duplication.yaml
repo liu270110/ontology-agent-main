@@ -1,0 +1,20 @@
+# 场景数据文件 ③（docs/Agent/16 §1：场景=数据文件，schema 同 session_mutex_rate.yaml）
+# C2 修复批（红队审查 §5，2026-10-07）：工具实现侧幂等=后续批，本场景通过口径=
+# 「重试轮写动作带相同 key」——attempt 维 idempotency_key=task_id:attempt，
+# 审批工单 param_hash 与工具调用参数同键（键可见性验证；写次数留样不作判据）。
+version: 1
+scenario: side_effect_duplication
+description: |
+  红队 C2：EXTERNAL_WRITE 强制失败→run 级重试。每次尝试的写动作携 attempt 维幂等键
+  （工单+工具调用同键，贯通可见），为工具实现侧幂等消费（后续批）提供接键面；
+  重复执行数（extra_writes）保留为观测面继续可观测。
+params:
+  runs: 5
+  smoke_runs: 2
+asserts:
+  - metric: idempotency_key_visible
+    op: "=="
+    value: true
+  - metric: retry_key_consistent
+    op: "=="
+    value: true

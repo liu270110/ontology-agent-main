@@ -413,6 +413,26 @@ class TaskRunWorker:
                 for a in anchors
                 if isinstance(a.get("param_hash"), str) and a["param_hash"]
             )
+            # C4 trace 贯通（红队审查 §5 修复批 2026-10-07）：受理面（send_message 202）落
+            # task.payload 的网关原始 trace 就近回溯——重放命令复用原 trace 保持跨层同链；
+            # 无法回溯（存量任务/直造任务）才用 worker 合成（现状兜底，行为不回退）。
+            origin_trace = str((task.payload or {}).get("origin_trace_id") or "").strip()
+            # C2 EXTERNAL_WRITE 幂等锚（红队审查 §5 修复批）：attempt 维度幂等键随命令下发
+            # （key=task_id:attempt），经内核注入写动作工具调用参数与审批工单（本 worker 落
+            # run.idempotency_key 审计行，键贯通可见性=bench side_effect_duplication 新口径）。
+            idempotency_key = f"{task.id}:{task.attempt_count}"
+            await tx.tasks.append_event(
+                task.id,
+                TaskEvent(
+                    task_id=task.id,
+                    event_type="run.idempotency_key",
+                    data={  # C2 审计落账：键贯通可见（工单 param_hash 绑定同键参数，工具实现侧幂等后续批）
+                        "run_id": str(run.id),
+                        "idempotency_key": idempotency_key,
+                        "attempt": task.attempt_count,
+                    },
+                ),
+            )
 
         command = ChatCommand(
             tenant_id=claim.tenant_id,
@@ -422,7 +442,9 @@ class TaskRunWorker:
             run_id=run.id,
             agent_id=session.agent_id,
             message=message_content,
-            trace_id=f"worker-{run.id}",
+            trace_id=origin_trace or f"worker-{run.id}",
+            original_trace_id=origin_trace or None,
+            idempotency_key=idempotency_key,
             adapter="builtin",
             resumed_validated=resumed,
             task_type=task.type,  # 40 篇 §4.2：RUN_STARTED.task_type 透传
@@ -453,6 +475,41 @@ class TaskRunWorker:
             if not mine:
                 # 票属其他 run/已被消费：清仓一致性由审批侧保证，此处幂等跳过
                 return False
+            # C5 estop×审批（红队审查 §5 修复批 2026-10-07）：审批回执恢复前补 estop 前检
+            # （_execute_claimed 认领处同款先例）——estop 激活期的人工批准**不得驱动 run 续跑**
+            # （违背暂停闸意图，红队 C5：「estop 激活→审批放行→断言 run 不恢复，应 0」）。
+            # 取票事务内先检后消费：4104 结构化拒绝零执行（run cancelled + task failed 且
+            # retryable=true，解除后经既有重试面自然恢复）；审批票不消费（留在票仓，幂等
+            # 护栏=task.active_run_id 断言保证后续 resume 声明不再命中本 run）。
+            estop_reason = await self._estop_reason(claim.tenant_id)
+            if estop_reason is not None:
+                run.cancel()
+                run.error = {
+                    "code": int(ErrorCode.ESTOP_ACTIVE),
+                    "message": f"紧急停止生效（estop: {estop_reason}），审批恢复被拒（A-7 只挡新工作，C5）",
+                    "retryable": True,
+                }
+                task.fail()
+                await tx.tasks.save(task)
+                await tx.tasks.append_event(
+                    task.id,
+                    TaskEvent(
+                        task_id=task.id,
+                        event_type="run.estop_rejected",
+                        data={
+                            "run_id": str(run.id),
+                            "code": int(ErrorCode.ESTOP_ACTIVE),
+                            "reason": estop_reason,
+                            "retryable": True,
+                            "suppressed": "approval_resume",
+                        },
+                    ),
+                )
+                logger.warning(
+                    "task=%s 审批 resume 被 estop 拒绝（4104，C5）：暂停闸优先于审批回执，解除后可经重试面恢复",
+                    task.id,
+                )
+                return True
             payload = dict(task.payload or {})
             payload["approvals"] = [r for r in rows if r not in mine]
             task.payload = payload
@@ -493,6 +550,11 @@ class TaskRunWorker:
                     for a in anchors
                     if isinstance(a.get("param_hash"), str) and a["param_hash"]
                 )
+                # C4/C2（红队审查 §5 修复批）：resume 重放同 queued 认领口径——网关原始 trace
+                # 回溯（payload origin_trace_id）+ attempt 维幂等键（同 attempt 重放同键，与
+                # 首过写动作同锚；审计行已在认领时落账，此处不重复）。
+                origin_trace = str((task.payload or {}).get("origin_trace_id") or "").strip()
+                idempotency_key = f"{task.id}:{task.attempt_count}"
             else:
                 # 全部过期：视同无回执（B5 默认拒绝）
                 run.fail({"code": 2001, "message": "运行中审批票已过期（视同无回执，B5）", "retryable": False})
@@ -515,7 +577,9 @@ class TaskRunWorker:
             run_id=run.id,
             agent_id=session.agent_id,
             message=message_content,
-            trace_id=f"worker-resume-{run.id}",
+            trace_id=origin_trace or f"worker-resume-{run.id}",
+            original_trace_id=origin_trace or None,
+            idempotency_key=idempotency_key,
             adapter="builtin",
             approvals=tickets,
             resumed_validated=resumed,
@@ -593,6 +657,10 @@ class TaskRunWorker:
         final_error: dict[str, Any] | None = None
         async for event in orchestrator.stream_chat(command):
             payload = wire_data(event)
+            if command.original_trace_id and "original_trace_id" not in payload:
+                # C4 trace 贯通（红队审查 §5 修复批）：事件 payload 注网关原始 trace——
+                # 跨副本/回放检索可按受理链聚合（trace_id 已复用原值，此注记为显式可查询锚）。
+                payload["original_trace_id"] = command.original_trace_id
             if event.name is ChatEventName.RUN_ERROR:
                 final_error = dict(event.data)
             if event.name in (ChatEventName.RUN_FINISHED, ChatEventName.RUN_ERROR):

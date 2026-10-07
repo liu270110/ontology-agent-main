@@ -10,7 +10,7 @@ from services.agent.business.kernel.errors import KernelContractError
 from services.agent.business.kernel.execution import ExecutionStage
 from services.agent.business.kernel.gate_baseline import canonical_param_hash
 from services.agent.business.kernel.loop import AgentKernel
-from services.agent.domain.model.kernel_actions import ApprovalTicket, ExecutionMode
+from services.agent.domain.model.kernel_actions import ApprovalTicket, ExecutionMode, SandboxSpec
 from services.agent.domain.model.kernel_planning import PlanStep
 from services.agent.domain.model.task import RunStatus
 from tests.agent.conftest import (
@@ -140,3 +140,105 @@ async def test_白名单规格正常路径_沙箱执行成功且租约释放():
     assert backend.acquired_specs[0].network_enabled is False
     assert backend.active_leases == []  # 正常路径租约释放、钩子摘除
     assert outcome.terminal_states[0].status.value == "validated"
+
+
+# ── K18-a 门 3 通道（方案=docs/Agent/13 §24）：SandboxSpec.env 受控供给通道 ──────────
+
+
+def test_沙箱规格env缺省None_序列化向后兼容():
+    """K18-a：缺省构造 env=None；model_dump 既有字段形状不变，env 以 null 落盘可回读。"""
+    spec = SandboxSpec(image="platform/sandbox:default")
+    assert spec.env is None
+    dumped = spec.model_dump()
+    # 既有字段零变化（向后兼容面）：仅新增 env=null 键
+    assert dumped == {
+        "image": "platform/sandbox:default",
+        "network_enabled": False,
+        "egress_whitelist": (),
+        "cpu_limit": "1.0",
+        "memory_limit": "512m",
+        "env": None,
+    }
+    # null 载荷可原样回读（序列化往返）
+    assert SandboxSpec.model_validate(dumped).env is None
+
+
+def test_规格构造_env参数映射进规格通道():
+    """K18-a：parameters.env 非 None → 映射入 SandboxSpec.env（值字符串化，通道值原样保留）。"""
+    spec = ExecutionStage.sandbox_spec(
+        PlanStep(
+            seq=1,
+            action_iri=CODE_ACTION_IRI,
+            execution_mode=ExecutionMode.CODE,
+            parameters={
+                "image": "platform/sandbox:9",
+                "code": "print(1)",
+                "env": {"SKILL_TOKEN": "tok-123", "RETRIES": 3},
+            },
+            parameter_schema={},
+            required_scopes=(),
+        )
+    )
+    assert spec.env == {"SKILL_TOKEN": "tok-123", "RETRIES": "3"}
+
+
+def test_规格构造_无env参数_不注env保持缺省None():
+    """K18-a：parameters.env 缺省 → 不注 env，保持缺省 None（既有路径零差）。"""
+    spec = ExecutionStage.sandbox_spec(
+        PlanStep(
+            seq=1,
+            action_iri=CODE_ACTION_IRI,
+            execution_mode=ExecutionMode.CODE,
+            parameters={"image": "platform/sandbox:9", "code": "print(1)"},
+            parameter_schema={},
+            required_scopes=(),
+        )
+    )
+    assert spec.env is None
+
+
+def test_规格构造_env非映射_契约违规拒绝():
+    """K18-a 负向：env 通道只收字符串映射，非映射入参走内核结构化契约错误。"""
+    step = PlanStep(
+        seq=1,
+        action_iri=CODE_ACTION_IRI,
+        execution_mode=ExecutionMode.CODE,
+        parameters={"code": "1+1", "env": "API_KEY=sk-leak"},
+        parameter_schema={},
+        required_scopes=(),
+    )
+    with pytest.raises(KernelContractError, match="env 通道契约违规"):
+        ExecutionStage.sandbox_spec(step)
+
+
+async def test_code行动带env参数_通道值随规格透传至执行后端():
+    """K18-a 端到端（内核侧一跳）：env 通道值经 sandbox_spec 随规格到达后端 acquire；宿主 env 不涉入。"""
+    params = {"code": "print('停电分析')", "env": {"SKILL_TOKEN": "tok-k18"}}
+    backend = FakeBackend()
+    planner = FakePlanner(
+        make_candidate(
+            (
+                make_step(
+                    seq=1,
+                    action_iri=CODE_ACTION_IRI,
+                    mode=ExecutionMode.CODE,
+                    params=params,
+                    scopes=(),
+                    schema={
+                        "properties": {
+                            "code": {"type": "string"},
+                            "env": {"type": "object"},
+                        }
+                    },
+                ),
+            )
+        )
+    )
+    kernel = AgentKernel(
+        make_tool_dispatcher(FakeTool(), register_planning_strategy=(planner,), register_execution_backend=(backend,))
+    )
+    ticket = ApprovalTicket(param_hash=canonical_param_hash(params))
+    outcome = await kernel.run(make_task(), make_ctx(), budget=Budget(max_steps=5, duration_s=10), approvals=(ticket,))
+    assert outcome.status == str(RunStatus.COMPLETED)
+    assert backend.acquired_specs[0].env == {"SKILL_TOKEN": "tok-k18"}  # 通道值受控透传
+    assert backend.active_leases == []

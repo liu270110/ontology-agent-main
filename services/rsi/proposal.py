@@ -138,8 +138,9 @@ class Proposal:
     # K15-a 原文快照（docs/Agent/13 §21，G-15）：受理时条目原文与 baseline_hash 同位双存，
     # apply 路径 hash 通道通过后整内容直比（第三道写冲突防线）。内存口径：阶段 A 条目=
     # prompt 模板/config（KB 级），进程内候选池直存原文可接受；None=旧提案/未存原文（K9
-    # hash 通道语义不变）；rsi_proposals DDL 欠账清偿时同列落库。
-    baseline_content: str | None = None
+    # hash 通道语义不变）；rsi_proposals DDL 欠账清偿时同列落库。repr=False（K23 P2①）：
+    # 原文快照不进 repr——日志/异常消息间接泄漏面收口（hash 摘要照常可见，非原文）。
+    baseline_content: str | None = field(default=None, repr=False)
     # K13-b 提交回显：submit() 受理成功时由服务侧回填同 target 最近 rejected 上下文
     # （有界截断，最旧→最新；构造时恒空——落选回喂的提交端可见面）
     rejection_feedback: tuple[RejectionRecord, ...] = ()

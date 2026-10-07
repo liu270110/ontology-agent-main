@@ -24,9 +24,13 @@ from pydantic import BaseModel, ConfigDict, Field
 
 # M3 落地顺序裁决（Agent 服务设计 §3.2：M3 仅 builtin+claude，pi/nanobot 随 M5，openclaw/hermes
 # 走标准协议接入不自研适配器）；新增类型=此处扩枚举 + DTO pattern 同步，禁绕过聚合直写。
-ALLOWED_AGENT_TOOLS: tuple[str, ...] = ("builtin", "claude")
+# 20 篇 §2/§3.3（2026-10-07）：Bridge 通用形态扩枚举——acp（F4 标准协议，G1 批）；
+# http-generic/cli-generic/a2a 随 G2/下波追加（注册面 profile 缺失=422，见 agents.py）。
+ALLOWED_AGENT_TOOLS: tuple[str, ...] = ("builtin", "claude", "acp")
 
-_CONFIG_KEYS = frozenset({"model", "temperature", "tool_whitelist", "num_ctx"})
+# G1（20 篇 §2）：acp_profile=ACP 画像名（adapters/profiles/acp/<名>.yaml；注册面校验 profile
+# 在位否则 422，值域收窄同其余键——api/01「未知字段一律拒绝」同构）。
+_CONFIG_KEYS = frozenset({"model", "temperature", "tool_whitelist", "num_ctx", "acp_profile"})
 
 
 class AgentError(Exception):
@@ -84,6 +88,11 @@ def _validate_config(config: dict[str, Any]) -> None:
     num_ctx = config.get("num_ctx")
     if num_ctx is not None and (not isinstance(num_ctx, int) or isinstance(num_ctx, bool) or num_ctx <= 0):
         raise AgentError("3001 PARAM_INVALID: config.num_ctx 须为正整数")
+    acp_profile = config.get("acp_profile")
+    if acp_profile is not None and (
+        not isinstance(acp_profile, str) or not acp_profile.strip() or len(acp_profile) > 128
+    ):
+        raise AgentError("3001 PARAM_INVALID: config.acp_profile 须为 1~128 字符的画像名")
 
 
 class Agent(BaseModel):

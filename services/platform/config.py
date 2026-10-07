@@ -144,6 +144,13 @@ class Settings(BaseSettings):
     # 新会话拒绑、存量 Run 跑完；成功清零自愈）
     agent_degrade_threshold: int = 3
 
+    # Bridge F4 ACP 通用适配器（docs/Agent/20 §2 G1 批；可变参数唯一事实源=统一配置层）：
+    acp_default_profile: str = "opencode"  # agent_tool=acp 注册未指定 profile 时的回落画像名
+    acp_profiles_dir: str | None = None  # profile 目录覆盖（None=包内 adapters/profiles/acp）
+    acp_spawn_timeout_s: float = 10.0  # 子进程 spawn + initialize 握手超时
+    acp_request_timeout_s: float = 60.0  # session/prompt 等请求缺省超时（调用方 timeout_ms 显式值优先）
+    acp_permission_wait_s: float = 300.0  # 审批工单等待上限（超时默认拒绝——B5 SLA 同语义）
+
     # X16 工作流执行引擎（2026-10-07 批；api/01 §5.11 test/runs 端点）：节点执行超时上限。
     # per-node 配置=节点 params.timeout_s（秒，夹取 [1,3600]）；未配置回落本缺省值
     # （统一配置层铁律——08 篇，OA_WORKFLOW_NODE_TIMEOUT_DEFAULT_S 覆盖）。

@@ -371,7 +371,8 @@ class ChatOrchestrator:
         dispatcher.register_planning_strategy(adapter.turn_planner(turn))
         dispatcher.register_context_provider(adapter.turn_context_provider(turn))
         dispatcher.register_tool(adapter.turn_tool(turn, box, on_event))
-        for binding in turn_bindings:  # 能力层 P0（docs/Agent/06）：fs/web 等工具经 B1 门禁链注册；K28-c 按会话工具集过滤
+        # 能力层 P0（docs/Agent/06）：fs/web 等工具经 B1 门禁链注册；K28-c 按会话工具集过滤
+        for binding in turn_bindings:
             dispatcher.register_tool(binding)
         if self._criterion_projection is not None:  # E-4 K1-c：判据投影端口（唯一注册面，无注入=纯回执口径）
             dispatcher.register_criterion_projection(self._criterion_projection)
@@ -580,6 +581,28 @@ def build_chat_orchestrator(
             model_port, prompt_resolver=build_tenant_ctx_prompt_resolver(session_factory)
         )
     adapters["claude"] = claude_adapter or ClaudeAdapter()
+    # G1（docs/Agent/20 §2）：F4 ACP 通用适配器——默认 profile 在位才装配（缺失=不注册，
+    # ChatCommand.adapter="acp" → 适配器未注册 5002 结构化，与 builtin 缺 LLM 同口径）；
+    # 会话映射经 adapter_sessions（PG uk upsert）；审批桥/预算暂停随审批中心接线批挂入
+    # （缺省未装配桥=权限请求 fail-closed 默认拒绝 + no-op 暂停，不阻塞既有对话面）。
+    from services.agent.business.adapters.acp import (
+        ADAPTER_KEY,
+        AcpAdapter,
+        AcpProfileNotFoundError,
+        PgAdapterSessionStore,
+        load_acp_profile,
+    )
+    from services.platform.config import get_settings as _acp_get_settings
+
+    _acp_settings = _acp_get_settings()
+    try:
+        adapters[ADAPTER_KEY] = AcpAdapter.from_settings(
+            load_acp_profile(_acp_settings.acp_default_profile, profiles_dir=_acp_settings.acp_profiles_dir),
+            store=PgAdapterSessionStore(session_factory),
+            settings=_acp_settings,
+        )
+    except AcpProfileNotFoundError as exc:
+        logger.info("acp 默认 profile 缺失，编排器不装配 acp 适配器（adapter=acp 调用 5002）: %s", exc)
     if policy is None:
         from services.platform.config import get_settings
 

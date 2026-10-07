@@ -232,12 +232,15 @@ async def test_adapter_schemas_空表回落常量_字段对齐mock(agent_env):
     assert resp.status_code == status.HTTP_200_OK, resp.text
     body = resp.json()
     assert set(body) == {"items"}
-    # 空库表 → ALLOWED_AGENT_TOOLS 常量回落（builtin/claude；M3 落地顺序裁决口径）
-    assert [item["key"] for item in body["items"]] == ["builtin", "claude"]
+    # 空库表 → ALLOWED_AGENT_TOOLS 常量回落（builtin/claude/acp；M3 裁决 + 20 篇 §2 G1 扩枚举）
+    assert [item["key"] for item in body["items"]] == ["builtin", "claude", "acp"]
     for item in body["items"]:
         assert set(item) == {"key", "name", "vendor", "capability", "schema"}  # mock ADAPTER_SCHEMAS 逐字段
         props = item["schema"]["properties"]
-        assert set(props) == {"model", "temperature", "tool_whitelist", "num_ctx"}  # 领域 config 白名单同键
+        if item["key"] == "acp":  # G1 批 _AcpConfigSchema：画像名 + 工具白名单
+            assert set(props) == {"acp_profile", "tool_whitelist"}
+        else:
+            assert set(props) == {"model", "temperature", "tool_whitelist", "num_ctx"}  # 领域 config 白名单同键
     builtin = body["items"][0]
     assert "ModelPort" in builtin["capability"] and builtin["vendor"] == "平台内置"
     assert builtin["schema"]["properties"]["temperature"]["title"] == "采样温度 temperature"

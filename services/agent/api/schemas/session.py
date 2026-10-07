@@ -40,6 +40,9 @@ class SessionCreateIn(BaseModel):
     # None=平台现行全集（含 MCP 桥动态面）。名合法性在受理端点 fail-closed 校验
     # （未知名 422，不静默空集），注册表=business/capabilities/toolsets.py。
     toolset: str | None = Field(default=None, max_length=64, description="具名工具集（None=现行全集）")
+    toolset: str | None = Field(
+        default=None, max_length=64, description="具名工具集，会话工具表面门；None=平台现行全集"
+    )
     # 群聊扩展（27 篇 X15，向后兼容可选；type=single 时 members/routing 被聚合拒绝）
     type: str = Field(default="single", pattern="^(single|group)$")
     routing: str = Field(default="round_robin", pattern="^(mention|round_robin|all|orchestrator)$")
@@ -50,14 +53,15 @@ class SendMessageIn(BaseModel):
     """发送消息请求体（api/01 §6.1：content 必填；agent_id 占位兼容、M1 不消费）。
 
     adapter（计划 3.2 增补，向后兼容可选）：适配器路由键（builtin|claude，缺省 builtin，
-    Agent 服务设计 §3.2）；api/01 登记册回填随报告待办。
+    Agent 服务设计 §3.2）；api/01 登记册回填随报告待办。acp=G1 批追加（20 篇 §2/§3.3，
+    Bridge 六 adapter_type 收敛口径第一波）。
     """
 
     model_config = ConfigDict(extra="forbid")
     content: str = Field(min_length=1, max_length=65_536)
     content_type: str = Field(default="text", max_length=32)
     agent_id: uuid.UUID | None = None
-    adapter: str = Field(default="builtin", pattern="^(builtin|claude)$")
+    adapter: str = Field(default="builtin", pattern="^(builtin|claude|acp)$")
 
 
 class SessionOut(BaseModel):

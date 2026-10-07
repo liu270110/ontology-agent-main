@@ -15,7 +15,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from services.agent.domain.model.agent import Agent, AgentAdapterInfo
 from services.platform.schemas import PageMeta
 
-_AGENT_TOOL_PATTERN = "^(builtin|claude)$"
+_AGENT_TOOL_PATTERN = "^(builtin|claude|acp)$"  # 领域 ALLOWED_AGENT_TOOLS 同源（acp=G1 批，20 篇 §2）
 
 
 class AgentCreateIn(BaseModel):

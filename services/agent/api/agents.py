@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import time
 import uuid
-from typing import Annotated
+from typing import Annotated, Any
 
 import httpx
 from fastapi import APIRouter, Depends, Query, Request, status
@@ -37,7 +37,7 @@ from services.agent.business import agent_admin
 from services.agent.business.agent_health import record_adapter_health_outcome
 from services.agent.domain.model.agent import Agent, AgentError
 from services.platform.deps import Principal, require_scope
-from services.platform.errors import GatewayError
+from services.platform.errors import ErrorCode, GatewayError
 from services.platform.ports.model_port import ModelPortError
 from services.platform.schemas import PageMeta
 
@@ -56,8 +56,33 @@ def _agent_error(exc: AgentError) -> GatewayError:
     return GatewayError(code, str(exc), status_code=400 if 3000 <= code < 4000 else 409)
 
 
+def _ensure_acp_profile_or_422(config: dict[str, Any]) -> None:
+    """agent_tool=acp 注册前置：profile 数据文件必须在位（20 篇 §2「无 profile 的 acp 注册=422」）。
+
+    受理面纯输入校验先于存在性校验（零事务开销，sessions.py toolset fail-closed 同构）；
+    profile 名=config.acp_profile 或 Settings.acp_default_profile（可变参数唯一事实源）。
+    """
+    from services.agent.business.adapters.acp import (  # noqa: PLC0415  惰性（同组合根）
+        AcpProfileNotFoundError,
+        load_acp_profile,
+        resolve_acp_profile_name,
+    )
+    from services.platform.config import get_settings  # noqa: PLC0415
+
+    settings = get_settings()
+    try:
+        load_acp_profile(
+            resolve_acp_profile_name(config, settings.acp_default_profile),
+            profiles_dir=settings.acp_profiles_dir,
+        )
+    except AcpProfileNotFoundError as exc:
+        raise GatewayError(ErrorCode.PARAM_INVALID, f"acp 注册缺可用 profile: {exc}", status_code=422) from exc
+
+
 @router.post("", status_code=status.HTTP_201_CREATED, summary="注册 agent（绑定适配器）")
 async def create_agent(body: AgentCreateIn, principal: AgentWriteDep, uow: UowDep) -> AgentOut:
+    if body.agent_tool == "acp":
+        _ensure_acp_profile_or_422(body.config)  # 20 篇 §2：无 profile 的 acp 注册=422（受理面先校验）
     try:
         async with uow.for_tenant(principal.tenant_id) as tx:
             adapter_id = body.adapter_id or await tx.agents.ensure_platform_adapter(body.agent_tool)

@@ -58,6 +58,19 @@ class _ClaudeConfigSchema(BaseModel):
     num_ctx: int = Field(default=0, title="上下文窗口 num_ctx", description="上下文预算上限；端点不支持时忽略")
 
 
+class _AcpConfigSchema(BaseModel):
+    """acp 适配器 config 面板（G1 批，20 篇 §2；acp_profile=adapters/profiles/acp/<名>.yaml）。"""
+
+    acp_profile: str = Field(
+        default="opencode",
+        title="ACP 画像 acp_profile",
+        description="profiles/acp 下的画像名（opencode-acp/goose-acp 所在文件名；缺省回落平台配置）",
+    )
+    tool_whitelist: list[str] = Field(
+        default_factory=list, title="工具白名单 tool_whitelist", description="该 agent 可绑定的工具清单"
+    )
+
+
 class AdapterSchemaEntry(BaseModel):
     """adapter-schemas 单项（mock ADAPTER_SCHEMAS 逐字段：key/name/vendor/capability/schema）。"""
 
@@ -84,6 +97,14 @@ _ADAPTER_REGISTRY: dict[str, AdapterSchemaEntry] = {
         vendor="Anthropic · 保留通道",
         capability="Messages API 直连 · prompt caching · SSE 流式",
         schema=_ClaudeConfigSchema.model_json_schema(by_alias=True),
+    ),
+    # G1（20 篇 §2）：F4 ACP 通用适配器——一个适配器吃全部 ACP 系（opencode/goose/hermes-acp…）
+    "acp": AdapterSchemaEntry(
+        key="acp",
+        name="acp（ACP 标准协议）",
+        vendor="Bridge · 通用形态 F4",
+        capability="stdio JSON-RPC · profile 驱动 · 权限桥接审批中心",
+        schema=_AcpConfigSchema.model_json_schema(by_alias=True),
     ),
 }
 
@@ -232,6 +253,29 @@ def _debug_adapter(agent: Agent, model_port: ModelPort | None):
         return BuiltinAdapter(model_port)
     if agent.agent_tool == "claude":
         return ClaudeAdapter()  # 无 key 注册成功调用拒绝（claude.py 契约）
+    if agent.agent_tool == "acp":
+        # G1（20 篇 §2）：调试面 acp 通道——profile 缺失=422（注册校验白名单同源）；映射走
+        # 内存桩（调试面零持久化，同「不落 sessions/messages/tasks 行」口径）；审批桥未装配
+        # →权限请求默认拒绝（fail-closed）。
+        from services.agent.business.adapters.acp import (  # noqa: PLC0415
+            AcpAdapter,
+            AcpProfileNotFoundError,
+            InMemoryAdapterSessionStore,
+            load_acp_profile,
+            resolve_acp_profile_name,
+        )
+        from services.platform.config import get_settings  # noqa: PLC0415
+        from services.platform.errors import GatewayError  # noqa: PLC0415
+
+        settings = get_settings()
+        try:
+            profile = load_acp_profile(
+                resolve_acp_profile_name(agent.config, settings.acp_default_profile),
+                profiles_dir=settings.acp_profiles_dir,
+            )
+        except AcpProfileNotFoundError as exc:
+            raise GatewayError(3001, str(exc), status_code=422) from exc
+        return AcpAdapter.from_settings(profile, store=InMemoryAdapterSessionStore(), settings=settings)
     from services.platform.errors import GatewayError  # noqa: PLC0415
 
     raise GatewayError(3001, f"适配器 {agent.agent_tool} 无调试通道（允许 {ALLOWED_AGENT_TOOLS}）", status_code=422)

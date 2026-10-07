@@ -44,15 +44,25 @@ async def get_session_owned(tx: Any, principal: Principal, session_id: uuid.UUID
 
 
 async def get_task_owned(tx: Any, principal: Principal, task_id: uuid.UUID) -> Any:
-    """取**归属本主体**的任务聚合（A2 任务时间线族统一归属校验：task 以会话为归属锚）。
+    """取**归属本主体**的任务聚合（A2 任务时间线族统一归属校验，B1 双路归属扩展）。
 
-    task 行无 user 列——归属经 ``task.session_id`` → 会话 user_id 判定（get_session_owned
-    同一口径）；任务不存在与任务会话非归属同形 404「任务不存在」，防存在性探测。
+    task 行无 user 列，归属双路判定（B1 缺陷修复 2026-10-07：原实现对 session_id 为空
+    一律 404，工作流任务恒 session_id=None——X16 executor 契约——读面全 404）：
+
+    - 会话锚：``task.session_id`` 非空 → 会话 user_id 判定（get_session_owned 同一口径）；
+    - 触发者锚：session_id 为空 → 既有触发者留痕 ``payload.triggered_by``（workflow 受理
+      端点 submit 落行，X16）== 本主体判定——复用既有列零迁移；无留痕（如 a2a 任务）
+      两路皆不中。
+
+    任务不存在与非归属同形 404「任务不存在」，防存在性探测。
     """
     task = await tx.tasks.get(task_id)
-    if task is None or task.session_id is None:
+    if task is None:
         raise GatewayError(404, "任务不存在", status_code=404)
-    session = await tx.sessions.get(task.session_id, user_id=principal.user_id)
-    if session is None:
+    if task.session_id is not None:
+        owned = await tx.sessions.get(task.session_id, user_id=principal.user_id) is not None
+    else:
+        owned = str((task.payload or {}).get("triggered_by") or "") == str(principal.user_id)
+    if not owned:
         raise GatewayError(404, "任务不存在", status_code=404)
     return task

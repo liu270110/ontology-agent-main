@@ -19,6 +19,8 @@
   =ontology_read_model.DEFINITION_FIELDS，随本批同步扩型）。原四类值域保持不动。
 
 降级：本仓 upgrade-only 惯例（ONT-1 迁移 b8e4d2f6a9c1 同款）——downgrade 留空不实现。
+可重入：两表建表/建索引均带存在性守卫（迁移② 种子链 mid-run COMMIT 落库后若失败/崩溃，
+重跑再次进入本迁移须干净跳过——表级 has_table 守卫，理由见 upgrade() 注记）。
 
 Contract: docs/architecture/06-数据层设计.md §ONT-2.1~§ONT-2.3；
           docs/database/01-数据库详细设计.md §ONT-2（DDL 权威）。
@@ -68,90 +70,96 @@ END $$;
         "element_type IN ('class','property','axiom','rule','capability')",
     )
 
-    # 1) capabilities（database/01 §ONT-2 DDL 逐列对照）
-    op.create_table(
-        "capabilities",
-        sa.Column("id", UUID(as_uuid=True), primary_key=True),
-        sa.Column("tenant_id", UUID(as_uuid=True), nullable=False),
-        sa.Column("ontology_id", UUID(as_uuid=True), sa.ForeignKey("ontologies.id"), nullable=False),
-        sa.Column("version_id", UUID(as_uuid=True), sa.ForeignKey("ontology_versions.id"), nullable=False),
-        sa.Column("iri", sa.String(length=256), nullable=False),
-        sa.Column("kind", sa.String(length=16), nullable=False),
-        sa.Column("name", sa.String(length=128), nullable=False),
-        sa.Column("label", sa.String(length=256), nullable=True),
-        sa.Column("description", sa.Text(), nullable=True),
-        sa.Column("requires", JSONB(), nullable=False, server_default=sa.text("'[]'::jsonb")),
-        sa.Column("produces", JSONB(), nullable=False, server_default=sa.text("'[]'::jsonb")),
-        sa.Column("grants", JSONB(), nullable=False, server_default=sa.text("'[]'::jsonb")),
-        sa.Column("constrained_by", sa.String(length=256), nullable=True),
-        sa.Column("execution", JSONB(), nullable=False),
-        sa.Column("serves_task", JSONB(), nullable=False, server_default=sa.text("'[]'::jsonb")),
-        sa.Column("binds_action", sa.String(length=256), nullable=True),
-        sa.Column(
-            "current_definition_version_id",
-            UUID(as_uuid=True),
-            sa.ForeignKey("ontology_element_versions.id"),
-            nullable=True,
-        ),
-        sa.Column("source", sa.String(length=16), nullable=False, server_default=sa.text("'manual'")),
-        sa.Column("withdrawn_at", sa.DateTime(timezone=True), nullable=True),
-        sa.Column("withdrawn_reason", sa.String(length=256), nullable=True),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
-        sa.CheckConstraint("kind IN ('atomic','composite')", name="ck_capabilities_kind"),
-        sa.CheckConstraint("source IN ('manual','seed','llm_candidate')", name="ck_capabilities_source"),
-        sa.UniqueConstraint("version_id", "iri", name="uk_capabilities_version_id_iri"),
-    )
-    op.create_index(
-        "ix_capabilities_tenant_iri",
-        "capabilities",
-        ["tenant_id", "iri"],
-        unique=False,
-        postgresql_where=sa.text("withdrawn_at IS NULL"),
-    )
+    # 1) capabilities（database/01 §ONT-2 DDL 逐列对照）。可重入守卫：迁移② 在种子链前
+    #    exec_driver_sql("COMMIT")——此后 ① 的 DDL 已持久而版本戳仍停在 b8e4d2f6a9c1（env.py
+    #    单事务包全程、版本戳终态一次性提交），若种子失败/崩溃，重跑会再次进入本迁移；
+    #    CREATE TABLE 非幂等，存在性守卫让重放干净跳过（PG 事务性 DDL：COMMIT 前失败整体
+    #    回滚、无半建状态，表级守卫即充分；与上方 DO 块的条件 DROP 同款纪律）。
+    if not sa.inspect(op.get_bind()).has_table("capabilities"):
+        op.create_table(
+            "capabilities",
+            sa.Column("id", UUID(as_uuid=True), primary_key=True),
+            sa.Column("tenant_id", UUID(as_uuid=True), nullable=False),
+            sa.Column("ontology_id", UUID(as_uuid=True), sa.ForeignKey("ontologies.id"), nullable=False),
+            sa.Column("version_id", UUID(as_uuid=True), sa.ForeignKey("ontology_versions.id"), nullable=False),
+            sa.Column("iri", sa.String(length=256), nullable=False),
+            sa.Column("kind", sa.String(length=16), nullable=False),
+            sa.Column("name", sa.String(length=128), nullable=False),
+            sa.Column("label", sa.String(length=256), nullable=True),
+            sa.Column("description", sa.Text(), nullable=True),
+            sa.Column("requires", JSONB(), nullable=False, server_default=sa.text("'[]'::jsonb")),
+            sa.Column("produces", JSONB(), nullable=False, server_default=sa.text("'[]'::jsonb")),
+            sa.Column("grants", JSONB(), nullable=False, server_default=sa.text("'[]'::jsonb")),
+            sa.Column("constrained_by", sa.String(length=256), nullable=True),
+            sa.Column("execution", JSONB(), nullable=False),
+            sa.Column("serves_task", JSONB(), nullable=False, server_default=sa.text("'[]'::jsonb")),
+            sa.Column("binds_action", sa.String(length=256), nullable=True),
+            sa.Column(
+                "current_definition_version_id",
+                UUID(as_uuid=True),
+                sa.ForeignKey("ontology_element_versions.id"),
+                nullable=True,
+            ),
+            sa.Column("source", sa.String(length=16), nullable=False, server_default=sa.text("'manual'")),
+            sa.Column("withdrawn_at", sa.DateTime(timezone=True), nullable=True),
+            sa.Column("withdrawn_reason", sa.String(length=256), nullable=True),
+            sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
+            sa.CheckConstraint("kind IN ('atomic','composite')", name="ck_capabilities_kind"),
+            sa.CheckConstraint("source IN ('manual','seed','llm_candidate')", name="ck_capabilities_source"),
+            sa.UniqueConstraint("version_id", "iri", name="uk_capabilities_version_id_iri"),
+        )
+        op.create_index(
+            "ix_capabilities_tenant_iri",
+            "capabilities",
+            ["tenant_id", "iri"],
+            unique=False,
+            postgresql_where=sa.text("withdrawn_at IS NULL"),
+        )
 
-    # 2) capability_runs（database/01 §ONT-2 DDL 逐列对照；0050 五态）
-    op.create_table(
-        "capability_runs",
-        sa.Column("id", UUID(as_uuid=True), primary_key=True),
-        sa.Column("tenant_id", UUID(as_uuid=True), nullable=False),
-        sa.Column("capability_iri", sa.String(length=256), nullable=False),
-        sa.Column(
-            "capability_id",
-            UUID(as_uuid=True),
-            sa.ForeignKey("capabilities.id", ondelete="SET NULL"),
-            nullable=True,
-        ),
-        sa.Column("action_iri", sa.String(length=256), nullable=True),
-        sa.Column("status", sa.String(length=16), nullable=False),
-        sa.Column("channel", sa.String(length=16), nullable=False),
-        sa.Column("requested_by", UUID(as_uuid=True), sa.ForeignKey("users.id"), nullable=True),
-        sa.Column("session_id", UUID(as_uuid=True), nullable=True),
-        sa.Column("trace_id", sa.String(length=64), nullable=True),
-        sa.Column("input_digest", JSONB(), nullable=True),
-        sa.Column("result_digest", JSONB(), nullable=True),
-        sa.Column("target_ref_type", sa.String(length=32), nullable=True),
-        sa.Column("target_ref_id", UUID(as_uuid=True), nullable=True),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
-        sa.Column("finished_at", sa.DateTime(timezone=True), nullable=True),
-        sa.CheckConstraint(
-            "status IN ('pending','despatched','succeeded','partial','failed')",
-            name="ck_capability_runs_status",
-        ),
-        sa.CheckConstraint("channel IN ('kernel','mcp','api','skill')", name="ck_capability_runs_channel"),
-    )
-    op.create_index(
-        "ix_capability_runs_lookup",
-        "capability_runs",
-        ["tenant_id", "capability_iri", sa.text("created_at DESC")],
-        unique=False,
-    )
-    op.create_index(
-        "ix_capability_runs_open",
-        "capability_runs",
-        ["tenant_id"],
-        unique=False,
-        postgresql_where=sa.text("status IN ('pending','despatched')"),
-    )
+    # 2) capability_runs（database/01 §ONT-2 DDL 逐列对照；0050 五态；可重入守卫同上）
+    if not sa.inspect(op.get_bind()).has_table("capability_runs"):
+        op.create_table(
+            "capability_runs",
+            sa.Column("id", UUID(as_uuid=True), primary_key=True),
+            sa.Column("tenant_id", UUID(as_uuid=True), nullable=False),
+            sa.Column("capability_iri", sa.String(length=256), nullable=False),
+            sa.Column(
+                "capability_id",
+                UUID(as_uuid=True),
+                sa.ForeignKey("capabilities.id", ondelete="SET NULL"),
+                nullable=True,
+            ),
+            sa.Column("action_iri", sa.String(length=256), nullable=True),
+            sa.Column("status", sa.String(length=16), nullable=False),
+            sa.Column("channel", sa.String(length=16), nullable=False),
+            sa.Column("requested_by", UUID(as_uuid=True), sa.ForeignKey("users.id"), nullable=True),
+            sa.Column("session_id", UUID(as_uuid=True), nullable=True),
+            sa.Column("trace_id", sa.String(length=64), nullable=True),
+            sa.Column("input_digest", JSONB(), nullable=True),
+            sa.Column("result_digest", JSONB(), nullable=True),
+            sa.Column("target_ref_type", sa.String(length=32), nullable=True),
+            sa.Column("target_ref_id", UUID(as_uuid=True), nullable=True),
+            sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
+            sa.Column("finished_at", sa.DateTime(timezone=True), nullable=True),
+            sa.CheckConstraint(
+                "status IN ('pending','despatched','succeeded','partial','failed')",
+                name="ck_capability_runs_status",
+            ),
+            sa.CheckConstraint("channel IN ('kernel','mcp','api','skill')", name="ck_capability_runs_channel"),
+        )
+        op.create_index(
+            "ix_capability_runs_lookup",
+            "capability_runs",
+            ["tenant_id", "capability_iri", sa.text("created_at DESC")],
+            unique=False,
+        )
+        op.create_index(
+            "ix_capability_runs_open",
+            "capability_runs",
+            ["tenant_id"],
+            unique=False,
+            postgresql_where=sa.text("status IN ('pending','despatched')"),
+        )
 
 
 def downgrade() -> None:

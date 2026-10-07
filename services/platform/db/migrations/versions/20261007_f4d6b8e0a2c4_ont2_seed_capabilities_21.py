@@ -17,7 +17,9 @@
   故以独立 async 引擎驱动单事务种子链（run_seed）；
   `op.get_bind()` 先行 COMMIT 逃逸：同批首跑时迁移① 的 DDL 须先落库对种子连接可见
   （alembic 缺省全程单事务；COMMIT 后 alembic 隐式续新事务，版本戳照常终态提交）。
-  若种子提交后、版本戳提交前进程崩溃：重跑即幂等重放，无孤儿。
+  崩溃窗口语义：COMMIT 落库后、版本戳提交前失败/崩溃 → 重跑=迁移①（存在性守卫可重入，
+  见 ① 注记）干净跳过 + 本种子幂等重放，无孤儿不卡链；COMMIT 前失败 → 外层事务整体回滚，
+  ① 的 DDL 一并未落，重放从零开始。
 - importlinter：「platform 底座零上层依赖」契约豁免边随本批登记 pyproject
   ignore_imports（组合点白名单同款，TODO(M4) 收口复核）。
 

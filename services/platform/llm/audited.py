@@ -27,7 +27,7 @@ from services.platform.errors import tenant_id_ctx
 from services.platform.llm.audit import LlmCallAuditBuffer, LlmCallRecord
 from services.platform.llm.gateway import ModelGatewayOutputInvalidError
 from services.platform.llm.usage import get_last_usage, reset_last_usage
-from services.platform.ports.model_port import ModelPort
+from services.platform.ports.model_port import ModelPort, ModelStreamPiece
 
 logger = logging.getLogger("services.platform.llm.audited")
 
@@ -169,6 +169,37 @@ class AuditedModelPort:
             trace_id=trace_id,
         )
 
+    def stream_complete_events(
+        self,
+        messages: list[dict[str, Any]],
+        *,
+        temperature: float | None = None,
+        max_tokens: int | None = None,
+        num_ctx: int | None = None,
+        timeout_s: float | None = None,
+        tools: list[dict[str, Any]] | None = None,
+        tool_choice: str | dict[str, Any] | None = None,
+        trace_id: str | None = None,
+    ) -> AsyncIterator[ModelStreamPiece]:
+        """结构化真流式的审计/预算装饰（reasoning 透传批，2026-10-07）。
+
+        预算/审计/usage 口径与 stream_complete 完全一致（硬约束：审计装饰不可绕过）；
+        inner 具备 stream_complete_events → 原样透传（content/reasoning 两路并存），
+        缺席（旧桩）→ 退化消费 inner.stream_complete 纯文本面并装箱为仅 content 的
+        ModelStreamPiece（reasoning 丢弃，调用方语义不变）。
+        """
+        return self._stream_complete_audited(
+            messages,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            num_ctx=num_ctx,
+            timeout_s=timeout_s,
+            tools=tools,
+            tool_choice=tool_choice,
+            trace_id=trace_id,
+            structured=True,
+        )
+
     async def _stream_complete_audited(
         self,
         messages: list[dict[str, Any]],
@@ -180,7 +211,8 @@ class AuditedModelPort:
         tools: list[dict[str, Any]] | None,
         tool_choice: str | dict[str, Any] | None,
         trace_id: str | None,
-    ) -> AsyncIterator[str]:
+        structured: bool = False,
+    ) -> AsyncIterator[Any]:
         acquire = getattr(self._budget, "acquire", None) if self._budget is not None else None
         if acquire is not None:
             tenant = tenant_id_ctx.get()
@@ -189,7 +221,64 @@ class AuditedModelPort:
         started = time.perf_counter()
         try:
             reset_last_usage()
-            async for piece in self._inner.stream_complete(
+            source: AsyncIterator[Any] = (
+                self._inner_stream_events(
+                    messages,
+                    temperature=temperature,
+                    max_tokens=max_tokens,
+                    num_ctx=num_ctx,
+                    timeout_s=timeout_s,
+                    tools=tools,
+                    tool_choice=tool_choice,
+                    trace_id=trace_id,
+                )
+                if structured
+                else self._inner.stream_complete(
+                    messages,
+                    temperature=temperature,
+                    max_tokens=max_tokens,
+                    num_ctx=num_ctx,
+                    timeout_s=timeout_s,
+                    tools=tools,
+                    tool_choice=tool_choice,
+                    trace_id=trace_id,
+                )
+            )
+            async for piece in source:
+                yield piece
+        except Exception as exc:
+            self._record_attempt("error", started, trace_id, exc)
+            raise
+        self._record_attempt("ok", started, trace_id, None)
+
+    def _inner_stream_events(
+        self,
+        messages: list[dict[str, Any]],
+        *,
+        temperature: float | None,
+        max_tokens: int | None,
+        num_ctx: int | None,
+        timeout_s: float | None,
+        tools: list[dict[str, Any]] | None,
+        tool_choice: str | dict[str, Any] | None,
+        trace_id: str | None,
+    ) -> AsyncIterator[ModelStreamPiece]:
+        """inner 结构化流式源（鸭子类型探测）：缺席旧桩退化纯文本面装箱（reasoning 丢弃）。"""
+        events = getattr(self._inner, "stream_complete_events", None)
+        if events is not None:
+            return events(
+                messages,
+                temperature=temperature,
+                max_tokens=max_tokens,
+                num_ctx=num_ctx,
+                timeout_s=timeout_s,
+                tools=tools,
+                tool_choice=tool_choice,
+                trace_id=trace_id,
+            )
+
+        async def _adapt() -> AsyncIterator[ModelStreamPiece]:
+            async for text in self._inner.stream_complete(
                 messages,
                 temperature=temperature,
                 max_tokens=max_tokens,
@@ -199,11 +288,9 @@ class AuditedModelPort:
                 tool_choice=tool_choice,
                 trace_id=trace_id,
             ):
-                yield piece
-        except Exception as exc:
-            self._record_attempt("error", started, trace_id, exc)
-            raise
-        self._record_attempt("ok", started, trace_id, None)
+                yield ModelStreamPiece(content=text)
+
+        return _adapt()
 
     async def aclose(self) -> None:
         """透传停机回收（组合根停机序列：先 flush 审计、后关连接池）。"""

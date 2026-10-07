@@ -18,6 +18,7 @@ import asyncio
 import sys
 import uuid
 from collections.abc import AsyncIterator
+from datetime import UTC, datetime
 
 import pytest
 from sqlalchemy import select
@@ -29,10 +30,12 @@ from services.agent.business.exec_events import (
     EXEC_PERSISTED_EVENTS,
     EXEC_REALTIME_ONLY_EVENTS,
     EXEC_STRUCTURE_EVENTS,
+    KERNEL_APPROVAL_PENDING,
     KERNEL_PLAN_UPDATED,
     KERNEL_SUBRUN_FINISHED,
     KERNEL_SUBRUN_STARTED,
     KERNEL_SUBRUN_UPDATED,
+    ApprovalRequiredPayload,
     ExecEventTranslator,
     SubRunFinishedPayload,
     SubRunStartedPayload,
@@ -58,6 +61,7 @@ if sys.platform == "win32":  # psycopg 异步要求 Selector 循环（导入期�
 TENANT = uuid.uuid4()
 TASK_ID, SESSION_ID, RUN_ID, SUB_RUN_ID, PARENT_RUN_ID = (uuid.uuid4() for _ in range(5))
 TRACE = "trace-exec-events"
+_APPROVAL_HASH = "c" * 64  # 审批锚点 param_hash（B5 参数哈希绑定）
 
 
 # ── 枚举登记（chat_events.py 单一事实源）──────────────────────────────────
@@ -222,6 +226,69 @@ def test_转译_PLAN_UPDATED_整表快照对照40篇_4_2() -> None:
         ],
         "trace_id": TRACE,
     }
+
+
+def test_转译_APPROVAL_REQUIRED_锚点载荷对照02协议行67() -> None:
+    """kernel.approval_pending → APPROVAL_REQUIRED：02 协议审批波行 67 载荷逐字段。
+
+    锚点载荷（execution.py 发射面）无 task_id/时间/描述类字段：task_id 由转译器上下文
+    补齐；waiting_since=锚点受理时刻（occurred_at 内核未赋值→转译受理当下）；summary
+    无描述类字段→省略（exclude_none，02 协议「无则省略」）。
+    """
+    before = datetime.now(tz=UTC)
+    chat = _translator().translate(
+        _kernel_event(
+            KERNEL_APPROVAL_PENDING,
+            {
+                "step_seq": 3,
+                "param_hash": _APPROVAL_HASH,
+                "action_iri": "http://ontology.example/action/external_write",
+                "execution_mode": "external_write",
+            },
+        )
+    )
+    after = datetime.now(tz=UTC)
+    assert chat is not None and chat.name is ChatEventName.APPROVAL_REQUIRED
+    assert chat.run_id == RUN_ID and chat.trace_id == TRACE
+    assert chat.data == {
+        "run_id": str(RUN_ID),
+        "task_id": str(TASK_ID),
+        "step_seq": 3,
+        "action_iri": "http://ontology.example/action/external_write",
+        "param_hash": _APPROVAL_HASH,
+        "execution_mode": "external_write",
+        "waiting_since": chat.data["waiting_since"],  # 动态时刻：形状断言+下方时刻窗断言
+        "trace_id": TRACE,
+    }
+    assert "summary" not in chat.data  # 锚点无描述类字段→省略（02 协议「无则省略」）
+    waiting_since = datetime.fromisoformat(chat.data["waiting_since"])
+    assert before <= waiting_since <= after  # 锚点受理时刻（ISO8601，落在转译窗口内）
+    ApprovalRequiredPayload.model_validate(chat.data)  # 载荷过模型校验（形状冻结）
+    assert len(ChatEventName.APPROVAL_REQUIRED.value) <= 32  # task_events.event_type 约束
+
+
+def test_转译_APPROVAL_REQUIRED_步描述截80字且occurred_at透出() -> None:
+    """锚点带描述类字段→summary 截 80 字；occurred_at 已赋值→waiting_since=锚点时刻非受理时刻。"""
+    occurred = datetime(2026, 10, 7, 8, 0, 0, tzinfo=UTC)
+    event = KernelEvent(
+        event_type=KERNEL_APPROVAL_PENDING,
+        tenant_id=TENANT,
+        run_id=RUN_ID,
+        trace_id=TRACE,
+        step_seq=1,
+        occurred_at=occurred,
+        data={
+            "step_seq": 1,
+            "param_hash": _APPROVAL_HASH,
+            "action_iri": "http://ontology.example/action/external_write",
+            "execution_mode": "code",
+            "description": "停电" * 100,  # 200 字 → 截 80
+        },
+    )
+    chat = _translator().translate(event)
+    assert chat is not None
+    assert chat.data["summary"] == "停电" * 40  # 80 字（200→80 截断）
+    assert chat.data["waiting_since"] == "2026-10-07T08:00:00+00:00"  # 锚点时刻非受理时刻
 
 
 def test_转译_非执行结构锚点与非法载荷一律丢弃不外泄() -> None:

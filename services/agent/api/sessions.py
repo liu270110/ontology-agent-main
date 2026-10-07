@@ -48,7 +48,7 @@ from services.agent.api.schemas.session import (
 from services.agent.business.chat_events import ChatCommand, ChatEvent, ChatOutcome, wire_data
 from services.agent.business.chat_group import stream_group_turn
 from services.agent.business.chat_orchestrator import build_chat_orchestrator
-from services.agent.business.exec_events import EXEC_PERSISTED_EVENTS
+from services.agent.business.exec_events import EXEC_PERSISTED_EVENTS, THINKING_PERSISTED_EVENTS
 from services.agent.domain.model.agent import AgentError
 from services.agent.domain.model.kernel_context import KernelEvent
 from services.agent.domain.model.session import MemberRole, Message, RoutingMode, SessionError, SessionStatus
@@ -299,6 +299,9 @@ def build_exec_event_dual_write(
     验收不成立）。纪律：
     - SUBRUN_UPDATED 设计为纯实时心跳**不落库**（EXEC_PERSISTED_EVENTS 之外，40 篇 §4.1
       控回放窗口挤占），钩子内守卫直接跳过（含 SUBRUN_UPDATED 之外的任何非回放根事件）；
+    - 思考流（02 协议 THINKING_* 注记，reasoning 透传批 2026-10-07）：THINKING_START/END
+      落 task_events 账本（THINKING_PERSISTED_EVENTS），THINKING_CONTENT 纯实时不落库
+      （增量体量大、回放非必需——SUBRUN_UPDATED 同款豁免）；
     - 落库走 R11 串行化+SAVEPOINT 重试（append_event replay_root=True，回放根不可吞——
       重试耗尽上抛中断本连接流，运行侧经取消清单收敛，防半截回放）；
     - data=wire_data(event)（trace_id 只补缺，wire payload 与回放行同源一致）；
@@ -309,8 +312,8 @@ def build_exec_event_dual_write(
     """
 
     async def dual_write(task_id: uuid.UUID, event: ChatEvent) -> None:
-        if event.name not in EXEC_PERSISTED_EVENTS:
-            return  # 非回放根事件（主干波/SUBRUN_UPDATED 心跳）不落库
+        if event.name not in EXEC_PERSISTED_EVENTS and event.name not in THINKING_PERSISTED_EVENTS:
+            return  # 非回放根事件（主干波/SUBRUN_UPDATED 心跳/THINKING_CONTENT 增量）不落库
         async with uow.for_tenant(tenant_id) as tx:
             await tx.tasks.append_event(
                 task_id,
@@ -342,6 +345,116 @@ def _build_mcp_tool_bindings(state: Any) -> tuple:
     from services.agent.business.capabilities.mcp_bridge import build_mcp_tool_bindings
 
     return build_mcp_tool_bindings(registry)
+
+
+def build_capability_tool_bindings(settings: Any) -> tuple:
+    """fs/web 能力绑定组装（W2-4，2026-10-07 批；docs/Agent/06 能力层分级 + 对账提案 W2-4）。
+
+    权限/沙箱评估（自 gateway/app.py `_build_capability_bindings` 迁入——该函数定义后全仓
+    零调用（死代码），真实消费点=本文件 build_chat_orchestrator(extra_tool_bindings)，
+    且 agent.api 禁 import gateway（import-linter 契约二），故组装面收本处，gateway 侧
+    保留同名委托入口）：
+
+    - ``workspace_root`` 未配置 → fs 不注册（只读也缺工作区边界，宁缺毋滥）；
+    - ``web_egress_allowlist`` 空 → web 全拒 fail-closed（注册但不可出网）；
+    - 分级开关（platform/config.py 能力绑定块，默认档=只读）：
+      * ``kernel_capability_read=True`` → fs 只读三件（read/glob/grep，executionMode=READ，
+        B1 基线放行）+ web 双工具（fetch/search，只读出网面，逐域白名单拦截）；
+      * ``kernel_capability_write=False`` → **fs 写类（write/edit，executionMode=WRITE）
+        默认不注册**；开启后仍走内核 B5 审批路由（scope 覆盖判级，审批面不因开关放宽）。
+    - ``terminal`` 绑定待沙箱会话供给批次接线（每 Run 一个沙箱会话句柄），本批不动。
+    """
+    bindings: list = []
+    read_enabled = bool(getattr(settings, "kernel_capability_read", True))
+    write_enabled = bool(getattr(settings, "kernel_capability_write", False))
+    if getattr(settings, "workspace_root", None):
+        from services.agent.business.capabilities.fs import build_fs_bindings
+        from services.agent.domain.model.kernel_actions import ExecutionMode
+
+        for binding in build_fs_bindings(settings.workspace_root):
+            if binding.execution_mode == ExecutionMode.WRITE:
+                if write_enabled:  # 写操作类默认关闭（W2-4 裁决：默认档=只读）
+                    bindings.append(binding)
+            elif read_enabled:
+                bindings.append(binding)
+    if read_enabled:
+        from services.agent.business.capabilities.web import build_web_bindings
+
+        allowlist = tuple(d.strip() for d in settings.web_egress_allowlist.split(",") if d.strip())
+        fetch_tool, search_tool = build_web_bindings(
+            fetch_allowlist=allowlist,
+            search_backend=None,
+            spill_store=_build_spill_store(settings),  # 与编排器同一 spill 存储（溢出口径同源）
+        )
+        bindings.extend((fetch_tool, search_tool))
+    return tuple(bindings)
+
+
+class _LazySubagentSlot:
+    """subagent 工具族的内核插槽薄代理（SubagentSlotPort）：spawn 期惰性解析主适配器插槽。
+
+    装配序解耦：绑定集构建早于编排器实例（extra_tool_bindings 是 build_chat_orchestrator
+    的入参），而派生路径=编排器主适配器的内核 BuiltinAgentSlot（chat_orchestrator.
+    subagent_slot，L3 唯一派生路径）——故 spawn/wait/interrupt 实际调用时（编排器必然
+    已就绪并缓存于 state）才解析。不做构建期预取，禁在绑定面复制适配器实例。
+    """
+
+    def __init__(self, resolver: Callable[[], Any]) -> None:
+        self._resolver = resolver
+
+    async def spawn_sub(self, task: Any, ctx: Any, **kwargs: Any) -> str:
+        return await self._resolver().spawn_sub(task, ctx, **kwargs)
+
+    def receipt(self, handle_id: str) -> Any:
+        return self._resolver().receipt(handle_id)
+
+
+def _build_chat_capability_bindings(state: Any) -> tuple:
+    """chat 默认绑定集组装（W2-4，2026-10-07 批）：fs/web + subagent 工具族 + ask_user。
+
+    方案依据：docs/api/对账-对话执行事件后端提案 W2-4（P0：TOOL_CALL_*/SUBRUN_* 见真数据
+    的注册面前置）+ docs/Agent/06 能力层分级。默认档=只读 + subagent 注册 + ask_user 注册，
+    全部经 platform/config.py 能力绑定开关（写操作类默认关）。装配失败不阻塞会话启动
+    （fail-soft 同 mcp/memory/worker 装配先例：绑 定集降级、留痕排障）。
+
+    - **subagent 族**（spawn/wait/interrupt，READ 判级内部编排原语）：派生裁决归内核——
+      白名单 deny-by-default（``kernel_subagent_derivable_agents``，空=spawn 全拒 fail-closed，
+      与 web 空白名单同款安全边界）+ R10 深度护栏双线（能力层 check_depth 取
+      ``kernel_subagent_max_depth`` 同源值 + 内核 spawn_sub 通道终审）；task_resolver 经
+      run_scope Run 级环境（编排器 _execute_turn 绑定父 TaskRef）。**已知边界（本批不做）**：
+      内核 BuiltinAgentSlot 无父作用域解绑 API，单例编排器上按 Run bind_parent 会累积泄漏，
+      故工具驱动派生暂以「裸插槽」运行——派生/回执/取消收敛/深度护栏可用，A4 份额分账与
+      SUBRUN 锚点发射待内核插槽生命周期批接入（发射面 _slot_emitter 闭包仅内核 run 可建）。
+    - **ask_user**（EXTERNAL_WRITE，B5 审批面照常「缺回执默认拒绝」）：问询板=进程级
+      InMemoryAskUserBoard（v1 单事件循环形态，并发上限护栏随板自带）；TOOL_CALL_* 投影经
+      run_scope Run 级事件口（编排器绑定 on_event，未绑定=静默跳过）；run_id/session_id
+      归因字段本批留空（ctx.tenant/trace 照常贯穿，静态绑定无每 Run 值可注入）。
+    """
+    settings = state.settings
+    bindings: list = list(build_capability_tool_bindings(settings))
+    try:
+        if getattr(settings, "kernel_capability_subagent", True):
+            derivable = tuple(
+                a.strip() for a in getattr(settings, "kernel_subagent_derivable_agents", "").split(",") if a.strip()
+            )
+            from services.agent.business.capabilities.run_scope import resolve_parent_task
+            from services.agent.business.capabilities.subagent import build_subagent_bindings
+
+            spawn, wait, interrupt = build_subagent_bindings(
+                _LazySubagentSlot(lambda: state.chat_orchestrator.subagent_slot),
+                task_resolver=resolve_parent_task,
+                derivable_agents=derivable,
+                max_depth=int(getattr(settings, "kernel_subagent_max_depth", 2)),  # 能力层第一线，与内核 R10 同源
+            )
+            bindings.extend((spawn, wait, interrupt))
+        if getattr(settings, "kernel_capability_ask_user", True):
+            from services.agent.business.capabilities.ask_user import InMemoryAskUserBoard, build_ask_user_bindings
+            from services.agent.business.capabilities.run_scope import emit_via_run_scope
+
+            bindings.extend(build_ask_user_bindings(InMemoryAskUserBoard(), emit=emit_via_run_scope))
+    except Exception:  # noqa: BLE001 ——装配失败应用以「无能力绑定」继续（fail-soft，留痕排障）
+        logger.exception("chat 能力绑定装配失败（以 MCP 桥绑定继续）: subagent/ask_user 未注册")
+    return tuple(bindings)
 
 
 def _build_skills_catalog_segment(settings: Any) -> str:
@@ -390,6 +503,9 @@ def get_or_build_chat_orchestrator(state: Any) -> Any:
     M4.5-A：运行注册表 + estop 探针工厂随编排器装配（spawn 注册/终态注销；惰性单例）。
     竖线①（2026-10-05 批）：MCP registry 工具经 extra_tool_bindings 进每轮分发器——
     chat 模板规划器当前只规划 chat 行动类，模型可调随逐轮 tool-calling 批（注册面就绪）。
+    W2-4（2026-10-07 批）：能力默认绑定集（fs/web 只读 + subagent 族 + ask_user）同经
+    extra_tool_bindings 注册，TOOL_CALL_*/SUBRUN_* 见真数据的注册面前置（对账提案 W2-4）；
+    开关全在 platform/config.py 能力绑定块（写操作类默认关）。
     """
     cached = getattr(state, "chat_orchestrator", None)
     if cached is not None:
@@ -421,7 +537,9 @@ def get_or_build_chat_orchestrator(state: Any) -> Any:
         spill_store=spill_store,
         run_registry=get_or_build_run_registry(state),  # M4.5-A：运行中输入面注册表
         estop_probe_factory=estop_store.probe,  # M4.5-A：estop 步边界闸门探针工厂
-        extra_tool_bindings=tuple(extra_bindings),
+        # 竖线①：MCP registry→内核绑定桥；W2-4：能力默认绑定集（fs/web 只读 + subagent 族 + ask_user，
+        # 开关见 platform/config.py 能力绑定块——写操作类默认关）
+        extra_tool_bindings=tuple(extra_bindings + list(_build_chat_capability_bindings(state))),
         skills_catalog=_build_skills_catalog_segment(settings),  # 竖线②：SKILL.md 目录式注入（L1）
     )
     state.chat_orchestrator = orchestrator

@@ -7,7 +7,9 @@
   complete_structured（Protocol 扩展前的旧实现/测试桩，及生产 AuditedModelPort 收口
   流式面之前的过渡期）→ 回退「一次性结构化答案 + 固定步长切片」伪流式（规划回退路径
   保留）。两路事件语义同构：TEXT_MESSAGE_CONTENT 的 delta 形态不变，SSE 投影无差别，
-  前端零感知；
+  前端零感知；reasoning 透传批（2026-10-07）：端口具备 ``stream_complete_events``
+  结构化面 → 优先消费（reasoning_content → reasoning_delta 与 text_delta 并存投影），
+  缺席回退纯文本面（reasoning 丢弃）；
 - 用量：平台用量上下文（llm/usage）回填后读取（真流式=末块 usage），FakeModelPort
   不回填 → 记 0（显式口径）；
 - **H-1 钉死引用接入（2026-09-29，一处最小接入）**：``turn.system_prompt`` 若为
@@ -162,7 +164,8 @@ class BuiltinAdapter(ChatAdapter):
     async def stream_chat(
         self, turn: ChatTurn, ctx: TenantContext, *, timeout_ms: int = 30_000
     ) -> AsyncIterator[GenerationEvent]:
-        """生成入口：端口有流式面走真流式，否则回退结构化切片（两路事件语义同构）。"""
+        """生成入口：端口有结构化流式面走真流式（含 reasoning 两路），仅纯文本流式面走
+        文本真流式，否则回退结构化切片（三路事件语义对消费侧同构）。"""
         persona = await self._persona_prompt(turn)
         stream_complete = getattr(self._model, "stream_complete", None)
         if stream_complete is None:
@@ -173,6 +176,24 @@ class BuiltinAdapter(ChatAdapter):
         # 硬上限由内核单工具超时（asyncio.wait_for）钳制；传输层超时=timeout_s（端口内
         # httpx 必设）——与 claude 直连通道同口径（docs/Agent §5：流式按传输层判超时）。
         timeout_s = max(timeout_ms / 1000, 1.0)
+        # 结构化流式面（reasoning 透传批，2026-10-07）：端口具备 stream_complete_events
+        # （鸭子类型探测，与 stream_complete 同款可选面纪律）→ content/reasoning 两路并存
+        # 投影（单 piece 双路时 reasoning 先于 content）；缺席 → 纯文本面（reasoning 丢弃）。
+        stream_events = getattr(self._model, "stream_complete_events", None)
+        if stream_events is not None:
+            async for piece in stream_events(
+                _build_messages(turn, persona),
+                temperature=None,  # 对话档：服务端缺省（complete_structured 的事实型 0.1 属抽取面，不沿用到闲聊面）
+                num_ctx=turn.num_ctx,
+                timeout_s=timeout_s,
+                trace_id=ctx.trace_id,
+            ):
+                if piece.reasoning:
+                    yield GenerationEvent(kind="reasoning_delta", delta=piece.reasoning)
+                if piece.content:
+                    yield GenerationEvent(kind="text_delta", delta=piece.content)
+            yield _finish_event()
+            return
         async for piece in stream_complete(
             _build_messages(turn, persona),
             temperature=None,  # 对话档：服务端缺省（complete_structured 的事实型 0.1 属抽取面，不沿用到闲聊面）

@@ -612,8 +612,9 @@ def test_builtin零HTTP直连_模型请求点trace贯通_源码断言():
     orchestrator_src = (_ROOT / "services/agent/business/chat_orchestrator.py").read_text(encoding="utf-8")
     # Assert：builtin 无 httpx import（直连禁止）——模型 IO 全走注入 ModelPort（组合根恒为 Audited 包裹面）
     assert "import httpx" not in builtin_src
-    # Assert：builtin 两处模型请求点（真流式 + 伪流式回退）均贯通 trace_id
-    assert builtin_src.count("trace_id=ctx.trace_id") == 2
+    # Assert：builtin 三处模型请求点（结构化真流式 + 纯文本真流式 + 伪流式回退）均贯通 trace_id
+    # （reasoning 透传批 2026-10-07 增 stream_complete_events 请求点，trace 口径不变）
+    assert builtin_src.count("trace_id=ctx.trace_id") == 3
     # Assert：claude 组合根未配 api_key（注册成功调用 5002）——当前无实装调用面，
     # 审计收口最小面=builtin（claude 直连审计随其获得实装 key 的批次收口）
     assert 'adapters["claude"] = claude_adapter or ClaudeAdapter()' in orchestrator_src

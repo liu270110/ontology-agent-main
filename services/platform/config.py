@@ -94,6 +94,21 @@ class Settings(BaseSettings):
     # （防御=降级面，永不中断 run）；False=完全零行为变化（不扫描、不剥离、无事件回退口）。
     context_threat_scan_enabled: bool = True
 
+    # 能力绑定组合根装配（W2-4，2026-10-07 批；docs/api/对账-对话执行事件后端提案 W2-4=P0
+    # + docs/Agent/06 能力层分级）：chat 编排器默认绑定集分级开关——默认档=只读 + subagent
+    # 注册 + ask_user 注册；**写操作类默认关闭**。开关只控注册面：B5 审批路由不受开关影响
+    # （write/edit=WRITE、ask_user=EXTERNAL_WRITE 照常「缺回执默认拒绝」），fs 只读的
+    # 沙箱边界仍由 workspace_root 圈定、web 出口仍由 web_egress_allowlist 圈定。
+    # 取值在编排器单例构建时生效（进程内改值需重启）。
+    kernel_capability_read: bool = True  # fs 只读三件（read/glob/grep）+ web 双工具（fetch/search）
+    kernel_capability_write: bool = False  # fs 写类（write/edit）——写操作类默认不注册
+    kernel_capability_subagent: bool = True  # spawn/wait/interrupt 注册（白名单 deny-by-default + R10 护栏归内核）
+    kernel_capability_ask_user: bool = True  # ask_user 注册（EXTERNAL_WRITE，B5 审批面照常）
+    # 派生白名单（deny-by-default）：空=spawn 全拒 fail-closed（与 web 空白名单同款安全边界，
+    # 非功能开关）；配置后 spawn 仅接受列名 agent_type。能力层第一线 + 内核 R10 深度护栏
+    # （kernel_subagent_max_depth）不受本值影响。
+    kernel_subagent_derivable_agents: str = ""  # 逗号分隔 agent 类型名
+
     # 网关运行
     api_prefix: str = "/api/v1"
     sse_heartbeat_seconds: int = 15  # 建议值，压测后冻结（02 §5）

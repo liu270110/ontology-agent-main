@@ -23167,7 +23167,7 @@
     },
     "/api/v1/tasks/{task_id}/runs/{run_id}/approvals": {
       "post": {
-        "description": "裁决（202）：核验链=租户可见 → waiting_tool 态 → 锚点 param_hash 一致（B5 绑定）。\n\n409+4102（非 waiting_tool/无锚点）、409+3001（哈希不一致）详见 approval_service docstring。",
+        "description": "裁决（202）：核验链=租户可见 → waiting_tool 态 → 锚点 param_hash 一致（B5 绑定）。\n\n409+4102（非 waiting_tool/无锚点）、409+3001（哈希不一致）详见 approval_service docstring。\n成功路径发射 APPROVAL_RESOLVED：SSE（sse_hub 装配）+ outbox 双通道，先于 resume。",
         "operationId": "decide_run_approval_api_v1_tasks__task_id__runs__run_id__approvals_post",
         "parameters": [
           {

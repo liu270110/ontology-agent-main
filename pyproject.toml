@@ -152,13 +152,13 @@ ignore_imports = [
     "services.platform.db.uow -> services.agent.domain.repo.prompt_repo",
     "services.gateway.app -> services.agent.business.task_worker",  # 任务执行 worker 组合根装配（2026-09-27 批，mcp.bootstrap 单边豁免同款）
     "services.gateway.app -> services.agent.data.repo_impl.task_poller",  # 任务 worker 轮询器组合根装配（同上）
-    "services.gateway.app -> services.agent.data.spill_store",  # 2026-10-07 静态清账批补登记：K14-b spill 组合根条件装配（task_poller 同款组合根装配边）
     "services.gateway.app -> services.agent.domain.model.task",  # RunRetryPolicy 组合根注入（同上）
     # 候选审核端口组合点（契约六同款豁免；TODO(M4) 收口）
     "services.gateway.app -> services.review.business.candidates",
     # 4.2 组合根收口装配边（lifespan 装配，TODO(M4) UoW 收口一并复核）
-    "services.gateway.app -> services.agent.business.capabilities.fs",  # 能力层 P0（docs/Agent/06）
-    "services.gateway.app -> services.agent.business.capabilities.web",
+    # （W2-4 2026-10-07：原「gateway.app -> capabilities.fs/web」两条豁免随死代码消除撤销——
+    # fs/web 组装面收 sessions.build_capability_tool_bindings（对账提案 W2-4），gateway 侧仅
+    # 委托 sessions，直连能力层边不复存在）
     "services.gateway.app -> services.ontology.data.repo_impl.ontology_repo",  # 本体制品装载器绑定
     # P1-1 收口（2026-09-27 M4 验收条件一）：MCP registry 共享工厂（services/mcp/bootstrap）
     # ——gateway 与独立进程同一装配面；原 kb.business/iam.data/mcp.providers 三条直连边
@@ -204,7 +204,6 @@ ignore_imports = [
     "services.platform.db.uow -> services.agent.data.repo_impl.agent_repo",  # 同上（agents CRUD 批）
     "services.platform.db.uow -> services.agent.data.repo_impl.prompt_repo",  # 同上（H-1 提示词工程治理批，2026-09-29）
     "services.gateway.app -> services.agent.data.repo_impl.task_poller",  # 任务 worker 轮询器装配（writeback_repo 同款豁免，2026-09-27 批）
-    "services.gateway.app -> services.agent.data.spill_store",  # 2026-10-07 静态清账批补登记：K14-b spill 组合根条件装配（spill 传递链同 spill_store 边豁免）
     # spill 存储装配边（2026-09-27 批）：sessions 组合根持有 LocalDirSpillStore（ontology 本地目录先例，
     # M4 切 MinIO）；mcp.a2a 经 sessions 的传递链由本边豁免
     "services.agent.api.sessions -> services.agent.data.spill_store",

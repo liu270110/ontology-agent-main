@@ -35,6 +35,7 @@ except ModuleNotFoundError:  # pragma: no cover
 
 # 用量上下文（llm_calls 审计批量落库的 token 来源；审计装饰器 services/platform/llm/audited.py 消费）
 from services.platform.llm.usage import LlmUsage, set_last_usage  # noqa: E402
+from services.platform.ports.model_port import ModelStreamPiece  # noqa: E402  # 结构化流式产出单元（reasoning 透传批）
 
 # ---------------------------------------------------------------- 错误族（镜像 L4 ModelPortError，码值=02 篇 §7）
 
@@ -428,9 +429,67 @@ class OpenAICompatibleModelPort:
           {"include_usage": true}`` 才保证，本期**不发**（部分兼容层对 stream_options
           报错，最小够用）；上游主动携带时回填用量上下文；
         - delta.content 缺失/空串不产出；choices 为空的 usage-only 末块安全跳过；
+        - 纯文本投影：上游附带推理增量（``delta.reasoning_content``）在本面**丢弃**，
+          透传走 :meth:`stream_complete_events`（reasoning 透传批，2026-10-07）；
         - 超时口径：timeout_s=传输层每次读的粒度（None=构造期默认，必设）；错误分类
           同 complete_structured（TimeoutException→5001，HTTPError/非200/结构异常→5002）。
         """
+        async for piece in self._iter_stream_pieces(
+            messages,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            num_ctx=num_ctx,
+            timeout_s=timeout_s,
+            tools=tools,
+            tool_choice=tool_choice,
+            trace_id=trace_id,
+        ):
+            if piece.content:
+                yield piece.content
+
+    async def stream_complete_events(
+        self,
+        messages: list[dict],
+        *,
+        temperature: float | None = None,
+        max_tokens: int | None = None,
+        num_ctx: int | None = None,
+        timeout_s: float | None = None,
+        tools: list[dict] | None = None,
+        tool_choice: str | dict | None = None,
+        trace_id: str | None = None,
+    ) -> AsyncIterator[ModelStreamPiece]:
+        """结构化真流式（reasoning 透传批，2026-10-07）：逐段 yield ModelStreamPiece。
+
+        与 stream_complete 同参同契约（SSE 解析/超时/错误码族/凭据池轮换口径一致），
+        区别仅在产出单元：``content``（回答增量）与 ``reasoning``（vLLM/DeepSeek
+        ``delta.reasoning_content``）两路并存透传，顺序=模型产出顺序、空段（双空）不产出。
+        """
+        async for piece in self._iter_stream_pieces(
+            messages,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            num_ctx=num_ctx,
+            timeout_s=timeout_s,
+            tools=tools,
+            tool_choice=tool_choice,
+            trace_id=trace_id,
+        ):
+            yield piece
+
+    async def _iter_stream_pieces(
+        self,
+        messages: list[dict],
+        *,
+        temperature: float | None,
+        max_tokens: int | None,
+        num_ctx: int | None,
+        timeout_s: float | None,
+        tools: list[dict] | None,
+        tool_choice: str | dict | None,
+        trace_id: str | None,
+    ) -> AsyncIterator[ModelStreamPiece]:
+        """SSE 逐行解析主干（stream_complete/stream_complete_events 两投影面共用）。"""
         body = self._chat_body(
             messages,
             temperature=temperature,
@@ -487,10 +546,18 @@ class OpenAICompatibleModelPort:
                         if isinstance(payload.get("usage"), dict):
                             self._capture_usage(payload)  # 末块用量（上游主动携带时）
                         try:
-                            piece = payload["choices"][0]["delta"]["content"]
+                            delta = payload["choices"][0]["delta"]
                         except (KeyError, IndexError, TypeError):
-                            continue  # role 首块 / finish 块 / usage-only 块均无 content
-                        if isinstance(piece, str) and piece:
+                            continue  # role 首块 / finish 块 / usage-only 块均无 delta
+                        if not isinstance(delta, dict):
+                            continue
+                        content = delta.get("content")
+                        reasoning = delta.get("reasoning_content")  # vLLM/DeepSeek 推理增量
+                        piece = ModelStreamPiece(
+                            content=content if isinstance(content, str) else "",
+                            reasoning=reasoning if isinstance(reasoning, str) else "",
+                        )
+                        if piece.content or piece.reasoning:
                             yield piece
             except httpx.TimeoutException as exc:
                 raise ModelGatewayTimeoutError(str(exc)) from exc

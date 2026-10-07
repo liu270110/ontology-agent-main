@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import UTC, datetime
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -23,6 +24,8 @@ from services.agent.business.approval_service import (
     TICKETS_KEY,
     RunApprovalService,
 )
+from services.agent.business.chat_events import ChatEvent, ChatEventName, wire_data
+from services.agent.business.exec_events import ApprovalDecision, ApprovalResolvedPayload
 from services.agent.domain.model.task import Run, RunStatus, Task, TaskStatus
 from services.platform.deps import Principal
 from services.platform.errors import GatewayError
@@ -174,6 +177,8 @@ async def test_approve_核验链通过_run恢复running_票仓审计与resume事
     # resume 触发：outbox 事件（worker 重放消费，与业务行同事务）
     resumed = [p for kind, p in uow.repo.projections if kind == "run.resume_requested"]
     assert resumed and resumed[0]["ticket_id"] == rows[0]["ticket_id"]
+    # 审批波 RESOLVED（02 协议行 68）：先于 resume 入列（同事务，relay 按 UUIDv7 id 保序）
+    assert [kind for kind, _ in uow.repo.projections] == ["approval.resolved", "run.resume_requested"]
 
 
 async def test_approve_非waiting_tool态_拒409并4102段错误码():
@@ -244,6 +249,175 @@ async def test_reject_run取消终态task失败_审计行含理由():
     data = next(e for e in uow.repo.events if e.event_type == "run.approval_decision").data
     assert (data["decision"], data["reason"], data["approver"]) == ("reject", "目标写库不在本轮授权范围", str(_USER))
     assert not any(kind == "run.resume_requested" for kind, _ in uow.repo.projections)  # 拒绝不触发 resume
+    # reject 同发 RESOLVED（02 协议行 68 decision=rejected；无票→ticket_id 省略）
+    resolved = [p for kind, p in uow.repo.projections if kind == "approval.resolved"]
+    assert resolved and resolved[0]["decision"] == "rejected" and "ticket_id" not in resolved[0]
+
+
+async def test_decide成功路径发RESOLVED_wire载荷对照02协议行68_先于resume():
+    """APPROVAL_RESOLVED 事件通道：outbox ``approval.resolved``（本服务无 SSE hub 依赖，
+    outbox=既有通道最小侵入）；载荷=ApprovalResolvedPayload（wire 形状冻结）；trace_id 透传。"""
+    uow = FakeUow()
+    task = _waiting_task()
+    uow.repo.tasks[task.id] = task
+    run = task.runs[0]
+    result = await _service(uow).decide(
+        tenant_id=_TENANT,
+        approver_id=_USER,
+        task_id=task.id,
+        run_id=run.id,
+        decision="approve",
+        param_hash=_HASH,
+        trace_id="trace-approval-wire",
+    )
+    kinds = [kind for kind, _ in uow.repo.projections]
+    assert kinds.index("approval.resolved") < kinds.index("run.resume_requested")  # RESOLVED 先于 resume
+    resolved = uow.repo.projections[0][1]
+    assert resolved == {  # 02 协议行 68 逐字段（ticket_id 有票在场）
+        "run_id": str(run.id),
+        "decision": "approved",
+        "approver": str(_USER),
+        "ticket_id": result.ticket_id,
+        "trace_id": "trace-approval-wire",
+    }
+    ApprovalResolvedPayload.model_validate(resolved)
+
+
+async def test_RESOLVED_trace缺省_回执trace_approval_run_id():
+    """服务直调无 trace → 缺省回执 trace（``approval-{run_id}``，_link_review_center 同款惯例）。"""
+    uow = FakeUow()
+    task = _waiting_task()
+    uow.repo.tasks[task.id] = task
+    await _service(uow).decide(
+        tenant_id=_TENANT,
+        approver_id=_USER,
+        task_id=task.id,
+        run_id=task.runs[0].id,
+        decision="reject",
+        param_hash=_HASH,
+    )
+    resolved = next(p for kind, p in uow.repo.projections if kind == "approval.resolved")
+    assert resolved["trace_id"] == f"approval-{task.runs[0].id}"
+    assert resolved["decision"] == "rejected" and "ticket_id" not in resolved
+
+
+# ── 真实发射（decide 成功路径 SSE + 决策值枚举）───────────────────────────────
+class FakeEventPublisher:
+    """SSE 发射口桩：记录 (session_id, ChatEvent) 投递账本；可注入故障验证降级。"""
+
+    def __init__(self, *, error: Exception | None = None) -> None:
+        self.published: list[tuple[uuid.UUID, ChatEvent]] = []
+        self._error = error
+
+    async def __call__(self, session_id: uuid.UUID, event: ChatEvent) -> None:
+        if self._error is not None:
+            raise self._error
+        self.published.append((session_id, event))
+
+
+async def test_decide成功路径真实发射SSE_APPROVAL_RESOLVED_决策值为枚举():
+    """chat_events.py 发射点登记（decide 成功路径）：事务提交后经注入 publisher 真实发布
+    ChatEvent(APPROVAL_RESOLVED)——SSE 实时面，非仅 outbox 行；decision=ApprovalDecision
+    枚举（wire 值 approved）；wire_data 补 trace_id（与 outbox 载荷同源）。"""
+    uow = FakeUow()
+    task = _waiting_task()
+    uow.repo.tasks[task.id] = task
+    run = task.runs[0]
+    publisher = FakeEventPublisher()
+    result = await RunApprovalService(uow, now=lambda: _FIXED_NOW, event_publisher=publisher).decide(
+        tenant_id=_TENANT,
+        approver_id=_USER,
+        task_id=task.id,
+        run_id=run.id,
+        decision="approve",
+        param_hash=_HASH,
+        trace_id="trace-approval-sse",
+    )
+    # 真实发射：恰一次，投给 Run 所属会话，事件名=APPROVAL_RESOLVED
+    assert len(publisher.published) == 1
+    session_id, event = publisher.published[0]
+    assert session_id == task.session_id
+    assert event.name is ChatEventName.APPROVAL_RESOLVED
+    assert event.run_id == run.id
+    # 载荷单一事实源：ApprovalResolvedPayload dump（exclude_none）+ wire_data 补 trace_id
+    assert event.data == {
+        "run_id": str(run.id),
+        "decision": "approved",
+        "approver": str(_USER),
+        "ticket_id": result.ticket_id,
+        "trace_id": "trace-approval-sse",
+    }
+    assert event.data == wire_data(event)
+    ApprovalResolvedPayload.model_validate(event.data)
+    # 决策值枚举：模型字段即 ApprovalDecision（StrEnum），wire 序列化=成员值
+    assert type(event.data["decision"]) is str  # json dump 后 wire 值仍是字符串
+    assert ApprovalDecision(event.data["decision"]) is ApprovalDecision.APPROVED
+    # 时序：SSE 发布发生在裁决落账完成之后（publisher 收到时 outbox 双行已入列）
+    kinds = [kind for kind, _ in uow.repo.projections]
+    assert kinds.index("approval.resolved") < kinds.index("run.resume_requested")
+
+
+async def test_SSE发射决策值枚举双路_reject亦发布且无票():
+    """approve/reject 双路都真实发射（02 协议行 68）；reject decision=REJECTED、无票省略。"""
+    uow = FakeUow()
+    task = _waiting_task()
+    uow.repo.tasks[task.id] = task
+    publisher = FakeEventPublisher()
+    await RunApprovalService(uow, now=lambda: _FIXED_NOW, event_publisher=publisher).decide(
+        tenant_id=_TENANT,
+        approver_id=_USER,
+        task_id=task.id,
+        run_id=task.runs[0].id,
+        decision="reject",
+        param_hash=_HASH,
+        reason="越权写库",
+    )
+    assert len(publisher.published) == 1
+    _, event = publisher.published[0]
+    assert event.name is ChatEventName.APPROVAL_RESOLVED
+    assert event.data["decision"] == "rejected"
+    assert "ticket_id" not in event.data  # reject 无票（exclude_none 省略）
+    assert ApprovalDecision(event.data["decision"]) is ApprovalDecision.REJECTED
+
+
+async def test_SSE发射失败_降级告警不反噬裁决落账():
+    """hub 推送抛错 → decide 正常返回（202 语义），outbox 双行与票仓不受影响（02 §3 ⑥）。"""
+    uow = FakeUow()
+    task = _waiting_task()
+    uow.repo.tasks[task.id] = task
+    run = task.runs[0]
+    result = await RunApprovalService(
+        uow, now=lambda: _FIXED_NOW, event_publisher=FakeEventPublisher(error=RuntimeError("hub 不可达"))
+    ).decide(
+        tenant_id=_TENANT,
+        approver_id=_USER,
+        task_id=task.id,
+        run_id=run.id,
+        decision="approve",
+        param_hash=_HASH,
+    )
+    assert result.run_status == "running"  # 裁决本体成立
+    assert run.status is RunStatus.RUNNING
+    kinds = [kind for kind, _ in uow.repo.projections]
+    assert kinds == ["approval.resolved", "run.resume_requested"]  # outbox 双通道完整落账
+    assert len(uow.repo.tasks[task.id].payload[TICKETS_KEY]) == 1  # 票仓不受推送失败影响
+
+
+async def test_无publisher_退化为仅outbox通道():
+    """直调/未装配 publisher（None）→ 不发布 SSE，outbox 通道照常（向后兼容）。"""
+    uow = FakeUow()
+    task = _waiting_task()
+    uow.repo.tasks[task.id] = task
+    result = await _service(uow).decide(  # _service 不注入 event_publisher
+        tenant_id=_TENANT,
+        approver_id=_USER,
+        task_id=task.id,
+        run_id=task.runs[0].id,
+        decision="approve",
+        param_hash=_HASH,
+    )
+    assert result.run_status == "running"
+    assert [kind for kind, _ in uow.repo.projections] == ["approval.resolved", "run.resume_requested"]
 
 
 # ── pending 视图 ──────────────────────────────────────────────────────────────
@@ -376,3 +550,41 @@ async def test_端点直调_202信封与pending视图信封():
     view_resp = await get_pending_run_approval(task.id, task.runs[0].id, principal=principal, uow=uow)
     assert set(view_resp) == {"data", "meta"}
     assert (view_resp["data"]["run_status"], view_resp["data"]["action_iri"]) == ("running", None)
+
+
+async def test_端点装配sse_hub_裁决成功路径发布RESOLVED到会话流():
+    """路由装配链（approvals._sse_publisher → service.event_publisher）：hub.publish 收到
+    APPROVAL_RESOLVED（会话/事件名/wire 载荷三对；hub 二态同步返回二元组不 await）。"""
+
+    class _FakeHub:
+        def __init__(self) -> None:
+            self.frames: list[tuple[uuid.UUID, str, dict[str, Any]]] = []
+
+        def publish(self, session_id: uuid.UUID, name: str, data: dict[str, Any]) -> tuple[int, bytes]:
+            self.frames.append((session_id, name, data))
+            return 1, b""
+
+    class _FakeApp:
+        def __init__(self, hub: _FakeHub) -> None:
+            self.state = SimpleNamespace(sse_hub=hub)
+
+    hub = _FakeHub()
+    uow = FakeUow()
+    task = _waiting_task()
+    uow.repo.tasks[task.id] = task
+    principal = _principal()
+    resp = await decide_run_approval(
+        task.id,
+        task.runs[0].id,
+        ApprovalDecisionIn(decision="approve", param_hash=_HASH),
+        principal=principal,
+        uow=uow,
+        request=SimpleNamespace(app=_FakeApp(hub), state=SimpleNamespace(trace_id="trace-route-sse")),
+    )
+    assert resp["data"]["run_status"] == "running"
+    assert len(hub.frames) == 1
+    session_id, name, data = hub.frames[0]
+    assert session_id == task.session_id
+    assert name == ChatEventName.APPROVAL_RESOLVED.value
+    assert data["decision"] == "approved" and data["run_id"] == str(task.runs[0].id)
+    assert ApprovalDecision(data["decision"]) is ApprovalDecision.APPROVED

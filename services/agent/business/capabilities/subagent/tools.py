@@ -295,11 +295,13 @@ class SubagentSpawnTool:
             depth = check_depth(self._max_depth)  # 当前深度 < 上限才放行（防无限派生）
             check_concurrency(self._registry.in_flight, len(specs), self._max_concurrent)
             allocations = [self._budget_policy.allocate(spec.context_budget, self._budget_probe()) for spec in specs]
+            parent = self._task_resolver(ctx)  # W2-4（2026-10-07）：父归因解析收进护栏段——resolver
+            # 失败=结构化 denied 拒绝，不再裸异常逃逸（extensions.py ④ 契约；此前在 try 外，
+            # resolver 抛错走内核裸异常转义 5999，错误码失真）
         except SubagentGuardError as exc:
             self._emit(ctx, call, outcome="denied", reason=exc.message, code=int(exc.code))
             return _guard_fail(exc)
 
-        parent = self._task_resolver(ctx)
         group = _SpawnGroup(group_id=uuid.uuid4().hex, parent_run_id=parent.run_id)
         for index, (spec, budget) in enumerate(zip(specs, allocations, strict=True)):
             self._schedule_entry(group, index, spec, budget, ctx, depth, total=len(specs))

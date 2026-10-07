@@ -35,22 +35,28 @@ action_iri/param_hash、StepState 快照不投影 task_events——**无持久�
 
 from __future__ import annotations
 
+import logging
 import uuid
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
+from services.agent.business.chat_events import ChatEvent, ChatEventName
+from services.agent.business.exec_events import ApprovalDecision, ApprovalResolvedPayload
 from services.agent.domain.model.kernel_actions import ApprovalTicket
 from services.agent.domain.model.task import RunStatus, TaskEvent
 from services.platform.errors import GatewayError
 from services.platform.ports.review_port import CandidateReviewPort
+
+logger = logging.getLogger(__name__)
 
 # ── approvals 通道存储契约（task.payload 键；执行侧写入/本服务核验消费）─────────
 PENDING_KEY = "approval_pending"  # 当前待审批动作锚点（一 run 至多一行）
 TICKETS_KEY = "approvals"  # 已批票仓（list[dict]，重放时并入内核 approvals 元组）
 
 _DECISION_EVENT = "run.approval_decision"  # 审计行（decision/param_hash/approver/ticket）
+_RESOLVED_PROJECTION = "approval.resolved"  # outbox：审批波 APPROVAL_RESOLVED 源（02 协议行 68）
 _RESUME_PROJECTION = "run.resume_requested"  # outbox：resume 触发（worker 重放消费）
 _TICKET_PROJECTION = "approval.ticket_created"  # outbox：审批中心出单通知
 
@@ -103,11 +109,15 @@ class RunApprovalService:
         ticket_port: CandidateReviewPort | None = None,
         now: Callable[[], datetime] | None = None,
         ticket_ttl_s: float = _DEFAULT_TTL_S,
+        event_publisher: Callable[[uuid.UUID, ChatEvent], Awaitable[None]] | None = None,
     ) -> None:
         self._uow = uow
         self._ticket_port = ticket_port
         self._now = now or (lambda: datetime.now(tz=UTC))
         self._ttl = timedelta(seconds=ticket_ttl_s)
+        # SSE 实时发射口（L2 路由装配：hub.publish 包装，sessions._chat_stream_response 同款
+        # 二态收敛；None=直调/单测退化为仅 outbox 通道——发射失败只告警不反噬裁决）
+        self._event_publisher = event_publisher
 
     # ── 待审批动作视图（只读；轮询友好，恒 200 语义）────────────────────────
     async def pending_view(self, *, tenant_id: uuid.UUID, task_id: uuid.UUID, run_id: uuid.UUID) -> PendingApprovalView:
@@ -142,11 +152,20 @@ class RunApprovalService:
         param_hash: str,
         reason: str | None = None,
         create_ticket: bool = False,
+        trace_id: str | None = None,
     ) -> ApprovalDecisionResult:
         """核验链 → 落账（票仓/状态机/审计/outbox）→ 联动；任一核验失败整体拒绝。
 
         错误码（api/01 §5.15 登记口径）：404（不可见）；409+4102（非 waiting_tool /
         无锚点——复用 41xx session 段，专属码待 02 §7 登记）；409+3001（param_hash 不一致）。
+
+        审批波事件（02 协议行 68）：成功路径**双通道发射** APPROVAL_RESOLVED——
+        ① SSE 实时：注入的 event_publisher（L2 路由经 hub.publish 装配，chat_events.py
+        发射点登记面）在事务提交后同步发布 ChatEvent，先于 resume 生效（resume 仅经
+        outbox 由 worker 轮询重放，本调用返回后才发生）；② outbox ``approval.resolved``
+        （本服务无 SSE hub 依赖时的兜底持久通道）同事务先于 ``run.resume_requested``
+        入列，relay 按 UUIDv7 id 保序（writeback_repo.py fetch_pending id.asc）→ RESOLVED
+        恒先于 resume 触发。载荷单一事实源=ApprovalResolvedPayload（decision=枚举）。
         """
         if decision not in ("approve", "reject"):
             raise GatewayError(3001, "3001 PARAM_INVALID: decision 仅支持 approve/reject", status_code=400)
@@ -244,6 +263,17 @@ class RunApprovalService:
                     },
                 ),
             )
+            # 审批波 RESOLVED（02 协议行 68）：先于 resume 入列（同事务，relay 按 id 保序）——
+            # approve/reject 双路都发；reject 无票 ticket_id 省略（载荷模型 exclude_none）。
+            resolved = ApprovalResolvedPayload(
+                run_id=str(run_id),
+                decision=ApprovalDecision.APPROVED if decision == "approve" else ApprovalDecision.REJECTED,
+                approver=str(approver_id),
+                ticket_id=ticket_id,
+                trace_id=trace_id or f"approval-{run_id}",  # 缺省回执 trace（_link_review_center 同款惯例）
+            )
+            resolved_data = resolved.model_dump(mode="json", exclude_none=True)
+            tx.enqueue_projection(_RESOLVED_PROJECTION, task.id, resolved_data)
             if decision == "approve":  # resume 触发：outbox 与业务行同事务（worker 重放消费）
                 tx.enqueue_projection(
                     _RESUME_PROJECTION,
@@ -256,6 +286,30 @@ class RunApprovalService:
                         task.id,
                         {"task_id": str(task.id), "run_id": str(run_id), "review_ticket_id": review_ticket_id},
                     )
+
+        # ── 真实发射（事务已提交，chat_events.py 发射点登记=decide 成功路径）─────────
+        # SSE APPROVAL_RESOLVED 先于 resume 生效：resume 仅经 outbox 行由 worker 轮询重放
+        # （本调用返回后才可能发生），此处同步发布恒在前——会话流上 RESOLVED 恒先于续跑
+        # 产生的任何 RUN_*/TOOL_* 事件。尽力推送：失败只告警不反噬已落账裁决（02 §3 ⑥）。
+        if self._event_publisher is not None:
+            try:
+                await self._event_publisher(
+                    task.session_id,
+                    ChatEvent(
+                        name=ChatEventName.APPROVAL_RESOLVED,
+                        data=dict(resolved_data),
+                        run_id=run_id,
+                        trace_id=resolved.trace_id,
+                    ),
+                )
+            except Exception:  # noqa: BLE001 ——SSE 推送失败不阻断审批落账（审计不阻塞主流程）
+                logger.warning(
+                    "APPROVAL_RESOLVED SSE 推送失败（task=%s run=%s session=%s）",
+                    task_id,
+                    run_id,
+                    task.session_id,
+                    exc_info=True,
+                )
         return ApprovalDecisionResult(
             decision=decision,
             task_id=str(task_id),

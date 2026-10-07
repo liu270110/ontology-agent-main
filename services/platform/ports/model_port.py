@@ -16,7 +16,23 @@
 from __future__ import annotations
 
 from collections.abc import AsyncIterator
+from dataclasses import dataclass
 from typing import Any, Protocol
+
+
+@dataclass(frozen=True, slots=True)
+class ModelStreamPiece:
+    """结构化流式产出单元（reasoning 透传批，2026-10-07）：一段增量可含回答/推理两路。
+
+    - ``content``：回答增量（OpenAI 兼容 ``choices[0].delta.content``）；
+    - ``reasoning``：推理增量（vLLM/DeepSeek ``choices[0].delta.reasoning_content``）；
+    - 两字段可并存（单 chunk 双路时），空段（双空）由实现方跳过不产出。
+    纯 dataclass（本模块零框架依赖纪律）；消费方：builtin 适配器投影为
+    reasoning_delta/text_delta 两路 GenerationEvent（并存互不干扰，reasoning 先于 content）。
+    """
+
+    content: str = ""
+    reasoning: str = ""
 
 
 class ModelPort(Protocol):
@@ -89,6 +105,30 @@ class ModelPort(Protocol):
         取增量，``data: [DONE]`` 终止），产出顺序=模型产出顺序、空段不产出——实现必须
         逐段透传，禁止攒齐全文再切片（伪流式）；硬上限由消费侧内核超时钳制，传输层
         超时=timeout_s（每读一次的粒度，None=实现默认，必设）。
+        本面为纯文本投影：上游若附带推理增量（``delta.reasoning_content``）在此**丢弃**
+        ——推理透传走 :meth:`stream_complete_events`（reasoning 透传批，2026-10-07）。
+        """
+        ...  # pragma: no cover — Protocol 方法无实现
+
+    def stream_complete_events(
+        self,
+        messages: list[dict[str, Any]],
+        *,
+        temperature: float | None = None,
+        max_tokens: int | None = None,
+        num_ctx: int | None = None,
+        timeout_s: float | None = None,
+        tools: list[dict[str, Any]] | None = None,
+        tool_choice: str | dict[str, Any] | None = None,
+        trace_id: str | None = None,
+    ) -> AsyncIterator[ModelStreamPiece]:
+        """真流式补全·结构化面（reasoning 透传批，2026-10-07）：逐段 yield ModelStreamPiece。
+
+        可选扩展面：与 stream_complete 同参同契约（SSE 解析/超时/错误码族一致），区别仅在
+        产出单元——content 与 reasoning 两路并存透传（空段不产出、顺序=模型产出顺序）；
+        装饰器（audited/resilience）与实现方（OpenAICompatibleModelPort）应实现本面，
+        旧实现/测试桩可缺席——消费侧（builtin 适配器）``getattr`` 探测，缺席时回退
+        stream_complete 纯文本面（reasoning 丢弃，与既有口径一致）。
         """
         ...  # pragma: no cover — Protocol 方法无实现
 

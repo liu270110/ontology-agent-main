@@ -26,6 +26,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from services.agent.business.adapters.base import ChatAdapter, ChatTurn, TurnBox
 from services.agent.business.adapters.claude import ClaudeAdapter
+from services.agent.business.capabilities.run_scope import bind_run_scope, reset_run_scope
 from services.agent.business.chat_context import ChatContext, ChatContextAssembler
 from services.agent.business.chat_events import (
     ChatCommand,
@@ -357,6 +358,10 @@ class ChatOrchestrator:
             duration_s=self._policy.total_budget_s,
             max_tokens=None,
         )
+        # W2-4（2026-10-07）：Run 级环境绑定（capabilities/run_scope，set_llm_event_emitter
+        # 同款先例）——静态能力绑定（subagent/ask_user）invoke 侧经此取父 TaskRef 与事件投影口；
+        # finally 解除防 ContextVar 跨 Run 串归因。
+        scope_token = bind_run_scope(task, on_event)
         # M4.5-A：spawn 注册（worker 与 SSE 内联同经本编排器 → 两路径都可运行中 inbox/estop）
         inbox: KernelInbox | None = None
         control_probe: Callable[[], str | None] | None = None
@@ -378,8 +383,23 @@ class ChatOrchestrator:
                 idempotency_key=command.idempotency_key,  # C2 EXTERNAL_WRITE 幂等锚（红队 §5 修复批）
             )
         finally:
+            reset_run_scope(scope_token)  # W2-4：Run 级环境解除（异常路径同收）
             if self._run_registry is not None:  # 终态注销（显式 remove 防泄漏；异常路径同收）
                 self._run_registry.unregister(command.run_id)
+
+    @property
+    def subagent_slot(self) -> Any:
+        """主适配器的内核子代理插槽（W2-4 组合根装配面，2026-10-07）。
+
+        subagent 工具族（spawn/wait/interrupt）经它派生——派生本体走内核 BuiltinAgentSlot
+        （adapters/base.py ``sub_slot``，L3 唯一派生路径，窗口隔离/Artifact 契约/R10 深度
+        护栏全在内核裁决，能力层只是薄封装）。主适配器取序：builtin（有 LLM 配置时）优先，
+        否则 claude 占位通道——子代理生成通道随主适配器确定性可判，禁随调用方漂移。
+        """
+        adapter = self._adapters.get("builtin") or self._adapters.get("claude")
+        if adapter is None:
+            raise ModelPortError(int(ErrorCode.LLM_UNAVAILABLE), "无可用适配器（编排器未装配）")
+        return adapter.sub_slot
 
     # ── 收尾与映射 ────────────────────────────────────────────────────────
     @staticmethod

@@ -37,6 +37,13 @@ class ChatEventName(StrEnum):
     TEXT_MESSAGE_START = "TEXT_MESSAGE_START"
     TEXT_MESSAGE_CONTENT = "TEXT_MESSAGE_CONTENT"
     TEXT_MESSAGE_END = "TEXT_MESSAGE_END"
+    # 思考流三事件（02 协议 THINKING_* 注记，reasoning 透传批 2026-10-07；挂 TEXT_MESSAGE_*
+    # 同族消息路径）：START {message_id, reasoning_effort?} / CONTENT {message_id, delta} /
+    # END {message_id}——每消息至多一对 START/END。落库口径：CONTENT 纯实时不落 task_events
+    # （EventSink 双写豁免，SUBRUN_UPDATED 先例）；START/END 落账本（exec_events.py 集合）。
+    THINKING_START = "THINKING_START"
+    THINKING_CONTENT = "THINKING_CONTENT"
+    THINKING_END = "THINKING_END"
     TOOL_CALL_RESULT = "TOOL_CALL_RESULT"
     RUN_FINISHED = "RUN_FINISHED"
     RUN_ERROR = "RUN_ERROR"
@@ -51,6 +58,11 @@ class ChatEventName(StrEnum):
     SUBRUN_FINISHED = "SUBRUN_FINISHED"  # 子 run 终态（含 rejected_artifact，40 篇 §3.2）
     WORKFLOW_NODE_STARTED = "WORKFLOW_NODE_STARTED"  # 工作流节点开始（X16 才有发射点，R7）
     WORKFLOW_NODE_FINISHED = "WORKFLOW_NODE_FINISHED"  # 工作流节点终态（X16 才有发射点，R7）
+    # ── 审批波双事件（02 协议行 67/68，2026-10-05 五组登记；设计源=08 篇事件 14+11 篇状态机）──
+    APPROVAL_REQUIRED = "APPROVAL_REQUIRED"  # 审批挂起（发射点=kernel.approval_pending 转译上 wire，W2-2）
+    # 审批裁决落定（发射点=approval_service.decide 成功路径：SSE 实时 +
+    # outbox approval.resolved 双通道，恒先于 resume 生效）。
+    APPROVAL_RESOLVED = "APPROVAL_RESOLVED"
 
 
 class ChatEvent(BaseModel):

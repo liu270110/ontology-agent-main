@@ -22,6 +22,32 @@
 - 架构变更先改 `docs/architecture/01` 锚点；契约变更先改对应权威篇（端点登记册=docs/api/01）。
 - 分支（2026-09-27 起 worktree 工作流，hooks 强制）：主工作区=develop 集成区禁直提；`sh services/devtools/git/wt new <域>-<简述>` 开功能分支，`wt finish` 串行合入；详见 [docs/standards/02](docs/standards/02-git多Agent协作与Worktree规范.md)；commit 中文 conventional。
 
+## 功能规范（Feature Spec · 四区）
+
+> **上线纪律**：每次发版前必须更新本节与 [frontend/CHANGELOG.md](frontend/CHANGELOG.md)——两者不同步视为发版未完成。功能口径以本节为权威快照。
+
+### 主页区 `/`（用户功能交互）
+对话（SSE 流式+Markdown/代码块+工具卡+Artifact 卡+运行审批卡+停止生成+消息操作组+证据溯源+轨迹回放入口）｜群聊（多 Agent 编排·四路由模式·成员分组·高风险确认·拒绝/转人工）｜任务中心（七步流水线+日志+重试/取消+事件时间线）｜本体工作台（类树/画布/检查器/公理编辑/校验报告/版本评审 diff）｜知识库（八态管理+上传+回收站+库设置+抽取审核+检索 Playground+图谱浏览）｜记忆管理（L1-L4+升级终审+失效流+容量卡）｜新手引导卡（三步判定自动隐藏）
+
+### 平台区 `/platform`（浏览·获取能力）
+插件市场｜工具与技能｜MCP 接入｜Agent 目录｜能力总览卡
+
+### 管理控制台 `/console`（治理）
+审批中心（六类+批量+SLA 倒计时+多签进度+详情弹窗）｜系统管理（用户 CRUD/用户组/RBAC 矩阵/模型渠道/租户/审计日志/**系统日志四维检索+trace 瀑布**/回写台账人工处置/**成本看板**）｜邀请链接（局域网/公网口径）
+
+### 用户设置 `/settings`（个性化）
+资料（头像裁剪）/安全（2FA+TOTP 二维码）/API Keys/通知/设备/外观与语言/对话偏好/记忆偏好/数据导出/账号 Danger Zone/关于（版本·构建·双端）
+
+### 桌面端（Electron）
+oa:// 协议+多窗口（主页/管理控制台）+自动更新+托盘
+
+### 上线检查清单（发版前逐项勾）
+- [ ] 本节功能清单与实际一致（新增/变更/下线）
+- [ ] frontend/CHANGELOG.md Unreleased → 版本号
+- [ ] frontend/package.json 与 desktop/package.json 版本双端同步
+- [ ] git tag v<版本> 打在 develop 合入点
+- [ ] 三档部署其一完成冒烟（Docker/Linux/Windows，33 篇）
+
 ## 快速开始
 
 ```bash

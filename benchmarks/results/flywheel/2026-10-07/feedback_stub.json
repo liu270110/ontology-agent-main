@@ -1,0 +1,21 @@
+{
+  "_note": "harvest 演练 stub（2026-10-07）：对种子会话造的 2 条假 feedback（一正一负）——session_feedback 采集批（F1）未合入期的协议兼容演练输入；行字段=docs/Agent/19 §5（run_id/outcome/tags/correction_text）+协议扩展（task_prompt/created_at）。内容全为虚构样例（.example 域名/保留段 IP/演示路径）。",
+  "feedback": [
+    {
+      "run_id": "6f1c2a34-9b7d-4e5a-8c21-77aa01fe33b4",
+      "outcome": "completed",
+      "tags": [],
+      "correction_text": null,
+      "task_prompt": "帮我把 10.77.12.9 节点上 E:\\grid\\ops\\feeders_2026.csv 里的停电工单按线路汇总，并发摘要到 dispatcher@gridcorp.example",
+      "created_at": "2026-10-07T08:12:00+00:00"
+    },
+    {
+      "run_id": "0b8e55f2-3d41-4a97-9e0c-52cc9ab710e6",
+      "outcome": "failed",
+      "tags": ["wrong"],
+      "correction_text": "查错了范围：应该只统计 /var/lib/gridops/tickets/open.json 里 state=open 的工单，不要把已归档的算进去",
+      "task_prompt": "统计当前未闭环的停电工单数量",
+      "created_at": "2026-10-07T09:40:00+00:00"
+    }
+  ]
+}

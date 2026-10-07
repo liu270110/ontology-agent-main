@@ -1102,6 +1102,9 @@ _ALLOWED_METRIC_KEYS = frozenset(
         "recovery_rate",
         "converged_rate",
         "zombie_tasks_total",
+        # 飞轮转化环（docs/Agent/19 §5 批 F2）：用户上报任务结果三元口径
+        # （metrics.task_outcome_user_reported——飞轮草稿场景断言键，口径登记见 metrics.py ⑦）
+        "task_outcome_user_reported",
     }
 )
 

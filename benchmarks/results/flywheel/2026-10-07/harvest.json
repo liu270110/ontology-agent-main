@@ -1,0 +1,99 @@
+{
+  "schema": "flywheel.harvest/v1",
+  "benchmark_ref": "docs/Agent/19-通用Agent前后端对标与评测飞轮设计 §5（批 F2/B6，主仓本地）",
+  "since": "2026-10-07T00:00:00+00:00",
+  "harvested_at": "2026-10-07T15:55:31+00:00",
+  "feedback_source": "stub-json:benchmarks\\results\\flywheel\\2026-10-07\\feedback_stub.json",
+  "note": null,
+  "counts": {
+    "feedback_total": 2,
+    "golden": 1,
+    "regression": 1,
+    "skipped_unknown_outcome": 0,
+    "skipped_empty_signal": 0,
+    "drafts_written": 2,
+    "drafts_validated": 2,
+    "sanitization": {
+      "uuid": 0,
+      "email": 1,
+      "ip": 1,
+      "path": 2,
+      "total": 4
+    }
+  },
+  "candidates": [
+    {
+      "run_id": "6f1c2a34-9b7d-4e5a-8c21-77aa01fe33b4",
+      "kind": "golden",
+      "reason": "completed_clean",
+      "reported_outcome": "completed",
+      "scenario": "flywheel:golden:660f8bc5bcd8",
+      "draft": "benchmarks/suites/agent-core/scenarios/proposed/flywheel-golden-660f8bc5bcd8.yaml",
+      "asserts": [
+        {
+          "metric": "task_outcome_user_reported",
+          "op": "==",
+          "value": true
+        }
+      ],
+      "sanitize_counts": {
+        "path": 1,
+        "email": 1,
+        "uuid": 0,
+        "ip": 1
+      }
+    },
+    {
+      "run_id": "0b8e55f2-3d41-4a97-9e0c-52cc9ab710e6",
+      "kind": "regression",
+      "reason": "outcome=failed",
+      "reported_outcome": "failed",
+      "scenario": "flywheel:regression:3a53b4cf8b4a",
+      "draft": "benchmarks/suites/agent-core/scenarios/proposed/flywheel-regression-3a53b4cf8b4a.yaml",
+      "asserts": [
+        {
+          "metric": "task_outcome_user_reported",
+          "op": "==",
+          "value": true
+        },
+        {
+          "metric": "invalid_retry_count",
+          "op": "<=",
+          "value": 2
+        }
+      ],
+      "sanitize_counts": {
+        "path": 1,
+        "email": 0,
+        "uuid": 0,
+        "ip": 0
+      }
+    }
+  ],
+  "orsi_suggestions": [
+    {
+      "suggestion_type": "orsi_capability_registration",
+      "auto_registered": false,
+      "proposal": {
+        "name": "quality_regression:flywheel.3a53b4cf8b4a",
+        "face": "O4",
+        "status": "candidate",
+        "version": "1.0.0",
+        "source_channel": "L0",
+        "source_face_track": "shortgap"
+      },
+      "evidence": {
+        "evidence_uri": "benchmarks/suites/agent-core/scenarios/proposed/flywheel-regression-3a53b4cf8b4a.yaml",
+        "run_status": "proposed",
+        "smoke": null,
+        "benchmark_ref": "docs/Agent/19-通用Agent前后端对标与评测飞轮设计 §5（批 F2/B6，主仓本地）",
+        "key_metrics": {},
+        "source_run_id": "0b8e55f2-3d41-4a97-9e0c-52cc9ab710e6",
+        "classification_reason": "outcome=failed"
+      },
+      "capability_fingerprint": "2e001fe1e8c49987bc1fe6fe3676d44ee32a080eca64bdb1f776798e0f01de04",
+      "fingerprint_note": "飞轮场景集哈希（orsi_link.scenario_set_hash 同口径：场景名排序 \\x1f join sha256）；非注册面算法——正式注册时由 services/rsi 业务层重算，本值仅供人工比照",
+      "rationale": "用户负反馈信号（outcome=failed）→ quality_regression 常规缺口轨注册建议（docs/Agent/19-通用Agent前后端对标与评测飞轮设计 §5（批 F2/B6，主仓本地） 回流环：track=shortgap，face=O4 技能面）；候选非成品——注册必经人工确认"
+    }
+  ]
+}

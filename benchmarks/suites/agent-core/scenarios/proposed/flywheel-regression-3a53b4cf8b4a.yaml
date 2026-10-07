@@ -1,0 +1,23 @@
+# 飞轮转化环候选草稿（docs/Agent/19 §5 批 F2）——审核队列：未过审不进正式套件（宪法 3：候选非成品）
+# 源 run: 0b8e55f2-3d41-4a97-9e0c-52cc9ab710e6 | kind: regression | 归因: outcome=failed | harvest: 2026-10-07T15:55:31+00:00
+# 脱敏说明：用户专有名词（UUID/邮箱/IP/绝对路径）已保守替换为 ⟪USER_n⟫ 占位（同词同号）
+version: 1
+scenario: "flywheel:regression:3a53b4cf8b4a"
+description: |
+  飞轮 regression 候选：会话反馈收割（归因 outcome=failed）。golden=用户确认完成的任务回归样；
+  regression=用户纠错/失败样——修复后重跑应以 params.expected_outcome 收敛。
+params:
+  task_prompt: "统计当前未闭环的停电工单数量"
+  expected_outcome: "completed"
+  reported_outcome: "failed"
+  source_run_id: "0b8e55f2-3d41-4a97-9e0c-52cc9ab710e6"
+  flywheel_kind: "regression"
+  harvested_at: "2026-10-07T15:55:31+00:00"
+  user_correction: "查错了范围：应该只统计 ⟪USER_1⟫ 里 state=open 的工单，不要把已归档的算进去"
+asserts:
+  - metric: task_outcome_user_reported
+    op: "=="
+    value: true
+  - metric: invalid_retry_count
+    op: "<="
+    value: 2

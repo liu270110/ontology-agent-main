@@ -29,6 +29,7 @@ from typing import Any, Final, Protocol, runtime_checkable
 from services.memory.business.context import merge_l2_hits
 from services.memory.domain.model.l1 import MemoryBlock
 from services.memory.domain.model.l2_fact import FactCategory, L2Fact, fact_fingerprint
+from services.memory.domain.model.memory import DEFAULT_EXPIRY_FLOOR
 from services.memory.domain.repo.fact_repo import L1MemoryStore, L2FactRepository
 from services.ontology.business.hierarchy_service import get_class_hierarchy
 from services.ontology.business.ontology_gate import run_changeset_gate
@@ -292,6 +293,7 @@ class MemoryCapabilityProvider:
         l2_repo_builder: Callable[[Any, uuid.UUID], L2FactRepository] | None = None,
         rrf_k: int = 60,
         half_life_days: float = 30,
+        expiry_floor: float = DEFAULT_EXPIRY_FLOOR,
     ) -> None:
         self.provider_version = "0.1.0"
         self.supported_loop_versions = [KERNEL_LOOP_VERSION]
@@ -301,6 +303,7 @@ class MemoryCapabilityProvider:
         self._l2_repo_builder = l2_repo_builder
         self._rrf_k = rrf_k
         self._half_life_days = half_life_days
+        self._expiry_floor = expiry_floor  # D-6 地板分（K25-c：组合根下传 Settings 值，与 L4/REST 同参）
 
     @asynccontextmanager
     async def _l2_for(self, ctx: CallContext, *, commit: bool = False) -> AsyncIterator[L2FactRepository]:
@@ -396,6 +399,7 @@ class MemoryCapabilityProvider:
                     top_k=top_k,
                     rrf_k=self._rrf_k,
                     half_life_days=self._half_life_days,
+                    expiry_floor=self._expiry_floor,
                     now=datetime.now(UTC),
                 )
             memories = [

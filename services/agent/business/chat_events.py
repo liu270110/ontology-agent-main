@@ -166,6 +166,11 @@ class ChatPolicy:
     retrieval_retry_max: int = 1  # 检索自动重试（03 §3 步骤 3）
     rrf_k: int = 60  # L2 融合平滑常数（memory §3）
     half_life_days: float = 30.0  # L2 时间衰减半衰期（memory §3）
+    # D-6 软时效地板分（Agent/13 §28，K25-c chat 路接线 2026-10-07，§31）：None=不注入，
+    # L2 组装吃域缺省 DEFAULT_EXPIRY_FLOOR=0.1；组合根缺省读统一配置层 Settings.
+    # memory_expiry_floor（OA_ 环境变量覆盖），显式传入 policy 时以 policy 值为准
+    # （faithfulness/F2 同款纪律）——chat 路与 REST/MCP/L4 检索通道同参对齐。
+    memory_expiry_floor: float | None = None
     # 在线忠实度抽检（architecture/10 §2 缺口②，落点 08 §7.4；2026-09-27 M5-2 追加）：
     # 完成路径按采样率抽中后记录 faithfulness 检查占位（LLM-as-judge 随评估批次接入）
     faithfulness_sampling_enabled: bool = True  # 开关默认开（10 篇 1% 口径）

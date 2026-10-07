@@ -138,6 +138,7 @@ def build_capability_registry(
             l2_repo_builder=build_l2_repo,
             rrf_k=settings.memory_rrf_k,
             half_life_days=settings.memory_decay_half_life_days,
+            expiry_floor=settings.memory_expiry_floor,  # K25-c：MCP memory.read 与 L4/REST 同参对齐
         )
     )
     # ④⑤ action.invoke 执行面 + writeback.status 查询面（同一 dispatcher，幂等键/状态机在 writeback）

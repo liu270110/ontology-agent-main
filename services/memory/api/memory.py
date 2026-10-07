@@ -205,6 +205,7 @@ async def search_memory(
         top_k=body.top_k,
         rrf_k=settings.memory_rrf_k,
         half_life_days=settings.memory_decay_half_life_days,
+        expiry_floor=settings.memory_expiry_floor,  # K25-c：L2 路与 L4 检索通道同参对齐
         now=datetime.now(UTC),
     )
     return MemorySearchOut(items=[_hit_out(hit) for hit in hits], degraded=True)
@@ -380,6 +381,7 @@ async def memory_context(
         top_k=settings.memory_search_top_k,
         rrf_k=settings.memory_rrf_k,
         half_life_days=settings.memory_decay_half_life_days,
+        expiry_floor=settings.memory_expiry_floor,  # K25-c：L2 路与 L4 检索通道同参对齐
         now=datetime.now(UTC),
     )
     return MemoryContextOut.from_bundle(bundle)

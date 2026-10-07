@@ -215,7 +215,10 @@ class Settings(BaseSettings):
     memory_search_top_k: int = 8  # 检索注入条数上限
     memory_rrf_k: int = 60  # RRF 平滑常数（Σ1/(k+rank)）
     memory_decay_half_life_days: int = 30  # 衰减半衰期（天）
-    # D-6 软时效地板分（valid_to 过点得分乘子下限，Agent/13 §28；生效面=L4 检索通道）
+    # D-6 软时效地板分（valid_to 过点得分乘子下限，Agent/13 §28；生效面=REST/MCP/chat
+    # 三路 L2 组装+L4 检索通道，K25-c 接线对齐——chat 路经 ChatPolicy 注入，2026-10-07 补齐）。
+    # 退化语义（K22 P2①）：floor=0.0 时过期项得分恒 0=零分陪跑仍可注入（软降权非硬门），
+    # 直至 decay_scan 依半衰期跌破阈值置 EXPIRED 才退场。
     memory_expiry_floor: float = Field(default=0.1, ge=0.0, le=1.0)
 
     # 沉淀与空闲调度（06 篇 §5.1/§5.5；M4 计划 2 落位 2026-09-28；沉淀模型复用上方 llm_model

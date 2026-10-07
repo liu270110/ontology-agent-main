@@ -51,6 +51,8 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
+from sqlalchemy import select
+
 from services.agent.business.chat_events import ChatEvent, ChatEventName
 from services.agent.business.exec_events import ApprovalDecision, ApprovalResolvedPayload
 from services.agent.domain.model.kernel_actions import ApprovalTicket
@@ -370,6 +372,11 @@ class RunApprovalService:
 
         - 候选行经 tx.session 裸 add（K19 首个跨模块同事务写先例，事务边界仍归 UoW 唯一
           所有）：回流失败随裁决整体回滚——审批与候选原子，不留半套副作用；
+        - 幂等 get-or-create（K25-a，13 篇 §31）：同 run 经 wait_external 二次落锚后审批人
+          携同 hint 再次 approve 时 rule_key 与首次回流恒等，裸 add 撞
+          uk_kb_rule_candidates_tenant_id_rule_key → 审批整体 5xx 回滚；故同事务先按
+          (tenant_id, rule_key) 查存在即复用既有候选行（候选产物永不物理删除）并最小留痕
+          （reflux_dedup_skip 日志），评审单首次回流已登记（uk_review_one_open 幂等）不重发；
         - 草案形态（13 篇 §25 最小构造路径）：trigger=审批人提示原文（证据同源）、
           consequence/target_class/draft_shacl 留空待终审结构化（人本草案无 LLM 生成环节，
           不伪造草案；违例面以 approval_reflux_unstructured 标记携带，只标记不裁决）；
@@ -381,12 +388,30 @@ class RunApprovalService:
           rule_draft + risk_flag=true 随单透出；payload 溯源=rule_hint/approval_ticket_id/
           decided_by）；端口自持事务，未装配/失败降级留痕不反噬裁决（02 §3 ⑥）。
         """
+        rule_key = hashlib.sha256(f"approval|{rule_hint}|{task_id}|{run_id}".encode()).hexdigest()[:32]
+        existing_id = (
+            await tx.session.execute(
+                select(KbRuleCandidate.id).where(
+                    KbRuleCandidate.tenant_id == tenant_id,
+                    KbRuleCandidate.rule_key == rule_key,
+                )
+            )
+        ).scalar_one_or_none()
+        if existing_id is not None:
+            logger.info(
+                "审批回流幂等跳过（reflux_dedup_skip）：同 run 二次回流同 hint，复用既有候选不重插"
+                "（rule_candidate=%s task=%s run=%s）",
+                existing_id,
+                task_id,
+                run_id,
+            )
+            return existing_id
         row = KbRuleCandidate(
             tenant_id=tenant_id,
             document_id=None,  # K19-c：审批回流无文档出处（占位锚语义失真，立项裁决放宽 nullable）
             chunk_id=None,
             rule_id=f"approval-{run_id}",  # 人读坐标：审批回流无模板序号，以 run 定位
-            rule_key=hashlib.sha256(f"approval|{rule_hint}|{task_id}|{run_id}".encode()).hexdigest()[:32],
+            rule_key=rule_key,  # 幂等基准（get-or-create 查询同键；K23 P2① 哈希源口径不变）
             kind="precondition",  # 策略修正≈放行前置条件的修订建议；结构化细分交终审（kind 枚举内最贴切值）
             trigger=rule_hint,  # 审批人提示原文即触发条件描述
             consequence="",  # 待终审结构化（不伪造草案）

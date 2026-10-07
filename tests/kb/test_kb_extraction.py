@@ -263,13 +263,13 @@ async def test_extract_writes_candidate_facts_and_tickets_idempotent(
         assert source_ref["doc_version"] == 1 and len(source_ref["span"]) == 2
         assert fact.evidence["quote"] == fact.subject  # 引语=关键词本身（逐字命中，extract 只保留不裁决）
         assert fact.evidence["span"] and len(fact.evidence["span"]) == 2  # chunk 内定位可回指
-        assert fact.meta["fact_key"] and fact.meta["template_ref"] == "kb_extract@v3"
+        assert fact.meta["fact_key"] and fact.meta["template_ref"] == "kb_extract@v4"
         assert fact.meta["properties"] == MODEL_PROPERTIES.get(fact.subject, {})
     assert len(tickets) == len(facts)  # 一候选一 open 单
     assert all(t.target_type == "knowledge_instance" and t.status == "pending_review" for t in tickets)
     for ticket in tickets:  # 统一信封（standards/01 §5.3）
         assert ticket.payload["envelope_version"] == "v1"
-        assert ticket.payload["template_ref"] == "kb_extract@v3"
+        assert ticket.payload["template_ref"] == "kb_extract@v4"
         assert ticket.payload["payload"]["source_ref"]["chunk_id"]
         assert ticket.payload["payload"]["quote"]  # 引语随单透出（终审可直接对回原文）
         assert ticket.payload["payload"]["fact"]["violations"] == []  # 干净候选：fact 面零留痕（K21 P2-3）
@@ -1082,7 +1082,7 @@ async def test_extract_v3_index_hit_maps_back_to_iri_end_to_end(
     kb_pg: async_sessionmaker[AsyncSession], extract_env: dict
 ) -> None:
     """K24-c 命中路径（端到端）：模型回目录序号（实体类+关系双端点）→ 解析侧在剪枝/落库前映射回
-    种子类 IRI 走既有链——subject_type/object_type=IRI、violations=[]、template_ref=kb_extract@v3、
+    种子类 IRI 走既有链——subject_type/object_type=IRI、violations=[]、template_ref=kb_extract@v4、
     evidence 引语照常保留、零剪除 pruning_stats 显式落账。"""
     model = ScriptedModelPort(
         {
@@ -1122,7 +1122,7 @@ async def test_extract_v3_index_hit_maps_back_to_iri_end_to_end(
     for fact in entities:
         assert fact.subject_type == f"{PW}Feeder"  # 序号已映射回 IRI（非序号原文落库）
         assert fact.violations == [] and fact.status == "candidate"
-        assert fact.meta["template_ref"] == "kb_extract@v3"
+        assert fact.meta["template_ref"] == "kb_extract@v4"
         assert fact.evidence["quote"] == "馈线F001"  # evidence 链不受映射影响
     for fact in relations:
         assert fact.subject_type == f"{PW}Feeder" and fact.object_type == f"{PW}Substation"  # 双端点映射

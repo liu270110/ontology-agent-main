@@ -39,6 +39,7 @@ from services.kb.business.prompts import (
     extract_v1,
     extract_v2,
     extract_v3,
+    extract_v4,
     get_prompt,
     get_system_prompt,
 )
@@ -132,12 +133,50 @@ _EXPECTED_USER_PROMPT_V3 = (
     f"\n\n## 抽取文本\n{_SNAPSHOT_CHUNK}"
 )
 
+# v4 标题栏结构化线索区快照（extract_lab A2 实测正文，ce543e8 实验版 v3 重登记 v4；
+# 示例字段值用 SAMPLE-* 占位，零真实图号）。目录前缀=编号制（v4 沿用 v3 目录口径）。
+_EXPECTED_HINT_V4 = (
+    "## 标题栏结构化线索（确定性投影产物，可能含错配——仅作位置线索，取值须以「抽取文本」原文为准）\n"
+    "图号: SAMPLE-0001\n"
+    "\n"
+    "## 候选字段清单（标题栏字段；输出 attribute 候选时 predicate 取清单中的**字段中文名**（括号外部分），"
+    '每个可配对字段一条：{"kind": "attribute", "name": "<字段值所属实体>", '
+    '"predicate": "<字段名>", "object": "<字段值>"}）\n'
+    "- 图号(图样代号/Drawing NO/DWG NO)\n"
+    "- 名称(图名/Title)\n"
+    "- 材料(Material)\n"
+    "- 表面处理(Finish/Surface Treatment)\n"
+    "- 热处理(Heat Treat)\n"
+    "- 数量(Qty/Pcs)\n"
+    "- 比例(Scale)\n"
+    "- 重量(Weight)\n"
+    "- 幅面(Size/Sheet Size)\n"
+    "- 版本(Rev/Version)\n"
+    "- 日期(Date)\n"
+    "- 设计(Design/Drawn)\n"
+    "- 审核(Check/Checked)\n"
+    "- 批准(Approval/Approved)\n"
+    "- 共几张(Sheet,如 1 OF 4 形态)\n"
+    "- 项目名(Project Name)\n"
+    "\n"
+    "## 输出 JSON schema（强约束，违反即无效）\n" + extract_v4.OUTPUT_SCHEMA_JSON + "\n"
+)
+_SNAPSHOT_TITLEBLOCK_FIELDS = {"图号": "SAMPLE-0001"}
+_EXPECTED_USER_PROMPT_V4_HINT = (
+    "## 本体引导清单\n"
+    "- 1. 类 馈线（Feeder）\n"
+    "- 2. 类 抢修工单（OutageOrder）\n"
+    "- 属性 hasStatus（标签：工单状态）"
+    f"\n\n{_EXPECTED_HINT_V4}## 抽取文本\n{_SNAPSHOT_CHUNK}"
+)
+
 
 def test_snapshot_template_ref_版本钉死() -> None:
-    """version pin（18 篇 §1.1）：v1/v2 冻结为历史（v2 留注册表可回退），active ref = kb_extract@v3。"""
+    """version pin（18 篇 §1.1）：v1/v2/v3 冻结为历史（v2/v3 留注册表可回退），active ref = kb_extract@v4。"""
     assert extract_v1.TEMPLATE_REF == "kb_extract@v1"  # 历史版本不可变
     assert extract_v2.TEMPLATE_REF == "kb_extract@v2"  # 历史（可回退）
-    assert extract_v3.TEMPLATE_REF == "kb_extract@v3"  # 现役（K24 §30）
+    assert extract_v3.TEMPLATE_REF == "kb_extract@v3"  # 历史（K24 §30，可回退）
+    assert extract_v4.TEMPLATE_REF == "kb_extract@v4"  # 现役（v3 编号制 + 标题栏线索区复合）
 
 
 def test_snapshot_system_prompt_v1_历史冻结_byte_exact() -> None:
@@ -148,6 +187,13 @@ def test_snapshot_system_prompt_v1_历史冻结_byte_exact() -> None:
 def test_snapshot_system_prompt_v2_byte_exact() -> None:
     """v2 系统提示词正文与深化批次字面量逐字节一致（新增 evidence 逐字引语要求）。"""
     assert extract_v2.SYSTEM_PROMPT == _EXPECTED_SYSTEM_PROMPT_V2
+
+
+def test_snapshot_system_prompt_v4_与v3一致_byte_exact() -> None:
+    """v4 系统提示词与 v3 逐字节一致（v4 只动用户提示词组装面——标题栏结构化线索区；
+    序号口径规则 2 随 v3 原样生效）。"""
+    assert extract_v4.SYSTEM_PROMPT == _EXPECTED_SYSTEM_PROMPT_V3
+    assert extract_v4.SYSTEM_PROMPT == extract_v3.SYSTEM_PROMPT
 
 
 def test_snapshot_catalog_text_byte_exact() -> None:
@@ -166,6 +212,31 @@ def test_snapshot_user_prompt_byte_exact() -> None:
     """用户提示词组装与现网 f-string 逐字节一致（清单区 + 空行 + 抽取文本区）。"""
     assert extract_v1.render(_EXPECTED_CATALOG_TEXT, _SNAPSHOT_CHUNK) == _EXPECTED_USER_PROMPT
     assert extract_v2.render(_EXPECTED_CATALOG_TEXT, _SNAPSHOT_CHUNK) == _EXPECTED_USER_PROMPT
+
+
+def test_snapshot_v4_user_prompt_none形态与v3逐字节一致() -> None:
+    """v4 双参形态（titleblock_fields=None，非图纸文档路径）= v3 输出逐字节一致（零行为变化）。"""
+    assert extract_v4.render(_EXPECTED_CATALOG_TEXT_V3, _SNAPSHOT_CHUNK) == _EXPECTED_USER_PROMPT_V3
+
+
+def test_snapshot_user_prompt_v4_hint_byte_exact() -> None:
+    """v4 标题栏结构化线索区逐字节快照（extract_lab A2 实测正文 + v3 编号目录前缀；
+    线索区恒在「抽取文本」标记前）。"""
+    rendered = extract_v4.render(_EXPECTED_CATALOG_TEXT_V3, _SNAPSHOT_CHUNK, _SNAPSHOT_TITLEBLOCK_FIELDS)
+    assert rendered == _EXPECTED_USER_PROMPT_V4_HINT
+    # FakeModelPort 契约：正文段以「## 抽取文本」标记切分，标记必须仍是唯一末段入口
+    assert rendered.count("## 抽取文本\n") == 1
+    assert rendered.index("## 标题栏结构化线索") < rendered.index("## 抽取文本\n")
+
+
+def test_snapshot_v4_schema_literal_与抽取schema一致() -> None:
+    """v4 提示词内嵌 schema 字面量与 kb_extraction._EXTRACT_SCHEMA_V3 逐字节一致
+    （跨模块一致性锁：v4 沿用 K24 integer 序号 schema 口径）。"""
+    import json
+
+    from services.kb.business.kb_extraction import _EXTRACT_SCHEMA_V3
+
+    assert extract_v4.OUTPUT_SCHEMA_JSON == json.dumps(_EXTRACT_SCHEMA_V3, ensure_ascii=False)
 
 
 def test_snapshot_system_prompt_v3_byte_exact() -> None:
@@ -198,10 +269,14 @@ def test_registry_binds_active_template() -> None:
     assert PROMPTS[extract_v1.TEMPLATE_REF] is extract_v1.render
     assert PROMPTS[extract_v2.TEMPLATE_REF] is extract_v2.render
     assert PROMPTS[extract_v3.TEMPLATE_REF] is extract_v3.render
+    assert PROMPTS[extract_v4.TEMPLATE_REF] is extract_v4.render
     assert SYSTEM_PROMPTS[extract_v2.TEMPLATE_REF] is extract_v2.SYSTEM_PROMPT
     assert SYSTEM_PROMPTS[extract_v3.TEMPLATE_REF] is extract_v3.SYSTEM_PROMPT
+    assert SYSTEM_PROMPTS[extract_v4.TEMPLATE_REF] is extract_v4.SYSTEM_PROMPT
     assert get_prompt(extract_v3.TEMPLATE_REF) is extract_v3.render
     assert get_system_prompt(extract_v3.TEMPLATE_REF) is extract_v3.SYSTEM_PROMPT
+    assert get_prompt(extract_v4.TEMPLATE_REF) is extract_v4.render
+    assert get_system_prompt(extract_v4.TEMPLATE_REF) is extract_v4.SYSTEM_PROMPT
     assert set(PROMPTS) == set(SYSTEM_PROMPTS)
 
 
@@ -228,15 +303,19 @@ def test_candidate_envelopes_carry_active_template_ref() -> None:
     )
     chunk = _ChunkRef(id=uuid.uuid4(), seq=0, content=_SNAPSHOT_CHUNK, meta={"span": [0, 12]})
     cand = {"kind": "entity", "name": "馈线F001", "ontology_class": f"{_PW}Feeder", "confidence": 0.9}
-    fact = _candidate_fact(ctx, chunk, cand, "kb-extract:trace", extract_v2.TEMPLATE_REF)
-    assert fact["meta"]["template_ref"] == "kb_extract@v2"
+    fact = _candidate_fact(ctx, chunk, cand, "kb-extract:trace", extract_v3.TEMPLATE_REF)
+    assert fact["meta"]["template_ref"] == "kb_extract@v3"
     assert fact["meta"]["template_ref"] in PROMPTS  # 落库 ref 必须是注册表在册版本
     ticket = _ticket_envelope(fact, "kb-extract:trace", extract_v2.TEMPLATE_REF)
     assert ticket["template_ref"] == "kb_extract@v2"
-    fact_v3 = _candidate_fact(ctx, chunk, cand, "kb-extract:trace", extract_v3.TEMPLATE_REF)  # 现役版同源
+    fact_v3 = _candidate_fact(ctx, chunk, cand, "kb-extract:trace", extract_v3.TEMPLATE_REF)  # 历史版同源
     assert fact_v3["meta"]["template_ref"] == "kb_extract@v3"
     ticket_v3 = _ticket_envelope(fact_v3, "kb-extract:trace", extract_v3.TEMPLATE_REF)
     assert ticket_v3["template_ref"] == "kb_extract@v3"
+    fact_v4 = _candidate_fact(ctx, chunk, cand, "kb-extract:trace", extract_v4.TEMPLATE_REF)  # 现役版同源
+    assert fact_v4["meta"]["template_ref"] == "kb_extract@v4"
+    ticket_v4 = _ticket_envelope(fact_v4, "kb-extract:trace", extract_v4.TEMPLATE_REF)
+    assert ticket_v4["template_ref"] == "kb_extract@v4"
 
 
 # ---------------------------------------------------------------- 集成：template_ref 落库（PG 夹具风格同存量用例）
@@ -345,5 +424,5 @@ async def test_extract_persists_template_ref_into_envelopes(
             .all()
         )
     assert facts and tickets  # FakeModelPort 确定性产出 ≥1 候选
-    assert all(fact.meta["template_ref"] == extract_v3.TEMPLATE_REF for fact in facts)
-    assert all(ticket.payload["template_ref"] == extract_v3.TEMPLATE_REF for ticket in tickets)
+    assert all(fact.meta["template_ref"] == extract_v4.TEMPLATE_REF for fact in facts)
+    assert all(ticket.payload["template_ref"] == extract_v4.TEMPLATE_REF for ticket in tickets)

@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-from services.kb.business.prompts import extract_v1, extract_v2
+from services.kb.business.prompts import extract_v1, extract_v2, extract_v3
 
 
 class UnknownTemplateRefError(KeyError):
@@ -22,11 +22,13 @@ class UnknownTemplateRefError(KeyError):
 PROMPTS: dict[str, Callable[..., str]] = {
     extract_v1.TEMPLATE_REF: extract_v1.render,
     extract_v2.TEMPLATE_REF: extract_v2.render,
+    extract_v3.TEMPLATE_REF: extract_v3.render,
 }
 
 SYSTEM_PROMPTS: dict[str, str] = {
     extract_v1.TEMPLATE_REF: extract_v1.SYSTEM_PROMPT,
     extract_v2.TEMPLATE_REF: extract_v2.SYSTEM_PROMPT,
+    extract_v3.TEMPLATE_REF: extract_v3.SYSTEM_PROMPT,
 }
 
 

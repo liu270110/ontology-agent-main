@@ -12,8 +12,9 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 from enum import StrEnum
+from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class StepStateError(Exception):
@@ -99,6 +100,19 @@ class BudgetWatermark(BaseModel):
         )
 
 
+def deterministic_step_id(run_id: str, seq: int) -> str:
+    """A-5 确定性 step_id 派生（K32-a，docs/Agent/13 §38；上游=研究整理/12 对标 07-langgraph §2）。
+
+    **恢复幂等根基：重放/恢复按 ID 去重**——同 run 同 seq 恒派生同一 id
+    （uuid5(NAMESPACE_URL, f"{run_id}/step/{seq}"，langgraph task_id=确定性 hash 同构），
+    恢复后重建 StepState 与原步天然判等，重放去重无需持久侧索引即可对账命中。
+    边界（K32 裁决）：仅 Step 级派生；Run/Task/TaskEvent/SubRunHandle 保留 uuid4。
+    形态先例：cron/jobs.py 锁名、mcp/a2a/executor.py 委托主体均 uuid5(NAMESPACE_URL)；
+    返回合法 uuid5 字符串（StepState.step_id 字段经 pydantic 校验为 uuid.UUID）。
+    """
+    return str(uuid.uuid5(uuid.NAMESPACE_URL, f"{run_id}/step/{seq}"))
+
+
 class StepState(BaseModel):
     """步状态（task 聚合内步实体的执行态投影，04 §3）：迁移合法性内核断言（A2）。
 
@@ -109,7 +123,9 @@ class StepState(BaseModel):
 
     model_config = ConfigDict(validate_assignment=True)
 
-    step_id: uuid.UUID = Field(default_factory=uuid.uuid4)
+    # K32-b（A-5，docs/Agent/13 §38）：缺省路径由 _derive_step_id 注入确定性派生 id
+    # （同 run 同 seq 恒等）；显式直传（含测试桩 uuid4）原样保留，不覆盖。
+    step_id: uuid.UUID
     run_id: uuid.UUID
     seq: int  # 步序号（Run 内严格递增，04 §2 seq 纪律同源）
     stage: LoopStage
@@ -120,6 +136,21 @@ class StepState(BaseModel):
     error: str | None = None  # 终态原因（结构化描述，审计可读）
     resumable: bool = False  # 可恢复点：True=可从本步对账续跑（C1 重连续跑锚点）
     updated_at: datetime | None = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def _derive_step_id(cls, data: Any) -> Any:
+        """K32-b 构造点改接（A-5）：step_id 缺省时按 run_id+seq 确定性派生。
+
+        仅默认生成路径改接（原 default_factory=uuid.uuid4 位）：run_id/seq 缺位时不
+        注入，交字段必填校验显式报错——不静默回退 uuid4（确定性语义不可被旁路）。
+        """
+        if isinstance(data, dict) and data.get("step_id") is None:
+            run_id = data.get("run_id")
+            seq = data.get("seq")
+            if run_id is not None and seq is not None:
+                data["step_id"] = deterministic_step_id(str(run_id), int(seq))
+        return data
 
     @property
     def is_terminal(self) -> bool:

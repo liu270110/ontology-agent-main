@@ -23,9 +23,11 @@ from services.iam.data.orm import Tenant as TenantORM
 from services.kb.api.kb import get_document
 from services.kb.business.kb_extraction import (
     SEED_TTL_PATH,
+    PruningReason,
     StepContext,
     load_seed_catalog,
     match_seed_class,
+    prune_extraction,
     run_align,
     run_extract,
     run_validate,
@@ -617,3 +619,158 @@ async def test_extract_有候选_信号false(kb_pg: async_sessionmaker[AsyncSess
             (await db.execute(select(KbFactORM).where(KbFactORM.tenant_id == extract_env["tenant_id"]))).scalars().all()
         )
     assert len(facts) >= 1  # 有候选
+
+
+# ---------------------------------------------------------------- K21 事后剪枝（docs/Agent/13 §27）
+
+
+def test_prune_extraction_out_of_taxonomy_marks_reason():
+    """K21-a：schema 外自报类 → out_of_taxonomy 剪除+原因码；标签形可解析（match_seed_class
+    同源判定）不误剪；残缺条目（缺 name）透传不归剪枝管。"""
+    catalog = load_seed_catalog()
+    result = prune_extraction(
+        [
+            {"kind": "entity", "name": "馈线F001", "ontology_class": f"{PW}Feeder", "confidence": 0.9},
+            {  # schema 外类（上游「宽松放行」教训的剪除面）：IRI 不可解析 → 剪除
+                "kind": "entity",
+                "name": "神秘设备",
+                "ontology_class": "http://schema.example/Starship",
+                "confidence": 0.8,
+            },
+            {"kind": "entity", "name": "城东站", "ontology_class": "变电站", "confidence": 0.7},  # 标签形：在目
+            {"kind": "entity", "confidence": 0.5},  # 残缺（缺 name）：透传 kept
+        ],
+        catalog,
+    )
+    assert [c.get("name") for c in result.kept] == ["馈线F001", "城东站", None]
+    assert [(c["name"], reason) for c, reason in result.pruned] == [("神秘设备", PruningReason.OUT_OF_TAXONOMY)]
+    assert result.pruning_stats == {"out_of_taxonomy": 1}
+
+
+def test_prune_extraction_keeps_valid_products_intact():
+    """K21-a：全合法产物（实体+关系双端点在目）零剪除原序全保留；纯 IRI 集合口径=仅精确
+    成员判定（无 SeedCatalog 时标签形不再可解析，预期剪除）。"""
+    valid = [
+        {"kind": "entity", "name": "馈线F001", "ontology_class": f"{PW}Feeder", "confidence": 0.9},
+        {
+            "kind": "relation",
+            "name": "馈线F001",
+            "ontology_class": f"{PW}Feeder",
+            "predicate": "suppliedBy",
+            "object": "城东变电站",
+            "object_class": f"{PW}Substation",
+            "confidence": 0.8,
+        },
+    ]
+    result = prune_extraction(valid, load_seed_catalog())
+    assert result.kept == tuple(valid)  # 合法产物全保留（原序、原对象）
+    assert result.pruned == () and result.pruning_stats == {}
+    strict = prune_extraction(
+        [{"kind": "entity", "name": "城东站", "ontology_class": "变电站", "confidence": 0.7}],
+        {f"{PW}Feeder"},  # 纯 IRI 集合口径：仅精确成员判定
+    )
+    assert [reason for _, reason in strict.pruned] == [PruningReason.OUT_OF_TAXONOMY]
+
+
+def test_prune_extraction_duplicate_and_relation_endpoint():
+    """K21-a：同键重复（同批先到先得，跨条目原序）与关系端点类不合法两形态；判定顺序=
+    内容失效优先于键重复（单条单原因码）。"""
+    catalog = load_seed_catalog()
+    result = prune_extraction(
+        [
+            {"kind": "entity", "name": "馈线F001", "ontology_class": f"{PW}Feeder", "confidence": 0.9},
+            {"kind": "entity", "name": "馈线F001", "ontology_class": f"{PW}Feeder", "confidence": 0.9},  # 同键再现
+            {
+                "kind": "relation",
+                "name": "馈线F001",
+                "ontology_class": f"{PW}Feeder",
+                "predicate": "suppliedBy",
+                "object": "神秘节点",
+                "object_class": "http://schema.example/Bogus",  # 端点类 schema 外 → 剪除
+                "confidence": 0.8,
+            },
+        ],
+        catalog,
+    )
+    assert [c["name"] for c in result.kept] == ["馈线F001"]
+    assert [(c["name"], reason) for c, reason in result.pruned] == [
+        ("馈线F001", PruningReason.DUPLICATE),
+        ("馈线F001", PruningReason.INVALID_RELATION_ENDPOINT),
+    ]
+    assert result.pruning_stats == {"duplicate": 1, "invalid_relation_endpoint": 1}
+
+
+async def test_extract_pruned_items_marked_not_discarded(
+    kb_pg: async_sessionmaker[AsyncSession], extract_env: dict
+) -> None:
+    """K21-b：剪除项不丢弃不阻塞——照常落 kb_facts(candidate) 进审，violations 带原因码留痕
+    （只标记不裁决）；合法产物零标记不受影响（主流程不变，一候选一单）。"""
+    model = ScriptedModelPort(
+        {
+            "candidates": [
+                {"kind": "entity", "name": "馈线F001", "ontology_class": f"{PW}Feeder", "confidence": 0.9},
+                {
+                    "kind": "entity",
+                    "name": "神秘设备",
+                    "ontology_class": "http://schema.example/Starship",
+                    "confidence": 0.8,
+                },
+            ]
+        }
+    )
+    await run_extract(_ctx(kb_pg, extract_env, model=model))
+    async with kb_pg() as db:
+        rows = (
+            (await db.execute(select(KbFactORM).where(KbFactORM.tenant_id == extract_env["tenant_id"]))).scalars().all()
+        )
+        tickets = (
+            (await db.execute(select(ReviewTicketORM).where(ReviewTicketORM.tenant_id == extract_env["tenant_id"])))
+            .scalars()
+            .all()
+        )
+    pruned = [f for f in rows if f.subject == "神秘设备"]
+    valid = [f for f in rows if f.subject == "馈线F001"]
+    assert pruned and valid  # 剪除不丢弃：与合法产物同批落候选
+    for fact in pruned:
+        assert fact.status == "candidate"  # 剪除≠裁决：候选非成品交终审
+        assert [v["rule"] for v in fact.violations] == ["out_of_taxonomy"]
+        assert "不在种子类目" in fact.violations[0]["detail"]
+    for fact in valid:
+        assert fact.violations == [] and fact.status == "candidate"  # 合法产物零标记
+    assert len(tickets) == len(rows)  # 剪除/合法都进审（一候选一 open 单）
+
+
+async def test_extract_pruning_stats_meta_and_gate_preserves_marks(
+    kb_pg: async_sessionmaker[AsyncSession], extract_env: dict
+) -> None:
+    """K21-b：pruning_stats 随抽取完成落账（Document.meta，extract_empty 同落点，计数=被剪
+    候选数）；validate 门禁回写保留剪枝留痕且不改变门禁裁决（无门禁违例时仍 candidate）。"""
+    model = ScriptedModelPort(
+        {
+            "candidates": [
+                {
+                    "kind": "entity",
+                    "name": "神秘设备",
+                    "ontology_class": "http://schema.example/Starship",
+                    "confidence": 0.8,
+                }
+            ]
+        }
+    )
+    ctx = _ctx(kb_pg, extract_env, model=model)
+    await run_extract(ctx)
+    async with kb_pg() as db:
+        doc = await db.get(DocumentORM, extract_env["document_id"])
+        rows = (
+            (await db.execute(select(KbFactORM).where(KbFactORM.tenant_id == extract_env["tenant_id"]))).scalars().all()
+        )
+    assert doc.meta["pruning_stats"] == {"out_of_taxonomy": len(rows)}  # 每候选均被剪，计数一致
+    await run_validate(ctx)  # 门禁回写：留痕跨 validate 保留
+    async with kb_pg() as db:
+        rows_after = (
+            (await db.execute(select(KbFactORM).where(KbFactORM.tenant_id == extract_env["tenant_id"]))).scalars().all()
+        )
+    assert rows_after
+    for fact in rows_after:
+        assert [v["rule"] for v in fact.violations] == ["out_of_taxonomy"]  # 留痕未被门禁回写抹除
+        assert fact.status == "candidate"  # 剪枝留痕不计入裁决（主流程不变）

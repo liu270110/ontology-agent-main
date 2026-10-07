@@ -15,6 +15,13 @@
   三级=LLM 判定（经 ModelPort，输出强制过规则校验：target 只准落在种子类名白名单，越界一律弃，
   锚点 §6.4 推理分级）。命中 → aliases 补类 IRI + subject_type 归一；无着落 → 保留待审；
   对齐决策（tier/status/reason）全量落候选 meta["align"]。
+- 归并前置段（K27 E-6，docs/Agent/13 §33）：run_align 取名去重后插入归并工步（零 DDL 纯工步，
+  不动 pipeline 步表）——候选实体名批量嵌入近邻聚类（成对余弦 ≥ kb_merge_embed_threshold →
+  连通分量）发现跨 chunk 同义组，tier1（rule=embed_cluster）只留痕 meta["merge"]（裁决=不改写
+  subject/object，那是终审后的结构化工步）；分量 ≥2 的组交 LLM 批量判定（白名单=组内名字，
+  members/canonical 越界一律弃），采纳升级 tier2（rule=llm_confirmed），未采纳/异常挂 violations
+  merge_candidate 留痕（needs_review 语义，宪法第 2 条：LLM 结论不直接生效只留痕供终审）；
+  嵌入不可用整步跳过（降级不失败，与对齐二级同款）；单元素组零留痕；值不变不空写幂等。
 - validate（§2.6 步骤 6）：候选逐条组最小 ABox 图 → ontology.core.shacl.validate 对种子
   shapes（rdflib/pySHACL 同步调用一律 asyncio.to_thread）；外加确定性证据逐字门禁
   evidence_not_in_chunk（引语未在 chunk 内 str.find 命中即记违例——规则侧推理分级，与 SHACL
@@ -42,6 +49,7 @@ wedge，M2 出口条件）。评审票据写入经 CandidateReviewPort（review.
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import logging
 import math
@@ -249,7 +257,8 @@ _PRUNING_RULE_VALUES = frozenset(reason.value for reason in PruningReason)
 
 def _is_pruning_mark(item: Any) -> bool:
     """violations 条目是否剪枝留痕（rule 落 PruningReason 值域）——门禁回写保留、gate_result
-    计数拆分（mark_count）与分诊池排除三处共用的同一判据，单一事实源。"""
+    计数拆分与分诊池排除共用的判据之一（K27 起归并候选留痕同入保留面/计数面但不入分诊排除面，
+    见 _is_merge_mark），单一事实源。"""
     return isinstance(item, dict) and item.get("rule") in _PRUNING_RULE_VALUES
 
 
@@ -900,6 +909,218 @@ async def _align_by_llm(
             )
 
 
+# ---------------------------------------------------------------- K27 实体归并前置段（E-6，docs/Agent/13 §33）
+
+_MERGE_TEMPLATE_REF = "kb_merge@v1"
+
+# 提示词版本化资产（standards/01 §5.1；复用 _ALIGN_PROMPT_V1 批量+白名单形态）：给组内名字清单，
+# 问组内哪些名字指向同一现实实体；白名单=组内名字，代码侧精确校验越界一律弃（§6.4 推理分级）。
+_MERGE_PROMPT_V1 = """你是实体归并判定引擎。给定若干候选组，逐组判定组内哪些名字确为同一实体。
+规则：
+1. members 只准取该组 names 清单中出现过的名字，禁止创造清单之外的值；
+2. canonical 必须是 members 之一（组内最具规范性的名字）；
+3. 判定组内无可归并名字时 members 填空数组；
+4. 只输出 JSON 对象：{"judgements": [{"gid": "组标识", "canonical": "规范名", "members": ["名字", ...]}]}，逐组给出。"""
+
+# 归并判定输出 JSON Schema（端口实现负责校验；确定性桩不校验时代码侧仍兜底，宪法第 2 条）。
+_MERGE_SCHEMA_V1: dict[str, Any] = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": ["judgements"],
+    "properties": {
+        "judgements": {
+            "type": "array",
+            "maxItems": 256,
+            "items": {
+                "type": "object",
+                "additionalProperties": False,
+                "required": ["gid", "canonical", "members"],
+                "properties": {
+                    "gid": {"type": "string", "maxLength": 64},
+                    "canonical": {"type": "string", "maxLength": 256},
+                    "members": {
+                        "type": "array",
+                        "maxItems": 64,
+                        "items": {"type": "string", "maxLength": 256},
+                    },
+                },
+            },
+        }
+    },
+}
+
+_MERGE_MARK_RULE = "merge_candidate"  # K27-b：LLM 未采纳/异常的 needs_review 留痕 rule 值（gate 回写保留面）
+
+
+def _is_merge_mark(item: Any) -> bool:
+    """violations 条目是否归并候选留痕（K27-b；与剪枝留痕同语义：只标记不裁决，gate 回写保留、
+    不计入分诊池排除——归并候选仍是合规候选）。"""
+    return isinstance(item, dict) and item.get("rule") == _MERGE_MARK_RULE
+
+
+def _merge_group_id(members: Iterable[str]) -> str:
+    """归并组稳定标识（纯函数）：成员排序后 sha256 前 12 位——同成员恒同 id（幂等重跑不漂移）。"""
+    digest = hashlib.sha256("\x1f".join(sorted(members)).encode("utf-8")).hexdigest()
+    return f"mg-{digest[:12]}"
+
+
+def _connected_components(names: list[str], edges: Iterable[tuple[int, int]]) -> list[tuple[str, ...]]:
+    """并查集连通分量（纯函数，确定性）：名字表 + 建边下标对 → 分量列表（成员字典序，分量按首成员序）。"""
+    parent = list(range(len(names)))
+
+    def find(i: int) -> int:
+        while parent[i] != i:
+            parent[i] = parent[parent[i]]  # 路径压缩
+            i = parent[i]
+        return i
+
+    for a, b in edges:
+        root_a, root_b = find(a), find(b)
+        if root_a != root_b:
+            parent[max(root_a, root_b)] = min(root_a, root_b)  # 小根并入：分量代表确定性
+    groups: dict[int, list[str]] = {}
+    for i, name in enumerate(names):
+        groups.setdefault(find(i), []).append(name)
+    return sorted(tuple(sorted(members)) for members in groups.values())
+
+
+def _embed_cluster(names: list[str], vectors: list[list[float]], threshold: float) -> list[tuple[str, ...]]:
+    """嵌入近邻聚类（纯函数，确定性）：成对余弦 ≥ 阈值建边 → 连通分量 → 只留 ≥2 元素组
+    （单元素组零留痕，调用方不产生任何 meta/violations 痕迹）。"""
+    edges = [
+        (i, j)
+        for i in range(len(names))
+        for j in range(i + 1, len(names))
+        if _cosine(vectors[i], vectors[j]) >= threshold
+    ]
+    return [group for group in _connected_components(names, edges) if len(group) >= 2]
+
+
+def _mark_group(
+    marks: dict[str, list[dict[str, str]]], members: Iterable[str], detail: str
+) -> None:
+    """组内逐名挂 merge_candidate 留痕（K27-b 未采纳/异常路径共用；每名独立 dict 防共享引用）。"""
+    for name in members:
+        marks[name] = [{"rule": _MERGE_MARK_RULE, "detail": detail}]
+
+
+async def _merge_by_llm(
+    groups: list[tuple[str, ...]],
+    merge_meta: dict[str, dict[str, Any]],
+    merge_marks: dict[str, list[dict[str, str]]],
+    model: Any,
+    trace_id: str,
+) -> None:
+    """K27-b：分量 ≥2 的组批量交 LLM 判定（一次调用全组，复用对齐三级形态）：白名单=组内名字，
+    代码侧精确校验（members 全员 ∈ 组内且 canonical ∈ members，越界/重复整组弃）。
+
+    采纳 → 组内升级 tier2（rule=llm_confirmed，按采纳成员重算 group_id，template_ref 落库可追溯）；
+    未采纳（越界/空成员/未判定）或 LLM 不可用/输出不合法（ModelPortError/ValueError/RuntimeError
+    三族并集同 _align_by_llm）→ 组内 merge_candidate 留痕（tier1 嵌入记录保留，needs_review 语义
+    交终审），不失败不阻塞步。"""
+    user = json.dumps(
+        {"groups": [{"gid": _merge_group_id(members), "names": list(members)} for members in groups]},
+        ensure_ascii=False,
+    )
+    try:
+        data = await model.complete_structured(
+            system=_MERGE_PROMPT_V1, user=user, json_schema=_MERGE_SCHEMA_V1, trace_id=trace_id
+        )
+        judgements = data.get("judgements")
+        if not isinstance(judgements, list):
+            raise ValueError("judgements 不是数组")
+    except (ModelPortError, ValueError, RuntimeError):  # 三族并集（口径同 _align_by_llm）：端口契约族
+        # + 组合根 AuditedModelPort 实抛网关族（RuntimeError 树）+ 代码侧结构校验；
+        # AttributeError/TypeError 等编程错误不在捕获面，照常上抛响亮失败。
+        logger.warning("kb_merge tier-2 LLM unavailable, degrade to tier-1 marks", exc_info=True)
+        for members in groups:
+            _mark_group(merge_marks, members, "K27 实体归并：LLM 判定不可用或输出不合法（嵌入聚类留痕交人工终审）")
+        return
+    adopted: dict[str, dict[str, Any]] = {}
+    for item in judgements:  # 先到先得：同 gid 重复回包只认首个（与剪枝同批先到先得同惯例）
+        if isinstance(item, dict) and isinstance(item.get("gid"), str):
+            adopted.setdefault(item["gid"], item)
+    for members in groups:
+        judgement = adopted.get(_merge_group_id(members))
+        if judgement is None:
+            _mark_group(merge_marks, members, "K27 实体归并：LLM 未给出该组判定（嵌入聚类留痕交人工终审）")
+            continue
+        surface = {name.strip(): name for name in members}  # 白名单精确落名（禁模糊放行，对齐三级同款）
+        raw_members = judgement.get("members")
+        members_list = raw_members if isinstance(raw_members, list) else None
+        resolved: list[str] = []
+        out_of_range = members_list is None  # members 非数组 = 结构不合法（越界弃口径）
+        for member in members_list or ():
+            hit = surface.get(member.strip()) if isinstance(member, str) else None
+            if hit is None or hit in resolved:  # 越界或重复成员 → 整组弃（白名单精确校验）
+                out_of_range = True
+                break
+            resolved.append(hit)
+        raw_canonical = judgement.get("canonical")
+        canonical = surface.get(raw_canonical.strip()) if isinstance(raw_canonical, str) else None
+        if members_list is not None and not members_list:  # LLM 明确判定无可归并（拒绝意见本身留痕）
+            _mark_group(merge_marks, members, "K27 实体归并：LLM 判定组内无可归并名字（嵌入聚类留痕交人工终审）")
+            continue
+        if out_of_range or canonical is None or canonical not in resolved:
+            _mark_group(
+                merge_marks, members, "K27 实体归并：LLM 输出越界已弃（members/canonical 不在组内白名单，交人工终审）"
+            )
+            continue
+        confirmed = sorted(resolved)
+        record: dict[str, Any] = {  # tier2：LLM 确认（宪法 2 兜底已过白名单校验；仍只留痕不改写）
+            "group_id": _merge_group_id(confirmed),
+            "canonical": canonical,
+            "members": confirmed,
+            "rule": "llm_confirmed",
+            "tier": 2,
+            "template_ref": _MERGE_TEMPLATE_REF,
+        }
+        for name in confirmed:
+            merge_meta[name] = dict(record)
+
+
+async def _merge_entities(
+    names: list[str], ctx: StepContext
+) -> tuple[dict[str, dict[str, Any]], dict[str, list[dict[str, str]]]]:
+    """K27 归并前置段（E-6，docs/Agent/13 §33；graphiti 去重确定性优先 LLM 兜底）：跨 chunk 同义
+    实体名组发现 + 留痕。返回 (merge_meta, merge_marks)：
+    - merge_meta：名字 → meta["merge"] 值（{group_id, canonical, members, rule, tier, template_ref}）。
+      tier1=嵌入聚类（rule=embed_cluster，确定性建边强证据，canonical=组内字典序最小，零 LLM）；
+      tier2=LLM 确认（rule=llm_confirmed）。**只留痕不改写 subject/object**（归并改写=终审后的
+      结构化工步，本段仅供终审可见——候选非成品，宪法第 3 条）；
+    - merge_marks：名字 → violations 留痕（{"rule": "merge_candidate", "detail": ...}）——LLM 未采纳/
+      越界/异常时挂候选（needs_review 语义，宪法第 2 条：LLM 结论不直接生效只留痕供终审）。
+    降级：embedder 未装配或嵌入路不可用 → 整步跳过零留痕（对齐二级同款，降级不失败）；model 未装配
+    → 只出 tier1（对齐三级 model 缺省跳过同款，不记 LLM 异常留痕）；单元素组零留痕。"""
+    if len(names) < 2 or ctx.embedder is None:
+        return {}, {}
+    threshold = get_settings().kb_merge_embed_threshold
+    try:
+        vectors = await ctx.embedder.embed(names)
+    except EmbeddingUnavailableError:
+        logger.debug("kb_merge: 嵌入路不可用，归并段整步跳过（降级不失败）: names=%s", names)
+        return {}, {}
+    groups = _embed_cluster(names, vectors, threshold)
+    if not groups:
+        return {}, {}
+    merge_meta: dict[str, dict[str, Any]] = {}
+    for members in groups:  # tier1：确定性嵌入聚类强证据——裁决=只留痕不自动归并改写
+        record = {
+            "group_id": _merge_group_id(members),
+            "canonical": members[0],  # 组内字典序最小（members 已排序，确定性）
+            "members": list(members),
+            "rule": "embed_cluster",
+            "tier": 1,
+            "template_ref": None,  # tier1 零 LLM：无提示词出处（tier2 落 kb_merge@v1）
+        }
+        for name in members:
+            merge_meta[name] = dict(record)
+    merge_marks: dict[str, list[dict[str, str]]] = {}
+    if ctx.model is not None:  # K27-b：分量 ≥2 的组才交 LLM 批量判定（一次调用全组）
+        await _merge_by_llm(groups, merge_meta, merge_marks, ctx.model, f"kb-merge:{ctx.document_id}")
+    return merge_meta, merge_marks
+
+
 async def _align_decisions(
     names: list[str], catalog: SeedCatalog, ctx: StepContext, trace_id: str
 ) -> dict[str, _AlignDecision]:
@@ -922,10 +1143,11 @@ async def _align_decisions(
 
 
 async def run_align(ctx: StepContext) -> None:
-    """步骤 4 三级术语对齐：候选名与种子类对齐，命中补类 IRI + subject_type 归一；决策落 meta。
+    """步骤 4 三级术语对齐 + K27 归并前置段：候选名与种子类对齐，命中补类 IRI + subject_type 归一；
+    决策落 meta；跨 chunk 同义实体组留痕 meta["merge"]（E-6，docs/Agent/13 §33，只留痕不改写）。
 
     无着落 → 保留待审（meta["align"].status=needs_review，不失败）；embedder/model 未装配时
-    对应层级整级跳过（v1 行为为其退化形态：仅一级）。
+    对应层级整级跳过（v1 行为为其退化形态：仅一级）；归并段嵌入不可用整步跳过零留痕（同款降级）。
     """
     catalog = await asyncio.to_thread(load_seed_catalog)
     trace_id = f"kb-align:{ctx.document_id}"
@@ -942,6 +1164,7 @@ async def run_align(ctx: StepContext) -> None:
     if not rows:
         return
     names = sorted({(row.canonical_name or row.subject) for row in rows})
+    merge_meta, merge_marks = await _merge_entities(names, ctx)  # K27 归并前置段（LLM 调用在事务外，03 §6.1）
     decisions = await _align_decisions(names, catalog, ctx, trace_id)
     aligned = 0
     async with ctx.session_factory() as session, session.begin():  # 短事务：回写对齐结论
@@ -962,7 +1185,14 @@ async def run_align(ctx: StepContext) -> None:
                 "ref": _SHAPES_REF,
                 "template_ref": _ALIGN_TEMPLATE_REF,
             }
+            if name in merge_meta and meta.get("merge") != merge_meta[name]:  # K27：归并留痕
+                meta["merge"] = merge_meta[name]  # 值不变不空写（幂等重跑省无谓改写，仿 extract 信号落账口径）
             fact.meta = meta  # JSONB 整体重赋值
+            marks = merge_marks.get(name)
+            if marks:  # K27-b：LLM 未采纳/异常 → merge_candidate 留痕（JSON 规范形去重，重放不累积）
+                merged_violations = _merge_stage_marks(fact.violations, marks)
+                if merged_violations != list(fact.violations or []):
+                    fact.violations = merged_violations
             if decision.iri is None:
                 continue  # 无着落 → 保留待审（subject_type/aliases 不动，人工复核由 review 单承载）
             aligned += 1
@@ -1157,11 +1387,11 @@ async def _triage_after_validate(ctx: StepContext) -> None:
         )
 
 
-def _merge_pruning_marks(existing: Any, incoming: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """门禁回写合并（K21-b）：既有剪枝留痕（extract 期写入的 PruningReason 标记）保留在前，
-    后接本次门禁结论；整表 JSON 规范形幂等去重（validate 重放不重复累积）。留痕只标记不裁决：
-    conforms/rejected 判定不受影响（主流程不变）。"""
-    marks = [v for v in (existing or []) if _is_pruning_mark(v)]
+def _merge_stage_marks(existing: Any, incoming: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """工步留痕合并（K21-b，K27 扩展保留面）：既有 stage 留痕（extract 剪枝原因码 + align 归并候选
+    标记）保留在前，后接本次门禁结论；整表 JSON 规范形幂等去重（validate 重放不重复累积）。
+    留痕只标记不裁决：conforms/rejected 判定不受影响（主流程不变）。"""
+    marks = [v for v in (existing or []) if _is_pruning_mark(v) or _is_merge_mark(v)]
     merged: list[dict[str, Any]] = []
     seen: set[str] = set()
     for item in (*marks, *incoming):
@@ -1177,9 +1407,9 @@ async def _persist_gate_result(
 ) -> None:
     """短事务回写 violations/status + 审核单 gate_result（独立短事务，两表最终一致）。
 
-    违例合并口径：K21 剪枝留痕在前 + 规则侧违例（确定性结论）+ SHACL 结果在后；
-    conforms=规则侧与 SHACL 均无违例（剪枝留痕不计入裁决）；gate_result 计数拆分
-    violation_count（门禁违例数，与 conforms 同口径）/mark_count（剪枝留痕数）——
+    违例合并口径：K21 剪枝留痕与 K27 归并候选留痕在前 + 规则侧违例（确定性结论）+ SHACL 结果在后；
+    conforms=规则侧与 SHACL 均无违例（工步留痕不计入裁决）；gate_result 计数拆分
+    violation_count（门禁违例数，与 conforms 同口径）/mark_count（工步留痕数=剪枝 + 归并候选）——
     消除 conforms=True 且 violation_count≥1 的自相矛盾单据（K21 复核 P2-2；下游无
     解析 violation_count 的消费方，grep 核对 2026-10-07，review 侧仅透传整个 dict）。
     """
@@ -1188,21 +1418,21 @@ async def _persist_gate_result(
         fact = await session.get(KbFact, fact_id)
         if fact is None:
             raise PipelineError(f"404 候选事实不存在: {fact_id}")
-        violations = _merge_pruning_marks(fact.violations, gate_violations)  # K21：剪枝留痕跨门禁保留
+        violations = _merge_stage_marks(fact.violations, gate_violations)  # 工步留痕跨门禁保留（K21/K27）
         fact.violations = violations  # JSONB 整体重赋值（门禁结论可追溯回写）
         if not report.conforms or rule_violations:
             fact.status = "rejected"  # 任一违例（kb_facts.status 枚举内取值；不写 authoritative）
     review = ctx.review
     if review is None:  # 防御性收窄（extract 入口已断言；validate 独跑亦需单据可回写）
         raise PipelineError("409 候选审核端口未装配（gate_result 回写必需）")
-    mark_count = sum(1 for v in violations if _is_pruning_mark(v))
+    mark_count = sum(1 for v in violations if _is_pruning_mark(v) or _is_merge_mark(v))
     await review.attach_gate_result(
         tenant_id=ctx.tenant_id,
         target_id=fact_id,
         gate_result={
             "conforms": report.conforms and not rule_violations,
-            "violation_count": len(violations) - mark_count,  # 门禁违例数（剪枝留痕不计，与 conforms 同口径）
-            "mark_count": mark_count,  # 剪枝留痕数（拆分计数：终审 UI 可分列呈现）
+            "violation_count": len(violations) - mark_count,  # 门禁违例数（工步留痕不计，与 conforms 同口径）
+            "mark_count": mark_count,  # 工步留痕数（剪枝 + 归并候选，拆分计数：终审 UI 可分列呈现）
             "violations": violations,
             "elapsed_ms": report.elapsed_ms,
             "shapes": _SHAPES_REF,

@@ -89,6 +89,7 @@ def _session_to_domain(row: SessionORM, *, next_seq: int, members: list[GroupMem
         routing=RoutingMode(row.routing),
         members=members or [],
         next_seq=next_seq,
+        created_at=row.created_at,  # B3 缺陷修复 2026-10-07：行创建时刻随映射透出（读面不再恒 null）
     )
 
 

@@ -168,6 +168,7 @@ def from_domain(ag: Session) -> SessionOut:
         title=ag.title,
         type=ag.type.value,
         routing=ag.routing.value,
+        created_at=ag.created_at,  # B3 缺陷修复 2026-10-07：聚合已带行创建时刻，读面不再恒 null
     )
 
 

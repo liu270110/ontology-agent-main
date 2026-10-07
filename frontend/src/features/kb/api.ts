@@ -93,14 +93,17 @@ export interface KbGraphEdge {
 // ---------------------------------------------------------------- AgenticRAG 检索（§8.1 契约类型见 @/api/contracts）
 
 export interface KbSearchResult {
-  /** 答案摘要 markdown；[^n] 脚注 = 引用角标（react-markdown + remark-gfm 渲染 sup） */
-  answers: string
-  hits: KbSearchHit[]
-  citations: KbCitation[]
-  graph_paths: { nodes: string[]; edges: string[] }[]
-  graph: { nodes: KbGraphNode[]; edges: KbGraphEdge[] }
-  confidence: number
-  degraded: boolean
+  /** 答案摘要 markdown；[^n] 脚注 = 引用角标（react-markdown + remark-gfm 渲染 sup）。
+   *  F3（联调 2026-10-06）：live 降级响应 answers 可为空数组——渲染侧归一 join，不再按
+   *  mock 契约假定恒字符串。 */
+  answers: string | string[]
+  /** 以下字段 live 降级响应可缺省（无 confidence/graph/meta）——消费方全部可选防御 */
+  hits?: KbSearchHit[]
+  citations?: KbCitation[]
+  graph_paths?: { nodes: string[]; edges: string[] }[]
+  graph?: { nodes: KbGraphNode[]; edges: KbGraphEdge[] } | null
+  confidence?: number
+  degraded?: boolean
   /** §8.1 冻结契约：仅请求 agentic=true 时返回；旧响应无此键/为 null 均合法（前端可选消费） */
   agentic?: AgenticBlock | null
 }
@@ -310,7 +313,8 @@ export function search(body: {
   agentic?: boolean
   max_rounds?: 1 | 2
 }) {
-  return api.postEnvelope<{ data: KbSearchResult; meta: KbSearchMeta }>('/kb/search', body)
+  // F3：live 降级响应可无 meta——信封 meta 可选，消费方 res.meta?.elapsed_ms 兜底
+  return api.postEnvelope<{ data: KbSearchResult; meta?: KbSearchMeta }>('/kb/search', body)
 }
 
 /** GET /kb/documents/{id}/review/candidates —— 审核候选（跨文档队列由页面聚合，见 R16）。

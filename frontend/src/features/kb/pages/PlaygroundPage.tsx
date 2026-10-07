@@ -72,8 +72,9 @@ export function PlaygroundPage() {
       try {
         const res = await search({ query: q.trim(), mode: m, top_k: k })
         setResult(res.data)
-        setMeta(res.meta)
-        const next = [{ query: q.trim(), mode: m, time: Date.now(), elapsed_ms: res.meta.elapsed_ms }, ...loadHistory().filter(h => !(h.query === q.trim() && h.mode === m))].slice(0, 20)
+        // F3：live 降级响应可无 meta——缺省补 null（页头徽标不渲染），历史 elapsed 兜底 0
+        setMeta(res.meta ?? null)
+        const next = [{ query: q.trim(), mode: m, time: Date.now(), elapsed_ms: res.meta?.elapsed_ms ?? 0 }, ...loadHistory().filter(h => !(h.query === q.trim() && h.mode === m))].slice(0, 20)
         persistHistory(next)
       } catch (e) {
         toast.error(`检索失败：${e instanceof Error ? e.message : '未知错误'}`)
@@ -84,11 +85,14 @@ export function PlaygroundPage() {
     [loading, persistHistory],
   )
 
-  /** 悬浮角标对应的引用与文档（Popover 数据源） */
+  /** 悬浮角标对应的引用与文档（Popover 数据源；F3：citations 可选防御） */
   const hoverCitation = useMemo(() => {
     if (!hoverCite || !result) return null
-    return result.citations.find(c => c.index === hoverCite.index) ?? null
+    return (result.citations ?? []).find(c => c.index === hoverCite.index) ?? null
   }, [hoverCite, result])
+
+  /** F3：live 降级响应 answers 可为空数组——归一为字符串（空数组=空摘要，由占位行兜底） */
+  const answerText = result ? (Array.isArray(result.answers) ? result.answers.join('\n\n') : result.answers) : ''
 
   const previewDoc = useMemo(() => docs.find(d => d.id === previewDocId) ?? null, [docs, previewDocId])
 
@@ -164,7 +168,7 @@ export function PlaygroundPage() {
           {!loading && result && (
             <>
               {result.degraded && (
-                <p className="mb-2 rounded-lg bg-[var(--orange-soft)] px-3 py-2 text-[11px] text-orange">⚠ 图库或向量库单侧降级，证据链暂缺。</p>
+                <p className="mb-2 rounded-lg bg-[var(--orange-soft)] px-3 py-2 text-[11px] text-orange" data-testid="pg-degraded">⚠ 图库或向量库单侧降级，证据链暂缺。</p>
               )}
               {/* 引用交互容器：sup 悬停 → FloatingCard 预览；点击 → 分片原文抽屉（IX-CHT-03 同款） */}
               <div
@@ -180,18 +184,23 @@ export function PlaygroundPage() {
                   const sup = (e.target as HTMLElement).closest('sup')
                   if (!sup || !result) return
                   const idx = Number(/\d+/.exec(sup.textContent ?? '0')?.[0] ?? 0)
-                  const cite = result.citations.find(c => c.index === idx)
+                  const cite = (result.citations ?? []).find(c => c.index === idx)
                   const doc = cite ? docs.find(d => d.name === cite.doc) : null
                   if (doc) setPreviewDocId(doc.id)
                   else toast.info('该引用的来源文档不在当前知识库列表中')
                 }}
               >
-                <Markdown remarkPlugins={[remarkGfm]}>{result.answers}</Markdown>
+                {/* F3：降级空摘要不进 Markdown（空串也渲染占位行，不崩不留白） */}
+                {answerText.trim() ? (
+                  <Markdown remarkPlugins={[remarkGfm]}>{answerText}</Markdown>
+                ) : (
+                  <p className="py-6 text-center text-xs text-label-3">本次检索未返回答案摘要（降级响应），证据与引用见右侧。</p>
+                )}
               </div>
               <div className="hairline-t mt-3 flex flex-wrap gap-3 pt-2.5 text-[11px] text-label-2">
                 <span>
                   <span className="dot d-green mr-1 inline-block" aria-hidden />
-                  置信度 {result.confidence.toFixed(2)}
+                  置信度 {typeof result.confidence === 'number' ? result.confidence.toFixed(2) : '—'}
                 </span>
                 <span>
                   <span className="dot d-blue mr-1 inline-block" aria-hidden />
@@ -211,13 +220,13 @@ export function PlaygroundPage() {
         <div className="card flex max-h-full flex-col overflow-hidden">
           <div className="card-h !mb-2">
             <h3>检索结果 · {mode === 'local' ? 'Local' : mode === 'global' ? 'Global' : 'Drift'}</h3>
-            {result && <span className="badge b-gray ml-auto">{result.hits.length} 证据</span>}
+            {result && <span className="badge b-gray ml-auto">{(result.hits ?? []).length} 证据</span>}
           </div>
           {loading && <div className="space-y-2">{[0, 1, 2].map(i => <div key={i} className="skel w-full" />)}</div>}
           {!loading && !result && <p className="py-6 text-center text-xs text-label-3">证据分片与得分将在此展示。</p>}
           {!loading && result && (
             <ul className="max-h-[340px] min-h-0 flex-1 space-y-1.5 overflow-y-auto pr-1">
-              {result.hits.map((h, i) => (
+              {(result.hits ?? []).map((h, i) => (
                 <li
                   key={h.chunk_id}
                   className="jk-row cursor-default rounded-xl px-2.5 py-2 hover:bg-surface-2"

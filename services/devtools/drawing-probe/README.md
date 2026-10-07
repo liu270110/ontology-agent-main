@@ -1,6 +1,6 @@
 # drawing-probe —— 图纸能力实测靶
 
-图纸能力达标实测的验收靶与回归复跑靶:五个独立小工具覆盖「PDF 载体诊断 → 平台 HTTP 面实测 → 本地后端启动 → 嵌入协议垫片 → golden 评测」,用于验收图纸摄取/检索/终审链路的真实表现,并可在后续回归中复跑对照。
+图纸能力达标实测的验收靶与回归复跑靶:七个独立小工具覆盖「PDF 载体诊断 → 平台 HTTP 面实测 → 本地后端启动 → 嵌入协议垫片 → golden 评测 → docling 布局引擎对照 → 抽取链路加固实验」,用于验收图纸摄取/检索/终审链路的真实表现,并可在后续回归中复跑对照。
 
 | 脚本 | 作用 |
 | ---- | ---- |
@@ -9,6 +9,8 @@
 | `run_backend.py` | 本地后端启动器:支持 `PROBE_PORT`,内置 Windows Proactor→Selector 事件循环修补(psycopg 异步兼容) |
 | `embed_shim.py` | Ollama→TEI 嵌入协议垫片(历史用途,见下) |
 | `eval_golden.py` | golden 评测:客户资产 golden × 平台终审候选,字段级 P/R/F1 与宏平均(golden 路径经 `GOLDEN_PATH` 注入,永不入库) |
+| `docling_probe.py` | docling 布局引擎真机实验:表格 grid 配对/markdown 行序两级提取 × pdfium 文本流与 bbox 空间两路线三向对照,九字段 golden 判分(样图/golden 路径仅经参数与 `GOLDEN_PATH` 传入,永不入库;依赖锁外 docling,独立实验脚本) |
+| `extract_lab.py` | 抽取链路加固实验:乱序 PDF 文本 × 受约束抽取空候选根因实测,提示词变体×参数矩阵分组对照(hint/few-shot/no_think/冻结参数;样图 golden 经 `LAB_PDF_A`/`LAB_GOLDEN` 注入,零内置样例值,依赖本机 vLLM) |
 
 ## 复跑三步
 

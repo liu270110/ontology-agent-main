@@ -91,9 +91,7 @@ class OrsiCapabilityOut(BaseModel):
     @classmethod
     def from_domain(cls, capability: OrsiCapability) -> OrsiCapabilityOut:
         """领域聚合 → DTO（单一收敛点，plugin PluginOut.from_domain 同款）。"""
-        evidence = (
-            OrsiPromotionEvidenceOut(**capability.promotion_evidence) if capability.promotion_evidence else None
-        )
+        evidence = OrsiPromotionEvidenceOut(**capability.promotion_evidence) if capability.promotion_evidence else None
         return cls(
             id=capability.id,
             face=capability.face.value,

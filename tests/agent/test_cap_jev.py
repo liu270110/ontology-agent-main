@@ -88,6 +88,18 @@ def _ctx() -> TenantContext:
     return TenantContext(tenant_id=_TENANT, trace_id="trace-jev-test")
 
 
+@pytest.fixture(autouse=True)
+def _stub_zh_tokenize(request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch):
+    """桩路径零真实分词：jieba 为可选依赖（gliner/torch/jieba 同列，锁内外均可缺席），
+    缺席时桩路径原样透传——本文件门禁面=引擎判定逻辑（标签映射/去分词空格/噪声标记/
+    超时钳制），分词输入不影响桩返回的既定输出；jieba 真分词质量属 jev-local 实测面。
+    缺库契约行为由 test_zh_tokenize_缺库_转JevUnavailableError 单测钉死（real_tokenize
+    标记豁免本桩）。"""
+    if request.node.get_closest_marker("real_tokenize"):
+        return
+    monkeypatch.setattr("services.agent.business.capabilities.jev.engine._zh_tokenize", lambda t: t)
+
+
 def _settings(**over: Any) -> Settings:
     return Settings(jwt_secret="x" * 32, **over)
 
@@ -179,6 +191,27 @@ def test_真实加载路径_import缺库_转JevUnavailableError(monkeypatch: pyt
     # act + assert：ImportError 转结构化 JevUnavailableError（带安装指引）
     with pytest.raises(JevUnavailableError, match="安装指引"):
         engine.warmup()
+
+
+@pytest.mark.real_tokenize
+def test_zh_tokenize_缺库_转JevUnavailableError(monkeypatch: pytest.MonkeyPatch):
+    # arrange：importlib.import_module 对 jieba 抛 ImportError（缺库真形态；其余调用透传）
+    import importlib as _importlib
+
+    real_import = _importlib.import_module
+
+    def _fake_import(name: str, *a: Any, **kw: Any) -> Any:
+        if name == "jieba":
+            raise ImportError("No module named 'jieba'")
+        return real_import(name, *a, **kw)
+
+    monkeypatch.setattr("services.agent.business.capabilities.jev.engine.importlib.import_module", _fake_import)
+    # act + assert：缺 jieba 同转结构化 JevUnavailableError（模块 docstring「依赖可选」契约
+    # 三件套同列；禁裸 ModuleNotFoundError 逃逸——2026-10-07 全量 pytest 6 例实证修复）
+    from services.agent.business.capabilities.jev.engine import _zh_tokenize
+
+    with pytest.raises(JevUnavailableError, match="安装指引"):
+        _zh_tokenize("任意请求")
 
 
 async def test_判定超时_绑定结构化5001():

@@ -143,8 +143,12 @@ def _verdict(action: str, *, conf: float | None = 0.9) -> m.ItemVerdict:
     conf_part = "" if conf is None else f', "confidence": {conf}'
     raw = f'{{"action": "{action}"{conf_part}}}'
     return m.score_item(
-        item_id="x", ambiguity_level="clear", expectation="map", expected_action="file_read",
-        raw_output=raw, confidence_floor=0.5,
+        item_id="x",
+        ambiguity_level="clear",
+        expectation="map",
+        expected_action="file_read",
+        raw_output=raw,
+        confidence_floor=0.5,
     )
 
 

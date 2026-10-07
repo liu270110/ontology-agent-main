@@ -153,9 +153,7 @@ async def test_orsi_link注册真库端到端_幂等baseline与劣化触发(
     # ── ③ v2 注册（指标变化）+ 劣化触发实测：baseline 证据链 + quality_regression 落库 ──
     diff = _write_version_diff(tmp_path, prev=0.5, curr=0.4)  # ↓-20% ≥ 5% 阈值
     results_v2 = _write_results(tmp_path / "v2", rate=0.97)
-    async with OrsiRegistrar(
-        settings=settings, link_settings=link, tag=_TAG_V2, version_diff_uri=str(diff)
-    ) as reg:
+    async with OrsiRegistrar(settings=settings, link_settings=link, tag=_TAG_V2, version_diff_uri=str(diff)) as reg:
         report_v2 = await reg.register_eval(results_v2)
     assert report_v2["baseline_digest"] == v1_digest  # 上一 tag 指标摘要（注册表自身锚定，17 篇 §3.2）
     assert len(report_v2["regressions"]) == 1 and report_v2["regressions"][0]["metric"] == "recall_at_k"

@@ -199,9 +199,7 @@ async def test_B1_触发者锚不误扩_无留痕sessionless任务不可见_会�
     # Arrange②：会话锚任务（chat，session 归属 owner）
     from services.agent.domain.model.session import Session as DomainSession
 
-    session = DomainSession(
-        id=uuid.uuid4(), tenant_id=owner.tenant_id, agent_id=_agent_id, user_id=owner.user_id
-    )
+    session = DomainSession(id=uuid.uuid4(), tenant_id=owner.tenant_id, agent_id=_agent_id, user_id=owner.user_id)
     chat_task = Task(tenant_id=owner.tenant_id, type="chat", session_id=session.id)
     chat_task.start_run()
     async with uow.for_tenant(owner.tenant_id) as tx:

@@ -307,6 +307,7 @@ class A2aTaskExecutor:
             message=message,
             trace_id=trace_id,
             scopes=("session:chat",),  # 委托链 B1 R3 授权面（api/04 §5 scope 对齐受理判定）
+            toolset=session.toolset,  # K28-c：委托会话工具集同透传（P3-2 直读，AttributeError 响亮失败）
         )
 
     async def _consume(self, command: ChatCommand) -> DelegateResult:

@@ -50,7 +50,7 @@ _DELTA_CHARS = 24  # 回退路径透传切片步长（示例值；SSE 投影粒�
 # builtin 现无逐轮工具集变化（chat 单步形态），机制以下列纯函数落成可复用件，
 # 消费接线随逐轮 tool-calling（ReAct）批（02 §11.3 开放问题）。
 
-_TOOL_SCHEMA_SECTION_HEADER = "【工具 Schema·全量定义（常驻；当轮启用以清单为准）】"
+_TOOL_SCHEMA_SECTION_HEADER = "【工具名录·全量定义（常驻；当轮启用以清单为准；参数 schema 随 H-2 tool-calling 批）】"
 _TOOL_MASK_HEADER = "本轮可用工具："
 
 
@@ -86,13 +86,20 @@ def build_tools_segment(definitions: Mapping[str, Any], available: set[str]) -> 
 
 def _build_system_prompt(turn: ChatTurn) -> str:
     """系统提示：角色约定 + 技能目录段（竖线② L1，进程级稳定前缀）+ 已标界上下文（B3 标界
-    头在组装器落，此处原样携带；目录段置于 context_text 之前保 KV-cache 前缀稳定）。"""
+    头在组装器落，此处原样携带；目录段置于 context_text 之前保 KV-cache 前缀稳定）。
+
+    K28-c（docs/Agent/13 §34）：turn.tools_segment 非空=会话具名工具集的 schema 遮蔽段
+    （H-2 build_tools_segment 产出，编排器装配）——插在目录段之后、context_text 之前
+    （段内定义本体进程级稳定+遮蔽行会话级恒定，先于逐轮易变上下文保前缀稳定）；
+    空串=不遮蔽（未设工具集会话，现行行为零变化）。H-2 机制首个消费接线。"""
     parts = [
         "你是 ontology-agent 平台对话助手：仅依据给定的记忆与知识证据回答，"
         "证据不足时明确说明；引用事实时保持与证据原文一致。"
     ]
     if turn.skills_catalog:
         parts.append(turn.skills_catalog)
+    if turn.tools_segment:
+        parts.append(turn.tools_segment)
     parts.append(turn.context_text)
     return "\n".join(parts)
 

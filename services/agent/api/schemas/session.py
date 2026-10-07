@@ -31,6 +31,10 @@ class SessionCreateIn(BaseModel):
     agent_id: uuid.UUID
     title: str | None = Field(default=None, max_length=256)
     channel: str = Field(default="web", pattern="^(web|api|cli)$")
+    # K28-a（docs/Agent/13 §34）：具名工具集，会话工具表面门（hermes 03 §3 同构）；
+    # None=平台现行全集（含 MCP 桥动态面）。名合法性在受理端点 fail-closed 校验
+    # （未知名 422，不静默空集），注册表=business/capabilities/toolsets.py。
+    toolset: str | None = Field(default=None, max_length=64, description="具名工具集，会话工具表面门；None=平台现行全集")
     # 群聊扩展（27 篇 X15，向后兼容可选；type=single 时 members/routing 被聚合拒绝）
     type: str = Field(default="single", pattern="^(single|group)$")
     routing: str = Field(default="round_robin", pattern="^(mention|round_robin|all|orchestrator)$")
@@ -145,6 +149,7 @@ def to_domain(dto: SessionCreateIn, *, tenant_id: uuid.UUID, user_id: uuid.UUID)
         agent_id=dto.agent_id,
         user_id=user_id,
         title=dto.title,
+        toolset=dto.toolset,  # K28-a：具名工具集透传（名合法性已由受理端点 fail-closed 校验）
         type=SessionType(dto.type),
     )
     if session.type.value == "group":  # 聚合方法逐成员入群：上限/唯一/协调者不变式在此断言

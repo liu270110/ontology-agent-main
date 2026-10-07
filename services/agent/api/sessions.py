@@ -566,7 +566,18 @@ def _get_chat_orchestrator(request: Request) -> Any:
 
 @router.post("", status_code=status.HTTP_201_CREATED, summary="创建会话（绑定 agent）")
 async def create_session(body: SessionCreateIn, principal: SessionWriteDep, uow: UowDep) -> SessionOut:
-    """会话不变式前置校验（Agent 服务设计 §2）：agent 必须存在（404）且未禁用（disabled 不得被新会话引用，409）。"""
+    """会话不变式前置校验（Agent 服务设计 §2）：agent 必须存在（404）且未禁用（disabled 不得被新会话引用，409）。
+
+    K28-a（docs/Agent/13 §34）：toolset 具名工具集 fail-closed 校验——未知名 422 拒绝
+    （3001 PARAM_INVALID），不静默空集（resolve_toolset ValueError → 422）。
+    """
+    if body.toolset is not None:  # K28-a：受理面先于存在性校验（纯输入校验，零事务开销）
+        from services.agent.business.capabilities.toolsets import resolve_toolset
+
+        try:
+            resolve_toolset(body.toolset)
+        except ValueError as exc:
+            raise GatewayError(ErrorCode.PARAM_INVALID, str(exc), status_code=422) from exc
     try:
         async with uow.for_tenant(principal.tenant_id) as tx:
             agent = await tx.agents.get(body.agent_id)
@@ -934,6 +945,7 @@ async def send_message(
         message=body.content,
         trace_id=getattr(request.state, "trace_id", "") or f"req-{run.id}",
         adapter=body.adapter,
+        toolset=session.toolset,  # K28-c：会话具名工具集随命令透传（Session 聚合字段）
         task_type=task.type,  # 40 篇 §4.2：RUN_STARTED.task_type 透传（chat 路径恒 chat）
     )
     return _chat_stream_response(

@@ -92,6 +92,10 @@ class Session(BaseModel):
     title: str | None = None
     type: SessionType = SessionType.SINGLE
     routing: RoutingMode = RoutingMode.ROUND_ROBIN
+    # K28-a（docs/Agent/13 §34）：具名工具集名（会话工具表面门；None=平台现行全集）。
+    # 名合法性归业务注册表（business/capabilities/toolsets.py TOOLSETS）——领域层不依赖
+    # 业务层，此处只存名；解析/校验在 API 受理面（未知名 422）与编排轮过滤面。
+    toolset: str | None = None
     members: list[GroupMember] = Field(default_factory=list)
     next_seq: int = 0  # 消息序号分配器（messages 只追加，seq 严格递增）
     created_at: datetime | None = None  # 创建时刻（B3 缺陷修复 2026-10-07：仓储映射随行透出，新建聚合未落库前为 None）

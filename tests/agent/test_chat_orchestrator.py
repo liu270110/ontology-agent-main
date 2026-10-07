@@ -377,3 +377,56 @@ async def test_消费方取消传播进内核且无任务泄漏() -> None:
 
 def test_时间基准使用_UTC_时钟() -> None:  # pragma: no cover — 装配面一致性防回归
     assert datetime.now(UTC).tzinfo is not None
+
+
+# ── K28-c：会话具名工具集 → schema 遮蔽段（docs/Agent/13 §34；builtin H-2 首接线）──
+
+
+class _FakeExtraBinding:
+    """ToolPort 形状桩（带 description 可选面）：验证注册面过滤与遮蔽段形状。"""
+
+    def __init__(self, name: str) -> None:
+        from services.agent.business.kernel.extensions import ExtensionMeta
+
+        self.meta = ExtensionMeta(
+            name=name,
+            version="1.0.0",
+            semantic_annotation={"action_iri": f"http://ontology.example/action/{name.replace('.', '_')}"},
+        )
+        self.description = f"{name} 桩描述"
+
+    async def invoke(self, call: Any, ctx: Any, *, approval: Any = None, timeout_ms: int = 30_000) -> Any:  # noqa: ARG002
+        raise AssertionError("过滤后绑定不应被调用（模板规划器只规划 chat 行动类）")
+
+
+async def test_会话工具集_遮蔽段进系统提示且只列启用面() -> None:
+    """toolset=readonly：常驻全量定义（含被过滤绑定）+ 遮蔽行只列解析∩装配成员（H-2 形态）。"""
+    model = FakeChatModel()
+    orchestrator = ChatOrchestrator(
+        adapters={"builtin": BuiltinAdapter(model)},
+        assembler=_assembler(FakeL1Store(), FakeKnowledge(_evidence())),
+        extra_tool_bindings=(_FakeExtraBinding("fs.read"), _FakeExtraBinding("fs.write")),
+    )
+    command = _command().model_copy(update={"toolset": "readonly"})
+    events = await _collect(orchestrator, command)
+    assert events[-1].name is ChatEventName.RUN_FINISHED  # 过滤不阻断对话
+
+    system = model.last_kwargs["system"]
+    # 常驻段就位（P3-3 名录命名：字面钉住段头字节——防提示词前缀静默漂移）
+    assert "【工具名录·全量定义（常驻；当轮启用以清单为准；参数 schema 随 H-2 tool-calling 批）】" in system
+    assert "- fs.write:" in system  # 定义本体=组合根全量（遮蔽不删定义，KV-cache 前缀稳定）
+    mask_line = next(line for line in system.splitlines() if line.startswith("本轮可用工具："))
+    assert mask_line == "本轮可用工具：fs.read"  # 启用面=解析集∩装配面（fs.write 出局）
+
+
+async def test_会话工具集None_无遮蔽段_现行行为零变化() -> None:
+    """toolset=None（缺省）：不产遮蔽段、注册面零过滤——既有会话提示词形状逐位不变。"""
+    model = FakeChatModel()
+    orchestrator = ChatOrchestrator(
+        adapters={"builtin": BuiltinAdapter(model)},
+        assembler=_assembler(FakeL1Store(), FakeKnowledge(_evidence())),
+        extra_tool_bindings=(_FakeExtraBinding("fs.read"), _FakeExtraBinding("fs.write")),
+    )
+    await _collect(orchestrator, _command())
+    system = model.last_kwargs["system"]
+    assert "【工具名录" not in system and "本轮可用工具" not in system  # 无遮蔽段

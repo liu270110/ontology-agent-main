@@ -126,6 +126,11 @@ class ChatCommand(BaseModel):
     # param_hash}）：worker 重试/续跑重放时携前序 Run 的 kernel.step_validated 锚点，
     # 内核规划完成后对账——全等匹配且 execution_mode=READ 才特批跳过。
     resumed_validated: tuple[Any, ...] = ()
+    # K28-c（docs/Agent/13 §34）：会话具名工具集随命令透传（sessions.py 受理组装 /
+    # task_worker 重放组装 / a2a executor 委托组装三路同源取 Session.toolset）。
+    # None=平台现行全集（不设门，注册面零过滤=现行行为）；具名=经
+    # capabilities/toolsets.py 解析后过滤 extra_tool_bindings 注册面（fail-closed）。
+    toolset: str | None = None
 
 
 class ChatOutcome(BaseModel):

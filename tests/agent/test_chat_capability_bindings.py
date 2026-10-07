@@ -280,3 +280,74 @@ async def test_装配_组合根spill注入_fs截断产物附locator_同源兑换
     assert "spill_locator" in result.output  # 组合根注入到位（未注入时仅 truncated 布尔）
     redeemed = await LocalDirSpillStore(spill_dir).get(result.output["spill_locator"], tenant_id=str(_TENANT))
     assert redeemed is not None and "line-0" in redeemed  # 截断快照可回放
+
+
+# ── K28-c：会话具名工具集 → 注册面过滤（docs/Agent/13 §34）────────────────
+
+
+def _k28_orchestrator(extra: tuple) -> Any:
+    return build_chat_orchestrator(
+        model_port=None,
+        l1_store=Any,  # 类型桩透传（构建期不触存取面）
+        session_factory=None,  # type: ignore[arg-type]
+        ollama_base_url="http://localhost:11434",
+        extra_tool_bindings=extra,
+    )
+
+
+class _FakeMcpBinding:
+    """mcp.{name} 形状桩（动态面代表）：具名工具集=静态白名单，动态面不隐式放行。"""
+
+    from services.agent.business.kernel.extensions import ExtensionMeta
+
+    meta = ExtensionMeta(
+        name="mcp.echo",
+        version="1.0.0",
+        semantic_annotation={"action_iri": "http://ontology.example/action/mcp_echo_k28"},
+    )
+
+    async def invoke(self, call: ToolCall, ctx: Any, *, approval: Any = None, timeout_ms: int = 30_000) -> Any:  # noqa: ARG002
+        raise AssertionError("过滤后不应注册，更不应被调用")
+
+
+def test_会话工具集过滤_readonly只注册只读绑定() -> None:
+    """K28-c（docs/Agent/13 §34）：toolset=readonly → 注册面=解析集∩已装配（交集只减不增）。
+
+    断言四面：fs 写类出局（即使 kernel_capability_write=True 已装配）、subagent/ask_user
+    出局、mcp.* 动态面出局（fail-closed，见 toolsets.py 已知边界）、命中成员恰为 readonly
+    集与装配面的交集。未知名在此层 ValueError fail-closed（API 层 422 见 test_sessions）。
+    """
+    from services.agent.business.capabilities.toolsets import TOOLSETS
+
+    cap = _build_chat_capability_bindings(SimpleNamespace(settings=_settings(kernel_capability_write=True)))
+    extra = (_FakeMcpBinding(), *cap)  # 12 绑定：mcp 桩 + fs 五件 + web 双件 + subagent 三件 + ask_user
+    orchestrator = _k28_orchestrator(extra)
+    kept, names = orchestrator.turn_tool_bindings("readonly")
+    assert names == {"fs.read", "fs.glob", "fs.grep", "web.fetch", "web.search"}  # spill 未装配交集自然缺
+    assert names <= TOOLSETS["readonly"]  # 只减不增（命中成员必属解析集）
+    assert all(b.meta.name in names for b in kept)  # 绑定与名集同源
+    assert orchestrator._extra_tool_bindings == extra  # noqa: SLF001 ——装配面不被原地改动
+    with pytest.raises(ValueError, match="未知工具集"):
+        orchestrator.turn_tool_bindings("no-such-set")  # fail-closed，不静默空集
+
+
+def test_会话工具集fs_文件系子集且写类交集可见() -> None:
+    """K28-c：toolset=fs → 只剩 fs 五件（写类在写开关已开时交集可见；只读档装配时自然缺）。"""
+    cap = _build_chat_capability_bindings(SimpleNamespace(settings=_settings(kernel_capability_write=True)))
+    orchestrator = _k28_orchestrator(cap)
+    _, names = orchestrator.turn_tool_bindings("fs")
+    assert names == {"fs.read", "fs.write", "fs.edit", "fs.glob", "fs.grep"}
+    # 只读档装配（默认）下同集：写类未注册 → 交集只剩三件（过滤只收窄不发放）
+    cap_ro = _build_chat_capability_bindings(SimpleNamespace(settings=_settings()))
+    _, names_ro = _k28_orchestrator(cap_ro).turn_tool_bindings("fs")
+    assert names_ro == {"fs.read", "fs.glob", "fs.grep"}
+
+
+def test_会话工具集None_不过滤_全量注册兼容() -> None:
+    """K28-c 零变化锚：toolset=None → 注册面原样全量（含 mcp.* 动态面），现行行为逐位一致。"""
+    cap = _build_chat_capability_bindings(SimpleNamespace(settings=_settings(kernel_capability_write=True)))
+    extra = (_FakeMcpBinding(), *cap)
+    orchestrator = _k28_orchestrator(extra)
+    kept, names = orchestrator.turn_tool_bindings(None)
+    assert kept == extra  # 全量原样（元组恒等）
+    assert names == {b.meta.name for b in extra}  # mcp.echo/ask_user.tool/fs.write 全在

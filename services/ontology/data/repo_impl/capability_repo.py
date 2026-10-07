@@ -89,15 +89,18 @@ class CapabilityRepository:
         self,
         ontology_id: uuid.UUID,
         *,
+        version_id: uuid.UUID,
         include_withdrawn: bool = False,
         kind: str | None = None,
         offset: int = 0,
         limit: int = 50,
     ) -> tuple[list[CapabilityORM], int]:
-        """本体能力清单（head 版本内；created_at 升序稳定序；返回 (行, total)）。"""
+        """能力清单（必带版本作用域：capabilities 唯一键=(version_id, iri)，不按版本过滤会把
+        旧版本同 IRI 行与新 head 行混返——清单重复/陈旧；created_at 升序稳定序；返回 (行, total)）。"""
         conds = [
             CapabilityORM.tenant_id == self._tenant_id,
             CapabilityORM.ontology_id == ontology_id,
+            CapabilityORM.version_id == version_id,
         ]
         if not include_withdrawn:
             conds.append(CapabilityORM.withdrawn_at.is_(None))

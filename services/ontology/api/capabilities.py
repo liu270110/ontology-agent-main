@@ -1,7 +1,7 @@
 """L2 能力读模型只读路由（ONT-2 本批只读 API；api/01 登记册风格，ontology 路由同款装配）。
 
-- GET /ontologies/{ontology_id}/capabilities —— 能力清单（head 挂靠版本内；在役行缺省，
-  include_withdrawn=true 含撤除标记行——撤除=标记，ONT-1.3 同口径）；
+- GET /ontologies/{ontology_id}/capabilities —— 能力清单（head 挂靠版本内，按聚合 head_version
+  解析版本行过滤；在役行缺省，include_withdrawn=true 含撤除标记行——撤除=标记，ONT-1.3 同口径）；
 - GET /ontologies/{ontology_id}/capabilities/{capability_id} —— 能力详情。
 
 本批只读（写面=种子迁移 + ONT-3 投影链接线）；台账（capability_runs）无路由——写点选型
@@ -55,9 +55,19 @@ async def list_capabilities(
     offset: int = Query(default=0, ge=0),
     limit: int = Query(default=50, ge=1, le=200),
 ) -> CapabilityListOut:
-    await _require_ontology(db, principal.tenant_id, ontology_id)
+    ontology = await _require_ontology(db, principal.tenant_id, ontology_id)
+    # 版本作用域（capabilities 唯一键=(version_id, iri)，不按 head 过滤会把旧版本同 IRI 行
+    # 混返——清单重复/陈旧）：head 未发布（从未 publish）→ head 挂靠版本内=空集。
+    head_version_id = await PgOntologyRepository(db, principal.tenant_id).head_version_id(ontology)
+    if head_version_id is None:
+        return CapabilityListOut(ontology_id=ontology_id, items=[], total=0, offset=offset, limit=limit)
     rows, total = await _caps(db, principal.tenant_id).list_for_ontology(
-        ontology_id, include_withdrawn=include_withdrawn, kind=kind, offset=offset, limit=limit
+        ontology_id,
+        version_id=head_version_id,
+        include_withdrawn=include_withdrawn,
+        kind=kind,
+        offset=offset,
+        limit=limit,
     )
     return CapabilityListOut(
         ontology_id=ontology_id,

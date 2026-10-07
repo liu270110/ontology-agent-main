@@ -110,6 +110,7 @@ async def ont2_api(
         )
         db.add(version)
         await db.flush()
+        ontology.current_version_id = version.id  # head 指针（清单端点按 head 挂靠版本过滤）
         cap = CapabilityORM(
             id=uuid.uuid4(),
             tenant_id=tenant_id,
@@ -158,6 +159,79 @@ async def ont2_api(
         )
     await cleanup_tenant(factory, tenant_id)
     await cleanup_tenant(factory, other_tenant)
+
+
+async def test_清单_head版本作用域_旧版本同IRI行不混入(
+    ont1_pg: async_sessionmaker[AsyncSession],
+) -> None:
+    """清单按聚合 head_version 解析的版本行过滤（UNIQUE 键=version_id+iri）：旧版本同 IRI 行不混返。
+
+    回归锚点（ocr 4fdef2a8 bug·medium）：无版本过滤时 v1/v2 同 IRI 双行齐返——清单重复/陈旧。
+    """
+    factory = ont1_pg
+    tenant_id, user_id = await seed_tenant_user(factory)
+    principal = _principal(tenant_id, user_id)
+
+    async def _test_session() -> AsyncIterator[AsyncSession]:
+        async with factory() as session:
+            try:
+                yield session
+                await session.commit()
+            except Exception:
+                await session.rollback()
+                raise
+
+    app = FastAPI()
+    app.include_router(capability_router)
+    app.dependency_overrides[get_current_principal] = lambda: principal
+    app.dependency_overrides[get_session] = _test_session
+
+    async with factory() as db, db.begin():
+        ontology = OntologyORM(
+            id=uuid.uuid4(), tenant_id=tenant_id, iri_base="http://ontology-agent.local/cap#", name="双版本本体"
+        )
+        db.add(ontology)
+        await db.flush()
+        versions = {}
+        for v in ("v1", "v2"):
+            row = OntologyVersionORM(
+                tenant_id=tenant_id,
+                ontology_id=ontology.id,
+                version=v,
+                version_no=1 if v == "v1" else 2,
+                artifact_key=f"ontologies/{tenant_id}/{ontology.id}/{v}.ttl",
+                checksum=("3" if v == "v1" else "4") * 64,
+            )
+            db.add(row)
+            await db.flush()
+            versions[v] = row
+        ontology.current_version_id = versions["v2"].id  # head=v2
+        await db.flush()
+        for version in versions.values():
+            db.add(
+                CapabilityORM(
+                    id=uuid.uuid4(),
+                    tenant_id=tenant_id,
+                    ontology_id=ontology.id,
+                    version_id=version.id,
+                    iri="http://ontology-agent.local/cap#fs-read",  # 同 IRI 跨版本双行
+                    kind="atomic",
+                    name="fs.read",
+                    execution=EXECUTION,
+                    source="seed",
+                )
+            )
+        ontology_id = ontology.id
+
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://testserver") as client:
+            resp = await client.get(f"/ontologies/{ontology_id}/capabilities")
+            assert resp.status_code == 200, resp.text
+            body = resp.json()
+            assert body["total"] == 1  # 只回 head（v2）挂靠行
+            assert [i["version_id"] for i in body["items"]] == [str(versions["v2"].id)]
+    finally:
+        await cleanup_tenant(factory, tenant_id)
 
 
 async def test_清单_分页形状_撤除标记缺省隐藏(ont2_api: ApiEnv) -> None:

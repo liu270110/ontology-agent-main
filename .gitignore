@@ -72,3 +72,7 @@ tools/onto-train/runs/
 
 # S2 技能集市模块源码层（services/skills/data 为 Python data 层，非客户样图数据目录）
 !services/skills/data/
+
+# E2E 巡检产物：报告 JSON 入库（跨轮对比），截图可再生不入库（49MB）
+services/devtools/ui-audit/out/crawl/
+services/devtools/ui-audit/out/**/*.png

@@ -1,0 +1,154 @@
+{
+  "generatedAt": "2026-10-07T12:39:17.994Z",
+  "apiBase": "http://localhost:8364",
+  "admin": {
+    "email": "admin@ontology.local"
+  },
+  "steps": [
+    {
+      "name": "login",
+      "email": "admin@ontology.local"
+    },
+    {
+      "name": "seed-agent-2026100712391-a",
+      "id": "d487f707-d860-4dac-b1e7-d29944d05ff1"
+    },
+    {
+      "name": "seed-agent-2026100712391-b",
+      "id": "d9563bf4-ab09-4d53-84a6-c1a3b2856b7c"
+    },
+    {
+      "name": "session-single",
+      "id": "b03340aa-8bae-45e4-a3b0-af50cd58291c"
+    },
+    {
+      "name": "message",
+      "task_id": "4ac077d9-e4d8-48af-821a-d08ba9db930a",
+      "status": "succeeded"
+    },
+    {
+      "name": "session-group",
+      "id": "1dc278f6-ccec-4ae6-840a-5fe75f16253c",
+      "members": 1
+    },
+    {
+      "name": "workflow",
+      "id": "2be5daab-72a9-47d0-a059-c8feb4f588bd",
+      "publish_status": "published"
+    },
+    {
+      "name": "kb",
+      "collection_id": "01a11660-2734-7820-9396-7f1d24df3324",
+      "document_id": "60be8dd5-7ff6-4fc0-bafe-e2c53c4a32a3",
+      "pipeline_status": "indexed"
+    }
+  ],
+  "agents": [
+    {
+      "id": "d487f707-d860-4dac-b1e7-d29944d05ff1",
+      "name": "seed-agent-2026100712391-a",
+      "agent_tool": "builtin",
+      "status": "enabled"
+    },
+    {
+      "id": "d9563bf4-ab09-4d53-84a6-c1a3b2856b7c",
+      "name": "seed-agent-2026100712391-b",
+      "agent_tool": "builtin",
+      "status": "enabled"
+    }
+  ],
+  "sessionSingle": {
+    "id": "b03340aa-8bae-45e4-a3b0-af50cd58291c",
+    "agent_id": "d487f707-d860-4dac-b1e7-d29944d05ff1",
+    "title": "seed-single-2026100712391",
+    "type": "single",
+    "message": {
+      "task_id": "4ac077d9-e4d8-48af-821a-d08ba9db930a",
+      "run_id": "1b5ac838-9542-4004-a1c3-5dc97aa8780a",
+      "status": "succeeded"
+    }
+  },
+  "sessionGroup": {
+    "id": "1dc278f6-ccec-4ae6-840a-5fe75f16253c",
+    "agent_id": "d487f707-d860-4dac-b1e7-d29944d05ff1",
+    "title": "seed-group-2026100712391",
+    "type": "group",
+    "routing": "round_robin",
+    "members": [
+      {
+        "id": "cc225e03-2598-4bba-95c1-3584482ff0d9",
+        "agent_id": "d9563bf4-ab09-4d53-84a6-c1a3b2856b7c",
+        "display_name": "seed-member-2026100712391-b",
+        "routing_role": "speaker"
+      }
+    ]
+  },
+  "workflow": {
+    "id": "2be5daab-72a9-47d0-a059-c8feb4f588bd",
+    "name": "seed-workflow-2026100712391",
+    "template": "rag_qa",
+    "draft_version": "v1",
+    "publish": {
+      "status": "published",
+      "governance": "solo",
+      "approval_id": null,
+      "object_type": null,
+      "redirect": null,
+      "next_version": "v1"
+    }
+  },
+  "kb": {
+    "collection": {
+      "id": "01a11660-2734-7820-9396-7f1d24df3324",
+      "name": "seed-kb-2026100712391"
+    },
+    "document": {
+      "id": "60be8dd5-7ff6-4fc0-bafe-e2c53c4a32a3",
+      "title": "seed-doc-2026100712391",
+      "created": true,
+      "status": "uploaded"
+    },
+    "pipeline": {
+      "accepted": true,
+      "status": "indexed",
+      "degraded": true,
+      "steps": [
+        {
+          "step": "preprocess",
+          "status": "done",
+          "attempt": 1
+        },
+        {
+          "step": "chunk",
+          "status": "done",
+          "attempt": 1
+        },
+        {
+          "step": "embed",
+          "status": "failed",
+          "attempt": 3
+        },
+        {
+          "step": "extract",
+          "status": "done",
+          "attempt": 1
+        },
+        {
+          "step": "align",
+          "status": "done",
+          "attempt": 1
+        },
+        {
+          "step": "validate",
+          "status": "done",
+          "attempt": 1
+        },
+        {
+          "step": "bm25_index",
+          "status": "done",
+          "attempt": 1
+        }
+      ]
+    }
+  }
+}

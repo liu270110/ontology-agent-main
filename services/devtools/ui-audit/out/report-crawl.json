@@ -1,0 +1,3615 @@
+[
+  {
+    "page": "dashboard",
+    "path": "/",
+    "clicks": [
+      {
+        "target": "[ontology-agent · 回主页]"
+      },
+      {
+        "target": "工作台"
+      },
+      {
+        "target": "语义资产"
+      },
+      {
+        "target": "[插件市场 · 工具技能 · MCP · Agent 目录]",
+        "navigatedTo": "/platform"
+      },
+      {
+        "target": "[审批中心 · 系统管理 · 审计观测]",
+        "navigatedTo": "/console"
+      },
+      {
+        "target": "[个人资料与偏好]",
+        "navigatedTo": "/settings"
+      },
+      {
+        "target": "[设置]",
+        "navigatedTo": "/settings"
+      },
+      {
+        "target": "[收起侧边栏]"
+      },
+      {
+        "target": "[工作台]"
+      },
+      {
+        "target": "[对话]",
+        "navigatedTo": "/chat"
+      },
+      {
+        "target": "[群聊]",
+        "navigatedTo": "/chat/group"
+      },
+      {
+        "target": "[工作流]",
+        "navigatedTo": "/workflows"
+      },
+      {
+        "target": "[任务中心]",
+        "navigatedTo": "/tasks"
+      },
+      {
+        "target": "[语义资产]"
+      },
+      {
+        "target": "[本体工作台]",
+        "navigatedTo": "/ontology"
+      }
+    ],
+    "navigations": [
+      {
+        "from": "/",
+        "click": "[插件市场 · 工具技能 · MCP · Agent 目录]",
+        "to": "/platform"
+      },
+      {
+        "from": "/",
+        "click": "[审批中心 · 系统管理 · 审计观测]",
+        "to": "/console"
+      },
+      {
+        "from": "/",
+        "click": "[个人资料与偏好]",
+        "to": "/settings"
+      },
+      {
+        "from": "/",
+        "click": "[设置]",
+        "to": "/settings"
+      },
+      {
+        "from": "/",
+        "click": "[对话]",
+        "to": "/chat"
+      },
+      {
+        "from": "/",
+        "click": "[群聊]",
+        "to": "/chat/group"
+      },
+      {
+        "from": "/",
+        "click": "[工作流]",
+        "to": "/workflows"
+      },
+      {
+        "from": "/",
+        "click": "[任务中心]",
+        "to": "/tasks"
+      },
+      {
+        "from": "/",
+        "click": "[本体工作台]",
+        "to": "/ontology"
+      }
+    ],
+    "dialogs": [],
+    "toasts": [],
+    "errors": [],
+    "render": [],
+    "targets0": 37
+  },
+  {
+    "page": "chat",
+    "path": "/chat",
+    "clicks": [
+      {
+        "target": "[ontology-agent · 回主页]",
+        "navigatedTo": "/"
+      },
+      {
+        "target": "[工作台]"
+      },
+      {
+        "target": "[对话]"
+      },
+      {
+        "target": "[群聊]",
+        "navigatedTo": "/chat/group"
+      },
+      {
+        "target": "[工作流]",
+        "navigatedTo": "/workflows"
+      },
+      {
+        "target": "[任务中心]",
+        "navigatedTo": "/tasks"
+      },
+      {
+        "target": "[语义资产]"
+      },
+      {
+        "target": "[平台能力]",
+        "navigatedTo": "/platform"
+      },
+      {
+        "target": "[管理控制台]",
+        "navigatedTo": "/console"
+      },
+      {
+        "target": "[用户设置]",
+        "navigatedTo": "/settings"
+      },
+      {
+        "target": "[设置]",
+        "clickErr": "TimeoutError: locator.click: Timeout 5000ms exceeded."
+      },
+      {
+        "target": "[展开侧边栏]"
+      },
+      {
+        "target": "工作台"
+      },
+      {
+        "target": "[对话]"
+      },
+      {
+        "target": "[群聊]",
+        "navigatedTo": "/chat/group"
+      }
+    ],
+    "navigations": [
+      {
+        "from": "/chat",
+        "click": "[ontology-agent · 回主页]",
+        "to": "/"
+      },
+      {
+        "from": "/chat",
+        "click": "[群聊]",
+        "to": "/chat/group"
+      },
+      {
+        "from": "/chat",
+        "click": "[工作流]",
+        "to": "/workflows"
+      },
+      {
+        "from": "/chat",
+        "click": "[任务中心]",
+        "to": "/tasks"
+      },
+      {
+        "from": "/chat",
+        "click": "[平台能力]",
+        "to": "/platform"
+      },
+      {
+        "from": "/chat",
+        "click": "[管理控制台]",
+        "to": "/console"
+      },
+      {
+        "from": "/chat",
+        "click": "[用户设置]",
+        "to": "/settings"
+      },
+      {
+        "from": "/chat",
+        "click": "[群聊]",
+        "to": "/chat/group"
+      }
+    ],
+    "dialogs": [],
+    "toasts": [],
+    "errors": [],
+    "render": [],
+    "targets0": 64
+  },
+  {
+    "page": "chat-new",
+    "path": "/chat/new",
+    "clicks": [
+      {
+        "target": "[ontology-agent · 回主页]",
+        "navigatedTo": "/"
+      },
+      {
+        "target": "工作台"
+      },
+      {
+        "target": "[对话]",
+        "navigatedTo": "/chat"
+      },
+      {
+        "target": "[群聊]",
+        "navigatedTo": "/chat/group"
+      },
+      {
+        "target": "[工作流]",
+        "navigatedTo": "/workflows"
+      },
+      {
+        "target": "[任务中心]",
+        "navigatedTo": "/tasks"
+      },
+      {
+        "target": "语义资产"
+      },
+      {
+        "target": "[本体工作台]",
+        "navigatedTo": "/ontology"
+      },
+      {
+        "target": "[知识库]",
+        "navigatedTo": "/kb"
+      },
+      {
+        "target": "[记忆管理]",
+        "navigatedTo": "/memory"
+      },
+      {
+        "target": "[插件市场 · 工具技能 · MCP · Agent 目录]",
+        "navigatedTo": "/platform"
+      },
+      {
+        "target": "[审批中心 · 系统管理 · 审计观测]",
+        "navigatedTo": "/console"
+      },
+      {
+        "target": "[个人资料与偏好]",
+        "navigatedTo": "/settings"
+      },
+      {
+        "target": "[设置]",
+        "navigatedTo": "/settings"
+      },
+      {
+        "target": "[收起侧边栏]"
+      }
+    ],
+    "navigations": [
+      {
+        "from": "/chat/new",
+        "click": "[ontology-agent · 回主页]",
+        "to": "/"
+      },
+      {
+        "from": "/chat/new",
+        "click": "[对话]",
+        "to": "/chat"
+      },
+      {
+        "from": "/chat/new",
+        "click": "[群聊]",
+        "to": "/chat/group"
+      },
+      {
+        "from": "/chat/new",
+        "click": "[工作流]",
+        "to": "/workflows"
+      },
+      {
+        "from": "/chat/new",
+        "click": "[任务中心]",
+        "to": "/tasks"
+      },
+      {
+        "from": "/chat/new",
+        "click": "[本体工作台]",
+        "to": "/ontology"
+      },
+      {
+        "from": "/chat/new",
+        "click": "[知识库]",
+        "to": "/kb"
+      },
+      {
+        "from": "/chat/new",
+        "click": "[记忆管理]",
+        "to": "/memory"
+      },
+      {
+        "from": "/chat/new",
+        "click": "[插件市场 · 工具技能 · MCP · Agent 目录]",
+        "to": "/platform"
+      },
+      {
+        "from": "/chat/new",
+        "click": "[审批中心 · 系统管理 · 审计观测]",
+        "to": "/console"
+      },
+      {
+        "from": "/chat/new",
+        "click": "[个人资料与偏好]",
+        "to": "/settings"
+      },
+      {
+        "from": "/chat/new",
+        "click": "[设置]",
+        "to": "/settings"
+      }
+    ],
+    "dialogs": [],
+    "toasts": [],
+    "errors": [],
+    "render": [],
+    "targets0": 61
+  },
+  {
+    "page": "chat-group",
+    "path": "/chat/group",
+    "clicks": [
+      {
+        "target": "[ontology-agent · 回主页]",
+        "navigatedTo": "/"
+      },
+      {
+        "target": "[工作台]"
+      },
+      {
+        "target": "[对话]",
+        "navigatedTo": "/chat"
+      },
+      {
+        "target": "[群聊]"
+      },
+      {
+        "target": "[工作流]",
+        "navigatedTo": "/workflows"
+      },
+      {
+        "target": "[任务中心]",
+        "navigatedTo": "/tasks"
+      },
+      {
+        "target": "[语义资产]"
+      },
+      {
+        "target": "[平台能力]",
+        "navigatedTo": "/platform"
+      },
+      {
+        "target": "[管理控制台]",
+        "navigatedTo": "/console"
+      },
+      {
+        "target": "[用户设置]",
+        "navigatedTo": "/settings"
+      },
+      {
+        "target": "[设置]",
+        "navigatedTo": "/settings"
+      },
+      {
+        "target": "[展开侧边栏]"
+      },
+      {
+        "target": "工作台"
+      },
+      {
+        "target": "[对话]",
+        "navigatedTo": "/chat"
+      },
+      {
+        "target": "[群聊]"
+      }
+    ],
+    "navigations": [
+      {
+        "from": "/chat/group",
+        "click": "[ontology-agent · 回主页]",
+        "to": "/"
+      },
+      {
+        "from": "/chat/group",
+        "click": "[对话]",
+        "to": "/chat"
+      },
+      {
+        "from": "/chat/group",
+        "click": "[工作流]",
+        "to": "/workflows"
+      },
+      {
+        "from": "/chat/group",
+        "click": "[任务中心]",
+        "to": "/tasks"
+      },
+      {
+        "from": "/chat/group",
+        "click": "[平台能力]",
+        "to": "/platform"
+      },
+      {
+        "from": "/chat/group",
+        "click": "[管理控制台]",
+        "to": "/console"
+      },
+      {
+        "from": "/chat/group",
+        "click": "[用户设置]",
+        "to": "/settings"
+      },
+      {
+        "from": "/chat/group",
+        "click": "[设置]",
+        "to": "/settings"
+      },
+      {
+        "from": "/chat/group",
+        "click": "[对话]",
+        "to": "/chat"
+      }
+    ],
+    "dialogs": [],
+    "toasts": [],
+    "errors": [],
+    "render": [],
+    "targets0": 24
+  },
+  {
+    "page": "workflows",
+    "path": "/workflows",
+    "clicks": [
+      {
+        "target": "[ontology-agent · 回主页]",
+        "navigatedTo": "/"
+      },
+      {
+        "target": "工作台"
+      },
+      {
+        "target": "[对话]",
+        "navigatedTo": "/chat"
+      },
+      {
+        "target": "[群聊]",
+        "navigatedTo": "/chat/group"
+      },
+      {
+        "target": "[工作流]"
+      },
+      {
+        "target": "[任务中心]",
+        "navigatedTo": "/tasks"
+      },
+      {
+        "target": "语义资产"
+      },
+      {
+        "target": "[本体工作台]",
+        "navigatedTo": "/ontology"
+      },
+      {
+        "target": "[知识库]",
+        "navigatedTo": "/kb"
+      },
+      {
+        "target": "[记忆管理]",
+        "navigatedTo": "/memory"
+      },
+      {
+        "target": "[插件市场 · 工具技能 · MCP · Agent 目录]",
+        "navigatedTo": "/platform"
+      },
+      {
+        "target": "[审批中心 · 系统管理 · 审计观测]",
+        "navigatedTo": "/console"
+      },
+      {
+        "target": "[个人资料与偏好]",
+        "navigatedTo": "/settings"
+      },
+      {
+        "target": "[设置]",
+        "navigatedTo": "/settings"
+      },
+      {
+        "target": "[收起侧边栏]"
+      }
+    ],
+    "navigations": [
+      {
+        "from": "/workflows",
+        "click": "[ontology-agent · 回主页]",
+        "to": "/"
+      },
+      {
+        "from": "/workflows",
+        "click": "[对话]",
+        "to": "/chat"
+      },
+      {
+        "from": "/workflows",
+        "click": "[群聊]",
+        "to": "/chat/group"
+      },
+      {
+        "from": "/workflows",
+        "click": "[任务中心]",
+        "to": "/tasks"
+      },
+      {
+        "from": "/workflows",
+        "click": "[本体工作台]",
+        "to": "/ontology"
+      },
+      {
+        "from": "/workflows",
+        "click": "[知识库]",
+        "to": "/kb"
+      },
+      {
+        "from": "/workflows",
+        "click": "[记忆管理]",
+        "to": "/memory"
+      },
+      {
+        "from": "/workflows",
+        "click": "[插件市场 · 工具技能 · MCP · Agent 目录]",
+        "to": "/platform"
+      },
+      {
+        "from": "/workflows",
+        "click": "[审批中心 · 系统管理 · 审计观测]",
+        "to": "/console"
+      },
+      {
+        "from": "/workflows",
+        "click": "[个人资料与偏好]",
+        "to": "/settings"
+      },
+      {
+        "from": "/workflows",
+        "click": "[设置]",
+        "to": "/settings"
+      }
+    ],
+    "dialogs": [],
+    "toasts": [],
+    "errors": [],
+    "render": [],
+    "targets0": 20
+  },
+  {
+    "page": "tasks",
+    "path": "/tasks",
+    "clicks": [
+      {
+        "target": "[ontology-agent · 回主页]",
+        "navigatedTo": "/"
+      },
+      {
+        "target": "[工作台]"
+      },
+      {
+        "target": "[对话]",
+        "navigatedTo": "/chat"
+      },
+      {
+        "target": "[群聊]",
+        "navigatedTo": "/chat/group"
+      },
+      {
+        "target": "[工作流]",
+        "navigatedTo": "/workflows"
+      },
+      {
+        "target": "[任务中心]"
+      },
+      {
+        "target": "[语义资产]"
+      },
+      {
+        "target": "[平台能力]",
+        "navigatedTo": "/platform"
+      },
+      {
+        "target": "[管理控制台]",
+        "navigatedTo": "/console"
+      },
+      {
+        "target": "[用户设置]",
+        "navigatedTo": "/settings"
+      },
+      {
+        "target": "[设置]",
+        "navigatedTo": "/settings"
+      },
+      {
+        "target": "[展开侧边栏]"
+      },
+      {
+        "target": "工作台"
+      },
+      {
+        "target": "[对话]",
+        "navigatedTo": "/chat"
+      },
+      {
+        "target": "[群聊]",
+        "navigatedTo": "/chat/group"
+      }
+    ],
+    "navigations": [
+      {
+        "from": "/tasks",
+        "click": "[ontology-agent · 回主页]",
+        "to": "/"
+      },
+      {
+        "from": "/tasks",
+        "click": "[对话]",
+        "to": "/chat"
+      },
+      {
+        "from": "/tasks",
+        "click": "[群聊]",
+        "to": "/chat/group"
+      },
+      {
+        "from": "/tasks",
+        "click": "[工作流]",
+        "to": "/workflows"
+      },
+      {
+        "from": "/tasks",
+        "click": "[平台能力]",
+        "to": "/platform"
+      },
+      {
+        "from": "/tasks",
+        "click": "[管理控制台]",
+        "to": "/console"
+      },
+      {
+        "from": "/tasks",
+        "click": "[用户设置]",
+        "to": "/settings"
+      },
+      {
+        "from": "/tasks",
+        "click": "[设置]",
+        "to": "/settings"
+      },
+      {
+        "from": "/tasks",
+        "click": "[对话]",
+        "to": "/chat"
+      },
+      {
+        "from": "/tasks",
+        "click": "[群聊]",
+        "to": "/chat/group"
+      }
+    ],
+    "dialogs": [],
+    "toasts": [],
+    "errors": [],
+    "render": [],
+    "targets0": 26
+  },
+  {
+    "page": "ontology",
+    "path": "/ontology",
+    "clicks": [
+      {
+        "target": "[ontology-agent · 回主页]",
+        "navigatedTo": "/"
+      },
+      {
+        "target": "工作台"
+      },
+      {
+        "target": "语义资产"
+      },
+      {
+        "target": "[本体工作台]"
+      },
+      {
+        "target": "[知识库]",
+        "navigatedTo": "/kb"
+      },
+      {
+        "target": "[记忆管理]",
+        "navigatedTo": "/memory"
+      },
+      {
+        "target": "[插件市场 · 工具技能 · MCP · Agent 目录]",
+        "navigatedTo": "/platform"
+      },
+      {
+        "target": "[审批中心 · 系统管理 · 审计观测]",
+        "navigatedTo": "/console"
+      },
+      {
+        "target": "[个人资料与偏好]",
+        "navigatedTo": "/settings"
+      },
+      {
+        "target": "[设置]",
+        "navigatedTo": "/settings"
+      },
+      {
+        "target": "[收起侧边栏]"
+      },
+      {
+        "target": "[工作台]"
+      },
+      {
+        "target": "[对话]",
+        "navigatedTo": "/chat"
+      },
+      {
+        "target": "[群聊]",
+        "navigatedTo": "/chat/group"
+      },
+      {
+        "target": "[工作流]",
+        "navigatedTo": "/workflows"
+      }
+    ],
+    "navigations": [
+      {
+        "from": "/ontology",
+        "click": "[ontology-agent · 回主页]",
+        "to": "/"
+      },
+      {
+        "from": "/ontology",
+        "click": "[知识库]",
+        "to": "/kb"
+      },
+      {
+        "from": "/ontology",
+        "click": "[记忆管理]",
+        "to": "/memory"
+      },
+      {
+        "from": "/ontology",
+        "click": "[插件市场 · 工具技能 · MCP · Agent 目录]",
+        "to": "/platform"
+      },
+      {
+        "from": "/ontology",
+        "click": "[审批中心 · 系统管理 · 审计观测]",
+        "to": "/console"
+      },
+      {
+        "from": "/ontology",
+        "click": "[个人资料与偏好]",
+        "to": "/settings"
+      },
+      {
+        "from": "/ontology",
+        "click": "[设置]",
+        "to": "/settings"
+      },
+      {
+        "from": "/ontology",
+        "click": "[对话]",
+        "to": "/chat"
+      },
+      {
+        "from": "/ontology",
+        "click": "[群聊]",
+        "to": "/chat/group"
+      },
+      {
+        "from": "/ontology",
+        "click": "[工作流]",
+        "to": "/workflows"
+      }
+    ],
+    "dialogs": [],
+    "toasts": [],
+    "errors": [],
+    "render": [],
+    "targets0": 30
+  },
+  {
+    "page": "ontology-versions",
+    "path": "/ontology/versions",
+    "clicks": [
+      {
+        "target": "[ontology-agent · 回主页]",
+        "navigatedTo": "/"
+      },
+      {
+        "target": "[工作台]"
+      },
+      {
+        "target": "[语义资产]"
+      },
+      {
+        "target": "[本体工作台]",
+        "navigatedTo": "/ontology"
+      },
+      {
+        "target": "[知识库]",
+        "navigatedTo": "/kb"
+      },
+      {
+        "target": "[记忆管理]",
+        "navigatedTo": "/memory"
+      },
+      {
+        "target": "[平台能力]",
+        "navigatedTo": "/platform"
+      },
+      {
+        "target": "[管理控制台]",
+        "navigatedTo": "/console"
+      },
+      {
+        "target": "[用户设置]",
+        "navigatedTo": "/settings"
+      },
+      {
+        "target": "[设置]",
+        "navigatedTo": "/settings"
+      },
+      {
+        "target": "[展开侧边栏]"
+      },
+      {
+        "target": "工作台"
+      },
+      {
+        "target": "[对话]",
+        "navigatedTo": "/chat"
+      },
+      {
+        "target": "[群聊]",
+        "navigatedTo": "/chat/group"
+      },
+      {
+        "target": "[工作流]",
+        "navigatedTo": "/workflows"
+      }
+    ],
+    "navigations": [
+      {
+        "from": "/ontology/versions",
+        "click": "[ontology-agent · 回主页]",
+        "to": "/"
+      },
+      {
+        "from": "/ontology/versions",
+        "click": "[本体工作台]",
+        "to": "/ontology"
+      },
+      {
+        "from": "/ontology/versions",
+        "click": "[知识库]",
+        "to": "/kb"
+      },
+      {
+        "from": "/ontology/versions",
+        "click": "[记忆管理]",
+        "to": "/memory"
+      },
+      {
+        "from": "/ontology/versions",
+        "click": "[平台能力]",
+        "to": "/platform"
+      },
+      {
+        "from": "/ontology/versions",
+        "click": "[管理控制台]",
+        "to": "/console"
+      },
+      {
+        "from": "/ontology/versions",
+        "click": "[用户设置]",
+        "to": "/settings"
+      },
+      {
+        "from": "/ontology/versions",
+        "click": "[设置]",
+        "to": "/settings"
+      },
+      {
+        "from": "/ontology/versions",
+        "click": "[对话]",
+        "to": "/chat"
+      },
+      {
+        "from": "/ontology/versions",
+        "click": "[群聊]",
+        "to": "/chat/group"
+      },
+      {
+        "from": "/ontology/versions",
+        "click": "[工作流]",
+        "to": "/workflows"
+      }
+    ],
+    "dialogs": [],
+    "toasts": [],
+    "errors": [],
+    "render": [],
+    "targets0": 21
+  },
+  {
+    "page": "kb",
+    "path": "/kb",
+    "clicks": [
+      {
+        "target": "[ontology-agent · 回主页]",
+        "navigatedTo": "/"
+      },
+      {
+        "target": "工作台"
+      },
+      {
+        "target": "语义资产"
+      },
+      {
+        "target": "[本体工作台]",
+        "navigatedTo": "/ontology"
+      },
+      {
+        "target": "[知识库]"
+      },
+      {
+        "target": "[记忆管理]",
+        "navigatedTo": "/memory"
+      },
+      {
+        "target": "[插件市场 · 工具技能 · MCP · Agent 目录]",
+        "navigatedTo": "/platform"
+      },
+      {
+        "target": "[审批中心 · 系统管理 · 审计观测]",
+        "navigatedTo": "/console"
+      },
+      {
+        "target": "[个人资料与偏好]",
+        "navigatedTo": "/settings"
+      },
+      {
+        "target": "[设置]",
+        "navigatedTo": "/settings"
+      },
+      {
+        "target": "[收起侧边栏]"
+      },
+      {
+        "target": "[工作台]"
+      },
+      {
+        "target": "[对话]",
+        "navigatedTo": "/chat"
+      },
+      {
+        "target": "[群聊]",
+        "navigatedTo": "/chat/group"
+      },
+      {
+        "target": "[工作流]",
+        "navigatedTo": "/workflows"
+      }
+    ],
+    "navigations": [
+      {
+        "from": "/kb",
+        "click": "[ontology-agent · 回主页]",
+        "to": "/"
+      },
+      {
+        "from": "/kb",
+        "click": "[本体工作台]",
+        "to": "/ontology"
+      },
+      {
+        "from": "/kb",
+        "click": "[记忆管理]",
+        "to": "/memory"
+      },
+      {
+        "from": "/kb",
+        "click": "[插件市场 · 工具技能 · MCP · Agent 目录]",
+        "to": "/platform"
+      },
+      {
+        "from": "/kb",
+        "click": "[审批中心 · 系统管理 · 审计观测]",
+        "to": "/console"
+      },
+      {
+        "from": "/kb",
+        "click": "[个人资料与偏好]",
+        "to": "/settings"
+      },
+      {
+        "from": "/kb",
+        "click": "[设置]",
+        "to": "/settings"
+      },
+      {
+        "from": "/kb",
+        "click": "[对话]",
+        "to": "/chat"
+      },
+      {
+        "from": "/kb",
+        "click": "[群聊]",
+        "to": "/chat/group"
+      },
+      {
+        "from": "/kb",
+        "click": "[工作流]",
+        "to": "/workflows"
+      }
+    ],
+    "dialogs": [],
+    "toasts": [],
+    "errors": [],
+    "render": [],
+    "targets0": 59
+  },
+  {
+    "page": "kb-review",
+    "path": "/kb/review",
+    "clicks": [
+      {
+        "target": "[ontology-agent · 回主页]",
+        "navigatedTo": "/"
+      },
+      {
+        "target": "[工作台]"
+      },
+      {
+        "target": "[语义资产]"
+      },
+      {
+        "target": "[本体工作台]",
+        "navigatedTo": "/ontology"
+      },
+      {
+        "target": "[知识库]",
+        "navigatedTo": "/kb"
+      },
+      {
+        "target": "[记忆管理]",
+        "navigatedTo": "/memory"
+      },
+      {
+        "target": "[平台能力]",
+        "navigatedTo": "/platform"
+      },
+      {
+        "target": "[管理控制台]",
+        "navigatedTo": "/console"
+      },
+      {
+        "target": "[用户设置]",
+        "navigatedTo": "/settings"
+      },
+      {
+        "target": "[设置]",
+        "navigatedTo": "/settings"
+      },
+      {
+        "target": "[展开侧边栏]"
+      },
+      {
+        "target": "工作台"
+      },
+      {
+        "target": "[对话]",
+        "navigatedTo": "/chat"
+      },
+      {
+        "target": "[群聊]",
+        "navigatedTo": "/chat/group"
+      },
+      {
+        "target": "[工作流]",
+        "navigatedTo": "/workflows"
+      }
+    ],
+    "navigations": [
+      {
+        "from": "/kb/review",
+        "click": "[ontology-agent · 回主页]",
+        "to": "/"
+      },
+      {
+        "from": "/kb/review",
+        "click": "[本体工作台]",
+        "to": "/ontology"
+      },
+      {
+        "from": "/kb/review",
+        "click": "[知识库]",
+        "to": "/kb"
+      },
+      {
+        "from": "/kb/review",
+        "click": "[记忆管理]",
+        "to": "/memory"
+      },
+      {
+        "from": "/kb/review",
+        "click": "[平台能力]",
+        "to": "/platform"
+      },
+      {
+        "from": "/kb/review",
+        "click": "[管理控制台]",
+        "to": "/console"
+      },
+      {
+        "from": "/kb/review",
+        "click": "[用户设置]",
+        "to": "/settings"
+      },
+      {
+        "from": "/kb/review",
+        "click": "[设置]",
+        "to": "/settings"
+      },
+      {
+        "from": "/kb/review",
+        "click": "[对话]",
+        "to": "/chat"
+      },
+      {
+        "from": "/kb/review",
+        "click": "[群聊]",
+        "to": "/chat/group"
+      },
+      {
+        "from": "/kb/review",
+        "click": "[工作流]",
+        "to": "/workflows"
+      }
+    ],
+    "dialogs": [],
+    "toasts": [],
+    "errors": [
+      "http.429: GET http://localhost:3276/api/v1/kb/documents/330bc723-52dd-42ad-98ff-45eedef18832/review/candidates?type=all",
+      "console.error: Failed to load resource: the server responded with a status of 429 (Too Many Requests)",
+      "http.429: GET http://localhost:3276/api/v1/kb/documents/313d01e8-7a60-4ea7-84fe-a3d77d02e322/review/candidates?type=all",
+      "console.error: Failed to load resource: the server responded with a status of 429 (Too Many Requests)",
+      "http.429: GET http://localhost:3276/api/v1/kb/documents/bdf92a5b-7af6-4e89-aca2-55d65f42e066/review/candidates?type=all",
+      "console.error: Failed to load resource: the server responded with a status of 429 (Too Many Requests)",
+      "http.429: GET http://localhost:3276/api/v1/kb/documents/7ce746bf-1c09-46f4-b237-0607b9287678/review/candidates?type=all",
+      "console.error: Failed to load resource: the server responded with a status of 429 (Too Many Requests)",
+      "http.429: GET http://localhost:3276/api/v1/kb/documents/d3e1cd1c-e410-45e6-b5b9-7bfa49664c8a/review/candidates?type=all",
+      "console.error: Failed to load resource: the server responded with a status of 429 (Too Many Requests)",
+      "http.429: GET http://localhost:3276/api/v1/kb/documents/44b11635-b5c1-4aac-a4cb-1da823715b26/review/candidates?type=all",
+      "console.error: Failed to load resource: the server responded with a status of 429 (Too Many Requests)",
+      "http.429: GET http://localhost:3276/api/v1/kb/documents/87a905d5-c221-4354-8cb4-4feb309fb41f/review/candidates?type=all",
+      "console.error: Failed to load resource: the server responded with a status of 429 (Too Many Requests)",
+      "http.429: GET http://localhost:3276/api/v1/kb/documents/99b2cde9-1bda-4bc0-b97e-974aae539e05/review/candidates?type=all",
+      "console.error: Failed to load resource: the server responded with a status of 429 (Too Many Requests)",
+      "http.429: GET http://localhost:3276/api/v1/kb/documents/60be8dd5-7ff6-4fc0-bafe-e2c53c4a32a3/review/candidates?type=all",
+      "console.error: Failed to load resource: the server responded with a status of 429 (Too Many Requests)",
+      "http.429: GET http://localhost:3276/api/v1/kb/documents/698f3c60-c6d8-4f9d-9ce2-64a6a275c759/review/candidates?type=all",
+      "console.error: Failed to load resource: the server responded with a status of 429 (Too Many Requests)",
+      "http.429: GET http://localhost:3276/api/v1/kb/documents/67798eec-73d3-49c7-be88-a05cfa7c253d/review/candidates?type=all",
+      "console.error: Failed to load resource: the server responded with a status of 429 (Too Many Requests)",
+      "http.429: GET http://localhost:3276/api/v1/kb/documents/330bc723-52dd-42ad-98ff-45eedef18832/review/candidates?type=all",
+      "console.error: Failed to load resource: the server responded with a status of 429 (Too Many Requests)",
+      "http.429: GET http://localhost:3276/api/v1/kb/documents/313d01e8-7a60-4ea7-84fe-a3d77d02e322/review/candidates?type=all",
+      "console.error: Failed to load resource: the server responded with a status of 429 (Too Many Requests)",
+      "http.429: GET http://localhost:3276/api/v1/kb/documents/d3e1cd1c-e410-45e6-b5b9-7bfa49664c8a/review/candidates?type=all",
+      "console.error: Failed to load resource: the server responded with a status of 429 (Too Many Requests)",
+      "http.429: GET http://localhost:3276/api/v1/kb/documents/7ce746bf-1c09-46f4-b237-0607b9287678/review/candidates?type=all",
+      "console.error: Failed to load resource: the server responded with a status of 429 (Too Many Requests)",
+      "http.429: GET http://localhost:3276/api/v1/kb/documents/bdf92a5b-7af6-4e89-aca2-55d65f42e066/review/candidates?type=all",
+      "console.error: Failed to load resource: the server responded with a status of 429 (Too Many Requests)",
+      "http.429: GET http://localhost:3276/api/v1/kb/documents/44b11635-b5c1-4aac-a4cb-1da823715b26/review/candidates?type=all",
+      "console.error: Failed to load resource: the server responded with a status of 429 (Too Many Requests)",
+      "http.429: GET http://localhost:3276/api/v1/kb/documents/99b2cde9-1bda-4bc0-b97e-974aae539e05/review/candidates?type=all",
+      "console.error: Failed to load resource: the server responded with a status of 429 (Too Many Requests)",
+      "http.429: GET http://localhost:3276/api/v1/kb/documents/87a905d5-c221-4354-8cb4-4feb309fb41f/review/candidates?type=all",
+      "console.error: Failed to load resource: the server responded with a status of 429 (Too Many Requests)",
+      "http.429: GET http://localhost:3276/api/v1/kb/documents/60be8dd5-7ff6-4fc0-bafe-e2c53c4a32a3/review/candidates?type=all",
+      "console.error: Failed to load resource: the server responded with a status of 429 (Too Many Requests)",
+      "http.429: GET http://localhost:3276/api/v1/kb/documents/698f3c60-c6d8-4f9d-9ce2-64a6a275c759/review/candidates?type=all",
+      "console.error: Failed to load resource: the server responded with a status of 429 (Too Many Requests)",
+      "http.429: GET http://localhost:3276/api/v1/kb/documents/67798eec-73d3-49c7-be88-a05cfa7c253d/review/candidates?type=all",
+      "console.error: Failed to load resource: the server responded with a status of 429 (Too Many Requests)",
+      "http.429: GET http://localhost:3276/api/v1/kb/documents/330bc723-52dd-42ad-98ff-45eedef18832/review/candidates?type=all",
+      "console.error: Failed to load resource: the server responded with a status of 429 (Too Many Requests)",
+      "http.429: GET http://localhost:3276/api/v1/kb/documents/313d01e8-7a60-4ea7-84fe-a3d77d02e322/review/candidates?type=all",
+      "console.error: Failed to load resource: the server responded with a status of 429 (Too Many Requests)",
+      "http.429: GET http://localhost:3276/api/v1/kb/documents/d3e1cd1c-e410-45e6-b5b9-7bfa49664c8a/review/candidates?type=all",
+      "console.error: Failed to load resource: the server responded with a status of 429 (Too Many Requests)",
+      "http.429: GET http://localhost:3276/api/v1/kb/documents/bdf92a5b-7af6-4e89-aca2-55d65f42e066/review/candidates?type=all",
+      "console.error: Failed to load resource: the server responded with a status of 429 (Too Many Requests)",
+      "http.429: GET http://localhost:3276/api/v1/kb/documents/7ce746bf-1c09-46f4-b237-0607b9287678/review/candidates?type=all",
+      "console.error: Failed to load resource: the server responded with a status of 429 (Too Many Requests)",
+      "http.429: GET http://localhost:3276/api/v1/kb/documents/44b11635-b5c1-4aac-a4cb-1da823715b26/review/candidates?type=all",
+      "console.error: Failed to load resource: the server responded with a status of 429 (Too Many Requests)",
+      "http.429: GET http://localhost:3276/api/v1/kb/documents/99b2cde9-1bda-4bc0-b97e-974aae539e05/review/candidates?type=all",
+      "console.error: Failed to load resource: the server responded with a status of 429 (Too Many Requests)",
+      "http.429: GET http://localhost:3276/api/v1/kb/documents/60be8dd5-7ff6-4fc0-bafe-e2c53c4a32a3/review/candidates?type=all",
+      "console.error: Failed to load resource: the server responded with a status of 429 (Too Many Requests)",
+      "http.429: GET http://localhost:3276/api/v1/kb/documents/87a905d5-c221-4354-8cb4-4feb309fb41f/review/candidates?type=all",
+      "console.error: Failed to load resource: the server responded with a status of 429 (Too Many Requests)",
+      "http.429: GET http://localhost:3276/api/v1/kb/documents/67798eec-73d3-49c7-be88-a05cfa7c253d/review/candidates?type=all",
+      "console.error: Failed to load resource: the server responded with a status of 429 (Too Many Requests)",
+      "http.429: GET http://localhost:3276/api/v1/kb/documents/698f3c60-c6d8-4f9d-9ce2-64a6a275c759/review/candidates?type=all",
+      "console.error: Failed to load resource: the server responded with a status of 429 (Too Many Requests)",
+      "http.429: GET http://localhost:3276/api/v1/kb/documents/330bc723-52dd-42ad-98ff-45eedef18832/review/candidates?type=all",
+      "console.error: Failed to load resource: the server responded with a status of 429 (Too Many Requests)",
+      "http.429: GET http://localhost:3276/api/v1/kb/documents/313d01e8-7a60-4ea7-84fe-a3d77d02e322/review/candidates?type=all",
+      "console.error: Failed to load resource: the server responded with a status of 429 (Too Many Requests)",
+      "http.429: GET http://localhost:3276/api/v1/kb/documents/d3e1cd1c-e410-45e6-b5b9-7bfa49664c8a/review/candidates?type=all",
+      "console.error: Failed to load resource: the server responded with a status of 429 (Too Many Requests)",
+      "http.429: GET http://localhost:3276/api/v1/kb/documents/7ce746bf-1c09-46f4-b237-0607b9287678/review/candidates?type=all",
+      "console.error: Failed to load resource: the server responded with a status of 429 (Too Many Requests)",
+      "http.429: GET http://localhost:3276/api/v1/kb/documents/bdf92a5b-7af6-4e89-aca2-55d65f42e066/review/candidates?type=all",
+      "console.error: Failed to load resource: the server responded with a status of 429 (Too Many Requests)",
+      "http.429: GET http://localhost:3276/api/v1/kb/documents/44b11635-b5c1-4aac-a4cb-1da823715b26/review/candidates?type=all",
+      "console.error: Failed to load resource: the server responded with a status of 429 (Too Many Requests)",
+      "http.429: GET http://localhost:3276/api/v1/kb/documents/99b2cde9-1bda-4bc0-b97e-974aae539e05/review/candidates?type=all",
+      "console.error: Failed to load resource: the server responded with a status of 429 (Too Many Requests)",
+      "http.429: GET http://localhost:3276/api/v1/kb/documents/60be8dd5-7ff6-4fc0-bafe-e2c53c4a32a3/review/candidates?type=all",
+      "console.error: Failed to load resource: the server responded with a status of 429 (Too Many Requests)",
+      "http.429: GET http://localhost:3276/api/v1/kb/documents/87a905d5-c221-4354-8cb4-4feb309fb41f/review/candidates?type=all",
+      "console.error: Failed to load resource: the server responded with a status of 429 (Too Many Requests)",
+      "http.429: GET http://localhost:3276/api/v1/kb/documents/330bc723-52dd-42ad-98ff-45eedef18832/review/candidates?type=all",
+      "console.error: Failed to load resource: the server responded with a status of 429 (Too Many Requests)",
+      "http.429: GET http://localhost:3276/api/v1/kb/documents/67798eec-73d3-49c7-be88-a05cfa7c253d/review/candidates?type=all",
+      "console.error: Failed to load resource: the server responded with a status of 429 (Too Many Requests)",
+      "http.429: GET http://localhost:3276/api/v1/kb/documents/698f3c60-c6d8-4f9d-9ce2-64a6a275c759/review/candidates?type=all",
+      "console.error: Failed to load resource: the server responded with a status of 429 (Too Many Requests)",
+      "http.429: GET http://localhost:3276/api/v1/kb/documents/313d01e8-7a60-4ea7-84fe-a3d77d02e322/review/candidates?type=all",
+      "console.error: Failed to load resource: the server responded with a status of 429 (Too Many Requests)",
+      "http.429: GET http://localhost:3276/api/v1/kb/documents/d3e1cd1c-e410-45e6-b5b9-7bfa49664c8a/review/candidates?type=all",
+      "console.error: Failed to load resource: the server responded with a status of 429 (Too Many Requests)",
+      "http.429: GET http://localhost:3276/api/v1/kb/documents/7ce746bf-1c09-46f4-b237-0607b9287678/review/candidates?type=all",
+      "console.error: Failed to load resource: the server responded with a status of 429 (Too Many Requests)",
+      "http.429: GET http://localhost:3276/api/v1/kb/documents/44b11635-b5c1-4aac-a4cb-1da823715b26/review/candidates?type=all",
+      "console.error: Failed to load resource: the server responded with a status of 429 (Too Many Requests)",
+      "http.429: GET http://localhost:3276/api/v1/kb/documents/bdf92a5b-7af6-4e89-aca2-55d65f42e066/review/candidates?type=all",
+      "console.error: Failed to load resource: the server responded with a status of 429 (Too Many Requests)",
+      "http.429: GET http://localhost:3276/api/v1/kb/documents/99b2cde9-1bda-4bc0-b97e-974aae539e05/review/candidates?type=all",
+      "console.error: Failed to load resource: the server responded with a status of 429 (Too Many Requests)",
+      "http.429: GET http://localhost:3276/api/v1/kb/documents/87a905d5-c221-4354-8cb4-4feb309fb41f/review/candidates?type=all",
+      "console.error: Failed to load resource: the server responded with a status of 429 (Too Many Requests)",
+      "http.429: GET http://localhost:3276/api/v1/kb/documents/60be8dd5-7ff6-4fc0-bafe-e2c53c4a32a3/review/candidates?type=all",
+      "console.error: Failed to load resource: the server responded with a status of 429 (Too Many Requests)",
+      "http.429: GET http://localhost:3276/api/v1/kb/documents/330bc723-52dd-42ad-98ff-45eedef18832/review/candidates?type=all",
+      "console.error: Failed to load resource: the server responded with a status of 429 (Too Many Requests)",
+      "http.429: GET http://localhost:3276/api/v1/kb/documents/698f3c60-c6d8-4f9d-9ce2-64a6a275c759/review/candidates?type=all",
+      "console.error: Failed to load resource: the server responded with a status of 429 (Too Many Requests)",
+      "http.429: GET http://localhost:3276/api/v1/kb/documents/67798eec-73d3-49c7-be88-a05cfa7c253d/review/candidates?type=all",
+      "console.error: Failed to load resource: the server responded with a status of 429 (Too Many Requests)",
+      "http.429: GET http://localhost:3276/api/v1/kb/documents/313d01e8-7a60-4ea7-84fe-a3d77d02e322/review/candidates?type=all",
+      "console.error: Failed to load resource: the server responded with a status of 429 (Too Many Requests)",
+      "http.429: GET http://localhost:3276/api/v1/kb/documents/d3e1cd1c-e410-45e6-b5b9-7bfa49664c8a/review/candidates?type=all",
+      "console.error: Failed to load resource: the server responded with a status of 429 (Too Many Requests)",
+      "http.429: GET http://localhost:3276/api/v1/kb/documents/7ce746bf-1c09-46f4-b237-0607b9287678/review/candidates?type=all",
+      "console.error: Failed to load resource: the server responded with a status of 429 (Too Many Requests)",
+      "http.429: GET http://localhost:3276/api/v1/kb/documents/bdf92a5b-7af6-4e89-aca2-55d65f42e066/review/candidates?type=all",
+      "console.error: Failed to load resource: the server responded with a status of 429 (Too Many Requests)",
+      "http.429: GET http://localhost:3276/api/v1/kb/documents/44b11635-b5c1-4aac-a4cb-1da823715b26/review/candidates?type=all",
+      "console.error: Failed to load resource: the server responded with a status of 429 (Too Many Requests)",
+      "http.429: GET http://localhost:3276/api/v1/kb/documents/99b2cde9-1bda-4bc0-b97e-974aae539e05/review/candidates?type=all",
+      "console.error: Failed to load resource: the server responded with a status of 429 (Too Many Requests)",
+      "http.429: GET http://localhost:3276/api/v1/kb/documents/87a905d5-c221-4354-8cb4-4feb309fb41f/review/candidates?type=all",
+      "console.error: Failed to load resource: the server responded with a status of 429 (Too Many Requests)",
+      "http.429: GET http://localhost:3276/api/v1/kb/documents/60be8dd5-7ff6-4fc0-bafe-e2c53c4a32a3/review/candidates?type=all",
+      "console.error: Failed to load resource: the server responded with a status of 429 (Too Many Requests)",
+      "http.429: GET http://localhost:3276/api/v1/kb/documents/67798eec-73d3-49c7-be88-a05cfa7c253d/review/candidates?type=all",
+      "console.error: Failed to load resource: the server responded with a status of 429 (Too Many Requests)",
+      "http.429: GET http://localhost:3276/api/v1/kb/documents/330bc723-52dd-42ad-98ff-45eedef18832/review/candidates?type=all",
+      "console.error: Failed to load resource: the server responded with a status of 429 (Too Many Requests)",
+      "http.429: GET http://localhost:3276/api/v1/kb/documents/698f3c60-c6d8-4f9d-9ce2-64a6a275c759/review/candidates?type=all",
+      "console.error: Failed to load resource: the server responded with a status of 429 (Too Many Requests)",
+      "http.429: GET http://localhost:3276/api/v1/kb/documents/d3e1cd1c-e410-45e6-b5b9-7bfa49664c8a/review/candidates?type=all",
+      "console.error: Failed to load resource: the server responded with a status of 429 (Too Many Requests)",
+      "http.429: GET http://localhost:3276/api/v1/kb/documents/313d01e8-7a60-4ea7-84fe-a3d77d02e322/review/candidates?type=all",
+      "console.error: Failed to load resource: the server responded with a status of 429 (Too Many Requests)",
+      "http.429: GET http://localhost:3276/api/v1/kb/documents/7ce746bf-1c09-46f4-b237-0607b9287678/review/candidates?type=all",
+      "console.error: Failed to load resource: the server responded with a status of 429 (Too Many Requests)",
+      "http.429: GET http://localhost:3276/api/v1/kb/documents/bdf92a5b-7af6-4e89-aca2-55d65f42e066/review/candidates?type=all",
+      "console.error: Failed to load resource: the server responded with a status of 429 (Too Many Requests)",
+      "http.429: GET http://localhost:3276/api/v1/kb/documents/44b11635-b5c1-4aac-a4cb-1da823715b26/review/candidates?type=all",
+      "console.error: Failed to load resource: the server responded with a status of 429 (Too Many Requests)"
+    ],
+    "render": [],
+    "targets0": 31
+  },
+  {
+    "page": "kb-playground",
+    "path": "/kb/playground",
+    "clicks": [
+      {
+        "target": "[ontology-agent · 回主页]",
+        "navigatedTo": "/"
+      },
+      {
+        "target": "工作台"
+      },
+      {
+        "target": "语义资产"
+      },
+      {
+        "target": "[本体工作台]",
+        "navigatedTo": "/ontology"
+      },
+      {
+        "target": "[知识库]",
+        "navigatedTo": "/kb"
+      },
+      {
+        "target": "[记忆管理]",
+        "navigatedTo": "/memory"
+      },
+      {
+        "target": "[插件市场 · 工具技能 · MCP · Agent 目录]",
+        "navigatedTo": "/platform"
+      },
+      {
+        "target": "[审批中心 · 系统管理 · 审计观测]",
+        "navigatedTo": "/console"
+      },
+      {
+        "target": "[个人资料与偏好]",
+        "navigatedTo": "/settings"
+      },
+      {
+        "target": "[设置]",
+        "navigatedTo": "/settings"
+      },
+      {
+        "target": "[收起侧边栏]"
+      },
+      {
+        "target": "[工作台]"
+      },
+      {
+        "target": "[对话]",
+        "navigatedTo": "/chat"
+      },
+      {
+        "target": "[群聊]",
+        "navigatedTo": "/chat/group"
+      },
+      {
+        "target": "[工作流]",
+        "navigatedTo": "/workflows"
+      }
+    ],
+    "navigations": [
+      {
+        "from": "/kb/playground",
+        "click": "[ontology-agent · 回主页]",
+        "to": "/"
+      },
+      {
+        "from": "/kb/playground",
+        "click": "[本体工作台]",
+        "to": "/ontology"
+      },
+      {
+        "from": "/kb/playground",
+        "click": "[知识库]",
+        "to": "/kb"
+      },
+      {
+        "from": "/kb/playground",
+        "click": "[记忆管理]",
+        "to": "/memory"
+      },
+      {
+        "from": "/kb/playground",
+        "click": "[插件市场 · 工具技能 · MCP · Agent 目录]",
+        "to": "/platform"
+      },
+      {
+        "from": "/kb/playground",
+        "click": "[审批中心 · 系统管理 · 审计观测]",
+        "to": "/console"
+      },
+      {
+        "from": "/kb/playground",
+        "click": "[个人资料与偏好]",
+        "to": "/settings"
+      },
+      {
+        "from": "/kb/playground",
+        "click": "[设置]",
+        "to": "/settings"
+      },
+      {
+        "from": "/kb/playground",
+        "click": "[对话]",
+        "to": "/chat"
+      },
+      {
+        "from": "/kb/playground",
+        "click": "[群聊]",
+        "to": "/chat/group"
+      },
+      {
+        "from": "/kb/playground",
+        "click": "[工作流]",
+        "to": "/workflows"
+      }
+    ],
+    "dialogs": [],
+    "toasts": [],
+    "errors": [],
+    "render": [],
+    "targets0": 27
+  },
+  {
+    "page": "memory",
+    "path": "/memory",
+    "clicks": [
+      {
+        "target": "[ontology-agent · 回主页]",
+        "navigatedTo": "/"
+      },
+      {
+        "target": "[工作台]"
+      },
+      {
+        "target": "[语义资产]"
+      },
+      {
+        "target": "[本体工作台]",
+        "navigatedTo": "/ontology"
+      },
+      {
+        "target": "[知识库]",
+        "navigatedTo": "/kb"
+      },
+      {
+        "target": "[记忆管理]"
+      },
+      {
+        "target": "[平台能力]",
+        "navigatedTo": "/platform"
+      },
+      {
+        "target": "[管理控制台]",
+        "navigatedTo": "/console"
+      },
+      {
+        "target": "[用户设置]",
+        "navigatedTo": "/settings"
+      },
+      {
+        "target": "[设置]",
+        "navigatedTo": "/settings"
+      },
+      {
+        "target": "[展开侧边栏]"
+      },
+      {
+        "target": "工作台"
+      },
+      {
+        "target": "[对话]",
+        "navigatedTo": "/chat"
+      },
+      {
+        "target": "[群聊]",
+        "navigatedTo": "/chat/group"
+      },
+      {
+        "target": "[工作流]",
+        "navigatedTo": "/workflows"
+      }
+    ],
+    "navigations": [
+      {
+        "from": "/memory",
+        "click": "[ontology-agent · 回主页]",
+        "to": "/"
+      },
+      {
+        "from": "/memory",
+        "click": "[本体工作台]",
+        "to": "/ontology"
+      },
+      {
+        "from": "/memory",
+        "click": "[知识库]",
+        "to": "/kb"
+      },
+      {
+        "from": "/memory",
+        "click": "[平台能力]",
+        "to": "/platform"
+      },
+      {
+        "from": "/memory",
+        "click": "[管理控制台]",
+        "to": "/console"
+      },
+      {
+        "from": "/memory",
+        "click": "[用户设置]",
+        "to": "/settings"
+      },
+      {
+        "from": "/memory",
+        "click": "[设置]",
+        "to": "/settings"
+      },
+      {
+        "from": "/memory",
+        "click": "[对话]",
+        "to": "/chat"
+      },
+      {
+        "from": "/memory",
+        "click": "[群聊]",
+        "to": "/chat/group"
+      },
+      {
+        "from": "/memory",
+        "click": "[工作流]",
+        "to": "/workflows"
+      }
+    ],
+    "dialogs": [],
+    "toasts": [],
+    "errors": [],
+    "render": [],
+    "targets0": 29
+  },
+  {
+    "page": "platform-index",
+    "path": "/platform",
+    "clicks": [
+      {
+        "target": "总览"
+      },
+      {
+        "target": "插件市场",
+        "navigatedTo": "/platform/market"
+      },
+      {
+        "target": "工具与技能",
+        "navigatedTo": "/platform/tools"
+      },
+      {
+        "target": "MCP 接入",
+        "navigatedTo": "/platform/mcp"
+      },
+      {
+        "target": "Agent 目录",
+        "navigatedTo": "/platform/agents"
+      },
+      {
+        "target": "返回主页",
+        "navigatedTo": "/"
+      },
+      {
+        "target": "[亮色]"
+      },
+      {
+        "target": "[暗色]"
+      },
+      {
+        "target": "[跟随系统]"
+      },
+      {
+        "target": "插件市场官方与社区插件：接入外部系统、扩展领域动作。安装走投毒扫描 + sche",
+        "clickErr": "TimeoutError: locator.click: Timeout 5000ms exceeded."
+      },
+      {
+        "target": "工具与技能注册工具（REST/CLI）与 SKILL.md 技能：Agent 可",
+        "clickErr": "TimeoutError: locator.click: Timeout 5000ms exceeded."
+      },
+      {
+        "target": "MCP 接入Model Context Protocol 出口：discover",
+        "clickErr": "TimeoutError: locator.click: Timeout 5000ms exceeded."
+      },
+      {
+        "target": "Agent 目录平台托管 Agent 实例目录：适配器、模型、工具授权与调试对话",
+        "clickErr": "TimeoutError: locator.click: Timeout 5000ms exceeded."
+      }
+    ],
+    "navigations": [
+      {
+        "from": "/platform",
+        "click": "插件市场",
+        "to": "/platform/market"
+      },
+      {
+        "from": "/platform",
+        "click": "工具与技能",
+        "to": "/platform/tools"
+      },
+      {
+        "from": "/platform",
+        "click": "MCP 接入",
+        "to": "/platform/mcp"
+      },
+      {
+        "from": "/platform",
+        "click": "Agent 目录",
+        "to": "/platform/agents"
+      },
+      {
+        "from": "/platform",
+        "click": "返回主页",
+        "to": "/"
+      }
+    ],
+    "dialogs": [],
+    "toasts": [],
+    "errors": [],
+    "render": [],
+    "targets0": 13
+  },
+  {
+    "page": "platform-market",
+    "path": "/platform/market",
+    "clicks": [
+      {
+        "target": "总览",
+        "navigatedTo": "/platform"
+      },
+      {
+        "target": "插件市场"
+      },
+      {
+        "target": "工具与技能",
+        "navigatedTo": "/platform/tools"
+      },
+      {
+        "target": "MCP 接入",
+        "navigatedTo": "/platform/mcp"
+      },
+      {
+        "target": "Agent 目录",
+        "navigatedTo": "/platform/agents"
+      },
+      {
+        "target": "返回主页",
+        "navigatedTo": "/"
+      },
+      {
+        "target": "[亮色]"
+      },
+      {
+        "target": "[暗色]"
+      },
+      {
+        "target": "[跟随系统]"
+      },
+      {
+        "target": "上架新插件",
+        "dialogOpened": true
+      },
+      {
+        "target": "全部"
+      },
+      {
+        "target": "官方认证"
+      },
+      {
+        "target": "社区"
+      },
+      {
+        "target": "已安装"
+      }
+    ],
+    "navigations": [
+      {
+        "from": "/platform/market",
+        "click": "总览",
+        "to": "/platform"
+      },
+      {
+        "from": "/platform/market",
+        "click": "工具与技能",
+        "to": "/platform/tools"
+      },
+      {
+        "from": "/platform/market",
+        "click": "MCP 接入",
+        "to": "/platform/mcp"
+      },
+      {
+        "from": "/platform/market",
+        "click": "Agent 目录",
+        "to": "/platform/agents"
+      },
+      {
+        "from": "/platform/market",
+        "click": "返回主页",
+        "to": "/"
+      }
+    ],
+    "dialogs": [
+      "上架新插件"
+    ],
+    "toasts": [],
+    "errors": [],
+    "render": [],
+    "targets0": 14
+  },
+  {
+    "page": "platform-tools",
+    "path": "/platform/tools",
+    "clicks": [
+      {
+        "target": "总览",
+        "navigatedTo": "/platform"
+      },
+      {
+        "target": "插件市场",
+        "navigatedTo": "/platform/market"
+      },
+      {
+        "target": "工具与技能"
+      },
+      {
+        "target": "MCP 接入",
+        "navigatedTo": "/platform/mcp"
+      },
+      {
+        "target": "Agent 目录",
+        "navigatedTo": "/platform/agents"
+      },
+      {
+        "target": "返回主页",
+        "navigatedTo": "/"
+      },
+      {
+        "target": "[亮色]"
+      },
+      {
+        "target": "[暗色]"
+      },
+      {
+        "target": "[跟随系统]"
+      },
+      {
+        "target": "注册工具",
+        "dialogOpened": true
+      },
+      {
+        "target": "工具注册表 0"
+      },
+      {
+        "target": "技能库"
+      },
+      {
+        "target": "技能库 0"
+      }
+    ],
+    "navigations": [
+      {
+        "from": "/platform/tools",
+        "click": "总览",
+        "to": "/platform"
+      },
+      {
+        "from": "/platform/tools",
+        "click": "插件市场",
+        "to": "/platform/market"
+      },
+      {
+        "from": "/platform/tools",
+        "click": "MCP 接入",
+        "to": "/platform/mcp"
+      },
+      {
+        "from": "/platform/tools",
+        "click": "Agent 目录",
+        "to": "/platform/agents"
+      },
+      {
+        "from": "/platform/tools",
+        "click": "返回主页",
+        "to": "/"
+      }
+    ],
+    "dialogs": [
+      "注册工具"
+    ],
+    "toasts": [],
+    "errors": [],
+    "render": [],
+    "targets0": 12
+  },
+  {
+    "page": "platform-mcp",
+    "path": "/platform/mcp",
+    "clicks": [
+      {
+        "target": "总览",
+        "navigatedTo": "/platform"
+      },
+      {
+        "target": "插件市场",
+        "navigatedTo": "/platform/market"
+      },
+      {
+        "target": "工具与技能",
+        "navigatedTo": "/platform/tools"
+      },
+      {
+        "target": "MCP 接入"
+      },
+      {
+        "target": "Agent 目录",
+        "navigatedTo": "/platform/agents"
+      },
+      {
+        "target": "返回主页",
+        "navigatedTo": "/"
+      },
+      {
+        "target": "[亮色]"
+      },
+      {
+        "target": "[暗色]"
+      },
+      {
+        "target": "[跟随系统]"
+      },
+      {
+        "target": "接入 Server",
+        "dialogOpened": true
+      }
+    ],
+    "navigations": [
+      {
+        "from": "/platform/mcp",
+        "click": "总览",
+        "to": "/platform"
+      },
+      {
+        "from": "/platform/mcp",
+        "click": "插件市场",
+        "to": "/platform/market"
+      },
+      {
+        "from": "/platform/mcp",
+        "click": "工具与技能",
+        "to": "/platform/tools"
+      },
+      {
+        "from": "/platform/mcp",
+        "click": "Agent 目录",
+        "to": "/platform/agents"
+      },
+      {
+        "from": "/platform/mcp",
+        "click": "返回主页",
+        "to": "/"
+      }
+    ],
+    "dialogs": [
+      "接入 Server"
+    ],
+    "toasts": [],
+    "errors": [],
+    "render": [],
+    "targets0": 10
+  },
+  {
+    "page": "platform-agents",
+    "path": "/platform/agents",
+    "clicks": [
+      {
+        "target": "总览",
+        "navigatedTo": "/platform"
+      },
+      {
+        "target": "插件市场",
+        "navigatedTo": "/platform/market"
+      },
+      {
+        "target": "工具与技能",
+        "navigatedTo": "/platform/tools"
+      },
+      {
+        "target": "MCP 接入",
+        "navigatedTo": "/platform/mcp"
+      },
+      {
+        "target": "Agent 目录"
+      },
+      {
+        "target": "返回主页",
+        "navigatedTo": "/"
+      },
+      {
+        "target": "[亮色]"
+      },
+      {
+        "target": "[暗色]"
+      },
+      {
+        "target": "[跟随系统]"
+      },
+      {
+        "target": "注册 Agent",
+        "dialogOpened": true
+      },
+      {
+        "target": "详情",
+        "navigatedTo": "/agents/d9563bf4-ab09-4d53-84a6-c1a3b2856b7c"
+      },
+      {
+        "target": "停止",
+        "dialogOpened": true
+      }
+    ],
+    "navigations": [
+      {
+        "from": "/platform/agents",
+        "click": "总览",
+        "to": "/platform"
+      },
+      {
+        "from": "/platform/agents",
+        "click": "插件市场",
+        "to": "/platform/market"
+      },
+      {
+        "from": "/platform/agents",
+        "click": "工具与技能",
+        "to": "/platform/tools"
+      },
+      {
+        "from": "/platform/agents",
+        "click": "MCP 接入",
+        "to": "/platform/mcp"
+      },
+      {
+        "from": "/platform/agents",
+        "click": "返回主页",
+        "to": "/"
+      },
+      {
+        "from": "/platform/agents",
+        "click": "详情",
+        "to": "/agents/d9563bf4-ab09-4d53-84a6-c1a3b2856b7c"
+      }
+    ],
+    "dialogs": [
+      "注册 Agent",
+      "停止"
+    ],
+    "toasts": [],
+    "errors": [],
+    "render": [],
+    "targets0": 26
+  },
+  {
+    "page": "console-index",
+    "path": "/console",
+    "clicks": [
+      {
+        "target": "审批中心",
+        "navigatedTo": "/console/approvals"
+      },
+      {
+        "target": "系统管理",
+        "navigatedTo": "/console/admin"
+      },
+      {
+        "target": "审计日志",
+        "navigatedTo": "/console/admin?tab=audit"
+      },
+      {
+        "target": "数据分析",
+        "navigatedTo": "/console/admin?tab=analytics"
+      },
+      {
+        "target": "返回主页",
+        "navigatedTo": "/"
+      },
+      {
+        "target": "[亮色]"
+      },
+      {
+        "target": "[暗色]"
+      },
+      {
+        "target": "[跟随系统]"
+      },
+      {
+        "target": "审批中心候选产物人工终审与批量审批队列",
+        "clickErr": "TimeoutError: locator.click: Timeout 5000ms exceeded."
+      },
+      {
+        "target": "系统管理用户 / 用户组 / 角色 / 模型渠道",
+        "clickErr": "TimeoutError: locator.click: Timeout 5000ms exceeded."
+      },
+      {
+        "target": "审计日志全链路审计 trace 与操作台账",
+        "clickErr": "TimeoutError: locator.click: Timeout 5000ms exceeded."
+      },
+      {
+        "target": "数据分析用量 · 成本 · 归因与预算水位（FR-SYS-04/05/07）",
+        "clickErr": "TimeoutError: locator.click: Timeout 5000ms exceeded."
+      }
+    ],
+    "navigations": [
+      {
+        "from": "/console",
+        "click": "审批中心",
+        "to": "/console/approvals"
+      },
+      {
+        "from": "/console",
+        "click": "系统管理",
+        "to": "/console/admin"
+      },
+      {
+        "from": "/console",
+        "click": "审计日志",
+        "to": "/console/admin?tab=audit"
+      },
+      {
+        "from": "/console",
+        "click": "数据分析",
+        "to": "/console/admin?tab=analytics"
+      },
+      {
+        "from": "/console",
+        "click": "返回主页",
+        "to": "/"
+      }
+    ],
+    "dialogs": [],
+    "toasts": [],
+    "errors": [],
+    "render": [],
+    "targets0": 12
+  },
+  {
+    "page": "console-approvals",
+    "path": "/console/approvals",
+    "clicks": [
+      {
+        "target": "审批中心"
+      },
+      {
+        "target": "系统管理",
+        "navigatedTo": "/console/admin"
+      },
+      {
+        "target": "审计日志",
+        "navigatedTo": "/console/admin?tab=audit"
+      },
+      {
+        "target": "数据分析",
+        "navigatedTo": "/console/admin?tab=analytics"
+      },
+      {
+        "target": "返回主页",
+        "navigatedTo": "/"
+      },
+      {
+        "target": "[亮色]"
+      },
+      {
+        "target": "[暗色]"
+      },
+      {
+        "target": "[跟随系统]"
+      },
+      {
+        "target": "待办",
+        "navigatedTo": "/console/approvals?tab=todo"
+      },
+      {
+        "target": "已办",
+        "navigatedTo": "/console/approvals?tab=done"
+      }
+    ],
+    "navigations": [
+      {
+        "from": "/console/approvals",
+        "click": "系统管理",
+        "to": "/console/admin"
+      },
+      {
+        "from": "/console/approvals",
+        "click": "审计日志",
+        "to": "/console/admin?tab=audit"
+      },
+      {
+        "from": "/console/approvals",
+        "click": "数据分析",
+        "to": "/console/admin?tab=analytics"
+      },
+      {
+        "from": "/console/approvals",
+        "click": "返回主页",
+        "to": "/"
+      },
+      {
+        "from": "/console/approvals",
+        "click": "待办",
+        "to": "/console/approvals?tab=todo"
+      },
+      {
+        "from": "/console/approvals",
+        "click": "已办",
+        "to": "/console/approvals?tab=done"
+      }
+    ],
+    "dialogs": [],
+    "toasts": [],
+    "errors": [],
+    "render": [],
+    "targets0": 10
+  },
+  {
+    "page": "console-admin-users",
+    "path": "/console/admin?tab=users",
+    "clicks": [
+      {
+        "target": "审批中心",
+        "navigatedTo": "/console/approvals"
+      },
+      {
+        "target": "系统管理",
+        "navigatedTo": "/console/admin"
+      },
+      {
+        "target": "审计日志",
+        "navigatedTo": "/console/admin?tab=audit"
+      },
+      {
+        "target": "数据分析",
+        "navigatedTo": "/console/admin?tab=analytics"
+      },
+      {
+        "target": "返回主页",
+        "navigatedTo": "/"
+      },
+      {
+        "target": "[亮色]"
+      },
+      {
+        "target": "[暗色]"
+      },
+      {
+        "target": "[跟随系统]"
+      },
+      {
+        "target": "用户"
+      },
+      {
+        "target": "用户组",
+        "navigatedTo": "/console/admin?tab=groups"
+      },
+      {
+        "target": "角色",
+        "navigatedTo": "/console/admin?tab=roles"
+      },
+      {
+        "target": "模型渠道",
+        "navigatedTo": "/console/admin?tab=models"
+      },
+      {
+        "target": "审计日志",
+        "navigatedTo": "/console/admin?tab=audit"
+      },
+      {
+        "target": "回写台账",
+        "navigatedTo": "/console/admin?tab=writeback"
+      },
+      {
+        "target": "数据分析",
+        "navigatedTo": "/console/admin?tab=analytics"
+      }
+    ],
+    "navigations": [
+      {
+        "from": "/console/admin?tab=users",
+        "click": "审批中心",
+        "to": "/console/approvals"
+      },
+      {
+        "from": "/console/admin?tab=users",
+        "click": "系统管理",
+        "to": "/console/admin"
+      },
+      {
+        "from": "/console/admin?tab=users",
+        "click": "审计日志",
+        "to": "/console/admin?tab=audit"
+      },
+      {
+        "from": "/console/admin?tab=users",
+        "click": "数据分析",
+        "to": "/console/admin?tab=analytics"
+      },
+      {
+        "from": "/console/admin?tab=users",
+        "click": "返回主页",
+        "to": "/"
+      },
+      {
+        "from": "/console/admin?tab=users",
+        "click": "用户组",
+        "to": "/console/admin?tab=groups"
+      },
+      {
+        "from": "/console/admin?tab=users",
+        "click": "角色",
+        "to": "/console/admin?tab=roles"
+      },
+      {
+        "from": "/console/admin?tab=users",
+        "click": "模型渠道",
+        "to": "/console/admin?tab=models"
+      },
+      {
+        "from": "/console/admin?tab=users",
+        "click": "审计日志",
+        "to": "/console/admin?tab=audit"
+      },
+      {
+        "from": "/console/admin?tab=users",
+        "click": "回写台账",
+        "to": "/console/admin?tab=writeback"
+      },
+      {
+        "from": "/console/admin?tab=users",
+        "click": "数据分析",
+        "to": "/console/admin?tab=analytics"
+      }
+    ],
+    "dialogs": [],
+    "toasts": [],
+    "errors": [],
+    "render": [],
+    "targets0": 39
+  },
+  {
+    "page": "console-admin-groups",
+    "path": "/console/admin?tab=groups",
+    "clicks": [
+      {
+        "target": "审批中心",
+        "navigatedTo": "/console/approvals"
+      },
+      {
+        "target": "系统管理",
+        "navigatedTo": "/console/admin"
+      },
+      {
+        "target": "审计日志",
+        "navigatedTo": "/console/admin?tab=audit"
+      },
+      {
+        "target": "数据分析",
+        "navigatedTo": "/console/admin?tab=analytics"
+      },
+      {
+        "target": "返回主页",
+        "navigatedTo": "/"
+      },
+      {
+        "target": "[亮色]"
+      },
+      {
+        "target": "[暗色]"
+      },
+      {
+        "target": "[跟随系统]"
+      },
+      {
+        "target": "用户",
+        "navigatedTo": "/console/admin?tab=users"
+      },
+      {
+        "target": "用户组"
+      },
+      {
+        "target": "角色",
+        "navigatedTo": "/console/admin?tab=roles"
+      },
+      {
+        "target": "模型渠道",
+        "navigatedTo": "/console/admin?tab=models"
+      },
+      {
+        "target": "审计日志",
+        "navigatedTo": "/console/admin?tab=audit"
+      },
+      {
+        "target": "回写台账",
+        "navigatedTo": "/console/admin?tab=writeback"
+      },
+      {
+        "target": "数据分析",
+        "navigatedTo": "/console/admin?tab=analytics"
+      }
+    ],
+    "navigations": [
+      {
+        "from": "/console/admin?tab=groups",
+        "click": "审批中心",
+        "to": "/console/approvals"
+      },
+      {
+        "from": "/console/admin?tab=groups",
+        "click": "系统管理",
+        "to": "/console/admin"
+      },
+      {
+        "from": "/console/admin?tab=groups",
+        "click": "审计日志",
+        "to": "/console/admin?tab=audit"
+      },
+      {
+        "from": "/console/admin?tab=groups",
+        "click": "数据分析",
+        "to": "/console/admin?tab=analytics"
+      },
+      {
+        "from": "/console/admin?tab=groups",
+        "click": "返回主页",
+        "to": "/"
+      },
+      {
+        "from": "/console/admin?tab=groups",
+        "click": "用户",
+        "to": "/console/admin?tab=users"
+      },
+      {
+        "from": "/console/admin?tab=groups",
+        "click": "角色",
+        "to": "/console/admin?tab=roles"
+      },
+      {
+        "from": "/console/admin?tab=groups",
+        "click": "模型渠道",
+        "to": "/console/admin?tab=models"
+      },
+      {
+        "from": "/console/admin?tab=groups",
+        "click": "审计日志",
+        "to": "/console/admin?tab=audit"
+      },
+      {
+        "from": "/console/admin?tab=groups",
+        "click": "回写台账",
+        "to": "/console/admin?tab=writeback"
+      },
+      {
+        "from": "/console/admin?tab=groups",
+        "click": "数据分析",
+        "to": "/console/admin?tab=analytics"
+      }
+    ],
+    "dialogs": [],
+    "toasts": [],
+    "errors": [],
+    "render": [],
+    "targets0": 17
+  },
+  {
+    "page": "console-admin-roles",
+    "path": "/console/admin?tab=roles",
+    "clicks": [
+      {
+        "target": "审批中心",
+        "navigatedTo": "/console/approvals"
+      },
+      {
+        "target": "系统管理",
+        "navigatedTo": "/console/admin"
+      },
+      {
+        "target": "审计日志",
+        "navigatedTo": "/console/admin?tab=audit"
+      },
+      {
+        "target": "数据分析",
+        "navigatedTo": "/console/admin?tab=analytics"
+      },
+      {
+        "target": "返回主页",
+        "navigatedTo": "/"
+      },
+      {
+        "target": "[亮色]"
+      },
+      {
+        "target": "[暗色]"
+      },
+      {
+        "target": "[跟随系统]"
+      },
+      {
+        "target": "用户",
+        "navigatedTo": "/console/admin?tab=users"
+      },
+      {
+        "target": "用户组",
+        "navigatedTo": "/console/admin?tab=groups"
+      },
+      {
+        "target": "角色"
+      },
+      {
+        "target": "模型渠道",
+        "navigatedTo": "/console/admin?tab=models"
+      },
+      {
+        "target": "审计日志",
+        "navigatedTo": "/console/admin?tab=audit"
+      },
+      {
+        "target": "回写台账",
+        "navigatedTo": "/console/admin?tab=writeback"
+      },
+      {
+        "target": "数据分析",
+        "navigatedTo": "/console/admin?tab=analytics"
+      }
+    ],
+    "navigations": [
+      {
+        "from": "/console/admin?tab=roles",
+        "click": "审批中心",
+        "to": "/console/approvals"
+      },
+      {
+        "from": "/console/admin?tab=roles",
+        "click": "系统管理",
+        "to": "/console/admin"
+      },
+      {
+        "from": "/console/admin?tab=roles",
+        "click": "审计日志",
+        "to": "/console/admin?tab=audit"
+      },
+      {
+        "from": "/console/admin?tab=roles",
+        "click": "数据分析",
+        "to": "/console/admin?tab=analytics"
+      },
+      {
+        "from": "/console/admin?tab=roles",
+        "click": "返回主页",
+        "to": "/"
+      },
+      {
+        "from": "/console/admin?tab=roles",
+        "click": "用户",
+        "to": "/console/admin?tab=users"
+      },
+      {
+        "from": "/console/admin?tab=roles",
+        "click": "用户组",
+        "to": "/console/admin?tab=groups"
+      },
+      {
+        "from": "/console/admin?tab=roles",
+        "click": "模型渠道",
+        "to": "/console/admin?tab=models"
+      },
+      {
+        "from": "/console/admin?tab=roles",
+        "click": "审计日志",
+        "to": "/console/admin?tab=audit"
+      },
+      {
+        "from": "/console/admin?tab=roles",
+        "click": "回写台账",
+        "to": "/console/admin?tab=writeback"
+      },
+      {
+        "from": "/console/admin?tab=roles",
+        "click": "数据分析",
+        "to": "/console/admin?tab=analytics"
+      }
+    ],
+    "dialogs": [],
+    "toasts": [],
+    "errors": [],
+    "render": [],
+    "targets0": 16
+  },
+  {
+    "page": "console-admin-models",
+    "path": "/console/admin?tab=models",
+    "clicks": [
+      {
+        "target": "审批中心",
+        "navigatedTo": "/console/approvals"
+      },
+      {
+        "target": "系统管理",
+        "navigatedTo": "/console/admin"
+      },
+      {
+        "target": "审计日志",
+        "navigatedTo": "/console/admin?tab=audit"
+      },
+      {
+        "target": "数据分析",
+        "navigatedTo": "/console/admin?tab=analytics"
+      },
+      {
+        "target": "返回主页",
+        "navigatedTo": "/"
+      },
+      {
+        "target": "[亮色]"
+      },
+      {
+        "target": "[暗色]"
+      },
+      {
+        "target": "[跟随系统]"
+      },
+      {
+        "target": "用户",
+        "navigatedTo": "/console/admin?tab=users"
+      },
+      {
+        "target": "用户组",
+        "navigatedTo": "/console/admin?tab=groups"
+      },
+      {
+        "target": "角色",
+        "navigatedTo": "/console/admin?tab=roles"
+      },
+      {
+        "target": "模型渠道"
+      },
+      {
+        "target": "审计日志",
+        "navigatedTo": "/console/admin?tab=audit"
+      },
+      {
+        "target": "回写台账",
+        "navigatedTo": "/console/admin?tab=writeback"
+      },
+      {
+        "target": "数据分析",
+        "navigatedTo": "/console/admin?tab=analytics"
+      }
+    ],
+    "navigations": [
+      {
+        "from": "/console/admin?tab=models",
+        "click": "审批中心",
+        "to": "/console/approvals"
+      },
+      {
+        "from": "/console/admin?tab=models",
+        "click": "系统管理",
+        "to": "/console/admin"
+      },
+      {
+        "from": "/console/admin?tab=models",
+        "click": "审计日志",
+        "to": "/console/admin?tab=audit"
+      },
+      {
+        "from": "/console/admin?tab=models",
+        "click": "数据分析",
+        "to": "/console/admin?tab=analytics"
+      },
+      {
+        "from": "/console/admin?tab=models",
+        "click": "返回主页",
+        "to": "/"
+      },
+      {
+        "from": "/console/admin?tab=models",
+        "click": "用户",
+        "to": "/console/admin?tab=users"
+      },
+      {
+        "from": "/console/admin?tab=models",
+        "click": "用户组",
+        "to": "/console/admin?tab=groups"
+      },
+      {
+        "from": "/console/admin?tab=models",
+        "click": "角色",
+        "to": "/console/admin?tab=roles"
+      },
+      {
+        "from": "/console/admin?tab=models",
+        "click": "审计日志",
+        "to": "/console/admin?tab=audit"
+      },
+      {
+        "from": "/console/admin?tab=models",
+        "click": "回写台账",
+        "to": "/console/admin?tab=writeback"
+      },
+      {
+        "from": "/console/admin?tab=models",
+        "click": "数据分析",
+        "to": "/console/admin?tab=analytics"
+      }
+    ],
+    "dialogs": [],
+    "toasts": [],
+    "errors": [],
+    "render": [],
+    "targets0": 17
+  },
+  {
+    "page": "console-admin-audit",
+    "path": "/console/admin?tab=audit",
+    "clicks": [
+      {
+        "target": "审批中心",
+        "navigatedTo": "/console/approvals"
+      },
+      {
+        "target": "系统管理",
+        "navigatedTo": "/console/admin"
+      },
+      {
+        "target": "审计日志"
+      },
+      {
+        "target": "数据分析",
+        "navigatedTo": "/console/admin?tab=analytics"
+      },
+      {
+        "target": "返回主页",
+        "navigatedTo": "/"
+      },
+      {
+        "target": "[亮色]"
+      },
+      {
+        "target": "[暗色]"
+      },
+      {
+        "target": "[跟随系统]"
+      },
+      {
+        "target": "用户",
+        "navigatedTo": "/console/admin?tab=users"
+      },
+      {
+        "target": "用户组",
+        "navigatedTo": "/console/admin?tab=groups"
+      },
+      {
+        "target": "角色",
+        "navigatedTo": "/console/admin?tab=roles"
+      },
+      {
+        "target": "模型渠道",
+        "navigatedTo": "/console/admin?tab=models"
+      },
+      {
+        "target": "审计日志"
+      },
+      {
+        "target": "回写台账",
+        "navigatedTo": "/console/admin?tab=writeback"
+      },
+      {
+        "target": "数据分析",
+        "navigatedTo": "/console/admin?tab=analytics"
+      }
+    ],
+    "navigations": [
+      {
+        "from": "/console/admin?tab=audit",
+        "click": "审批中心",
+        "to": "/console/approvals"
+      },
+      {
+        "from": "/console/admin?tab=audit",
+        "click": "系统管理",
+        "to": "/console/admin"
+      },
+      {
+        "from": "/console/admin?tab=audit",
+        "click": "数据分析",
+        "to": "/console/admin?tab=analytics"
+      },
+      {
+        "from": "/console/admin?tab=audit",
+        "click": "返回主页",
+        "to": "/"
+      },
+      {
+        "from": "/console/admin?tab=audit",
+        "click": "用户",
+        "to": "/console/admin?tab=users"
+      },
+      {
+        "from": "/console/admin?tab=audit",
+        "click": "用户组",
+        "to": "/console/admin?tab=groups"
+      },
+      {
+        "from": "/console/admin?tab=audit",
+        "click": "角色",
+        "to": "/console/admin?tab=roles"
+      },
+      {
+        "from": "/console/admin?tab=audit",
+        "click": "模型渠道",
+        "to": "/console/admin?tab=models"
+      },
+      {
+        "from": "/console/admin?tab=audit",
+        "click": "回写台账",
+        "to": "/console/admin?tab=writeback"
+      },
+      {
+        "from": "/console/admin?tab=audit",
+        "click": "数据分析",
+        "to": "/console/admin?tab=analytics"
+      }
+    ],
+    "dialogs": [],
+    "toasts": [],
+    "errors": [],
+    "render": [],
+    "targets0": 220
+  },
+  {
+    "page": "settings",
+    "path": "/settings",
+    "clicks": [
+      {
+        "target": "[ontology-agent · 回主页]",
+        "navigatedTo": "/"
+      },
+      {
+        "target": "工作台"
+      },
+      {
+        "target": "语义资产"
+      },
+      {
+        "target": "[本体工作台]",
+        "navigatedTo": "/ontology"
+      },
+      {
+        "target": "[知识库]",
+        "navigatedTo": "/kb"
+      },
+      {
+        "target": "[记忆管理]",
+        "navigatedTo": "/memory"
+      },
+      {
+        "target": "[插件市场 · 工具技能 · MCP · Agent 目录]",
+        "navigatedTo": "/platform"
+      },
+      {
+        "target": "[审批中心 · 系统管理 · 审计观测]",
+        "navigatedTo": "/console"
+      },
+      {
+        "target": "[个人资料与偏好]"
+      },
+      {
+        "target": "[设置]"
+      },
+      {
+        "target": "[收起侧边栏]"
+      },
+      {
+        "target": "[工作台]"
+      },
+      {
+        "target": "[对话]",
+        "navigatedTo": "/chat"
+      },
+      {
+        "target": "[群聊]",
+        "navigatedTo": "/chat/group"
+      },
+      {
+        "target": "[工作流]",
+        "navigatedTo": "/workflows"
+      }
+    ],
+    "navigations": [
+      {
+        "from": "/settings",
+        "click": "[ontology-agent · 回主页]",
+        "to": "/"
+      },
+      {
+        "from": "/settings",
+        "click": "[本体工作台]",
+        "to": "/ontology"
+      },
+      {
+        "from": "/settings",
+        "click": "[知识库]",
+        "to": "/kb"
+      },
+      {
+        "from": "/settings",
+        "click": "[记忆管理]",
+        "to": "/memory"
+      },
+      {
+        "from": "/settings",
+        "click": "[插件市场 · 工具技能 · MCP · Agent 目录]",
+        "to": "/platform"
+      },
+      {
+        "from": "/settings",
+        "click": "[审批中心 · 系统管理 · 审计观测]",
+        "to": "/console"
+      },
+      {
+        "from": "/settings",
+        "click": "[对话]",
+        "to": "/chat"
+      },
+      {
+        "from": "/settings",
+        "click": "[群聊]",
+        "to": "/chat/group"
+      },
+      {
+        "from": "/settings",
+        "click": "[工作流]",
+        "to": "/workflows"
+      }
+    ],
+    "dialogs": [],
+    "toasts": [],
+    "errors": [],
+    "render": [],
+    "targets0": 31
+  },
+  {
+    "page": "trajectory",
+    "path": "/chat/b03340aa-8bae-45e4-a3b0-af50cd58291c/trajectory",
+    "clicks": [
+      {
+        "target": "[ontology-agent · 回主页]",
+        "navigatedTo": "/"
+      },
+      {
+        "target": "[工作台]"
+      },
+      {
+        "target": "[对话]",
+        "navigatedTo": "/chat"
+      },
+      {
+        "target": "[群聊]",
+        "navigatedTo": "/chat/group"
+      },
+      {
+        "target": "[工作流]",
+        "navigatedTo": "/workflows"
+      },
+      {
+        "target": "[任务中心]",
+        "navigatedTo": "/tasks"
+      },
+      {
+        "target": "[语义资产]"
+      },
+      {
+        "target": "[平台能力]",
+        "navigatedTo": "/platform"
+      },
+      {
+        "target": "[管理控制台]",
+        "navigatedTo": "/console"
+      },
+      {
+        "target": "[用户设置]",
+        "navigatedTo": "/settings"
+      },
+      {
+        "target": "[设置]",
+        "navigatedTo": "/settings"
+      },
+      {
+        "target": "[展开侧边栏]"
+      },
+      {
+        "target": "工作台"
+      },
+      {
+        "target": "[对话]",
+        "navigatedTo": "/chat"
+      },
+      {
+        "target": "[群聊]",
+        "navigatedTo": "/chat/group"
+      }
+    ],
+    "navigations": [
+      {
+        "from": "/chat/b03340aa-8bae-45e4-a3b0-af50cd58291c/trajectory",
+        "click": "[ontology-agent · 回主页]",
+        "to": "/"
+      },
+      {
+        "from": "/chat/b03340aa-8bae-45e4-a3b0-af50cd58291c/trajectory",
+        "click": "[对话]",
+        "to": "/chat"
+      },
+      {
+        "from": "/chat/b03340aa-8bae-45e4-a3b0-af50cd58291c/trajectory",
+        "click": "[群聊]",
+        "to": "/chat/group"
+      },
+      {
+        "from": "/chat/b03340aa-8bae-45e4-a3b0-af50cd58291c/trajectory",
+        "click": "[工作流]",
+        "to": "/workflows"
+      },
+      {
+        "from": "/chat/b03340aa-8bae-45e4-a3b0-af50cd58291c/trajectory",
+        "click": "[任务中心]",
+        "to": "/tasks"
+      },
+      {
+        "from": "/chat/b03340aa-8bae-45e4-a3b0-af50cd58291c/trajectory",
+        "click": "[平台能力]",
+        "to": "/platform"
+      },
+      {
+        "from": "/chat/b03340aa-8bae-45e4-a3b0-af50cd58291c/trajectory",
+        "click": "[管理控制台]",
+        "to": "/console"
+      },
+      {
+        "from": "/chat/b03340aa-8bae-45e4-a3b0-af50cd58291c/trajectory",
+        "click": "[用户设置]",
+        "to": "/settings"
+      },
+      {
+        "from": "/chat/b03340aa-8bae-45e4-a3b0-af50cd58291c/trajectory",
+        "click": "[设置]",
+        "to": "/settings"
+      },
+      {
+        "from": "/chat/b03340aa-8bae-45e4-a3b0-af50cd58291c/trajectory",
+        "click": "[对话]",
+        "to": "/chat"
+      },
+      {
+        "from": "/chat/b03340aa-8bae-45e4-a3b0-af50cd58291c/trajectory",
+        "click": "[群聊]",
+        "to": "/chat/group"
+      }
+    ],
+    "dialogs": [],
+    "toasts": [],
+    "errors": [],
+    "render": [],
+    "targets0": 30
+  },
+  {
+    "page": "chat-group-room",
+    "path": "/chat/group/1dc278f6-ccec-4ae6-840a-5fe75f16253c",
+    "clicks": [
+      {
+        "target": "[ontology-agent · 回主页]",
+        "navigatedTo": "/"
+      },
+      {
+        "target": "工作台"
+      },
+      {
+        "target": "[对话]",
+        "navigatedTo": "/chat"
+      },
+      {
+        "target": "[群聊]",
+        "navigatedTo": "/chat/group"
+      },
+      {
+        "target": "[工作流]",
+        "navigatedTo": "/workflows"
+      },
+      {
+        "target": "[任务中心]",
+        "navigatedTo": "/tasks"
+      },
+      {
+        "target": "语义资产"
+      },
+      {
+        "target": "[本体工作台]",
+        "navigatedTo": "/ontology"
+      },
+      {
+        "target": "[知识库]",
+        "navigatedTo": "/kb"
+      },
+      {
+        "target": "[记忆管理]",
+        "navigatedTo": "/memory"
+      },
+      {
+        "target": "[插件市场 · 工具技能 · MCP · Agent 目录]",
+        "navigatedTo": "/platform"
+      },
+      {
+        "target": "[审批中心 · 系统管理 · 审计观测]",
+        "navigatedTo": "/console"
+      },
+      {
+        "target": "[个人资料与偏好]",
+        "navigatedTo": "/settings"
+      },
+      {
+        "target": "[设置]",
+        "navigatedTo": "/settings"
+      },
+      {
+        "target": "[收起侧边栏]"
+      }
+    ],
+    "navigations": [
+      {
+        "from": "/chat/group/1dc278f6-ccec-4ae6-840a-5fe75f16253c",
+        "click": "[ontology-agent · 回主页]",
+        "to": "/"
+      },
+      {
+        "from": "/chat/group/1dc278f6-ccec-4ae6-840a-5fe75f16253c",
+        "click": "[对话]",
+        "to": "/chat"
+      },
+      {
+        "from": "/chat/group/1dc278f6-ccec-4ae6-840a-5fe75f16253c",
+        "click": "[群聊]",
+        "to": "/chat/group"
+      },
+      {
+        "from": "/chat/group/1dc278f6-ccec-4ae6-840a-5fe75f16253c",
+        "click": "[工作流]",
+        "to": "/workflows"
+      },
+      {
+        "from": "/chat/group/1dc278f6-ccec-4ae6-840a-5fe75f16253c",
+        "click": "[任务中心]",
+        "to": "/tasks"
+      },
+      {
+        "from": "/chat/group/1dc278f6-ccec-4ae6-840a-5fe75f16253c",
+        "click": "[本体工作台]",
+        "to": "/ontology"
+      },
+      {
+        "from": "/chat/group/1dc278f6-ccec-4ae6-840a-5fe75f16253c",
+        "click": "[知识库]",
+        "to": "/kb"
+      },
+      {
+        "from": "/chat/group/1dc278f6-ccec-4ae6-840a-5fe75f16253c",
+        "click": "[记忆管理]",
+        "to": "/memory"
+      },
+      {
+        "from": "/chat/group/1dc278f6-ccec-4ae6-840a-5fe75f16253c",
+        "click": "[插件市场 · 工具技能 · MCP · Agent 目录]",
+        "to": "/platform"
+      },
+      {
+        "from": "/chat/group/1dc278f6-ccec-4ae6-840a-5fe75f16253c",
+        "click": "[审批中心 · 系统管理 · 审计观测]",
+        "to": "/console"
+      },
+      {
+        "from": "/chat/group/1dc278f6-ccec-4ae6-840a-5fe75f16253c",
+        "click": "[个人资料与偏好]",
+        "to": "/settings"
+      },
+      {
+        "from": "/chat/group/1dc278f6-ccec-4ae6-840a-5fe75f16253c",
+        "click": "[设置]",
+        "to": "/settings"
+      }
+    ],
+    "dialogs": [],
+    "toasts": [],
+    "errors": [],
+    "render": [],
+    "targets0": 24
+  },
+  {
+    "page": "workflow-editor",
+    "path": "/workflows/2be5daab-72a9-47d0-a059-c8feb4f588bd",
+    "clicks": [
+      {
+        "target": "[ontology-agent · 回主页]",
+        "navigatedTo": "/"
+      },
+      {
+        "target": "[工作台]"
+      },
+      {
+        "target": "[对话]",
+        "navigatedTo": "/chat"
+      },
+      {
+        "target": "[群聊]",
+        "navigatedTo": "/chat/group"
+      },
+      {
+        "target": "[工作流]",
+        "navigatedTo": "/workflows"
+      },
+      {
+        "target": "[任务中心]",
+        "navigatedTo": "/tasks"
+      },
+      {
+        "target": "[语义资产]"
+      },
+      {
+        "target": "[平台能力]",
+        "navigatedTo": "/platform"
+      },
+      {
+        "target": "[管理控制台]",
+        "navigatedTo": "/console"
+      },
+      {
+        "target": "[用户设置]",
+        "navigatedTo": "/settings"
+      },
+      {
+        "target": "[设置]",
+        "clickErr": "TimeoutError: locator.click: Timeout 5000ms exceeded."
+      },
+      {
+        "target": "[展开侧边栏]"
+      },
+      {
+        "target": "工作台"
+      },
+      {
+        "target": "[对话]",
+        "navigatedTo": "/chat"
+      },
+      {
+        "target": "[搜索]",
+        "dialogOpened": true
+      }
+    ],
+    "navigations": [
+      {
+        "from": "/workflows/2be5daab-72a9-47d0-a059-c8feb4f588bd",
+        "click": "[ontology-agent · 回主页]",
+        "to": "/"
+      },
+      {
+        "from": "/workflows/2be5daab-72a9-47d0-a059-c8feb4f588bd",
+        "click": "[对话]",
+        "to": "/chat"
+      },
+      {
+        "from": "/workflows/2be5daab-72a9-47d0-a059-c8feb4f588bd",
+        "click": "[群聊]",
+        "to": "/chat/group"
+      },
+      {
+        "from": "/workflows/2be5daab-72a9-47d0-a059-c8feb4f588bd",
+        "click": "[工作流]",
+        "to": "/workflows"
+      },
+      {
+        "from": "/workflows/2be5daab-72a9-47d0-a059-c8feb4f588bd",
+        "click": "[任务中心]",
+        "to": "/tasks"
+      },
+      {
+        "from": "/workflows/2be5daab-72a9-47d0-a059-c8feb4f588bd",
+        "click": "[平台能力]",
+        "to": "/platform"
+      },
+      {
+        "from": "/workflows/2be5daab-72a9-47d0-a059-c8feb4f588bd",
+        "click": "[管理控制台]",
+        "to": "/console"
+      },
+      {
+        "from": "/workflows/2be5daab-72a9-47d0-a059-c8feb4f588bd",
+        "click": "[用户设置]",
+        "to": "/settings"
+      },
+      {
+        "from": "/workflows/2be5daab-72a9-47d0-a059-c8feb4f588bd",
+        "click": "[对话]",
+        "to": "/chat"
+      }
+    ],
+    "dialogs": [
+      "[搜索]"
+    ],
+    "toasts": [],
+    "errors": [],
+    "render": [],
+    "targets0": 37
+  },
+  {
+    "page": "agent-detail",
+    "path": "/agents/d9563bf4-ab09-4d53-84a6-c1a3b2856b7c",
+    "clicks": [
+      {
+        "target": "[ontology-agent · 回主页]",
+        "navigatedTo": "/"
+      },
+      {
+        "target": "[工作台]"
+      },
+      {
+        "target": "[对话]",
+        "navigatedTo": "/chat"
+      },
+      {
+        "target": "[群聊]",
+        "navigatedTo": "/chat/group"
+      },
+      {
+        "target": "[工作流]",
+        "navigatedTo": "/workflows"
+      },
+      {
+        "target": "[任务中心]",
+        "navigatedTo": "/tasks"
+      },
+      {
+        "target": "[语义资产]"
+      },
+      {
+        "target": "[本体工作台]",
+        "navigatedTo": "/ontology"
+      },
+      {
+        "target": "[知识库]",
+        "navigatedTo": "/kb"
+      },
+      {
+        "target": "[记忆管理]",
+        "navigatedTo": "/memory"
+      },
+      {
+        "target": "[平台能力]",
+        "navigatedTo": "/platform"
+      },
+      {
+        "target": "[管理控制台]",
+        "navigatedTo": "/console"
+      },
+      {
+        "target": "[用户设置]",
+        "navigatedTo": "/settings"
+      },
+      {
+        "target": "[设置]",
+        "navigatedTo": "/settings"
+      },
+      {
+        "target": "[展开侧边栏]"
+      }
+    ],
+    "navigations": [
+      {
+        "from": "/agents/d9563bf4-ab09-4d53-84a6-c1a3b2856b7c",
+        "click": "[ontology-agent · 回主页]",
+        "to": "/"
+      },
+      {
+        "from": "/agents/d9563bf4-ab09-4d53-84a6-c1a3b2856b7c",
+        "click": "[对话]",
+        "to": "/chat"
+      },
+      {
+        "from": "/agents/d9563bf4-ab09-4d53-84a6-c1a3b2856b7c",
+        "click": "[群聊]",
+        "to": "/chat/group"
+      },
+      {
+        "from": "/agents/d9563bf4-ab09-4d53-84a6-c1a3b2856b7c",
+        "click": "[工作流]",
+        "to": "/workflows"
+      },
+      {
+        "from": "/agents/d9563bf4-ab09-4d53-84a6-c1a3b2856b7c",
+        "click": "[任务中心]",
+        "to": "/tasks"
+      },
+      {
+        "from": "/agents/d9563bf4-ab09-4d53-84a6-c1a3b2856b7c",
+        "click": "[本体工作台]",
+        "to": "/ontology"
+      },
+      {
+        "from": "/agents/d9563bf4-ab09-4d53-84a6-c1a3b2856b7c",
+        "click": "[知识库]",
+        "to": "/kb"
+      },
+      {
+        "from": "/agents/d9563bf4-ab09-4d53-84a6-c1a3b2856b7c",
+        "click": "[记忆管理]",
+        "to": "/memory"
+      },
+      {
+        "from": "/agents/d9563bf4-ab09-4d53-84a6-c1a3b2856b7c",
+        "click": "[平台能力]",
+        "to": "/platform"
+      },
+      {
+        "from": "/agents/d9563bf4-ab09-4d53-84a6-c1a3b2856b7c",
+        "click": "[管理控制台]",
+        "to": "/console"
+      },
+      {
+        "from": "/agents/d9563bf4-ab09-4d53-84a6-c1a3b2856b7c",
+        "click": "[用户设置]",
+        "to": "/settings"
+      },
+      {
+        "from": "/agents/d9563bf4-ab09-4d53-84a6-c1a3b2856b7c",
+        "click": "[设置]",
+        "to": "/settings"
+      }
+    ],
+    "dialogs": [],
+    "toasts": [],
+    "errors": [],
+    "render": [],
+    "targets0": 20
+  },
+  {
+    "page": "kb-explore",
+    "path": "/kb/explore/01a11660-2734-7820-9396-7f1d24df3324",
+    "clicks": [
+      {
+        "target": "[ontology-agent · 回主页]",
+        "navigatedTo": "/"
+      },
+      {
+        "target": "工作台"
+      },
+      {
+        "target": "语义资产"
+      },
+      {
+        "target": "[本体工作台]",
+        "navigatedTo": "/ontology"
+      },
+      {
+        "target": "[知识库]",
+        "navigatedTo": "/kb"
+      },
+      {
+        "target": "[记忆管理]",
+        "navigatedTo": "/memory"
+      },
+      {
+        "target": "[插件市场 · 工具技能 · MCP · Agent 目录]",
+        "navigatedTo": "/platform"
+      },
+      {
+        "target": "[审批中心 · 系统管理 · 审计观测]",
+        "navigatedTo": "/console"
+      },
+      {
+        "target": "[个人资料与偏好]",
+        "navigatedTo": "/settings"
+      },
+      {
+        "target": "[设置]",
+        "navigatedTo": "/settings"
+      },
+      {
+        "target": "[收起侧边栏]"
+      },
+      {
+        "target": "[工作台]"
+      },
+      {
+        "target": "[对话]",
+        "navigatedTo": "/chat"
+      },
+      {
+        "target": "[群聊]",
+        "navigatedTo": "/chat/group"
+      },
+      {
+        "target": "[工作流]",
+        "navigatedTo": "/workflows"
+      }
+    ],
+    "navigations": [
+      {
+        "from": "/kb/explore/01a11660-2734-7820-9396-7f1d24df3324",
+        "click": "[ontology-agent · 回主页]",
+        "to": "/"
+      },
+      {
+        "from": "/kb/explore/01a11660-2734-7820-9396-7f1d24df3324",
+        "click": "[本体工作台]",
+        "to": "/ontology"
+      },
+      {
+        "from": "/kb/explore/01a11660-2734-7820-9396-7f1d24df3324",
+        "click": "[知识库]",
+        "to": "/kb"
+      },
+      {
+        "from": "/kb/explore/01a11660-2734-7820-9396-7f1d24df3324",
+        "click": "[记忆管理]",
+        "to": "/memory"
+      },
+      {
+        "from": "/kb/explore/01a11660-2734-7820-9396-7f1d24df3324",
+        "click": "[插件市场 · 工具技能 · MCP · Agent 目录]",
+        "to": "/platform"
+      },
+      {
+        "from": "/kb/explore/01a11660-2734-7820-9396-7f1d24df3324",
+        "click": "[审批中心 · 系统管理 · 审计观测]",
+        "to": "/console"
+      },
+      {
+        "from": "/kb/explore/01a11660-2734-7820-9396-7f1d24df3324",
+        "click": "[个人资料与偏好]",
+        "to": "/settings"
+      },
+      {
+        "from": "/kb/explore/01a11660-2734-7820-9396-7f1d24df3324",
+        "click": "[设置]",
+        "to": "/settings"
+      },
+      {
+        "from": "/kb/explore/01a11660-2734-7820-9396-7f1d24df3324",
+        "click": "[对话]",
+        "to": "/chat"
+      },
+      {
+        "from": "/kb/explore/01a11660-2734-7820-9396-7f1d24df3324",
+        "click": "[群聊]",
+        "to": "/chat/group"
+      },
+      {
+        "from": "/kb/explore/01a11660-2734-7820-9396-7f1d24df3324",
+        "click": "[工作流]",
+        "to": "/workflows"
+      }
+    ],
+    "dialogs": [],
+    "toasts": [],
+    "errors": [
+      "http.422: GET http://localhost:3276/api/v1/kb/graph/search?q=&top_k=20",
+      "console.error: Failed to load resource: the server responded with a status of 422 (Unprocessable Content)",
+      "http.422: GET http://localhost:3276/api/v1/kb/graph/search?q=&top_k=20",
+      "console.error: Failed to load resource: the server responded with a status of 422 (Unprocessable Content)",
+      "http.422: GET http://localhost:3276/api/v1/kb/graph/search?q=&top_k=20",
+      "console.error: Failed to load resource: the server responded with a status of 422 (Unprocessable Content)",
+      "http.422: GET http://localhost:3276/api/v1/kb/graph/search?q=&top_k=20",
+      "console.error: Failed to load resource: the server responded with a status of 422 (Unprocessable Content)",
+      "http.422: GET http://localhost:3276/api/v1/kb/graph/search?q=&top_k=20",
+      "console.error: Failed to load resource: the server responded with a status of 422 (Unprocessable Content)",
+      "http.422: GET http://localhost:3276/api/v1/kb/graph/search?q=&top_k=20",
+      "console.error: Failed to load resource: the server responded with a status of 422 (Unprocessable Content)",
+      "http.422: GET http://localhost:3276/api/v1/kb/graph/search?q=&top_k=20",
+      "console.error: Failed to load resource: the server responded with a status of 422 (Unprocessable Content)",
+      "http.422: GET http://localhost:3276/api/v1/kb/graph/search?q=&top_k=20",
+      "console.error: Failed to load resource: the server responded with a status of 422 (Unprocessable Content)",
+      "http.422: GET http://localhost:3276/api/v1/kb/graph/search?q=&top_k=20",
+      "console.error: Failed to load resource: the server responded with a status of 422 (Unprocessable Content)",
+      "http.422: GET http://localhost:3276/api/v1/kb/graph/search?q=&top_k=20",
+      "console.error: Failed to load resource: the server responded with a status of 422 (Unprocessable Content)",
+      "http.422: GET http://localhost:3276/api/v1/kb/graph/search?q=&top_k=20",
+      "console.error: Failed to load resource: the server responded with a status of 422 (Unprocessable Content)",
+      "http.422: GET http://localhost:3276/api/v1/kb/graph/search?q=&top_k=20",
+      "console.error: Failed to load resource: the server responded with a status of 422 (Unprocessable Content)"
+    ],
+    "render": [],
+    "targets0": 41
+  },
+  {
+    "page": "_legacy_redirects",
+    "path": "-",
+    "clicks": [],
+    "navigations": [],
+    "dialogs": [],
+    "toasts": [],
+    "errors": [],
+    "redirects": [
+      {
+        "from": "/approvals",
+        "to": "/console/approvals",
+        "finalUrl": "/console/approvals",
+        "ok": true
+      },
+      {
+        "from": "/admin",
+        "to": "/console/admin",
+        "finalUrl": "/console/admin",
+        "ok": true
+      },
+      {
+        "from": "/admin?tab=audit",
+        "to": "/console/admin?tab=audit",
+        "finalUrl": "/console/admin?tab=audit",
+        "ok": true
+      },
+      {
+        "from": "/system",
+        "to": "/console/admin",
+        "finalUrl": "/console/admin",
+        "ok": true
+      },
+      {
+        "from": "/console/market",
+        "to": "/platform/market",
+        "finalUrl": "/platform/market",
+        "ok": true
+      },
+      {
+        "from": "/console/tools",
+        "to": "/platform/tools",
+        "finalUrl": "/platform/tools",
+        "ok": true
+      },
+      {
+        "from": "/console/mcp",
+        "to": "/platform/mcp",
+        "finalUrl": "/platform/mcp",
+        "ok": true
+      },
+      {
+        "from": "/agents",
+        "to": "/platform/agents",
+        "finalUrl": "/platform/agents",
+        "ok": true
+      },
+      {
+        "from": "/mcp",
+        "to": "/platform/mcp",
+        "finalUrl": "/platform/mcp",
+        "ok": true
+      },
+      {
+        "from": "/marketplace",
+        "to": "/platform/market",
+        "finalUrl": "/platform/market",
+        "ok": true
+      },
+      {
+        "from": "/tools",
+        "to": "/platform/tools",
+        "finalUrl": "/platform/tools",
+        "ok": true
+      }
+    ]
+  }
+]

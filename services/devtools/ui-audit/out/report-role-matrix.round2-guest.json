@@ -1,0 +1,359 @@
+{
+  "base": "http://localhost:3276",
+  "ts": "2026-10-07T13:47:41.437Z",
+  "matrix": [
+    {
+      "path": "/",
+      "roles": [
+        "admin",
+        "ontologist",
+        "curator",
+        "member",
+        "super_admin"
+      ]
+    },
+    {
+      "path": "/chat",
+      "roles": [
+        "admin",
+        "ontologist",
+        "curator",
+        "member",
+        "super_admin"
+      ]
+    },
+    {
+      "path": "/chat/group",
+      "roles": [
+        "admin",
+        "ontologist",
+        "curator",
+        "member",
+        "super_admin"
+      ]
+    },
+    {
+      "path": "/workflows",
+      "roles": [
+        "admin",
+        "ontologist",
+        "super_admin"
+      ]
+    },
+    {
+      "path": "/tasks",
+      "roles": [
+        "admin",
+        "ontologist",
+        "curator",
+        "member",
+        "super_admin"
+      ]
+    },
+    {
+      "path": "/ontology",
+      "roles": [
+        "admin",
+        "ontologist",
+        "curator",
+        "super_admin"
+      ]
+    },
+    {
+      "path": "/ontology/versions",
+      "roles": [
+        "admin",
+        "ontologist",
+        "curator",
+        "super_admin"
+      ]
+    },
+    {
+      "path": "/kb",
+      "roles": [
+        "admin",
+        "ontologist",
+        "curator",
+        "member",
+        "super_admin"
+      ]
+    },
+    {
+      "path": "/kb/review",
+      "roles": [
+        "admin",
+        "curator",
+        "super_admin"
+      ]
+    },
+    {
+      "path": "/kb/playground",
+      "roles": [
+        "admin",
+        "ontologist",
+        "curator",
+        "super_admin"
+      ]
+    },
+    {
+      "path": "/memory",
+      "roles": [
+        "admin",
+        "ontologist",
+        "curator",
+        "member",
+        "super_admin"
+      ]
+    },
+    {
+      "path": "/settings",
+      "roles": [
+        "admin",
+        "ontologist",
+        "curator",
+        "member",
+        "super_admin"
+      ]
+    },
+    {
+      "path": "/agents/d9563bf4-ab09-4d53-84a6-c1a3b2856b7c",
+      "roles": [
+        "admin",
+        "curator",
+        "member",
+        "super_admin"
+      ]
+    },
+    {
+      "path": "/platform",
+      "roles": null
+    },
+    {
+      "path": "/platform/market",
+      "roles": [
+        "admin",
+        "ontologist",
+        "curator",
+        "member",
+        "super_admin"
+      ]
+    },
+    {
+      "path": "/platform/tools",
+      "roles": [
+        "admin",
+        "ontologist",
+        "member",
+        "super_admin"
+      ]
+    },
+    {
+      "path": "/platform/mcp",
+      "roles": [
+        "admin",
+        "ontologist",
+        "member",
+        "super_admin"
+      ]
+    },
+    {
+      "path": "/platform/agents",
+      "roles": [
+        "admin",
+        "curator",
+        "member",
+        "super_admin"
+      ]
+    },
+    {
+      "path": "/console",
+      "roles": null
+    },
+    {
+      "path": "/console/approvals",
+      "roles": [
+        "admin",
+        "curator",
+        "super_admin"
+      ]
+    },
+    {
+      "path": "/console/admin?tab=users",
+      "roles": [
+        "admin",
+        "super_admin"
+      ],
+      "permission": "user:read"
+    }
+  ],
+  "accounts": [
+    {
+      "email": "guest@test.local",
+      "label": "guest",
+      "login": "PASS",
+      "roles": [
+        "guest"
+      ],
+      "results": [
+        {
+          "route": "/",
+          "name": "dashboard",
+          "expected": "403",
+          "actual": "403",
+          "ok": true
+        },
+        {
+          "route": "/chat",
+          "name": "chat",
+          "expected": "403",
+          "actual": "403",
+          "ok": true
+        },
+        {
+          "route": "/chat/group",
+          "name": "chat-group",
+          "expected": "403",
+          "actual": "403",
+          "ok": true
+        },
+        {
+          "route": "/workflows",
+          "name": "workflows",
+          "expected": "403",
+          "actual": "403",
+          "ok": true
+        },
+        {
+          "route": "/tasks",
+          "name": "tasks",
+          "expected": "403",
+          "actual": "403",
+          "ok": true
+        },
+        {
+          "route": "/ontology",
+          "name": "ontology",
+          "expected": "403",
+          "actual": "403",
+          "ok": true
+        },
+        {
+          "route": "/ontology/versions",
+          "name": "ontology-versions",
+          "expected": "403",
+          "actual": "403",
+          "ok": true
+        },
+        {
+          "route": "/kb",
+          "name": "kb",
+          "expected": "403",
+          "actual": "403",
+          "ok": true
+        },
+        {
+          "route": "/kb/review",
+          "name": "kb-review",
+          "expected": "403",
+          "actual": "403",
+          "ok": true
+        },
+        {
+          "route": "/kb/playground",
+          "name": "kb-playground",
+          "expected": "403",
+          "actual": "403",
+          "ok": true
+        },
+        {
+          "route": "/memory",
+          "name": "memory",
+          "expected": "403",
+          "actual": "403",
+          "ok": true
+        },
+        {
+          "route": "/settings",
+          "name": "settings",
+          "expected": "403",
+          "actual": "403",
+          "ok": true
+        },
+        {
+          "route": "/agents/d9563bf4-ab09-4d53-84a6-c1a3b2856b7c",
+          "name": "agents-detail-deeplink",
+          "expected": "403",
+          "actual": "403",
+          "ok": true
+        },
+        {
+          "route": "/platform",
+          "name": "platform-index",
+          "expected": "render",
+          "actual": "render",
+          "ok": true
+        },
+        {
+          "route": "/platform/market",
+          "name": "platform-market",
+          "expected": "403",
+          "actual": "403",
+          "ok": true
+        },
+        {
+          "route": "/platform/tools",
+          "name": "platform-tools",
+          "expected": "403",
+          "actual": "403",
+          "ok": true
+        },
+        {
+          "route": "/platform/mcp",
+          "name": "platform-mcp",
+          "expected": "403",
+          "actual": "403",
+          "ok": true
+        },
+        {
+          "route": "/platform/agents",
+          "name": "platform-agents",
+          "expected": "403",
+          "actual": "403",
+          "ok": true
+        },
+        {
+          "route": "/console",
+          "name": "console-index",
+          "expected": "render",
+          "actual": "render",
+          "ok": true
+        },
+        {
+          "route": "/console/approvals",
+          "name": "console-approvals",
+          "expected": "403",
+          "actual": "403",
+          "ok": true
+        },
+        {
+          "route": "/console/admin?tab=users",
+          "name": "console-admin",
+          "expected": "403",
+          "actual": "403",
+          "ok": true
+        }
+      ],
+      "scopes": [
+        "kb:read",
+        "plugin:read",
+        "session:read"
+      ]
+    }
+  ],
+  "summary": {
+    "accounts": 1,
+    "routes": 21,
+    "checks": 21,
+    "failures": 0
+  }
+}

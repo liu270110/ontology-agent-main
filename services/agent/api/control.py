@@ -21,7 +21,7 @@ from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, Request, status
 
-from services.agent.api.deps import SessionChatDep, UowDep
+from services.agent.api.deps import SessionChatDep, UowDep, get_session_owned
 from services.agent.api.schemas.control import EStopActivateIn, EStopStateOut, InboxSubmitIn, InboxSubmitOut
 from services.agent.business.chat_events import ChatEventName
 from services.agent.business.kernel.errors import KernelError
@@ -95,8 +95,7 @@ async def submit_run_inbox(
     """
     req = _require_request(request, "运行注册表")
     async with uow.for_tenant(principal.tenant_id) as tx:
-        if await tx.sessions.get(session_id) is None:
-            raise GatewayError(404, "会话不存在", status_code=404)
+        await get_session_owned(tx, principal, session_id)  # A2 归属收口（红队 §5 修复批 2026-10-07）
         task = await tx.tasks.find_running_by_session(session_id)
         if task is None or task.active_run_id != run_id:
             raise GatewayError(ErrorCode.RUN_NOT_LOCAL, "RUN_NOT_LOCAL: 该会话无此活跃 Run", status_code=409)

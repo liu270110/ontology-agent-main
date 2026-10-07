@@ -173,6 +173,7 @@ class AgentKernel:
         inbox: KernelInbox | None = None,
         control_gate: Callable[[], str | None] | None = None,
         resumed_validated: tuple[dict[str, Any], ...] = (),
+        idempotency_key: str | None = None,
     ) -> RunOutcome:
         """执行一次 Run（七阶段）。取消传播下状态一致：终态经账本可追溯后重抛取消。
 
@@ -201,7 +202,15 @@ class AgentKernel:
         """
         if not ctx.trace_id:
             raise KernelContractError("TenantContext.trace_id 为空，拒绝运行（C2 可追溯底线）")
-        rc = RunContext(task, ctx, budget, clock=self._clock, approvals=approvals, ledger_sink=ledger_sink)
+        rc = RunContext(
+            task,
+            ctx,
+            budget,
+            clock=self._clock,
+            approvals=approvals,
+            ledger_sink=ledger_sink,
+            idempotency_key=idempotency_key,  # C2 EXTERNAL_WRITE 幂等锚（红队 §5 修复批）
+        )
         loop_guard = LoopGuard(abort_threshold=self._loop_abort_threshold)  # A-1：每 Run 独立记账（状态不跨 Run）
         # K12 STUCK 观测器（docs/Agent/13 §18）：每 Run 独立（Run 级状态承载于 rc，观测器无跨 Run 态）
         stuck_watch = StuckWatch(

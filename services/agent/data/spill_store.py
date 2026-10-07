@@ -30,8 +30,14 @@ class LocalDirSpillStore(SpillStore):  # 显式协议实现（结构化满足亦
         """凭 locator 取回原文（K14-a 读侧兑换）：逃逸防护与 put 同款 + 租户归属校验。
 
         - 非法（越界/跨租户/空指针）→ ValueError 结构化拒绝（防孤儿防线在 get 内收口：
-          调用方转述的 locator 不可信，root 内且路径含调用租户段才放行）；
+          调用方转述的 locator 不可信，root 内且**首段=调用租户**才放行）；
         - 读不到（不存在/已归档/IO 失败）→ None（读不到≠非法，语义可区分，见协议注释）。
+
+        红队审查 H1（docs/评审/红队攻击性审查-2026-10-06 §5，2026-10-07 修复批）：归属
+        判定从「租户段出现在路径任意位置」收紧为**位置断言 ``parts[0] == tenant``**——
+        旧判法可被深层目录撞 UUID 绕过（如 ``<others>/<victim-uuid>/x`` 恰含调用租户段）。
+        写侧同源约束：内核 spill 键首段=租户（execution.py），web fetch 键 ``web/{tenant}/…``
+        既有形态本就满足（fetch.py _spill）。
         """
         if not isinstance(locator, str) or not locator.strip():
             raise ValueError("spill locator 为空")
@@ -39,7 +45,8 @@ class LocalDirSpillStore(SpillStore):  # 显式协议实现（结构化满足亦
         target = Path(locator).resolve()
         if root not in target.parents:  # 路径逃逸防护（与 put 同款）
             raise ValueError(f"spill locator 越界: {locator[:200]}")
-        if str(tenant_id) not in target.relative_to(root).parts:  # 租户归属：locator 须位于调用租户段之下
+        parts = target.relative_to(root).parts
+        if not parts or parts[0] != str(tenant_id):  # 位置断言：首段必须=调用租户（H1，防深层撞段）
             raise ValueError(f"spill locator 跨租户访问被拒: {locator[:200]}")
         try:
             return target.read_text(encoding="utf-8")

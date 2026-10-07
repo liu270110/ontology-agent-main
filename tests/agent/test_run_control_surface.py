@@ -55,8 +55,12 @@ class FakeSessionRepo:
         self.sessions: dict[uuid.UUID, Session] = {}
         self.messages: dict[tuple[uuid.UUID, int], Message] = {}
 
-    async def get(self, session_id: uuid.UUID) -> Session | None:
-        return self.sessions.get(session_id)
+    async def get(self, session_id: uuid.UUID, *, user_id: uuid.UUID | None = None) -> Session | None:
+        # A2 修复批：端点统一经 get_session_owned 传 user_id——桩同形（归属不符同形 None）
+        session = self.sessions.get(session_id)
+        if session is None or (user_id is not None and session.user_id != user_id):
+            return None
+        return session
 
     async def get_message_by_seq(self, session_id: uuid.UUID, seq: int) -> Message | None:
         return self.messages.get((session_id, seq))
@@ -274,6 +278,69 @@ async def test_estop拒绝_run_error_retryable_解除后经重试面恢复全链
     assert await worker2.poll_once() is True
     # Assert ③：恢复执行——编排器收到 attempt 2 命令（实测裁决：解除后重试成功）
     assert len(orchestrator.commands) == 1 and orchestrator.commands[0].run_id == retry_run.id
+
+
+async def test_worker_estop激活期_审批resume被拒_零执行_C5():
+    """红队 C5（docs/评审/红队攻击性审查-2026-10-06 §5，2026-10-07 修复批）：estop 激活期
+    waiting_tool 审批中的 run 收到人工批准 → worker resume 通道**取票事务内前检命中**
+    → 4104 拒绝零执行（run cancelled、task failed 且 retryable=true、审批票不消费）——
+    暂停闸优先于审批回执，违背 estop 意图的续跑次数=0。"""
+    # Arrange：running Run + 审批票在票仓 + estop 激活（审批回执已到的形态）
+    uow = FakeUow()
+    session = Session(id=uuid.uuid4(), tenant_id=_TENANT, agent_id=uuid.uuid4(), user_id=_USER)
+    uow.session_repo.sessions[session.id] = session
+    uow.session_repo.messages[(session.id, 1)] = Message(session_id=session.id, seq=1, role="user", content=_MSG)
+    task = Task(tenant_id=_TENANT, type="chat", session_id=session.id, payload={"message_seq": 1})
+    run = task.start_run()
+    run._transition(RunStatus.RUNNING)  # waiting_tool 审批中形态（running 为其承载态）
+    task.payload = {
+        **(task.payload or {}),
+        "approvals": [
+            {
+                "ticket_id": str(uuid.uuid4()),
+                "run_id": str(run.id),
+                "param_hash": "hash-c5",
+                "approved_by": str(_USER),
+                "expires_at": None,
+            }
+        ],
+    }
+    uow.task_repo.tasks[task.id] = task
+    store = build_estop_store(None)
+    await store.activate(_TENANT, reason="演练停机", by=_USER)
+    orchestrator = CaptureOrchestrator()
+    claim = WorkerClaim(kind="resume", tenant_id=_TENANT, task_id=task.id, run_id=run.id)
+
+    class _ResumePoller:
+        async def next_work(self):
+            return claim
+
+    worker = TaskRunWorker(
+        uow=uow,
+        poller=_ResumePoller(),
+        orchestrator_provider=lambda: orchestrator,
+        policy=RunRetryPolicy(base_seconds=0.001, cap_seconds=0.002, jitter_ratio=0.0),
+        orphan_sweep_interval_s=30.0,
+        orphan_running_timeout_s=300.0,
+        estop_store=store,
+    )
+    # Act：消费 resume 工作项（estop 前检命中）
+    assert await worker.poll_once() is True
+    # Assert ①：零执行——编排器未被触达（违背 estop 意图的续跑次数=0）
+    assert orchestrator.commands == []
+    stored = uow.task_repo.tasks[task.id]
+    resumed_run = next(r for r in stored.runs if r.id == run.id)
+    # Assert ②：run cancelled + 4104 结构化 error（retryable=true，解除后可经重试面恢复）
+    assert resumed_run.status is RunStatus.CANCELLED
+    assert resumed_run.error["code"] == int(ErrorCode.ESTOP_ACTIVE)
+    assert resumed_run.error["retryable"] is True
+    assert stored.status is TaskStatus.FAILED
+    # Assert ③：审计行 run.estop_rejected（suppressed=approval_resume 归因 C5 面）
+    rejected = [e for e in uow.task_repo.events[task.id] if e.event_type == "run.estop_rejected"]
+    assert len(rejected) == 1
+    assert rejected[0].data["suppressed"] == "approval_resume"
+    # Assert ④：审批票未消费（票仓原样——取票事务内先检后消费）
+    assert stored.payload["approvals"] and stored.payload["approvals"][0]["param_hash"] == "hash-c5"
 
 
 async def test_worker_未装配estop_store_零行为变化():

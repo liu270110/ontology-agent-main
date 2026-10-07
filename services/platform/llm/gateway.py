@@ -192,6 +192,19 @@ def _extract_json(content: str) -> str:
     return text
 
 
+def _trace_header(trace_id: str | None) -> str | None:
+    """C4 trace 贯通（红队审查 §5 修复批 2026-10-07）：trace_id → X-Trace-ID 请求头值。
+
+    消毒：仅保留可见 ASCII（HTTP 头 latin-1 安全）、截 128 字符；空值返回 None（不注入
+    ——无 trace 调用零行为变化）。调用方（audited.py 装饰面）已持 trace_id，就近透传，
+    补「builtin→httpx/provider 跳 trace 彻底丢失」断链（红队 C4）。
+    """
+    if not trace_id:
+        return None
+    sanitized = "".join(ch for ch in trace_id.strip() if 32 < ord(ch) < 127)[:128]
+    return sanitized or None
+
+
 class OpenAICompatibleModelPort:
     """OpenAI 兼容 /chat/completions 结构化输出客户端（httpx.AsyncClient，超时必设）。
 
@@ -255,7 +268,7 @@ class OpenAICompatibleModelPort:
         }
         if num_ctx is not None:
             body["num_ctx"] = num_ctx
-        resp = await self._post_chat_completions(body=body, timeout_s=timeout_s)
+        resp = await self._post_chat_completions(body=body, timeout_s=timeout_s, trace_id=trace_id)
         try:
             payload = resp.json()
             content = payload["choices"][0]["message"]["content"]
@@ -274,26 +287,31 @@ class OpenAICompatibleModelPort:
 
     # ── 对话生成面（H-6 模型协议主干批，2026-09-29：裸对话 + 真流式）──────────
 
-    async def _post_chat_completions(self, *, body: dict, timeout_s: float) -> httpx.Response:
+    async def _post_chat_completions(
+        self, *, body: dict, timeout_s: float, trace_id: str | None = None
+    ) -> httpx.Response:
         """POST /chat/completions（凭证轮换面，M4.5-C §3.1）：429/401 → 冷却+轮换重试。
 
         - 无池=单凭证直驱（构造期固定 Bearer 头，单次尝试，行为与引入前逐位一致）；
         - 有池=逐请求 RR 取凭证携带 Authorization；响应 429/401 → 该凭证冷却并换下一凭证
           重试（对调用方透明）；池空（全冷却）→ 抛**最后一次原始错误**（透传，不换错型）；
-        - 其余非 200/超时/不可达照旧归一错误族，不轮换（非凭证问题）。
+        - 其余非 200/超时/不可达照旧归一错误族，不轮换（非凭证问题）；
+        - C4 trace 贯通：``trace_id`` 非空即注入 X-Trace-ID 请求头（provider 侧可归因，
+          红队审查 §5 修复批 2026-10-07）。
         """
         pool = self._credential_pool
         last_error: ModelGatewayUnavailableError | None = None
+        trace_header = _trace_header(trace_id)
         while True:
             credential: str | None = None
-            headers: dict[str, str] | None = None
+            headers: dict[str, str] | None = {"X-Trace-ID": trace_header} if trace_header else None
             if pool is not None:
                 credential = pool.acquire()
                 if credential is None:
                     # 池空（全冷却）：至少一次凭证失败才可能全冷却——透传最后一次原始错误
                     assert last_error is not None  # noqa: S101 ——不变式（见上）
                     raise last_error
-                headers = {"Authorization": f"Bearer {credential}"}
+                headers = {**(headers or {}), "Authorization": f"Bearer {credential}"}
             try:
                 resp = await self._client.post(
                     f"{self._base_url}/chat/completions",
@@ -376,7 +394,9 @@ class OpenAICompatibleModelPort:
             tools=tools,
             tool_choice=tool_choice,
         )
-        resp = await self._post_chat_completions(body=body, timeout_s=self._resolve_timeout(timeout_s))
+        resp = await self._post_chat_completions(
+            body=body, timeout_s=self._resolve_timeout(timeout_s), trace_id=trace_id
+        )
         try:
             payload = resp.json()
             content = payload["choices"][0]["message"]["content"]
@@ -422,16 +442,17 @@ class OpenAICompatibleModelPort:
         body["stream"] = True
         pool = self._credential_pool
         last_error: ModelGatewayUnavailableError | None = None
+        trace_header = _trace_header(trace_id)  # C4 trace 贯通（同 _post_chat_completions 口径）
         while True:
             credential: str | None = None
-            headers: dict[str, str] | None = None
+            headers: dict[str, str] | None = {"X-Trace-ID": trace_header} if trace_header else None
             if pool is not None:
                 credential = pool.acquire()
                 if credential is None:
                     # 池空（全冷却）：透传最后一次原始错误（同 _post_chat_completions 口径）
                     assert last_error is not None  # noqa: S101 ——不变式（见上）
                     raise last_error
-                headers = {"Authorization": f"Bearer {credential}"}
+                headers = {**(headers or {}), "Authorization": f"Bearer {credential}"}
             try:
                 async with self._client.stream(
                     "POST",

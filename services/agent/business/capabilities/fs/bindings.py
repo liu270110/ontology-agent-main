@@ -176,8 +176,10 @@ class FsToolBinding:
         """
         assert result.output is not None
         # key 分段：run_id 在绑定层不可得（ToolCall/TenantContext 均不携带）——以 call_id
-        # 分段保唯一与归属（方案建议 fs/{tenant}/{run_id}/{tool}_{hash} 的最小可行变体）。
-        key = f"fs/{ctx.tenant_id}/{call.call_id}/{self.name}.txt"
+        # 分段保唯一与归属。键首段=租户（H1 位置断言同源约束，红队审查 §5 修复批
+        # 2026-10-07）：读侧 SpillStore.get 只放行 parts[0]==tenant 的 locator，写键须同形
+        # （原 fs/ 前缀移除，内核 spill/web fetch 键同款对齐）。
+        key = f"{ctx.tenant_id}/{call.call_id}/{self.name}.txt"
         try:
             locator = await self._spill_store.put(key, serialize_output(result.output))
         except Exception as exc:  # noqa: BLE001 ——存储故障 fail-open：有界结果仍回灌（内核 spill 同款）

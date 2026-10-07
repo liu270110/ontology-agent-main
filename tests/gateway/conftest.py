@@ -21,6 +21,7 @@ from services.agent.data.orm import AgentAdapter as AgentAdapterORM
 from services.agent.data.orm import Message as MessageORM
 from services.agent.data.orm import Run as RunORM
 from services.agent.data.orm import Session as SessionORM
+from services.agent.data.orm import SessionMember as SessionMemberORM
 from services.agent.data.orm import Task as TaskORM
 from services.agent.data.orm import TaskEvent as TaskEventORM
 from services.iam.data.orm import DeviceSession as DeviceSessionORM
@@ -101,6 +102,7 @@ async def seed(gateway_uow: AsyncUnitOfWork) -> AsyncIterator[tuple[Principal, u
             delete(OutboxEventORM).where(OutboxEventORM.tenant_id == tenant.id),
             delete(RunORM).where(RunORM.tenant_id == tenant.id),
             delete(TaskORM).where(TaskORM.tenant_id == tenant.id),
+            delete(SessionMemberORM).where(SessionMemberORM.tenant_id == tenant.id),
             delete(SessionORM).where(SessionORM.tenant_id == tenant.id),
             delete(AgentORM).where(AgentORM.id == agent.id),
             # C1 me 域表先于 users 清（device_sessions/totp* 以 user_id 引用 users；

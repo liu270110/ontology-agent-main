@@ -1,0 +1,40 @@
+{
+  "suite": "agent-core",
+  "smoke": true,
+  "env": {
+    "commit": "28346012edeed859fe0fa6b97ecab9f915a18ab6",
+    "branch": "feature/redteam-fix",
+    "dirty": true,
+    "python": "3.13.0",
+    "platform": "Windows-11-10.0.26200-SP0",
+    "deploy_profile": "lite",
+    "pg_host": "localhost",
+    "pg_db": "<一次性私库 oa_wt_test_*>",
+    "redis": "fakeredis（进程内替身）",
+    "model": "确定性桩（零真网）"
+  },
+  "env_ready_s": 3.838,
+  "scenarios_run": [
+    "session_mutex_rate",
+    "cross_tenant_leak",
+    "memory_cross_contamination",
+    "side_effect_duplication",
+    "invalid_retry_count",
+    "recovery_time_s"
+  ],
+  "status_counts": {
+    "ok": 6,
+    "assert_failed": 0,
+    "error": 0
+  },
+  "finished_at": "2026-10-07T00:55:18+00:00",
+  "tag": "redteam-fix-verified",
+  "results_files": [
+    "085511-session_mutex_rate.json",
+    "085511-cross_tenant_leak.json",
+    "085511-memory_cross_contamination.json",
+    "085511-side_effect_duplication.json",
+    "085511-invalid_retry_count.json",
+    "085511-recovery_time_s.json"
+  ]
+}

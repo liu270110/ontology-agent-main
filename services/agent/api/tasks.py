@@ -19,7 +19,7 @@ from typing import Annotated, Any
 from fastapi import APIRouter, Depends, Query, Request, status
 from fastapi.responses import StreamingResponse
 
-from services.agent.api.deps import SessionReadDep, SessionWriteDep, UowDep, domain_error
+from services.agent.api.deps import SessionReadDep, SessionWriteDep, UowDep, domain_error, get_task_owned
 from services.agent.api.schemas.task import (
     TaskDetailOut,
     TaskEventOut,
@@ -33,7 +33,6 @@ from services.agent.api.schemas.task import (
     task_from_domain,
 )
 from services.agent.domain.model.task import TaskError, TaskEvent
-from services.platform.errors import GatewayError
 from services.platform.schemas import PageMeta
 
 router = APIRouter(prefix="/tasks", tags=["tasks"])
@@ -62,7 +61,11 @@ async def list_tasks(
     page: Annotated[int, Query(ge=1)] = 1,
     page_size: Annotated[int, Query(ge=1, le=100)] = 20,
 ) -> TaskListOut:
-    """偏移分页改 page/page_size（B1 批，api/01 §3.1；offset=(page-1)*page_size 内部换算）。"""
+    """偏移分页改 page/page_size（B1 批，api/01 §3.1；offset=(page-1)*page_size 内部换算）。
+
+    A2 归属收口（红队 §5 修复批 2026-10-07）：恒带 user_id 归属过滤（repo 层经会话
+    EXISTS 子查询）——列表只见本人会话的任务。
+    """
     offset = (page - 1) * page_size
     async with uow.for_tenant(principal.tenant_id) as tx:
         items = await tx.tasks.list(
@@ -71,8 +74,11 @@ async def list_tasks(
             task_type=type_filter,
             offset=offset,
             limit=page_size,
+            user_id=principal.user_id,
         )
-        total = await tx.tasks.count(session_id=session_id, status=status_filter, task_type=type_filter)
+        total = await tx.tasks.count(
+            session_id=session_id, status=status_filter, task_type=type_filter, user_id=principal.user_id
+        )
     return TaskListOut(
         data=[task_from_domain(t) for t in items],
         meta=PageMeta(page=page, page_size=page_size, total=total),
@@ -82,9 +88,7 @@ async def list_tasks(
 @router.get("/{task_id}", summary="任务详情（状态 / 用量 / Run 历史）")
 async def get_task(task_id: uuid.UUID, principal: SessionReadDep, uow: UowDep) -> TaskDetailOut:
     async with uow.for_tenant(principal.tenant_id) as tx:
-        task = await tx.tasks.get(task_id)
-    if task is None:
-        raise GatewayError(404, "任务不存在", status_code=404)
+        task = await get_task_owned(tx, principal, task_id)  # A2 归属收口（红队 §5）
     return task_detail_from_domain(task)
 
 
@@ -96,9 +100,7 @@ async def cancel_task(task_id: uuid.UUID, principal: SessionWriteDep, uow: UowDe
     """
     try:
         async with uow.for_tenant(principal.tenant_id) as tx:
-            task = await tx.tasks.get(task_id)
-            if task is None:
-                raise GatewayError(404, "任务不存在", status_code=404)
+            task = await get_task_owned(tx, principal, task_id)  # A2 归属收口（红队 §5）
             task.cancel()  # 非法迁移/终态不可逆在聚合内断言（04 §2）
             await tx.tasks.save(task)  # 级联保存活跃 Run 的 cancelled 终态
             await tx.tasks.append_event(task.id, TaskEvent(task_id=task.id, event_type="task.cancelled", data={}))
@@ -133,9 +135,7 @@ async def list_task_events(
     """
     wants_sse = request is not None and _SSE_MEDIA_TYPE in request.headers.get("accept", "")
     async with uow.for_tenant(principal.tenant_id) as tx:
-        task = await tx.tasks.get(task_id)
-        if task is None:
-            raise GatewayError(404, "任务不存在", status_code=404)
+        await get_task_owned(tx, principal, task_id)  # A2 归属收口（红队 §5）
     if wants_sse and request is not None:
         header_id = request.headers.get("last-event-id", "").strip()
         effective = int(header_id) if header_id.isdigit() else after_seq
@@ -229,8 +229,7 @@ async def list_task_logs(
     `{items:[{ts,level,line}], next_cursor}`，items 为冻结口径）。数据源=task_events 只读
     投影（与 /events 同源不同视图）；next_cursor=after_seq 续读游标（字符串），取尽为 null。"""
     async with uow.for_tenant(principal.tenant_id) as tx:
-        if await tx.tasks.get(task_id) is None:
-            raise GatewayError(404, "任务不存在", status_code=404)
+        await get_task_owned(tx, principal, task_id)  # A2 归属收口（红队 §5）
         rows = await tx.tasks.list_events(task_id, after_seq=after_seq, limit=limit + 1)
     has_more = len(rows) > limit
     page = rows[:limit]
@@ -260,9 +259,7 @@ async def retry_task(task_id: uuid.UUID, body: TaskRetryIn, principal: SessionWr
     """
     try:
         async with uow.for_tenant(principal.tenant_id) as tx:
-            task = await tx.tasks.get(task_id)
-            if task is None:
-                raise GatewayError(404, "任务不存在", status_code=404)
+            task = await get_task_owned(tx, principal, task_id)  # A2 归属收口（红队 §5）
             last = task.runs[-1] if task.runs else None
             if last is not None and last.error is not None and last.error.get("retryable") is False:
                 raise TaskError("4102 TASK_NOT_RETRYABLE: 最近一次失败 retryable=false（RunRetryPolicy 口径，04 §3）")

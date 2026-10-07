@@ -1,34 +1,43 @@
 """benchmarks 统一入口（docs/Agent/16 §3）：python benchmarks/run.py --suite rag [--smoke]。
 
-套件分发：rag 已实现（benchmarks/suites/rag/runner.py）；agent-core / intent /
-ontology-scale 随各自波次落地，此处显式报错不静默。
+套件分发：rag（benchmarks/suites/rag/runner.py）与 agent-core（suites/agent-core/runner.py，
+2026-10-07 恢复入口——rag 批合并时误摘，红队修复批需 --suite agent-core 复验）已实现；
+intent / ontology-scale 随各自波次落地，此处显式报错不静默。
 
 示例（仓库根）：
     python benchmarks/run.py --suite rag --smoke          # 全链冒烟：进库+检索+基线+六维落盘
     python benchmarks/run.py --suite rag --tag v0.2.0     # 常规跑（优化后换 tag 留曲线）
+    python benchmarks/run.py --suite agent-core --smoke --tag redteam-fix-verified
 """
 
 from __future__ import annotations
 
 import argparse
 import asyncio
+import importlib.util
 import json
 import sys
+import time
+from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]  # benchmarks/run.py → 仓库根
 sys.path.insert(0, str(ROOT))
 
 from benchmarks.suites.rag.config import RagBenchSettings  # noqa: E402
 
-_IMPLEMENTED_SUITES = ("rag",)
+_IMPLEMENTED_SUITES = ("rag", "agent-core")
+
+_BENCH_ROOT = Path(__file__).resolve().parent
 
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="benchmarks.run", description="ontology-agent 基准对比套件统一入口")
-    parser.add_argument("--suite", required=True, choices=_IMPLEMENTED_SUITES, help="套件名（当前已实现：rag）")
+    parser.add_argument("--suite", required=True, choices=_IMPLEMENTED_SUITES, help="套件名（已实现：rag/agent-core）")
     parser.add_argument("--tag", default=None, help="运行标签（默认读 BENCH_RAG_TAG，缺省 v0）")
     parser.add_argument("--smoke", action="store_true", help="全链冒烟（rag：进库+检索+基线+六维落盘）")
+    parser.add_argument("--scenario", default=None, help="agent-core：只跑指定场景（缺省全量）")
     parser.add_argument("--limit", type=int, default=None, help="只跑前 N 个金标查询（调试用；缺省全量 20）")
     parser.add_argument(
         "--harness",
@@ -57,6 +66,8 @@ def main(argv: list[str] | None = None) -> int:
     if args.suite not in _IMPLEMENTED_SUITES:
         print(f"suite {args.suite!r} 未实现（当前已实现：{_IMPLEMENTED_SUITES}）", file=sys.stderr)
         return 2
+    if args.suite == "agent-core":
+        return _run_agent_core(args)
     if args.skip_ingest and not (args.kb_id and args.tenant_id):
         print("--skip-ingest 须配 --kb-id 与 --tenant-id（collection 与建库租户）", file=sys.stderr)
         return 2
@@ -109,6 +120,112 @@ def _console_digest(result: dict) -> dict:
             "cost_tokens_per_query": round(mt["cost_per_query_tokens"], 0),
         }
     return {"suite": result.get("suite"), "tag": result.get("tag"), "mode": result.get("mode"), "metrics": rows}
+
+
+# ---------------------------------------------------------------- agent-core 套件（16 篇 §1/§3 文件位加载形态）
+
+
+def _load_suite_runner(suite: str) -> Any:
+    """按 suite 名加载 suites/<suite>/runner.py（目录名含连字符，文件位 importlib 加载）。"""
+    runner_path = _BENCH_ROOT / "suites" / suite / "runner.py"
+    if not runner_path.is_file():
+        raise FileNotFoundError(f"suite 不存在: {suite}（期望 {runner_path}）")
+    spec = importlib.util.spec_from_file_location(f"bench_suite_{suite.replace('-', '_')}_runner", str(runner_path))
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+def _key_metric_display(runner: Any, result: dict[str, Any]) -> str:
+    key = runner.KEY_METRIC.get(result["scenario"])
+    value = result["metrics"].get(key) if key else None
+    return f"{key}={value}" if key else "-"
+
+
+def _asserts_display(result: dict[str, Any]) -> str:
+    if not result["asserts"]:
+        return "-"
+    passed = sum(1 for item in result["asserts"] if item["passed"])
+    return f"{passed}/{len(result['asserts'])} 通过"
+
+
+def _write_summary(
+    loaded_runner: Any, suite: str, tag: str, manifest: dict[str, Any], results: list[dict[str, Any]]
+) -> Path:
+    """SUMMARY.md 追加式汇总（16 篇 §3：不覆盖历史——每次优化后的参考指标曲线）。"""
+    summary_path = _BENCH_ROOT / "results" / suite / "SUMMARY.md"
+    summary_path.parent.mkdir(parents=True, exist_ok=True)
+    env = manifest["env"]
+    commit = (env.get("commit") or "")[:8] or "unknown"
+    lines = [
+        "",
+        "## "
+        f"{manifest['finished_at']} tag={tag or '-'} smoke={manifest['smoke']} "
+        f"commit={commit} branch={env.get('branch') or '-'}",
+        "",
+        "| 场景 | 关键指标 | 断言 | 状态 | 耗时s |",
+        "| ---- | ---- | ---- | ---- | ---- |",
+    ]
+    for result in results:
+        lines.append(
+            f"| {result['scenario']} | {_key_metric_display(loaded_runner, result)} "
+            f"| {_asserts_display(result)} | {result['status']} | {result['duration_s']} |"
+        )
+    lines.append("")
+    counts = manifest["status_counts"]
+    lines.append(
+        f"> 执行 {len(results)} 场景：ok={counts['ok']} "
+        f"assert_failed={counts['assert_failed']} error={counts['error']}；"
+        "环境=一次性私库+fakeredis+确定性桩（零真网）"
+    )
+    with summary_path.open("a", encoding="utf-8") as fh:
+        fh.write("\n".join(lines) + "\n")
+    return summary_path
+
+
+def _run_agent_core(args: argparse.Namespace) -> int:
+    """agent-core 六场景（红队 A/B/C/H 域）：一次性私库+fakeredis+确定性桩，结果 JSON+manifest+SUMMARY。"""
+    runner = _load_suite_runner(args.suite)
+    date_dir = datetime.now().strftime("%Y-%m-%d")
+    out_dir = _BENCH_ROOT / "results" / args.suite / date_dir
+    out_dir.mkdir(parents=True, exist_ok=True)
+    clock = time.strftime("%H%M%S")
+    tag = args.tag or ""
+    print(f"[bench] suite={args.suite} tag={tag or '-'} smoke={args.smoke} → {out_dir}")
+
+    if sys.platform == "win32":  # psycopg 异步要求 Selector 循环（须在 asyncio.run 前固定）
+        asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+
+    async def _run() -> tuple[list[dict[str, Any]], dict[str, Any]]:
+        return await runner.run_suite(smoke=args.smoke, only=args.scenario)
+
+    try:
+        results, manifest = asyncio.run(_run())
+    except Exception as exc:  # noqa: BLE001 ——环境装配失败：退出码 1，错误如实上屏
+        print(f"[bench] 环境装配/运行失败: {type(exc).__name__}: {exc}", file=sys.stderr)
+        return 1
+
+    for result in results:
+        scenario_file = out_dir / f"{clock}-{result['scenario']}.json"
+        scenario_file.write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
+        key = _key_metric_display(runner, result)
+        print(f"[bench] {result['scenario']:<28} {result['status']:<14} {key}")
+        if result["error"]:
+            print(f"         error: {result['error']}")
+    manifest_path = out_dir / f"{clock}-manifest.json"
+    manifest["tag"] = tag
+    manifest["results_files"] = [f"{clock}-{r['scenario']}.json" for r in results]
+    manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
+    summary_path = _write_summary(runner, args.suite, tag, manifest, results)
+    counts = manifest["status_counts"]
+    print(
+        f"[bench] 完成: ok={counts['ok']} assert_failed={counts['assert_failed']} error={counts['error']}"
+        f"；产物={manifest_path.parent}"
+    )
+    print(f"[bench] SUMMARY（追加式）: {summary_path}")
+    return 0 if counts["error"] == 0 else 1
 
 
 if __name__ == "__main__":

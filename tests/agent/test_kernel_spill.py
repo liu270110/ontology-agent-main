@@ -94,14 +94,15 @@ async def test_执行断点接线_超大成功结果被spill():
     kernel = AgentKernel(dispatcher, spill_store=store)
     outcome = await kernel.run(make_task(), make_ctx(), budget=_BUDGET)
     assert outcome.status == "completed"
-    assert store.put_keys and store.put_keys[0].startswith("spill/")  # 租户/run/call 分段键
+    first_seg = store.put_keys[0].replace("\\", "/").split("/")[0]  # H1 位置断言同源：键首段=租户
+    assert len(first_seg) == 36  # uuid4 str 长度（租户段打头，run/call 段随其后）
 
 
 async def test_本地目录存储_落盘可取回(tmp_path: Path):
     from services.agent.data.spill_store import LocalDirSpillStore
 
     store = LocalDirSpillStore(tmp_path)
-    locator = await store.put(f"spill/{uuid.uuid4()}/r/c.json", '{"payload": "原文"}')
+    locator = await store.put(f"{uuid.uuid4()}/r/c.json", '{"payload": "原文"}')
     assert Path(locator).read_text(encoding="utf-8") == '{"payload": "原文"}'
     with pytest.raises(ValueError):  # 路径逃逸防护
         await store.put("../escape.json", "x")

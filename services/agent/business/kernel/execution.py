@@ -9,6 +9,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 
 from services.agent.business.kernel.dispatcher import ExtensionDispatcher
@@ -29,7 +30,7 @@ from services.agent.domain.model.kernel_actions import (
 )
 from services.agent.domain.model.kernel_context import TenantContext, TrustLevel
 from services.agent.domain.model.kernel_planning import PlanStep
-from services.agent.domain.model.step_state import LoopStage, StepStatus
+from services.agent.domain.model.step_state import LoopStage, StepState, StepStatus
 from services.platform.config import get_settings
 from services.platform.errors import ErrorCode
 
@@ -37,6 +38,10 @@ logger = logging.getLogger(__name__)
 
 _APPROVAL_REQUIRED_MODES = frozenset({ExecutionMode.EXTERNAL_WRITE, ExecutionMode.CODE})
 _TOOL_ERROR_MAX_CHARS = 2048  # 工具错误正文硬截断（hermes 勘察细节 2，02 §11.2-2：「错误即反馈」回流防灌爆）
+# H5 启发式下界常数（红队审查 §5 修复批 2026-10-07）：真 LLM 回传的最小速率与 chars/token
+# 比（温和量级，仅供低报检测估算；精确计量以 llm_calls 冷账本为准，audited.py 同口径）。
+_USAGE_MIN_TOKENS_PER_S = 10.0
+_USAGE_CHARS_PER_TOKEN = 4.0
 
 
 def _err(code: ErrorCode, message: str) -> str:
@@ -53,6 +58,7 @@ class ExecutionStage:
         *,
         tool_timeout_s: float | None = None,
         spill_store: SpillStore | None = None,
+        usage_floor_ratio: float | None = None,
     ) -> None:
         self._dispatcher = dispatcher
         self._emit = emit
@@ -60,16 +66,29 @@ class ExecutionStage:
         # 显式注入优先（测试与组合根直传通道，D2/F-4 同款纪律）。
         self._tool_timeout_s = tool_timeout_s
         self._spill_store = spill_store  # C1 spill（02 §11.2-11）：超大结果→有界预览+locator
+        self._usage_floor_ratio = usage_floor_ratio  # H5：缺省 None=运行期读 Settings.kernel_usage_floor_ratio
 
     def _resolve_tool_timeout_s(self) -> float:
         if self._tool_timeout_s is not None:
             return self._tool_timeout_s
         return get_settings().kernel_tool_timeout_s
 
+    def _resolve_usage_floor_ratio(self) -> float:
+        if self._usage_floor_ratio is not None:
+            return self._usage_floor_ratio
+        return get_settings().kernel_usage_floor_ratio
+
     async def run(self, rc: RunContext, step: PlanStep) -> None:
         state, ctx, ledger = rc.states[step.seq], rc.ctx, rc.ledger
         state.transition(StepStatus.EXECUTING, stage=LoopStage.EXECUTION)
-        param_hash = canonical_param_hash(step.parameters)
+        # C2 EXTERNAL_WRITE 幂等锚贯通（红队审查 §5 修复批 2026-10-07）：attempt 维幂等键
+        # （ChatCommand.idempotency_key=task_id:attempt，worker 注入→内核 loop→RunContext）
+        # 进写动作参数**先于 param_hash 计算**——审批工单（param_hash 绑定）与工具调用参数
+        # 天然同键（「工单+工具调用都带」）；工具实现侧幂等消费=后续批（本批保键贯通可见）。
+        parameters = dict(step.parameters)
+        if step.execution_mode is ExecutionMode.EXTERNAL_WRITE and rc.idempotency_key:
+            parameters.setdefault("idempotency_key", rc.idempotency_key)
+        param_hash = canonical_param_hash(parameters)
         approval: ApprovalTicket | None = None
         if step.execution_mode in _APPROVAL_REQUIRED_MODES:
             # B5 审批路由（内核）：externalWrite/code 必须携参数哈希绑定的有效回执
@@ -91,6 +110,7 @@ class ExecutionStage:
                         "execution_mode": str(step.execution_mode.value)
                         if hasattr(step.execution_mode, "value")
                         else str(step.execution_mode),
+                        **({"idempotency_key": rc.idempotency_key} if rc.idempotency_key else {}),
                     },
                 )
                 state.transition(StepStatus.FAILED, stage=LoopStage.EXECUTION)
@@ -103,10 +123,18 @@ class ExecutionStage:
         if step.execution_mode is ExecutionMode.CODE:
             await self._execute_code(rc, step)
         else:
-            await self._execute_tool(rc, step, approval=approval)
+            await self._execute_tool(rc, step, approval=approval, parameters=parameters, param_hash=param_hash)
 
     # ── tools.bindings 分发 ───────────────────────────────────────────────
-    async def _execute_tool(self, rc: RunContext, step: PlanStep, *, approval: ApprovalTicket | None) -> None:
+    async def _execute_tool(
+        self,
+        rc: RunContext,
+        step: PlanStep,
+        *,
+        approval: ApprovalTicket | None,
+        parameters: dict | None = None,
+        param_hash: str | None = None,
+    ) -> None:
         """工具分发：在途任务可取消追踪 + 结构化失败 + B3 标界 + C3 租户核验。
 
         H-0a hook 调用点（评审 2026-09-28 §4；既有结果管线次序不许变）：
@@ -119,11 +147,13 @@ class ExecutionStage:
         state, ctx, ledger, coordinator = rc.states[step.seq], rc.ctx, rc.ledger, rc.coordinator
         tool = self._dispatcher.tool_for(step.action_iri)
         assert tool is not None  # 门禁已断言绑定存在（B1 R1）；类型收窄用
+        # parameters/param_hash 由 run() 预计算传入（C2 幂等键已在 EXTERNAL_WRITE 参数内）；
+        # None=直调旧形态（测试），回退原口径。
         call = ToolCall(
             action_iri=step.action_iri,
             execution_mode=step.execution_mode,
-            parameters=dict(step.parameters),
-            param_hash=canonical_param_hash(step.parameters),
+            parameters=parameters if parameters is not None else dict(step.parameters),
+            param_hash=param_hash if param_hash is not None else canonical_param_hash(step.parameters),
             step_seq=step.seq,
         )
         ledger.open_tool_call(call)
@@ -167,6 +197,7 @@ class ExecutionStage:
             )
             coordinator.track_tool_task(call.call_id, invoke_task)
             invoke_task.add_done_callback(lambda _t, call_id=call.call_id: coordinator.untrack_tool_task(call_id))
+            invoke_started = asyncio.get_running_loop().time()  # H5：时长维估算下界的观测起点
             try:
                 result = await asyncio.wait_for(asyncio.shield(invoke_task), timeout=tool_timeout_s)
             except TimeoutError:  # 单调用超时 → 结构化失败（禁异常逃逸循环；任务留协调器可取消）
@@ -191,13 +222,20 @@ class ExecutionStage:
                 result = await spill_if_oversized(
                     result,
                     self._spill_store,
-                    key=f"spill/{ctx.tenant_id}/{state.run_id}/{call.call_id}.json",
+                    # 键首段=租户（H1 位置断言同源约束，红队审查 §5 修复批 2026-10-07）：
+                    # 读侧 SpillStore.get 只放行 parts[0]==tenant 的 locator，写键须同形。
+                    key=f"{ctx.tenant_id}/{state.run_id}/{call.call_id}.json",
                 )
             if hooks.post_tool_call_hooks:  # observer：仅实际执行过的调用（空注册零开销）
                 await hooks.run_post_tool_call(result, ctx)
             usage_tokens = result.usage.get("total_tokens")
             if isinstance(usage_tokens, int) and usage_tokens > 0:
-                rc.tracker.add_tokens(usage_tokens)  # A4 token 记账（工具回传口径）
+                # H5 预算伪造防线（红队审查 §5 修复批 2026-10-07）：正数低报检测——回传值低于
+                # 启发式下界即告警并按估算入账（kernel.usage_adjusted，usage_estimated=true）；
+                # 0/负数维持既有拒收不变（不入账、不检测）。
+                elapsed_s = max(0.0, asyncio.get_running_loop().time() - invoke_started)
+                booked = self._floor_usage(rc, ctx, state, call, result, reported=usage_tokens, elapsed_s=elapsed_s)
+                rc.tracker.add_tokens(booked)  # A4 token 记账（工具回传口径；低报时按估算值）
             ledger.close_tool_call(call.call_id, error_code=None if result.ok else result.error_code)
         rc.results[step.seq] = StepResult(
             step_id=state.step_id,
@@ -260,6 +298,68 @@ class ExecutionStage:
         )
 
     # ── 标界与规格（静态契约，测试直断言）─────────────────────────────────
+    def _floor_usage(
+        self,
+        rc: RunContext,
+        ctx: TenantContext,
+        state: StepState,
+        call: ToolCall,
+        result: ToolResult,
+        *,
+        reported: int,
+        elapsed_s: float,
+    ) -> int:
+        """H5 低报检测（红队审查 §5 修复批）：回传 usage 低于启发式下界 → 告警+按估算入账。
+
+        估算下界 = max(执行时长×最小速率, 输出字符数/4) × floor_ratio（Settings
+        ``kernel_usage_floor_ratio`` 可调，默认 0.5 温和——真低报才调整，正常抖动不误伤）。
+        调整即落账本事件 ``kernel.usage_adjusted``（usage_estimated=true，payload 带
+        reported/booked/两路估算值，可追溯口径）；未低于下界原值入账（零行为变化）。
+        返回实际入账 token 数。
+        """
+        if result.output:
+            try:
+                output_chars = len(json.dumps(result.output, ensure_ascii=False, default=str))
+            except (TypeError, ValueError):  # 序列化降级（禁异常逃逸，同 serialize_output 姿态）
+                output_chars = len(str(result.output))
+        else:
+            output_chars = 0
+        est_by_time = elapsed_s * _USAGE_MIN_TOKENS_PER_S
+        est_by_chars = output_chars / _USAGE_CHARS_PER_TOKEN
+        floor = max(est_by_time, est_by_chars) * self._resolve_usage_floor_ratio()
+        if reported >= floor:
+            return reported
+        booked = int(floor) + 1  # 入账取不小于下界的整数（向上取整）
+        logger.warning(
+            "工具回传 usage 低于启发式下界，按估算入账（H5）: call=%s reported=%d booked=%d "
+            "(est_by_time=%.1f est_by_chars=%.1f ratio=%.2f elapsed=%.3fs output_chars=%d)",
+            call.call_id,
+            reported,
+            booked,
+            est_by_time,
+            est_by_chars,
+            self._resolve_usage_floor_ratio(),
+            elapsed_s,
+            output_chars,
+        )
+        self._emit(
+            rc.ledger,
+            ctx,
+            state.run_id,
+            "kernel.usage_adjusted",
+            {
+                "step_seq": state.seq,
+                "call_id": str(call.call_id),
+                "reported_tokens": reported,
+                "booked_tokens": booked,
+                "est_by_time_tokens": round(est_by_time, 1),
+                "est_by_chars_tokens": round(est_by_chars, 1),
+                "floor_ratio": self._resolve_usage_floor_ratio(),
+                "usage_estimated": True,
+            },
+        )
+        return booked
+
     @staticmethod
     def truncate_error(result: ToolResult) -> ToolResult:
         """错误正文硬截断（2048 字符）：结构化错误回喂 LLM 前防爆量（02 §11.2-2）。"""

@@ -96,6 +96,14 @@ class ChatCommand(BaseModel):
     agent_id: UUID | None = None
     message: str  # 本条用户消息（已落 PG messages）
     trace_id: str  # C2 贯穿（内核拒收空 trace_id）
+    # C4 trace 贯通（红队审查 §5 修复批 2026-10-07）：受理时记录的网关原始 trace（task.payload
+    # origin_trace_id 回溯）——worker 重放时优先复用为命令 trace（保持与受理同链），事件 payload
+    # 另注 original_trace_id 便于按网关 trace 聚合检索；None=无法回溯（worker 合成 trace 兜底）。
+    original_trace_id: str | None = None
+    # C2 EXTERNAL_WRITE 幂等锚（红队审查 §5 修复批 2026-10-07）：attempt 维度幂等键
+    # （key=task_id:attempt，worker 重试监督链注入）——经内核注入写动作工具调用参数与审批
+    # 工单（param_hash 绑定），工具实现侧幂等后续批接键（本批保键贯通可见+审计落账）。
+    idempotency_key: str | None = None
     task_type: str = "chat"  # task.type 透传（40 篇 §4.2：RUN_STARTED.task_type；chat|workflow_run|…，缺省 chat）
     scopes: tuple[str, ...] = ("session:chat",)  # 主体授权面（B1 R3 唯一依据）
     adapter: str = "builtin"  # 适配器路由键（builtin | claude，Agent 服务设计 §3.2）

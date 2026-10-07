@@ -2,6 +2,7 @@ import { useLayoutEffect, useRef, useState } from 'react'
 import { Tree, type NodeRendererProps } from 'react-arborist'
 import { Box, Crosshair, GripVertical, Plus, Search } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
+import { ErrorState } from '@/components/states'
 import { listAxioms, listClasses, listProperties, listRules } from '../api'
 
 /** 左侧资源树四 Tab（26 篇 §6.2 IX-ON-03；画板 ix-on-03）：
@@ -122,6 +123,7 @@ function ClassRow({ node, style, isSelected, onFocus }: NodeRendererProps<ArborC
 export function ClassTreePanel({
   projectId,
   tab,
+  blockedTabs = [],
   onTabChange,
   selectedId,
   onSelect,
@@ -130,6 +132,10 @@ export function ClassTreePanel({
 }: {
   projectId: string
   tab: TreeTab
+  /** P-001 断供收敛（2026-10-07）：404/1004 的元素读对应的 Tab（宿主 useWorkbenchData 四读判定）——
+   *  激活到该 Tab 时内容区显「功能建设中」占位（ErrorState 1004 特化），成功读不受影响。
+   *  缺省空数组（既有消费方零改动）；Tab 钮保持可点（点开见占位，不隐藏入口）。 */
+  blockedTabs?: TreeTab[]
   onTabChange: (t: TreeTab) => void
   selectedId: string | null
   onSelect: (id: string, iri: string) => void
@@ -138,6 +144,7 @@ export function ClassTreePanel({
 }) {
   const [search, setSearch] = useState('')
   const { ref, height } = useMeasure<HTMLDivElement>()
+  const tabBlocked = blockedTabs.includes(tab)
 
   const classesQ = useQuery({ queryKey: ['ontology', projectId, 'classes'], queryFn: () => listClasses(projectId) })
   const propsQ = useQuery({ queryKey: ['ontology', projectId, 'properties'], queryFn: () => listProperties(projectId), enabled: tab === 'properties' })
@@ -167,6 +174,7 @@ export function ClassTreePanel({
             key={t.key}
             type="button"
             aria-pressed={tab === t.key}
+            title={blockedTabs.includes(t.key) ? '该读模型端点未上线 · 功能建设中' : undefined}
             onClick={() => onTabChange(t.key)}
             className={`flex items-center gap-1 whitespace-nowrap rounded-lg px-2 py-1 text-[11px] ${
               tab === t.key ? 'bg-accent-soft font-semibold text-accent' : 'text-label-2 hover:bg-surface-2'
@@ -187,6 +195,14 @@ export function ClassTreePanel({
         </button>
       </div>
 
+      {/* P-001 断供收敛：当前 Tab 的读模型 404/1004 → 内容区整体换「功能建设中」占位，
+          不渲染该 Tab 原内容（成功读对应 Tab 不受影响） */}
+      {tabBlocked ? (
+        <div className="flex min-h-0 flex-1 items-center justify-center px-3">
+          <ErrorState code={1004} className="!py-6" />
+        </div>
+      ) : (
+        <>
       {tab === 'classes' && (
         <>
           <div className="relative mx-2 mt-2 flex-none">
@@ -302,6 +318,8 @@ export function ClassTreePanel({
           ))}
           <p className="mt-1 text-[11px] text-label-3">开关切换 = 向变更单追加启用/停用修改。</p>
         </div>
+      )}
+        </>
       )}
     </aside>
   )

@@ -1,7 +1,9 @@
 import { Suspense, lazy } from 'react'
+import type { ReactNode } from 'react'
 import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { Toaster } from 'sonner'
+import { ApiError } from '@/api/client'
 import { AppShell } from './AppShell'
 import { ConsoleShell, ConsoleIndex } from './ConsoleShell'
 import { PlatformShell } from './PlatformShell'
@@ -15,8 +17,24 @@ import { CONSOLE_ROUTES, MAIN_ROUTES, PLATFORM_ROUTES, type RouteMeta } from './
 import { PlaceholderPage } from './PlaceholderPage'
 import { LoginPage } from '@/features/auth/pages/LoginPage'
 
+/** P-012 retry 豁免（台账-生产化-2026-10-07）：查询失败的重试分流——
+ *  ① 4xx 族不重试：404（资源缺失，重试必再 404）、信封 code=1004（路由未实装=断供态，
+ *     httpStatus 可能缺失，按业务码豁免）、2xxx 权限族（重试不会改变判定结果）——
+ *     重试放大故障面且拖慢错误态呈现，直接失败；
+ *  ② 网络层错误（code=-1 断网/-2 超时）与 5xx 服务端错误：保留既有 retry:1（瞬时故障可能自愈）；
+ *  ③ 非 ApiError（编程错误等）：维持既有 retry:1 不变。
+ *  注：MutationCache 全局 onError 有意不加——各操作就地 toast，全局兜底会造成 toast 风暴（维持现状）。
+ *  导出供测试锁定策略（404 不重试：mock 404 端点 + query 配置下 fetch 计数=1）。 */
+export function retryQueryOnError(failureCount: number, error: unknown): boolean {
+  if (error instanceof ApiError) {
+    if (error.httpStatus !== undefined && error.httpStatus >= 400 && error.httpStatus < 500) return false
+    if (error.code === 1004 || (error.code >= 2000 && error.code < 3000)) return false
+  }
+  return failureCount < 1
+}
+
 const queryClient = new QueryClient({
-  defaultOptions: { queries: { retry: 1, refetchOnWindowFocus: false } },
+  defaultOptions: { queries: { retry: retryQueryOnError, refetchOnWindowFocus: false } },
 })
 
 // S8 路由级代码分割：域页面懒加载（首包=框架+登录；29 篇 FE-ADR-FE3 依赖台账配套）
@@ -100,8 +118,23 @@ function LegacyRedirect({ to }: { to: string }) {
   return <Navigate to={`${to}${search}`} replace />
 }
 
+/** P-004 路由区边界（统一包裹层）：variant="route" + resetKeys=[pathname]——
+ *  页面渲染崩只塌路由区（壳侧栏/导航仍在）；切路由（含同型不同参路由）即清兜底态重渲，
+ *  免「一处崩溃处处兜底直至整页重载」。 */
+function RouteBoundary({ children }: { children: ReactNode }) {
+  const { pathname } = useLocation()
+  return (
+    <ErrorBoundary variant="route" resetKeys={[pathname]}>
+      {children}
+    </ErrorBoundary>
+  )
+}
+
 /** 应用根：Provider 装配 + 路由（路由元数据见 routes.tsx）。
  *  层序：ErrorBoundary 兜底 → ThemeProvider（html .dark 切换，30 篇 §3-3）→ Query → Router。
+ *  双层兜底（P-004，台账-生产化-2026-10-07）：根部 root 边界兜 providers/壳层崩溃；
+ *  每条 lazy 路由 element 内 route 边界（variant="route"）兜页面渲染崩溃——错误只塌路由区，
+ *  侧栏/导航仍可用（「重载本页」）；chat 域 lazyCard 手工 catch 绕过保留（降级语义更优）。
  *  受护路由：RequireAuth（认证）→ AppShell / ConsoleShell / PlatformShell → RouteGuard（meta.roles/meta.permission → 403）。
  *  四区 IA：/console、/platform 嵌套布局路由各挂独立壳；旧路径 LegacyRedirect 保书签（查询串透传）。 */
 export function App() {
@@ -126,7 +159,10 @@ export function App() {
                     key={meta.path}
                     path={meta.path}
                     element={
-                      <RouteGuard meta={meta}>{PAGES[meta.path] ?? <PlaceholderPage meta={meta} />}</RouteGuard>
+                      <RouteGuard meta={meta}>
+                        {/* P-004 路由区边界（RouteBoundary）：崩只塌路由区，切路由即复位兜底态 */}
+                        <RouteBoundary>{PAGES[meta.path] ?? <PlaceholderPage meta={meta} />}</RouteBoundary>
+                      </RouteGuard>
                     }
                   />
                 ))}
@@ -146,7 +182,10 @@ export function App() {
                     key={meta.path}
                     path={meta.path.replace('/console/', '')}
                     element={
-                      <RouteGuard meta={meta}>{PAGES[meta.path] ?? <PlaceholderPage meta={meta} />}</RouteGuard>
+                      <RouteGuard meta={meta}>
+                        {/* P-004 路由区边界（RouteBoundary）：崩只塌路由区，切路由即复位兜底态 */}
+                        <RouteBoundary>{PAGES[meta.path] ?? <PlaceholderPage meta={meta} />}</RouteBoundary>
+                      </RouteGuard>
                     }
                   />
                 ))}
@@ -157,7 +196,9 @@ export function App() {
                   index
                   element={
                     <RouteGuard meta={PLATFORM_INDEX_META}>
-                      <PlatformPage />
+                      <RouteBoundary>
+                        <PlatformPage />
+                      </RouteBoundary>
                     </RouteGuard>
                   }
                 />
@@ -166,7 +207,10 @@ export function App() {
                     key={meta.path}
                     path={meta.path.replace('/platform/', '')}
                     element={
-                      <RouteGuard meta={meta}>{PAGES[meta.path] ?? <PlaceholderPage meta={meta} />}</RouteGuard>
+                      <RouteGuard meta={meta}>
+                        {/* P-004 路由区边界（RouteBoundary）：崩只塌路由区，切路由即复位兜底态 */}
+                        <RouteBoundary>{PAGES[meta.path] ?? <PlaceholderPage meta={meta} />}</RouteBoundary>
+                      </RouteGuard>
                     }
                   />
                 ))}

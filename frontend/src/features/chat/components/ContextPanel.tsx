@@ -53,7 +53,7 @@ const GRAPH_MODE_DESC: Record<UsageGroups['graph'][number]['mode'], string> = {
   Drift: 'Drift（漂移检测）',
 }
 
-/** run.usage 四分组 → 分组渲染树；空分组整组隐藏，与演示回退同构 */
+/** run.usage 四分组 → 分组渲染树；空分组整组隐藏（P-006：演示回退已删，无帧只走空态占位） */
 export function usageToCtxGroups(u: UsageGroups): { title: string; items: CtxItem[] }[] {
   const out: { title: string; items: CtxItem[] }[] = []
   if (u.memory.length) {
@@ -188,7 +188,10 @@ export function ContextPanel({ onOpenEvidence }: { onOpenEvidence: (f: EvidenceF
             data-testid="ctx-panel-empty"
             className="mt-3 rounded-lg border border-dashed border-separator px-3 py-4 text-[11px] leading-5 text-label-3"
           >
-            完成一轮回答后，此处展示本次回答召回的记忆、GraphRAG 路径与引用文档。
+            {/* P-006 假数据收敛（2026-10-07）：无 run.usage 帧只显空态语义 + 协议注记，不造演示数据 */}
+            <div className="font-semibold text-label-2">本 Run 无用量数据</div>
+            <p className="mt-1">完成一轮回答后，此处展示本次回答召回的记忆、GraphRAG 路径与引用文档。</p>
+            <p className="mt-1">协议注记：run.usage 帧随 B7 后端批转正后自动点亮。</p>
           </div>
         ) : (
           groups.map(g => (

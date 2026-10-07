@@ -1,15 +1,15 @@
 import { useEffect, useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import {
-  getProject, listAxioms, listClasses, listProperties,
+  getProject, listAxioms, listClasses, listProperties, listRules,
   type OntoAxiomRow, type OntoClassNode, type OntoPropertyRow,
 } from './api'
 import type { GraphEdgeBiz, GraphNodeBiz } from '@/components/graph/GraphCanvas'
 import { pendingEdgeKey, useWorkbenchStore } from './stores/workbench-store'
 
 /** 本体工作台数据 hook（模块化第一批自 WorkbenchPage 拆出，行为零变化）：
- *  项目详情 / 类 / 属性 / 公理四路查询 + 画布数据装配（类层级 + 公理约束节点 +
- *  对象属性边，双向联动事实源 = workbench-store selectedIri）。
+ *  项目详情 + 类/属性/公理/规则四元素读查询（P-001 起规则读提升到本层常查）+
+ *  画布数据装配（类层级 + 公理约束节点 + 对象属性边，双向联动事实源 = workbench-store selectedIri）。
  *  「新建/连线真上图」：装配 = 服务端数据 ∪ store pending 层——pending 类合成节点
  *  （pending:true + entering:true 标记，供上层入场动画）、pending 边合成边；
  *  服务端数据出现与 pending 同 IRI 的元素时自动清除 pending 项（IRI 幂等去重，
@@ -18,9 +18,13 @@ import { pendingEdgeKey, useWorkbenchStore } from './stores/workbench-store'
 
 export function useWorkbenchData(projectId: string, shapeParam: string | null) {
   const detail = useQuery({ queryKey: ['ontology', 'detail', projectId], queryFn: () => getProject(projectId) })
+  // P-001 断供收敛（2026-10-07）：四元素读（类/属性/公理/规则）全部提升到工作台层常查
+  // （此前 rules 仅 ClassTreePanel 在 tab 激活时懒查）——页面需在 Tab 未点开时就知道哪些
+  // 读模型端点 404/1004（断供），才能做「对应 Tab 显建设中占位」的混合态分流。
   const classesQ = useQuery({ queryKey: ['ontology', projectId, 'classes'], queryFn: () => listClasses(projectId) })
   const propsQ = useQuery({ queryKey: ['ontology', projectId, 'properties'], queryFn: () => listProperties(projectId) })
   const axiomsQ = useQuery({ queryKey: ['ontology', projectId, 'axioms'], queryFn: () => listAxioms(projectId) })
+  const rulesQ = useQuery({ queryKey: ['ontology', projectId, 'rules'], queryFn: () => listRules(projectId) })
 
   const selectedIri = useWorkbenchStore(s => s.selectedIri)
   const pendingClasses = useWorkbenchStore(s => s.pendingClasses)
@@ -151,7 +155,7 @@ export function useWorkbenchData(projectId: string, shapeParam: string | null) {
     [axioms, shapeParam],
   )
 
-  return { detail, classesQ, propsQ, axiomsQ, classes, properties, axioms, selectedCls, graphNodes, graphEdges, axiomForEditor }
+  return { detail, classesQ, propsQ, axiomsQ, rulesQ, classes, properties, axioms, selectedCls, graphNodes, graphEdges, axiomForEditor }
 }
 
 /** 对象属性边上图（38 号对账 O1）：对象属性（prop_type=object）按 domain→range 装配为

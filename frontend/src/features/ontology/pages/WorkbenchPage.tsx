@@ -4,6 +4,7 @@ import { toast } from 'sonner'
 import { ErrorState, SkeletonRows } from '@/components/states'
 import { useAuthStore } from '@/stores/auth-store'
 import { ApiError } from '@/api/client'
+import { isUnimplemented } from '@/lib/errors'
 import { createChangeset, submitChangeset, validateOntology, type ValidateReport } from '../api'
 import { ClassTreePanel, type TreeTab } from '../components/ClassTreePanel'
 import { InspectorPanel } from '../components/InspectorPanel'
@@ -70,6 +71,10 @@ export function WorkbenchPage() {
 
   const {
     detail,
+    classesQ,
+    propsQ,
+    axiomsQ,
+    rulesQ,
     classes,
     properties,
     axioms,
@@ -78,6 +83,21 @@ export function WorkbenchPage() {
     graphEdges,
     axiomForEditor,
   } = useWorkbenchData(projectId, shapeParam)
+
+  // ---- P-001 断供收敛（2026-10-07）：四元素读（类/属性/公理/规则）失败分流，统一「功能建设中」
+  //  语义（先例 VersionsPage → ErrorState code 1004 特化）：
+  //  ① 非 404/1004 错误 = 真故障 → 主区常规 ErrorState + 重试（重试=逐查询 refetch）；
+  //  ② 四读全部 404/1004 = 元素读模型整体断供 → 主区 ErrorState 1004 特化（注记随 B8 后端批交付）；
+  //  ③ 混合态（部分成功部分断供）→ 不整页拦截：断供读对应的左树 Tab 显建设中占位
+  //     （ClassTreePanel blockedTabs），成功读照常渲染（画布仍显可用数据，不虚构）。
+  const reads = { classes: classesQ, properties: propsQ, axioms: axiomsQ, rules: rulesQ } as const
+  const blockedTabs = (Object.keys(reads) as (keyof typeof reads)[]).filter(
+    k => reads[k].isError && isUnimplemented(reads[k].error),
+  )
+  const brokenReads = (Object.values(reads) as typeof classesQ[]).filter(
+    q => q.isError && !isUnimplemented(q.error),
+  )
+  const readsAllBlocked = blockedTabs.length === Object.keys(reads).length
 
   useEffect(() => enter(projectId), [projectId, enter])
 
@@ -385,20 +405,43 @@ export function WorkbenchPage() {
         onSubmitReview={() => setSubmitOpen(true)}
       />
 
-      {/* 主体三栏 / 公理编辑器整页 */}
-      {tab === 'axioms' ? (
-        <AxiomEditor
-          axiom={axiomForEditor}
-          validation={validation}
-          validating={validating}
-          onRunValidate={() => void runValidate()}
-          onSaveDraft={() => void saveDraft()}
-        />
+      {/* 主体三栏 / 公理编辑器整页；P-001 断供分流置顶（优先级：真故障 > 全断供 > 混合态） */}
+      {brokenReads.length > 0 ? (
+        <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-3 px-10">
+          <ErrorState
+            title="本体元素读取失败"
+            message={brokenReads[0].error instanceof Error ? brokenReads[0].error.message : undefined}
+            code={brokenReads[0].error instanceof ApiError ? brokenReads[0].error.code : undefined}
+            onRetry={() => brokenReads.forEach(q => void q.refetch())}
+          />
+        </div>
+      ) : readsAllBlocked ? (
+        <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-3 px-10">
+          <ErrorState
+            code={1004}
+            note="本体元素读模型端点（类/属性/公理/规则）随 B8 后端批交付。"
+          />
+        </div>
+      ) : tab === 'axioms' ? (
+        blockedTabs.includes('axioms') ? (
+          <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-3 px-10">
+            <ErrorState code={1004} note="公理读模型端点随 B8 后端批交付。" />
+          </div>
+        ) : (
+          <AxiomEditor
+            axiom={axiomForEditor}
+            validation={validation}
+            validating={validating}
+            onRunValidate={() => void runValidate()}
+            onSaveDraft={() => void saveDraft()}
+          />
+        )
       ) : (
         <div className="flex min-h-0 flex-1 gap-3">
           <ClassTreePanel
             projectId={projectId}
             tab={tab}
+            blockedTabs={blockedTabs}
             onTabChange={changeTab}
             selectedId={selectedCls?.id ?? null}
             onSelect={(_, iri) => {

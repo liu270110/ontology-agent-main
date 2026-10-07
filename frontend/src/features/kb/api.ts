@@ -1,4 +1,4 @@
-import { ApiError, api, trySilentRefresh } from '@/api/client'
+import { ApiError, api, fetchWithTimeout, trySilentRefresh } from '@/api/client'
 import type { AgenticBlock } from '@/api/contracts'
 import { useAuthStore } from '@/stores/auth-store'
 
@@ -123,18 +123,28 @@ export function listDocuments() {
 
 // ---------------------------------------------------------------- 上传链路（S8 live 对账 2026-09-28）
 
+/** 上传链路专用超时（P-012，台账-生产化-2026-10-07）：大文件 JSON 内容直传走全站 15s 缺省
+ *  必超时——独立 120s 长超时（AbortController 真中断/竞速拒绝语义与 client.fetchWithTimeout
+ *  同源，非复用 15s 版本）；超时→ApiError(-2)、网络层失败→ApiError(-1) 归一到全站口径。 */
+export const KB_UPLOAD_TIMEOUT_MS = 120_000
+
 /** 上传链路专用 POST：live 网关对 /kb/collections、/kb/documents、pipeline/start 返回裸 DTO
  *  （无信封；client.apiFetchEnvelope 的 `code !== 0` 强校验会误抛），而 mock（MSW）与
- *  GET /kb/documents 为信封形态——此处双形态兼容，并保留 401 单飞静默刷新后重放一次。 */
+ *  GET /kb/documents 为信封形态——此处双形态兼容，并保留 401 单飞静默刷新后重放一次。
+ *  P-012：改走 fetchWithTimeout（120s，见上）——裸 fetch 的网络错误（TypeError）不再裸抛，
+ *  与全站一致归一为 ApiError(-1/-2, NETWORK_UNAVAILABLE_MESSAGE)。 */
 async function postKbRaw<T>(path: string, body?: unknown): Promise<T> {
-  const base = import.meta.env.VITE_API_BASE ?? '/api/v1'
   const doFetch = () => {
     const token = useAuthStore.getState().accessToken
-    return fetch(`${base}${path}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-      body: body === undefined ? undefined : JSON.stringify(body),
-    })
+    return fetchWithTimeout(
+      path,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        body: body === undefined ? undefined : JSON.stringify(body),
+      },
+      KB_UPLOAD_TIMEOUT_MS,
+    )
   }
   let res = await doFetch()
   if (res.status === 401 && (await trySilentRefresh())) res = await doFetch()

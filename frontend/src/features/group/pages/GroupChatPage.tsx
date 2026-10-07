@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate, useParams } from 'react-router-dom'
 import {AlertTriangle, MessagesSquare, Plus, Search, Share2, Users, X, Zap} from 'lucide-react'
@@ -37,11 +37,18 @@ export function GroupChatPage() {
   const [baselineTick, setBaselineTick] = useState(0)
   // 左栏「过滤群聊」客户端过滤（设计稿 p-group sc-col 搜索框；纯前端，无检索端点）
   const [listFilter, setListFilter] = useState('')
+  /** 流内容会话闸门（P-004 复核修复）：store 为模块级单例，进页/切会话首帧 store 尚是
+   *  上一会话的消息（含高风险卡），直接渲染会把陈旧卡提交进 DOM，随后异步 reset/seed
+   *  再把它原地换新——生产=跨会话内容闪现；测试=sef-group-slice ③④ findBy 命中陈旧节点
+   *  后游离，间歇翻车（2026-10-07 实测 develop 与本分支同败，非 P-004 边界引入）。
+   *  基线 seed 确认本会话后放行。 */
+  const [streamReady, setStreamReady] = useState(false)
 
   const seed = useGroupStreamStore(s => s.seed)
   const reset = useGroupStreamStore(s => s.reset)
   const apply = useGroupStreamStore(s => s.apply)
-  const running = useGroupStreamStore(s => s.running)
+  const rawRunning = useGroupStreamStore(s => s.running)
+  const running = streamReady && rawRunning
 
   const sessionQ = useQuery({
     queryKey: ['group', 'session', sessionId],
@@ -51,18 +58,27 @@ export function GroupChatPage() {
   })
   const listQ = useQuery({ queryKey: ['group', 'sessions'], queryFn: () => listGroupSessions() })
 
-  // 会话切换：清空流态 → 拉详情与历史基线（历史 lastSeq = 最大 seq，§3.2）
-  useEffect(() => {
+  // 会话切换：清空流态（useLayoutEffect 同步于提交，尽早收掉陈旧 store 内容与运行徽标；
+  // 闸门 streamReady 兜住「复位/首拉完成前」的窗口——两层合围，陈旧帧任何时刻都不入 DOM）
+  useLayoutEffect(() => {
     reset()
     setMissing(false)
     setMentionCount(0)
     setBaselineErr(null)
+    setStreamReady(false)
+  }, [sessionId, reset, baselineTick])
+
+  // 拉历史基线（异步部分与同步清空拆开；lastSeq = 最大 seq，§3.2）
+  useEffect(() => {
     if (!sessionId) return
     let alive = true
     void (async () => {
       try {
         const { items } = await api.get<{ items: GroupMessageRow[] }>(`/sessions/${sessionId}/messages`)
-        if (alive) seed(items)
+        if (alive) {
+          seed(items)
+          setStreamReady(true)
+        }
       } catch (e) {
         if (!alive) return
         // 404 = 会话真不存在（保持原「不存在」语义）；网络/5xx 不再误报为「不存在」，
@@ -75,7 +91,7 @@ export function GroupChatPage() {
     return () => {
       alive = false
     }
-  }, [sessionId, reset, seed, baselineTick])
+  }, [sessionId, seed, baselineTick])
 
   useEffect(() => {
     if (sessionQ.error) setMissing(true)
@@ -247,7 +263,7 @@ export function GroupChatPage() {
                 </button>
               </div>
             )}
-            <GroupStream members={members} />
+            <GroupStream members={members} active={streamReady} />
             <GroupInput
               sessionId={sessionId}
               members={members}

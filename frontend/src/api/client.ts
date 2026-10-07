@@ -133,8 +133,14 @@ async function fetchAcceptsSignal(): Promise<boolean> {
 }
 
 /** 带超时的 fetch（api 层唯一网络入口）：超时 → ApiError(-2)；网络层失败 → ApiError(-1)，
- *  两者 message 统一为 NETWORK_UNAVAILABLE_MESSAGE（W-01）。 */
-async function fetchWithTimeout(path: string, init?: RequestInit): Promise<Response> {
+ *  两者 message 统一为 NETWORK_UNAVAILABLE_MESSAGE（W-01）。
+ *  P-012（台账-生产化-2026-10-07）：timeoutMs 参数化并导出——kb 上传链路传 120s 独立长超时
+ *  （大文件 JSON 直传 15s 缺省必超时），超时/网络错归一语义与全站同源。 */
+export async function fetchWithTimeout(
+  path: string,
+  init?: RequestInit,
+  timeoutMs: number = DEFAULT_TIMEOUT_MS,
+): Promise<Response> {
   const useSignal = await fetchAcceptsSignal()
   const controller = useSignal ? new AbortController() : null
   let timedOut = false
@@ -144,7 +150,7 @@ async function fetchWithTimeout(path: string, init?: RequestInit): Promise<Respo
       timedOut = true
       controller?.abort() // 原生 signal 可用时真中断连接；不可用（跨 realm 探测失败）仅竞速拒绝
       reject(new ApiError(API_TIMEOUT_CODE, NETWORK_UNAVAILABLE_MESSAGE))
-    }, DEFAULT_TIMEOUT_MS)
+    }, timeoutMs)
   })
   const external = init?.signal
   if (controller && external) {

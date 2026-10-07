@@ -111,3 +111,41 @@ describe('useTaskEvents（ocr fe2 发现2/3：切任务不泄漏旧错误/事件
     expect(result.current.events).toEqual([])
   })
 })
+
+describe('useTaskEvents 断流透出（fe-s1 P-009：streamClosed hook 层透出）', () => {
+  it('服务端关流（reader done）→ events 照常入列 + streamClosed=true（宿主可显重连提示）', async () => {
+    const encoder = new TextEncoder()
+    server.use(
+      http.get('*/api/v1/tasks/job-stream/events', () =>
+        new HttpResponse(
+          new ReadableStream({
+            start(controller) {
+              controller.enqueue(
+                encoder.encode('data: {"seq":1,"type":"log","label":"开始","at":"2026-10-07T00:00:00Z","step":1}\n\n'),
+              )
+              controller.close() // 推一帧后服务端关流（代理切断/后端重启同形态）
+            },
+          }),
+          { headers: { 'Content-Type': 'text/event-stream' } },
+        ),
+      ),
+    )
+
+    const { result } = renderHook(() => useTaskEvents('job-stream'))
+    await waitFor(() => expect(result.current.streamClosed).toBe(true), { timeout: 5_000 })
+    expect(result.current.events.map(e => e.seq)).toEqual([1])
+    // 断流 ≠ 建流失败：error 通道保持空，语义不混淆
+    expect(result.current.error).toBeNull()
+  })
+
+  it('建流失败（404）只走 error 通道，streamClosed 不置位', async () => {
+    server.use(
+      http.get('*/api/v1/tasks/job-miss/events', () =>
+        HttpResponse.json({ code: 5004, message: 'no such task' }, { status: 404 }),
+      ),
+    )
+    const { result } = renderHook(() => useTaskEvents('job-miss'))
+    await waitFor(() => expect(result.current.error).not.toBeNull())
+    expect(result.current.streamClosed).toBe(false)
+  })
+})

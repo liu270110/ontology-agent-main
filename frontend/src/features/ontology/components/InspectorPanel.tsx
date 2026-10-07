@@ -57,7 +57,14 @@ export function InspectorPanel({ projectId, cls }: { projectId: string; cls: Ont
   const [classList, setClassList] = useState<OntoClassNode[]>([])
   useEffect(() => {
     let alive = true
-    listClasses(projectId).then(d => alive && setClassList(d.items))
+    listClasses(projectId)
+      .then(d => alive && setClassList(d.items))
+      .catch(e => {
+        // P-001 断供收敛（2026-10-07）：类清单失败（404=读模型端点未上线/网络错误）不炸检查器——
+        // console.warn 留观测痕迹 + 空选项降级（父类下拉仅剩「无（顶层类）」、子类 chips 不渲染）。
+        console.warn('[inspector] listClasses 加载失败，父类选项降级为空', e)
+        if (alive) setClassList([])
+      })
     return () => {
       alive = false
     }

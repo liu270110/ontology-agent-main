@@ -2,7 +2,7 @@ import { Fragment, useEffect, useMemo, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
 import { AlertTriangle, ArrowRight, Check, ChevronDown, Copy, Search, ShieldAlert, Star, X, Zap } from 'lucide-react'
-import { useGroupStreamStore, type GroupMessage } from '../group-store'
+import { useGroupStreamStore, type GroupMessage, type GroupToolCall, type RoutingDecision } from '../group-store'
 import type { GroupMember } from '../api'
 import { AgentAvatar, ModelChip } from './shared'
 
@@ -16,6 +16,12 @@ function memberOf(members: GroupMember[], agentId?: string, memberId?: string): 
   return members.find(m => m.slot_id === agentId)
 }
 
+// 会话闸门关闭期的稳定空快照（useSyncExternalStore 要求 selector 结果 Object.is 稳定，
+// 内联字面量每次渲染都是新引用会引发无限重渲）
+const EMPTY_MESSAGES: GroupMessage[] = []
+const EMPTY_TOOL_CALLS: Record<string, GroupToolCall> = {}
+const EMPTY_DECISIONS: RoutingDecision[] = []
+
 /** @提及 高亮（简版：@名称 着色） */
 function renderContent(text: string) {
   return text.split(/(@[\u4e00-\u9fa5A-Za-z0-9]+)/g).map((seg, i) =>
@@ -27,12 +33,15 @@ function renderContent(text: string) {
   )
 }
 
-export function GroupStream({ members }: { members: GroupMember[] }) {
+export function GroupStream({ members, active }: { members: GroupMember[]; active: boolean }) {
   const navigate = useNavigate()
-  const messages = useGroupStreamStore(s => s.messages)
-  const toolCalls = useGroupStreamStore(s => s.toolCalls)
-  const decisions = useGroupStreamStore(s => s.decisions)
-  const running = useGroupStreamStore(s => s.running)
+  // active=会话闸门（P-004 复核修复）：store 为模块级单例，进页/切会话首帧 store 尚是
+  // 上一会话的内容，闸门放行会把陈旧消息卡（含高风险卡）提交进 DOM，随后异步 reset/seed
+  // 再把它原地换新——sef-group-slice ③④ findBy 命中游离节点间歇翻车根因（develop 同败）。
+  const messages = useGroupStreamStore(s => (active ? s.messages : EMPTY_MESSAGES))
+  const toolCalls = useGroupStreamStore(s => (active ? s.toolCalls : EMPTY_TOOL_CALLS))
+  const decisions = useGroupStreamStore(s => (active ? s.decisions : EMPTY_DECISIONS))
+  const running = useGroupStreamStore(s => active && s.running)
   const resolveAction = useGroupStreamStore(s => s.resolveAction)
   const rejectAction = useGroupStreamStore(s => s.rejectAction)
   const bottomRef = useRef<HTMLDivElement>(null)

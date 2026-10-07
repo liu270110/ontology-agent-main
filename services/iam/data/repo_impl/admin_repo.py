@@ -22,6 +22,7 @@ from sqlalchemy import distinct, func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from services.agent.data.orm import Agent
+from services.agent.data.orm import Run as RunORM
 from services.agent.data.orm import Session as SessionORM
 from services.agent.data.orm import Task as TaskORM
 from services.iam.data.orm import (
@@ -480,6 +481,68 @@ async def analytics_snapshot(db: AsyncSession, *, tenant_id: uuid.UUID, tenant_s
     }
 
 
+# ---------------------------------------------------------------- costs / stats（§5.8 ★，F3 收尾）
+
+
+async def costs_summary(db: AsyncSession, *, tenant_id: uuid.UUID, days: int = 30) -> dict:
+    """GET /admin/costs 聚合（15 篇 §3：llm_calls 30d 总 tokens/cost + 按 model 分组）。
+
+    cost=cost_usd 合计直显（analytics cost_30d_yuan 同源 M1 口径，汇率换算待接）；
+    pct=组成本占总成本取整（analytics attribution pct 同构，总成本 0 时恒 0）；
+    分组行按 cost 降序；窗口串 "%m-%d"（analytics window 同构）。"""
+    since = _since_30d()
+    rows = (
+        await db.execute(
+            select(
+                LlmCall.model,
+                func.coalesce(func.sum(LlmCall.token_in + LlmCall.token_out), 0),
+                func.coalesce(func.sum(LlmCall.cost_usd), 0.0),
+            )
+            .where(LlmCall.tenant_id == tenant_id, LlmCall.created_at >= since)
+            .group_by(LlmCall.model)
+            .order_by(func.sum(LlmCall.cost_usd).desc())
+        )
+    ).all()
+    total_tokens = sum(int(r[1] or 0) for r in rows)
+    total_cost = sum(float(r[2] or 0.0) for r in rows)
+    by_model = [
+        {
+            "model": r[0],
+            "tokens": int(r[1] or 0),
+            "cost": round(float(r[2] or 0.0), 4),
+            "pct": round(float(r[2] or 0.0) / total_cost * 100) if total_cost else 0,
+        }
+        for r in rows
+    ]
+    now = datetime.now(UTC).replace(tzinfo=None)
+    return {
+        "window": {"from": (now - timedelta(days=days)).strftime("%m-%d"), "to": now.strftime("%m-%d")},
+        "total_tokens": total_tokens,
+        "total_cost": round(total_cost, 4),
+        "by_model": by_model,
+    }
+
+
+async def platform_stats(db: AsyncSession, *, tenant_id: uuid.UUID) -> dict:
+    """GET /admin/stats 轻量计数（15 篇 §3：users=本租户用户总数；
+    sessions_30d/runs_30d=30 天窗口计数——契约行「平台统计」的最小实装面）。"""
+    since30 = _since_30d()
+    users = (await db.execute(select(func.count()).select_from(User).where(User.tenant_id == tenant_id))).scalar_one()
+    sessions = (
+        await db.execute(
+            select(func.count())
+            .select_from(SessionORM)
+            .where(SessionORM.tenant_id == tenant_id, SessionORM.created_at >= since30)
+        )
+    ).scalar_one()
+    runs = (
+        await db.execute(
+            select(func.count()).select_from(RunORM).where(RunORM.tenant_id == tenant_id, RunORM.created_at >= since30)
+        )
+    ).scalar_one()
+    return {"users": int(users), "sessions_30d": int(sessions), "runs_30d": int(runs)}
+
+
 # ---------------------------------------------------------------- groups（§5.10）
 
 
@@ -488,8 +551,18 @@ async def list_groups(db: AsyncSession, *, tenant_id: uuid.UUID) -> list[UserGro
     return list((await db.execute(stmt)).scalars().all())
 
 
-async def group_name_taken(db: AsyncSession, *, tenant_id: uuid.UUID, name: str) -> bool:
+async def get_group(db: AsyncSession, *, tenant_id: uuid.UUID, group_id: uuid.UUID) -> UserGroup | None:
+    return (
+        await db.execute(select(UserGroup).where(UserGroup.tenant_id == tenant_id, UserGroup.id == group_id))
+    ).scalar_one_or_none()
+
+
+async def group_name_taken(
+    db: AsyncSession, *, tenant_id: uuid.UUID, name: str, exclude_id: uuid.UUID | None = None
+) -> bool:
     stmt = select(func.count()).select_from(UserGroup).where(UserGroup.tenant_id == tenant_id, UserGroup.name == name)
+    if exclude_id is not None:  # PUT/PATCH 改名校验排除自身行
+        stmt = stmt.where(UserGroup.id != exclude_id)
     return (await db.execute(stmt)).scalar_one() > 0
 
 
@@ -512,6 +585,31 @@ async def create_group(
 
 async def role_code_exists(db: AsyncSession, code: str) -> bool:
     return (await db.execute(select(func.count()).select_from(Role).where(Role.code == code))).scalar_one() > 0
+
+
+async def update_group(
+    db: AsyncSession,
+    row: UserGroup,
+    *,
+    name: str,
+    description: str,
+    role_template: str,
+    members: list[str],
+) -> UserGroup:
+    """PUT 全量语义（15 篇 §3）：四字段即组的新状态（members 数组全量替换列写——
+    user_groups.members 为 ARRAY(Text) 展示位、无成员关联表；校验在路由侧，此处纯写）。"""
+    row.name = name
+    row.description = description
+    row.role_template = role_template
+    row.members = members
+    await db.flush()
+    return row
+
+
+async def delete_group(db: AsyncSession, row: UserGroup) -> None:
+    """解散组（有成员 409 由路由侧先断言——设计宪法 5 全程可追溯：物理删组行，审计留中间件）。"""
+    await db.delete(row)
+    await db.flush()
 
 
 # ---------------------------------------------------------------- roles matrix（§5.8 ★）
@@ -751,6 +849,27 @@ async def revoke_api_key(db: AsyncSession, *, tenant_id: uuid.UUID, key_id: uuid
         row.revoked_at = datetime.now(UTC).replace(tzinfo=None)
         await db.flush()
     return row
+
+
+async def rotate_api_key(db: AsyncSession, row: ApiKey) -> tuple[ApiKey, str]:
+    """轮换（15 篇 §3 口径：旧 key 立即吊销 + 同 name/scopes/owner 新签发；明文仅返回值出现一次）。
+
+    契约行 api/01 §5.8「旧钥 24h 宽限（active→rotated）」在 api_keys 表无 rotated 状态列
+    （实装状态机=revoked_at 单列，08 §2.6）——按详设收敛为立即吊销，形状差异随批登记。"""
+    if row.revoked_at is None:
+        row.revoked_at = datetime.now(UTC).replace(tzinfo=None)
+    plain = new_api_key_secret()
+    new_row = ApiKey(
+        tenant_id=row.tenant_id,
+        name=row.name,
+        key_hash=api_key_hash(plain),
+        key_prefix=f"sk-oa-…{plain[-4:]}",
+        owner_user_id=row.owner_user_id,
+        scopes=row.scopes,
+    )
+    db.add(new_row)
+    await db.flush()
+    return new_row, plain
 
 
 # ---------------------------------------------------------------- permission-requests（§5.10）

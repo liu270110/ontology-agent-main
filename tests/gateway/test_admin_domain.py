@@ -15,7 +15,13 @@ DTO，字段名级断言）：
 - api-keys：列表（只回前缀）/签发明文仅一次（哈希与前缀入库、scopes⊆owner 红线）/吊销 202 幂等；
 - permission-requests：提交 201 完整 DTO（requester 从令牌解析）、理由 <10 字 422+3001、
   重复 pending 409+3409、第六类 review_tickets 工单联动、写审计留痕（网关中间件）、
-  GET ?role=mine 本人免 review:read（他人单不可见）、approvable 无 review:read 403+2001。
+  GET ?role=mine 本人免 review:read（他人单不可见）、approvable 无 review:read 403+2001；
+- F3 收尾批（⑩ 节，2026-10-07，方案依据=docs/Agent/15 §3）：groups PUT/PATCH/DELETE
+  （全量/部分更新、改名撞唯一 422、有成员解散 409+3409、清空后 204、写审计行）、
+  models PUT（别名/优先级/预算透传清空/启停、extra=forbid、404）、costs（llm_calls 30d
+  总量+按模型分组 cost 降序与 pct 占比、窗口外不计）、stats（users/sessions/runs 计数）、
+  api-keys rotate（旧吊销+同 name 新签发明文一次、已吊销 409、链式轮换）、F3 写端点
+  scope 403 抽测（group:write / admin:write 门禁）。
 
 装配（本批纪律：**一次性 PG 测试库**，禁触共享开发库 schema）：复用 tests/agent/pg_testdb.py
 建/删库（oa_wt_test_<hex>），Base.metadata.create_all 建表（registry 全表聚合导入），角色种子
@@ -26,6 +32,7 @@ DTO，字段名级断言）：
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import re
 import sys
 import uuid
@@ -819,3 +826,280 @@ async def test_权限申请列表_mine免scope_approvable需review_read(admin_en
     assert approvable_denied.json()["detail"]["required"] == "review:read"
     assert all_rows.status_code == status.HTTP_200_OK and len(all_rows.json()["items"]) == 1
     assert mine_admin.json()["items"][0]["id"] == first.json()["id"]
+
+
+# ================================================================ ⑩ F3 六端点收尾（15 篇 §3）
+
+# ⑩ 覆盖（方案依据=docs/Agent/15 §3；契约行=api/01 §5.8 ★ models PUT/costs/rotate/stats、
+# §5.10 groups PUT/PATCH/DELETE）：组全量/部分更新与解散链路（有成员 409）、渠道配置更新
+# （预算透传清空/启停/别名）、成本 30d 聚合（总量+按模型分组占比）、平台统计轻量计数、
+# api-key 轮换（旧吊销+同 name 新签发明文一次）、F3 写端点 scope 403 抽测。
+
+
+async def _make_group(client: AsyncClient, headers: dict[str, str], name: str, members: list[str]) -> dict:
+    resp = await client.post(
+        "/api/v1/admin/groups",
+        json={"name": name, "description": "停电分析 wedge 业务组", "role_template": "member", "members": members},
+        headers=headers,
+    )
+    assert resp.status_code == status.HTTP_201_CREATED, resp.text
+    return resp.json()
+
+
+@pytest.mark.integration
+async def test_F3用户组更新_全量与部分_解散链路(admin_env):
+    client, env = admin_env
+    headers = await _login_headers(client, env["admin_email"], _PASSWORD)
+    await _make_group(client, headers, "巡检一班", ["王五"])
+    group = await _make_group(client, headers, "配网运维组", ["陈晨", "孙宇"])
+    # Act ①：PUT 全量语义（四字段即新状态，members 全量替换）
+    resp = await client.put(
+        f"/api/v1/admin/groups/{group['id']}",
+        json={"name": "配网值班组", "description": "值班轮换组", "role_template": "curator", "members": ["李雷"]},
+        headers=headers,
+    )
+    # Assert ①：200 全量替换生效；同名他组不受影响
+    assert resp.status_code == status.HTTP_200_OK, resp.text
+    body = resp.json()
+    assert set(body) == {"id", "name", "description", "role_template", "members", "created_at"}
+    assert body["id"] == group["id"]
+    assert body["name"] == "配网值班组" and body["description"] == "值班轮换组"
+    assert body["role_template"] == "curator" and body["members"] == ["李雷"]
+    listing = (await client.get("/api/v1/admin/groups", headers=headers)).json()
+    by_name = {g["name"]: g["members"] for g in listing["items"]}
+    assert by_name == {"配网值班组": ["李雷"], "巡检一班": ["王五"]}
+    # Act ②：PUT 改名撞他组 → 422+3001
+    dup = await client.put(
+        f"/api/v1/admin/groups/{group['id']}",
+        json={"name": "巡检一班", "description": "x", "role_template": "member", "members": []},
+        headers=headers,
+    )
+    assert dup.status_code == status.HTTP_422_UNPROCESSABLE_CONTENT and dup.json()["code"] == 3001
+    # Act ③：PATCH 部分语义（仅 description；members 保持）
+    partial = await client.patch(
+        f"/api/v1/admin/groups/{group['id']}", json={"description": "只改描述"}, headers=headers
+    )
+    # Assert ③
+    assert partial.status_code == status.HTTP_200_OK, partial.text
+    assert partial.json()["description"] == "只改描述"
+    assert partial.json()["members"] == ["李雷"] and partial.json()["name"] == "配网值班组"
+    # Act ④：PATCH members 提供=该数组全量替换；清空后可解散
+    replaced = await client.patch(
+        f"/api/v1/admin/groups/{group['id']}", json={"members": ["韩梅梅", "吴彦"]}, headers=headers
+    )
+    assert replaced.status_code == status.HTTP_200_OK and replaced.json()["members"] == ["韩梅梅", "吴彦"]
+    # Act ⑤：有成员 DELETE → 409+3409
+    conflict = await client.delete(f"/api/v1/admin/groups/{group['id']}", headers=headers)
+    assert conflict.status_code == status.HTTP_409_CONFLICT and conflict.json()["code"] == 3409
+    emptied = await client.patch(f"/api/v1/admin/groups/{group['id']}", json={"members": []}, headers=headers)
+    assert emptied.status_code == status.HTTP_200_OK and emptied.json()["members"] == []
+    # Act ⑥：清空后 DELETE → 204；列表不再含该组；未知 id 404
+    gone = await client.delete(f"/api/v1/admin/groups/{group['id']}", headers=headers)
+    missing = await client.delete(f"/api/v1/admin/groups/{uuid.uuid4()}", headers=headers)
+    # Assert ⑥
+    assert gone.status_code == status.HTTP_204_NO_CONTENT
+    assert missing.status_code == status.HTTP_404_NOT_FOUND and missing.json()["code"] == 404
+    names = [g["name"] for g in (await client.get("/api/v1/admin/groups", headers=headers)).json()["items"]]
+    assert names == ["巡检一班"]
+    # Assert ⑦：审计行（宪法 5：网关中间件对 PUT/PATCH/DELETE 自动落 audit_logs，带 trace_id）
+    async with env["factory"]() as session:
+        actions = (
+            (await session.execute(select(AuditLog.action).where(AuditLog.action.like("PUT /api/v1/admin/groups%"))))
+            .scalars()
+            .all()
+        )
+        deletes = (
+            (await session.execute(select(AuditLog).where(AuditLog.action.like("DELETE /api/v1/admin/groups%"))))
+            .scalars()
+            .all()
+        )
+        assert actions, "PUT /admin/groups 应有审计行"
+        ok_deletes = [row for row in deletes if row.result == "success"]  # 409/404 反例行之外的成功行
+        assert ok_deletes and all(row.trace_id for row in ok_deletes)
+
+
+@pytest.mark.integration
+async def test_F3渠道配置更新_预算启停别名_404(admin_env):
+    client, env = admin_env
+    headers = await _login_headers(client, env["admin_email"], _PASSWORD)
+    created = await client.post(
+        "/api/v1/admin/models",
+        json={
+            "provider": "deepseek",
+            "model_id": "deepseek-chat",
+            "api_key": "sk-ds-abcd1234wxyz7f3a",
+            "priority": 3,
+            "budget_daily": 500,
+            "name": "DeepSeek 主力",
+        },
+        headers=headers,
+    )
+    assert created.status_code == status.HTTP_201_CREATED, created.text
+    channel = created.json()
+    await _seed_llm_call(env, model="deepseek-chat", cost="1.25")
+    # Act ①：PUT 别名/优先级/预算/启停（仅提供字段生效；usage 读时重算）
+    resp = await client.put(
+        f"/api/v1/admin/models/{channel['id']}",
+        json={"name": "DeepSeek 备援", "priority": 1, "budget_daily": 200, "status": "disabled"},
+        headers=headers,
+    )
+    # Assert ①
+    assert resp.status_code == status.HTTP_200_OK, resp.text
+    body = resp.json()
+    assert body["name"] == "DeepSeek 备援" and body["priority"] == 1
+    assert body["budget_daily"] == 200 and body["status"] == "disabled"
+    assert body["models"] == ["deepseek-chat"] and body["usage_30d"] == "¥1.25"
+    # Act ②：budget_daily 显式 null=清空预算（透传口径）；部分字段不回填默认
+    cleared = await client.put(f"/api/v1/admin/models/{channel['id']}", json={"budget_daily": None}, headers=headers)
+    # Assert ②
+    assert cleared.status_code == status.HTTP_200_OK, cleared.text
+    assert cleared.json()["budget_daily"] is None
+    assert cleared.json()["name"] == "DeepSeek 备援" and cleared.json()["priority"] == 1  # 未提供字段不回默认
+    # Act ③：extra=forbid（密钥类字段不开放）与未知枚举 422；未知渠道 404
+    forbidden = await client.put(f"/api/v1/admin/models/{channel['id']}", json={"api_key": "sk-new"}, headers=headers)
+    bad_status = await client.put(f"/api/v1/admin/models/{channel['id']}", json={"status": "bogus"}, headers=headers)
+    missing = await client.put(f"/api/v1/admin/models/{uuid.uuid4()}", json={"priority": 2}, headers=headers)
+    # Assert ③
+    assert forbidden.status_code == status.HTTP_422_UNPROCESSABLE_CONTENT
+    assert bad_status.status_code == status.HTTP_422_UNPROCESSABLE_CONTENT
+    assert missing.status_code == status.HTTP_404_NOT_FOUND and missing.json()["code"] == 404
+
+
+@pytest.mark.integration
+async def test_F3成本聚合_30d_总量与按模型分组(admin_env):
+    client, env = admin_env
+    headers = await _login_headers(client, env["admin_email"], _PASSWORD)
+    # Arrange：A 模型两笔（0.25/300 tok）、B 模型一笔（0.30/150 tok）、窗口外一笔不计
+    await _seed_llm_call(env, model="model-a", token_in=100, token_out=50, cost="0.10", minutes_ago=10)
+    await _seed_llm_call(env, model="model-a", token_in=100, token_out=50, cost="0.15", minutes_ago=20)
+    await _seed_llm_call(env, model="model-b", token_in=100, token_out=50, cost="0.30", minutes_ago=30)
+    await _seed_llm_call(env, model="model-old", token_in=100, token_out=50, cost="9.99", minutes_ago=41 * 24 * 60)
+    # Act
+    resp = await client.get("/api/v1/admin/costs", headers=headers)
+    # Assert：{window, total_tokens, total_cost, by_model}；分组按 cost 降序、pct 占比取整
+    assert resp.status_code == status.HTTP_200_OK, resp.text
+    body = resp.json()
+    assert set(body) == {"window", "total_tokens", "total_cost", "by_model"}
+    assert set(body["window"]) == {"from", "to"}
+    assert body["total_tokens"] == 450 and abs(body["total_cost"] - 0.55) < 1e-9
+    assert [m["model"] for m in body["by_model"]] == ["model-b", "model-a"]  # cost 降序
+    first, second = body["by_model"]
+    assert set(first) == {"model", "tokens", "cost", "pct"}
+    assert first["tokens"] == 150 and abs(first["cost"] - 0.30) < 1e-9 and first["pct"] == 55
+    assert second["tokens"] == 300 and second["pct"] == 45
+    assert first["pct"] + second["pct"] == 100
+    # 窗口外模型不计入
+    assert "model-old" not in {m["model"] for m in body["by_model"]}
+
+
+@pytest.mark.integration
+async def test_F3平台统计_users_sessions_runs_30d(admin_env):
+    client, env = admin_env
+    headers = await _login_headers(client, env["admin_email"], _PASSWORD)
+    # Act ①：零种子基线（admin_env 已建 admin+plain 两用户）
+    base = await client.get("/api/v1/admin/stats", headers=headers)
+    # Assert ①：{users, sessions_30d, runs_30d}；users=2、窗口计数=0
+    assert base.status_code == status.HTTP_200_OK, base.text
+    assert set(base.json()) == {"users", "sessions_30d", "runs_30d"}
+    assert base.json()["users"] == 2 and base.json()["sessions_30d"] == 0 and base.json()["runs_30d"] == 0
+    # Act ②：种子 1 会话 + 1 任务 + 1 运行后再取
+    from services.agent.data.orm import Agent as AgentORM
+    from services.agent.data.orm import AgentAdapter as AgentAdapterORM
+    from services.agent.data.orm import Run as RunORM
+    from services.agent.data.orm import Session as SessionORM
+    from services.agent.data.orm import Task as TaskORM
+    from services.iam.data.orm import User as UserORM
+
+    async with env["factory"]() as session:
+        adapter = AgentAdapterORM(agent_tool="nanobot", version=f"f3-{uuid.uuid4().hex[:8]}")
+        session.add(adapter)
+        await session.flush()
+        agent = AgentORM(
+            tenant_id=env["tenant_id"],
+            name=f"f3-agent-{uuid.uuid4().hex[:8]}",
+            agent_tool=adapter.agent_tool,
+            adapter_id=adapter.id,
+        )
+        session.add(agent)
+        await session.flush()  # uuid7 PK 在 flush 时分配，session 行需引用真实 agent_id
+        admin_user = (await session.execute(select(UserORM).where(UserORM.id == env["admin_id"]))).scalar_one()
+        session.add_all(
+            [
+                SessionORM(tenant_id=env["tenant_id"], agent_id=agent.id, user_id=admin_user.id),
+                TaskORM(tenant_id=env["tenant_id"], type="audit_export"),
+            ]
+        )
+        await session.flush()
+        task = (await session.execute(select(TaskORM).where(TaskORM.tenant_id == env["tenant_id"]))).scalar_one()
+        session.add(RunORM(tenant_id=env["tenant_id"], task_id=task.id, seq_start=0))
+        await session.commit()
+    after = await client.get("/api/v1/admin/stats", headers=headers)
+    # Assert ②：30d 窗口计数各 +1，users 不变
+    assert after.status_code == status.HTTP_200_OK
+    assert after.json() == {"users": 2, "sessions_30d": 1, "runs_30d": 1}
+
+
+@pytest.mark.integration
+async def test_F3apikey轮换_旧吊销_新明文一次_已吊销409(admin_env):
+    client, env = admin_env
+    headers = await _login_headers(client, env["admin_email"], _PASSWORD)
+    created = await client.post(
+        "/api/v1/admin/api-keys", json={"name": "ci-runner", "scopes": ["session:read"]}, headers=headers
+    )
+    assert created.status_code == status.HTTP_201_CREATED, created.text
+    old = created.json()
+    # Act ①：轮换（旧吊销 + 同 name/scopes 新签发，明文仅本次）
+    resp = await client.post(f"/api/v1/admin/api-keys/{old['id']}/rotate", headers=headers)
+    # Assert ①：200 签发形状（ApiKeyCreatedOut）；新 id、同名同 scopes、明文前缀自洽
+    assert resp.status_code == status.HTTP_200_OK, resp.text
+    new = resp.json()
+    assert set(new) == {"id", "name", "prefix", "scopes", "status", "created_at", "last_used_at", "key"}
+    assert new["id"] != old["id"]
+    assert new["name"] == "ci-runner" and new["scopes"] == ["session:read"] and new["status"] == "active"
+    assert new["prefix"] == f"sk-oa-…{new['key'][-4:]}" and new["key"] != old["key"]
+    # Assert ②：列表两行——旧 revoked / 新 active；库面旧哈希原样、新哈希=sha256(新明文)
+    listing = (await client.get("/api/v1/admin/api-keys", headers=headers)).json()
+    status_by_id = {k["id"]: k["status"] for k in listing["items"]}
+    assert status_by_id == {old["id"]: "revoked", new["id"]: "active"}
+    async with env["factory"]() as session:
+        old_row = await session.get(ApiKey, uuid.UUID(old["id"]))
+        new_row = await session.get(ApiKey, uuid.UUID(new["id"]))
+        assert old_row is not None and old_row.revoked_at is not None
+        assert new_row is not None and new_row.key_hash == hashlib.sha256(new["key"].encode()).hexdigest()
+        assert old_row.key_hash != new_row.key_hash
+    # Act ③：已吊销旧 Key 再轮换 → 409+3409；未知 Key → 404
+    revoked_again = await client.post(f"/api/v1/admin/api-keys/{old['id']}/rotate", headers=headers)
+    missing = await client.post(f"/api/v1/admin/api-keys/{uuid.uuid4()}/rotate", headers=headers)
+    # Assert ③
+    assert revoked_again.status_code == status.HTTP_409_CONFLICT and revoked_again.json()["code"] == 3409
+    assert missing.status_code == status.HTTP_404_NOT_FOUND and missing.json()["code"] == 404
+    # Act ④：新 Key 可继续轮换（链式）
+    chain = await client.post(f"/api/v1/admin/api-keys/{new['id']}/rotate", headers=headers)
+    assert chain.status_code == status.HTTP_200_OK and chain.json()["id"] not in {old["id"], new["id"]}
+
+
+@pytest.mark.integration
+async def test_F3写端点_scope403抽测(admin_env):
+    client, env = admin_env
+    plain_headers = await _login_headers(client, env["plain_email"], _PASSWORD)
+    some_id = uuid.uuid4()
+    # Act：普通用户（无 group:write / admin:write）打 F3 写端点
+    put_group = await client.put(
+        f"/api/v1/admin/groups/{some_id}",
+        json={"name": "x", "description": "", "role_template": "member", "members": []},
+        headers=plain_headers,
+    )
+    patch_group = await client.patch(
+        f"/api/v1/admin/groups/{some_id}", json={"description": "y"}, headers=plain_headers
+    )
+    delete_group = await client.delete(f"/api/v1/admin/groups/{some_id}", headers=plain_headers)
+    put_model = await client.put(f"/api/v1/admin/models/{some_id}", json={"priority": 1}, headers=plain_headers)
+    rotate_key = await client.post(f"/api/v1/admin/api-keys/{some_id}/rotate", headers=plain_headers)
+    # Assert：一律 403+2001，required 指向各自 scope 门禁（组写=group:write，其余=admin:write）
+    assert put_group.status_code == status.HTTP_403_FORBIDDEN
+    assert put_group.json()["detail"]["required"] == "group:write"
+    assert patch_group.status_code == status.HTTP_403_FORBIDDEN
+    assert delete_group.status_code == status.HTTP_403_FORBIDDEN
+    assert put_model.status_code == status.HTTP_403_FORBIDDEN
+    assert put_model.json()["detail"]["required"] == "admin:write"
+    assert rotate_key.status_code == status.HTTP_403_FORBIDDEN

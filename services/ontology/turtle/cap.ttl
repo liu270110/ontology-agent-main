@@ -1,0 +1,324 @@
+# 平台能力本体（cap TBox）v1 — ONT-2 批（06 篇 §ONT-2.1；docs/ontology/03 §2.1 概念集）
+#
+# 定位：能力层类型系统=类/属性词表 + 16 个 A 档工具能力个体（内核 11 + MCP 5）。
+#   5 个业务行动能力个体不入本文件——它们 bindsAction 指向租户种子（power_outage_seed.ttl）
+#   的行动类 IRI，属租户侧数据，由种子迁移（Alembic 数据迁移）读代码常量+种子图生成 PG 行。
+#   TBox 个体与 PG 种子行的对账由测试钉死（tests/ontology/test_ont2_tbox.py），双向防漂移。
+# 纪律：
+#   - 本文件经 services/ontology/core/tbox.load_turtle 装载（@prefix 自带，loader 只补 ob2/task/gloss）；
+#   - 禁 task:executionMode 标注（行动类口径判定面，seed_service.inspect_seed 同源）——能力执行
+#     语义四元用 cap: 自有属性（cap:executionMode 等，06 篇 §ONT-2.1 契约），避免与行动类混淆；
+#   - 类不声明 rdfs:subClassOf ob2:Action（能力=行动的实现面，非行动类本身；lint 行动闭环不适用）；
+#   - requires/produces/constrainedBy/executionMode 等取值与 services/agent / services/mcp 代码
+#     常量单源对齐（对账测试同源校验），本文件是语义登记处而非第二事实源。
+# 校验：cap_shapes.ttl（AtomicCapabilityShape + 16 工具参数形状）为本文件门禁——
+#   requires/produces 各≥1、constrainedBy 合法 IRI 为 Violation 级；执行语义四元齐备为 warn 级。
+
+@prefix cap:  <http://ontology-agent.local/cap#> .
+@prefix ob2:  <https://ontology-agent.dev/ns/ob2#> .
+@prefix owl:  <http://www.w3.org/2002/07/owl#> .
+@prefix rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix sh:   <http://www.w3.org/ns/shacl#> .
+@prefix xsd:  <http://www.w3.org/2001/XMLSchema#> .
+
+<http://ontology-agent.local/cap> a owl:Ontology ;
+    owl:versionInfo "v1-ont2" ;
+    ob2:profile "rl" ;
+    rdfs:label "平台能力本体"@zh ;
+    rdfs:comment "能力层类型系统（06 篇 §ONT-2.1）：Capability 三类 + 域/值域签名词表 + 执行语义四元 + A 档 16 工具能力个体。" .
+
+# ============ 能力三件（06 篇 §ONT-2.1：抽象类 + 原子/组合） ============
+
+cap:Capability a owl:Class ;
+    rdfs:label "能力（抽象）"@zh ;
+    rdfs:comment "能力层根类：原子能力与组合能力的公共父类（16c F2 九概念骨架）。" .
+
+cap:AtomicCapability a owl:Class ;
+    rdfs:subClassOf cap:Capability ;
+    rdfs:label "原子能力"@zh ;
+    rdfs:comment "最小可指派执行单元：带域/值域签名（requires/produces）与执行语义四元。" .
+
+cap:CompositeCapability a owl:Class ;
+    rdfs:subClassOf cap:Capability ;
+    rdfs:label "组合能力"@zh ;
+    rdfs:comment "cap:composedOf 组合公理：一次执行是 (能力集,公理) 的纯函数（16c F2）。" .
+
+# ============ 关系与语义属性（全部 ObjectProperty 除四元中的字面量项） ============
+
+cap:requires a owl:ObjectProperty ;
+    rdfs:domain cap:Capability ;
+    rdfs:range cap:Capability ;
+    rdfs:label "前置（域签名）"@zh ;
+    rdfs:comment "作用于什么：类 IRI 或事实模式 JSON 的 iri 引用（PG 行 requires JSONB 逐项即本域 IRI）。" .
+
+cap:produces a owl:ObjectProperty ;
+    rdfs:domain cap:Capability ;
+    rdfs:range cap:Capability ;
+    rdfs:label "效果（值域签名）"@zh ;
+    rdfs:comment "产出什么：类 D 事实或 ob2:Action 行动类事实（写即提议，宪法 3）。" .
+
+cap:constrainedBy a owl:ObjectProperty ;
+    rdfs:domain cap:Capability ;
+    rdfs:range sh:Shape ;
+    rdfs:label "参数约束形状"@zh ;
+    rdfs:comment "指向 sh:Shape IRI（校验在写时，0034）；工具能力=参数形状，行动能力=守卫规则形状。" .
+
+cap:bindsAction a owl:ObjectProperty ;
+    rdfs:domain cap:Capability ;
+    rdfs:range ob2:Action ;
+    rdfs:label "实现行动类"@zh ;
+    rdfs:comment "能力↔本体行动桥（16d 五处隐式裁决显式化）：本能力是哪一 ob2:Action 的实现面。" .
+
+cap:servesTask a owl:ObjectProperty ;
+    rdfs:domain cap:Capability ;
+    rdfs:label "服务任务"@zh ;
+    rdfs:comment "能力由它服务的任务评判（16b B5 competency）：task: 任务 IRI 列表，任务侧行存储。" .
+
+cap:composedOf a owl:ObjectProperty ;
+    rdfs:domain cap:CompositeCapability ;
+    rdfs:range cap:Capability ;
+    rdfs:label "组合成员"@zh ;
+    rdfs:comment "组合公理：前提可以是结论（16c F2）。" .
+
+cap:hasGrant a owl:ObjectProperty ;
+    rdfs:domain cap:Capability ;
+    rdfs:range cap:Grant ;
+    rdfs:label "授予"@zh ;
+    rdfs:comment "ACL 断言三层（平台级/租户级/会话级，0034 grants 改造 + 0046 Identity 闸）；M2 空面。" .
+
+cap:Grant a owl:Class ;
+    rdfs:label "授予（ACL 断言）"@zh .
+
+# 执行语义四元（cap 自有属性；DataType——与行动类 task:/ob2: 词表分域，防口径混计）
+cap:executionMode a owl:DatatypeProperty ;
+    rdfs:domain cap:Capability ;
+    rdfs:range xsd:string ;
+    rdfs:label "执行模式"@zh ;
+    rdfs:comment "工具能力取绑定常量（kernel ExecutionMode：read/write）；行动能力取种子词表（modeReadOnly/modeExternalWrite/modeStateful）。" .
+cap:deterministic a owl:DatatypeProperty ;
+    rdfs:domain cap:Capability ;
+    rdfs:range xsd:boolean ;
+    rdfs:label "确定性"@zh ;
+    rdfs:comment "true=同参重放同果；显式常量（idempotentHint/行动种子 task:deterministic）优先，缺省按语义推导（推导式随种子迁移留档）。" .
+cap:triggeredByEvent a owl:DatatypeProperty ;
+    rdfs:domain cap:Capability ;
+    rdfs:range xsd:string ;
+    rdfs:label "触发事件"@zh ;
+    rdfs:comment "行动类事件 IRI 引用（工具能力恒空——四元齐备由 shape warn 级监督，非 Violation）。" .
+cap:guardedByRule a owl:DatatypeProperty ;
+    rdfs:domain cap:Capability ;
+    rdfs:range xsd:string ;
+    rdfs:label "守卫规则"@zh ;
+    rdfs:comment "行动类守卫 shape IRI 引用（工具能力恒空，同上 warn 级）。" .
+
+# ============ 域/值域签名词表（能力签名引用的类；pg 行 requires/produces 逐项 IRI 本源） ============
+
+cap:Workspace a owl:Class ; rdfs:label "工作区"@zh .
+cap:WorkspaceFile a owl:Class ; rdfs:label "工作区文件"@zh .
+cap:FileText a owl:Class ; rdfs:label "文件文本内容"@zh .
+cap:GlobMatch a owl:Class ; rdfs:label "glob 匹配清单"@zh .
+cap:GrepMatch a owl:Class ; rdfs:label "grep 命中清单"@zh .
+cap:Url a owl:Class ; rdfs:label "外网地址"@zh .
+cap:WebContent a owl:Class ; rdfs:label "网页内容"@zh .
+cap:SearchQuery a owl:Class ; rdfs:label "检索词"@zh .
+cap:SearchHits a owl:Class ; rdfs:label "搜索结果集"@zh .
+cap:TodoDeclaration a owl:Class ; rdfs:label "任务申报"@zh .
+cap:TodoBoard a owl:Class ; rdfs:label "任务清单看板"@zh .
+cap:UserMessage a owl:Class ; rdfs:label "用户消息"@zh .
+cap:ChatAnswer a owl:Class ; rdfs:label "对话回答"@zh .
+cap:KnowledgeQuery a owl:Class ; rdfs:label "知识检索查询"@zh .
+cap:KnowledgeEvidence a owl:Class ; rdfs:label "知识证据链"@zh .
+cap:OntologyGraph a owl:Class ; rdfs:label "本体图（TBox 制品）"@zh .
+cap:ShaclReport a owl:Class ; rdfs:label "SHACL 校验报告"@zh .
+cap:SparqlQuery a owl:Class ; rdfs:label "SPARQL 查询"@zh .
+cap:SparqlResult a owl:Class ; rdfs:label "SPARQL 结果集"@zh .
+cap:MemoryFact a owl:Class ; rdfs:label "记忆事实"@zh .
+cap:MemoryTombstone a owl:Class ; rdfs:label "记忆墓碑"@zh .
+cap:LedgerQuery a owl:Class ; rdfs:label "回写台账查询键"@zh .
+cap:LedgerStatus a owl:Class ; rdfs:label "回写台账状态"@zh .
+
+# ============ 参数形状属性（cap_shapes.ttl 工具形状 sh:path 引用；必需参数集单源=代码 schema） ============
+
+cap:arg-path a owl:DatatypeProperty ; rdfs:range xsd:string ; rdfs:label "参数:path"@zh .
+cap:arg-content a owl:DatatypeProperty ; rdfs:range xsd:string ; rdfs:label "参数:content"@zh .
+cap:arg-old_string a owl:DatatypeProperty ; rdfs:range xsd:string ; rdfs:label "参数:old_string"@zh .
+cap:arg-new_string a owl:DatatypeProperty ; rdfs:range xsd:string ; rdfs:label "参数:new_string"@zh .
+cap:arg-pattern a owl:DatatypeProperty ; rdfs:range xsd:string ; rdfs:label "参数:pattern"@zh .
+cap:arg-url a owl:DatatypeProperty ; rdfs:range xsd:string ; rdfs:label "参数:url"@zh .
+cap:arg-query a owl:DatatypeProperty ; rdfs:range xsd:string ; rdfs:label "参数:query"@zh .
+cap:arg-items a owl:DatatypeProperty ; rdfs:label "参数:items（数组）"@zh .
+cap:arg-item_id a owl:DatatypeProperty ; rdfs:range xsd:string ; rdfs:label "参数:item_id"@zh .
+cap:arg-status a owl:DatatypeProperty ; rdfs:range xsd:string ; rdfs:label "参数:status"@zh .
+cap:arg-message a owl:DatatypeProperty ; rdfs:range xsd:string ; rdfs:label "参数:message"@zh .
+cap:arg-ontology_id a owl:DatatypeProperty ; rdfs:range xsd:string ; rdfs:label "参数:ontology_id"@zh .
+cap:arg-graph a owl:DatatypeProperty ; rdfs:label "参数:graph（RDF 图文本）"@zh .
+cap:arg-sparql a owl:DatatypeProperty ; rdfs:range xsd:string ; rdfs:label "参数:sparql"@zh .
+cap:arg-fact_id a owl:DatatypeProperty ; rdfs:range xsd:string ; rdfs:label "参数:fact_id"@zh .
+cap:arg-reason a owl:DatatypeProperty ; rdfs:range xsd:string ; rdfs:label "参数:reason"@zh .
+
+# ============ A 档 16 工具能力个体（内核 11 + MCP 5；取值与代码常量对账，tests/ontology/test_ont2_tbox.py） ============
+
+# —— 内核 ToolPort 绑定 11（fs5 + todo3 + web2 + 适配器 chat_answer）——
+
+cap:fs-read a cap:AtomicCapability ;
+    rdfs:label "fs.read"@zh ;
+    rdfs:comment "读取工作区内文本文件（行窗口/行号前缀，2MB 上限）。" ;
+    cap:requires cap:WorkspaceFile ;
+    cap:produces cap:FileText ;
+    cap:constrainedBy cap:FsReadShape ;
+    cap:executionMode "read" ;
+    cap:deterministic true ;
+    cap:bindsAction <http://ontology.example/action/file_read> .
+
+cap:fs-write a cap:AtomicCapability ;
+    rdfs:label "fs.write"@zh ;
+    rdfs:comment "整文件写入工作区（overwrite 显式覆盖，512KB 上限，原子落盘）。" ;
+    cap:requires cap:WorkspaceFile ;
+    cap:produces cap:WorkspaceFile ;
+    cap:constrainedBy cap:FsWriteShape ;
+    cap:executionMode "write" ;
+    cap:deterministic false ;
+    cap:bindsAction <http://ontology.example/action/file_write> .
+
+cap:fs-edit a cap:AtomicCapability ;
+    rdfs:label "fs.edit"@zh ;
+    rdfs:comment "精确旧串替换（唯一命中约束，原子落盘）。" ;
+    cap:requires cap:WorkspaceFile ;
+    cap:produces cap:WorkspaceFile ;
+    cap:constrainedBy cap:FsEditShape ;
+    cap:executionMode "write" ;
+    cap:deterministic false ;
+    cap:bindsAction <http://ontology.example/action/file_edit> .
+
+cap:fs-glob a cap:AtomicCapability ;
+    rdfs:label "fs.glob"@zh ;
+    rdfs:comment "按 glob 模式匹配工作区文件（上限 1000 条）。" ;
+    cap:requires cap:Workspace ;
+    cap:produces cap:GlobMatch ;
+    cap:constrainedBy cap:FsGlobShape ;
+    cap:executionMode "read" ;
+    cap:deterministic true ;
+    cap:bindsAction <http://ontology.example/action/file_glob> .
+
+cap:fs-grep a cap:AtomicCapability ;
+    rdfs:label "fs.grep"@zh ;
+    rdfs:comment "正则逐行搜索工作区文本（上限 200 命中）。" ;
+    cap:requires cap:Workspace ;
+    cap:produces cap:GrepMatch ;
+    cap:constrainedBy cap:FsGrepShape ;
+    cap:executionMode "read" ;
+    cap:deterministic true ;
+    cap:bindsAction <http://ontology.example/action/file_grep> .
+
+cap:web-fetch a cap:AtomicCapability ;
+    rdfs:label "web.fetch"@zh ;
+    rdfs:comment "白名单出口抓取网页（egress 门禁 + 截断/spill）。" ;
+    cap:requires cap:Url ;
+    cap:produces cap:WebContent ;
+    cap:constrainedBy cap:WebFetchShape ;
+    cap:executionMode "read" ;
+    cap:deterministic false ;
+    cap:bindsAction <http://ontology.example/action/web_fetch> .
+
+cap:web-search a cap:AtomicCapability ;
+    rdfs:label "web.search"@zh ;
+    rdfs:comment "检索引擎适配（结果按白名单过滤）。" ;
+    cap:requires cap:SearchQuery ;
+    cap:produces cap:SearchHits ;
+    cap:constrainedBy cap:WebSearchShape ;
+    cap:executionMode "read" ;
+    cap:deterministic false ;
+    cap:bindsAction <http://ontology.example/action/web_search> .
+
+cap:todo-write a cap:AtomicCapability ;
+    rdfs:label "todo.write"@zh ;
+    rdfs:comment "整表申报重建任务清单（申报≠裁决，判据回执转权威）。" ;
+    cap:requires cap:TodoDeclaration ;
+    cap:produces cap:TodoBoard ;
+    cap:constrainedBy cap:TodoWriteShape ;
+    cap:executionMode "write" ;
+    cap:deterministic false ;
+    cap:bindsAction <http://ontology.example/action/todo_write> .
+
+cap:todo-update a cap:AtomicCapability ;
+    rdfs:label "todo.update"@zh ;
+    rdfs:comment "单项状态申报（done 申报由内核判据裁决）。" ;
+    cap:requires cap:TodoDeclaration ;
+    cap:produces cap:TodoBoard ;
+    cap:constrainedBy cap:TodoUpdateShape ;
+    cap:executionMode "write" ;
+    cap:deterministic false ;
+    cap:bindsAction <http://ontology.example/action/todo_update> .
+
+cap:todo-read a cap:AtomicCapability ;
+    rdfs:label "todo.read"@zh ;
+    rdfs:comment "读任务清单权威视图（申报态+裁决合成）。" ;
+    cap:requires cap:TodoBoard ;
+    cap:produces cap:TodoBoard ;
+    cap:constrainedBy cap:TodoReadShape ;
+    cap:executionMode "read" ;
+    cap:deterministic true ;
+    cap:bindsAction <http://ontology.example/action/todo_read> .
+
+cap:chat-answer a cap:AtomicCapability ;
+    rdfs:label "chat_answer"@zh ;
+    rdfs:comment "会话回答适配器行动（非 ToolPort 工具；LLM 生成非确定）。" ;
+    cap:requires cap:UserMessage ;
+    cap:produces cap:ChatAnswer ;
+    cap:constrainedBy cap:ChatAnswerShape ;
+    cap:executionMode "write" ;
+    cap:deterministic false ;
+    cap:bindsAction <http://ontology.example/action/chat_answer> .
+
+# —— MCP 出口 5（TOOL_SPECS 静态元数据单源；annotations idempotentHint→deterministic）——
+
+cap:knowledge-search a cap:AtomicCapability ;
+    rdfs:label "knowledge.search"@zh ;
+    rdfs:comment "GraphRAG 混合检索（auto/local/global/drift），返回引用与图路证据链。" ;
+    cap:requires cap:KnowledgeQuery ;
+    cap:produces cap:KnowledgeEvidence ;
+    cap:constrainedBy cap:KnowledgeSearchShape ;
+    cap:executionMode "read" ;
+    cap:deterministic true ;
+    cap:bindsAction <http://ontology.example/action/mcp/knowledge.search> .
+
+cap:ontology-validate a cap:AtomicCapability ;
+    rdfs:label "ontology.validate"@zh ;
+    rdfs:comment "SHACL 校验 data graph × 当前发布版 shapes 制品（失败即违规清单）。" ;
+    cap:requires cap:OntologyGraph ;
+    cap:produces cap:ShaclReport ;
+    cap:constrainedBy cap:OntologyValidateShape ;
+    cap:executionMode "read" ;
+    cap:deterministic true ;
+    cap:bindsAction <http://ontology.example/action/mcp/ontology.validate> .
+
+cap:ontology-query a cap:AtomicCapability ;
+    rdfs:label "ontology.query"@zh ;
+    rdfs:comment "只读 SPARQL 查询当前发布版 TBox（写语法 3001 拒绝）。" ;
+    cap:requires cap:SparqlQuery , cap:OntologyGraph ;
+    cap:produces cap:SparqlResult ;
+    cap:constrainedBy cap:OntologyQueryShape ;
+    cap:executionMode "read" ;
+    cap:deterministic true ;
+    cap:bindsAction <http://ontology.example/action/mcp/ontology.query> .
+
+cap:memory-invalidate a cap:AtomicCapability ;
+    rdfs:label "memory.invalidate"@zh ;
+    rdfs:comment "失效标记（墓碑式软删，reason 必填，重复失效返回原状态）。" ;
+    cap:requires cap:MemoryFact ;
+    cap:produces cap:MemoryTombstone ;
+    cap:constrainedBy cap:MemoryInvalidateShape ;
+    cap:executionMode "write" ;
+    cap:deterministic true ;
+    cap:bindsAction <http://ontology.example/action/mcp/memory.invalidate> .
+
+cap:writeback-status a cap:AtomicCapability ;
+    rdfs:label "writeback.status"@zh ;
+    rdfs:comment "回写台账状态查询（受理凭证三键任一定位，只读幂等）。" ;
+    cap:requires cap:LedgerQuery ;
+    cap:produces cap:LedgerStatus ;
+    cap:constrainedBy cap:WritebackStatusShape ;
+    cap:executionMode "read" ;
+    cap:deterministic true ;
+    cap:bindsAction <http://ontology.example/action/mcp/writeback.status> .

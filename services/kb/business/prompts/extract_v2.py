@@ -3,7 +3,10 @@
 2026-09-28 深化批次合流：正文自 kb_extraction 的 ``_EXTRACT_PROMPT_V2`` 原位平移，逐字节未变。
 v1→v2 变更 = 新增 evidence 原文逐字引语要求（规则 5 重写 + 规则 6 schema 增 evidence 字段）——
 与 kb_extraction 证据逐字门禁（evidence_not_in_chunk）配套。
-治理约束（18 篇 §1.1）：active 版本正文不可变，修错/调整一律发新版本（extract_v3.py
+2026-10-07 起被 extract_v3 取代（K24 批，docs/Agent/13 §30：目录编号制+序号回包的硬幻觉门禁）——
+本版留注册表可回退；rule_extraction 仍只读复用本模块 render_catalog（独立模板
+kb_rule_extract@v1，不受抽取模板切换影响）。正文仍冻结不可变。
+治理约束（18 篇 §1.1）：active 版本正文不可变，修错/调整一律发新版本（extract_v4.py
 新文件 + 注册表新登记 + 快照更新走评审回归），禁止原地改写本文件正文。
 """
 

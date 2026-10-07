@@ -22,6 +22,7 @@ if sys.platform == "win32":  # psycopg 异步要求 Selector 事件循环（同 
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
+from services.kb.business.kb_extraction import load_seed_catalog
 from services.kb.business.kb_pipeline import M2_FULL_STEPS, PipelineRunReport, run_pipeline
 from services.kb.retrieval.embed import EmbeddingUnavailableError, OllamaEmbedder
 from services.platform.config import Settings
@@ -31,13 +32,20 @@ from services.review.business.candidates import ReviewTicketService
 
 PW = "http://ontology-agent.local/o/t1/power#"
 
+
+def _seed_class_index(iri: str) -> int:
+    """K24 序号口径（docs/Agent/13 §30）：种子类在声明序（=extract_v3 目录渲染序=映射序）中的 1 起序号。"""
+    return next(i for i, (c_iri, _, _) in enumerate(load_seed_catalog().classes, start=1) if c_iri == iri)
+
+
 # 场景：4 节 ×~1450 字符 → 语义分块（512±128 token）每节必出 ≥2 chunk；关键词居节首、
 # 远离 10% 重叠搬运边界（保证每个关键词只出现在一个 chunk → 候选=4、无跨 chunk 重复证据）。
+# K24：extract_v3 编号目录制下模型只回类序号（整数），解析侧映射回 IRI——IRI 直出会被硬幻觉门禁误剪。
 SCENE_KEYWORDS = {
-    "馈线F001": f"{PW}Feeder",
-    "工单OO-123456": f"{PW}OutageOrder",
-    "变压器T-09": f"{PW}Transformer",
-    "恢复送电操作单": f"{PW}RestorePower",
+    "馈线F001": _seed_class_index(f"{PW}Feeder"),
+    "工单OO-123456": _seed_class_index(f"{PW}OutageOrder"),
+    "变压器T-09": _seed_class_index(f"{PW}Transformer"),
+    "恢复送电操作单": _seed_class_index(f"{PW}RestorePower"),
 }
 SCENE_PROPERTIES = {"工单OO-123456": {"orderNo": "OO-123456", "hasStatus": "created"}}
 _PAD = "台账例行核对记录保持原文以便语义分块与检索评估。" * 40

@@ -32,7 +32,8 @@
   count}）随抽取完成落账事务写入 Document.meta（extract_empty 信号同落点先例）。
 
 提示词治理（standards/01 §5.1 / 18 篇 §1）：抽取模板为版本化资产，正文落
-business/prompts/ 包（active=extract_v2，v1→v2 变更=新增 evidence 逐字引语要求），运行期经
+business/prompts/ 包（active=extract_v3，K24 §30 编号制硬幻觉门禁：目录编号制+序号回包+解析侧
+序号→IRI 映射；v2=证据逐字引语版，留注册表可回退），运行期经
 business/prompts 注册表按 template_ref 取用（version pin：同一 job 全程同版本，未知 ref 明确
 抛错），ref 随 kb_facts.meta 与审核信封落库可追溯；种子本体 = services/seeds/power_seed.ttl（电力停电
 wedge，M2 出口条件）。评审票据写入经 CandidateReviewPort（review.data 模块私有，见端口 docstring）。
@@ -60,7 +61,7 @@ from sqlalchemy import false, select, update
 
 from services.kb.business.conflict_triage import triage_conflicts
 from services.kb.business.pipeline_base import PipelineError, StepContext
-from services.kb.business.prompts import extract_v2, get_prompt, get_system_prompt
+from services.kb.business.prompts import extract_v2, extract_v3, get_prompt, get_system_prompt
 from services.kb.data.orm import Document, DocumentChunk, KbFact
 from services.kb.retrieval.embed import EmbeddingUnavailableError
 from services.ontology.core import shacl as ontology_shacl
@@ -351,7 +352,8 @@ def _pruning_violation(cand: dict[str, Any], reason: PruningReason) -> dict[str,
 
 # ---------------------------------------------------------------- extract（§2.3 批量抽取）
 
-_EXTRACT_TEMPLATE_REF = extract_v2.TEMPLATE_REF  # "kb_extract@v2"：v1→v2 新增 evidence 逐字引语要求（逐字门禁依据）
+_EXTRACT_TEMPLATE_REF = extract_v3.TEMPLATE_REF  # "kb_extract@v3"：K24 §30 切换行——回退 v2=仅改此行，
+# 配套 schema/目录渲染/序号映射开关按 ref 同步选取（下方三表）；v2 留注册表可回退。
 # 抽取输出 JSON Schema（端口实现负责校验，宪法第 2 条；兼容 FakeModelPort 确定性输出）。
 # evidence 为可选字段：旧模型/确定性桩不产出时仅逐字门禁空转（无引语无可证伪），不判违例。
 _EXTRACT_SCHEMA_V2: dict[str, Any] = {
@@ -385,6 +387,97 @@ _EXTRACT_SCHEMA_V2: dict[str, Any] = {
         }
     },
 }
+
+# v3 输出 schema（K24-b，docs/Agent/13 §30）：复制 v2，仅 ontology_class/object_class 改 integer
+# （编号目录制——模型只回类序号，minimum=1 对齐目录序从 1 起）；evidence 逐字引语要求原样保留。
+_EXTRACT_SCHEMA_V3: dict[str, Any] = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": ["candidates"],
+    "properties": {
+        "candidates": {
+            "type": "array",
+            "maxItems": 64,
+            "items": {
+                "type": "object",
+                "additionalProperties": False,
+                "required": ["kind", "name", "confidence"],
+                "properties": {
+                    "kind": {"enum": ["entity", "relation", "attribute", "event"]},
+                    "name": {"type": "string", "minLength": 1, "maxLength": 256},
+                    "ontology_class": {"type": "integer", "minimum": 1},
+                    "predicate": {"type": "string", "maxLength": 256},
+                    "object": {"type": "string", "maxLength": 1024},
+                    "object_class": {"type": "integer", "minimum": 1},
+                    "evidence": {"type": "string", "maxLength": 2048},
+                    "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+                    "detail": {"type": "string", "maxLength": 2048},
+                    "properties": {
+                        "type": "object",
+                        "additionalProperties": {"type": "string"},
+                    },
+                },
+            },
+        }
+    },
+}
+
+# 模板配套资产按 ref 选取（K24 §30：回退=仅改 _EXTRACT_TEMPLATE_REF 一行，三表随 ref 同步切换）。
+_EXTRACT_SCHEMAS: dict[str, dict[str, Any]] = {
+    extract_v2.TEMPLATE_REF: _EXTRACT_SCHEMA_V2,
+    extract_v3.TEMPLATE_REF: _EXTRACT_SCHEMA_V3,
+}
+_EXTRACT_CATALOG_RENDERERS: dict[str, Any] = {
+    extract_v2.TEMPLATE_REF: extract_v2.render_catalog,
+    extract_v3.TEMPLATE_REF: extract_v3.render_catalog,
+}
+_NUMBERED_CATALOG_REFS = frozenset({extract_v3.TEMPLATE_REF})  # 编号目录制模板集合（序号→IRI 映射门禁启用面）
+
+
+def _map_class_indices(candidates: list[Any], class_index: dict[int, str]) -> list[Any]:
+    """目录序号→种子类 IRI 解析侧映射（K24-c，docs/Agent/13 §30 E-3；mem0@10 §12 UUID→序号反幻觉同型）。
+
+    编号目录制模板（v3）下模型只回类序号，本函数在一切校验（剪枝/落库）之前逐条浅拷贝改写
+    （不污染端口返回对象——确定性桩/端口可能跨 chunk 复用同一响应字典，原地改写会被二次映射）：
+    - 命中（1..N 整数）→ 映射回种子类 IRI，其后 match_seed_class/剪枝/evidence 全走既有链
+      （剪枝侧 hint in class_iris 直命中，映射发生在校验前）；
+    - 未自报类（缺省/空白）原样透传（K21 口径：无自报无 schema 外断言，不归映射管）；
+    - 失序（非整数——含 bool/浮点/任意文本，或越界整数）改写为自描述哨兵串「形态:原值」
+      （如「序号越界:99」「非整数:Feeder」）——候选照常进 K21 剪枝管线，按 OUT_OF_TAXONOMY /
+      INVALID_RELATION_ENDPOINT 剪除留痕，detail 自然注明失效形态：不加新枚举、不 hard-raise
+      # 口径（专家审核 2026-10-07）：生产端口 schema=第一道门拒收非整数（反馈重试后上抛）；
+      # 本哨兵分支=非校验端口（测试桩）兜底走留痕——两道门互补而非矛盾。
+      （保 chunk 级断点续跑语义）；模型违反序号口径直出 IRI 文本同落此分支（硬幻觉门禁：
+      目录未展示 IRI，任何非序号回包皆视为 schema 外候选交终审）。
+    纯函数：返回新列表，不感知落库；非 dict 条目透传（调用方既有过滤口径）。
+    """
+    mapped: list[Any] = []
+    for item in candidates:
+        if not isinstance(item, dict):
+            mapped.append(item)
+            continue
+        cand = dict(item)  # 浅拷贝：仅改写顶层序号字段，不动端口返回对象
+        for field_name in ("ontology_class", "object_class"):
+            raw = cand.get(field_name)
+            if raw is None or (isinstance(raw, str) and not raw.strip()):
+                continue  # 未自报类：空 hint 原样透传（剪枝侧同口径）
+            if isinstance(raw, bool) or not isinstance(raw, int):
+                # jsonschema 视 2.0 为合法 integer——整值浮点容错为 int 后须落穿映射
+                # （替代复核发现 1：转换后 continue 会使容错成死代码——2.0 仍被剪除）；
+                # 非整值浮点/文本走哨兵留痕（K21 管线）。
+                if isinstance(raw, float) and raw.is_integer():
+                    raw = int(raw)
+                else:
+                    cand[field_name] = f"非整数:{raw}"
+                    continue
+            iri = class_index.get(raw)
+            if iri is None:
+                cand[field_name] = f"序号越界:{raw}"
+                continue
+            cand[field_name] = iri
+        mapped.append(cand)
+    return mapped
+
 
 _FACT_TYPES: frozenset[str] = frozenset({"entity", "relation", "attribute", "event"})
 
@@ -531,7 +624,10 @@ async def run_extract(ctx: StepContext) -> None:
         if isinstance(key, str):
             existing[key] = row.id
 
-    catalog_text = extract_v2.render_catalog(catalog)
+    catalog_text = _EXTRACT_CATALOG_RENDERERS[_EXTRACT_TEMPLATE_REF](catalog)
+    # K24-c：目录序号→种子类 IRI 映射表（SeedCatalog.classes 声明序 enumerate，与 v3 渲染同序同
+    # 起点——声明序=渲染序=映射序不变式）；仅编号目录制模板消费，v2 直出 IRI 时空转。
+    class_index = {idx: iri for idx, (iri, _, _) in enumerate(catalog.classes, start=1)}
     template_ref = _EXTRACT_TEMPLATE_REF  # version pin（18 篇 §1.1）：同一 job 全程同版本
     pruning_stats: dict[str, int] = {}  # K21：各原因码计数跨 chunk 累积，随抽取完成落账
     for chunk in chunks:  # 单 chunk 失败即抛 → 步级重试 ≤3；已落候选按 fact_key 去重续跑
@@ -539,12 +635,14 @@ async def run_extract(ctx: StepContext) -> None:
         data = await ctx.model.complete_structured(
             system=get_system_prompt(_EXTRACT_TEMPLATE_REF),
             user=get_prompt(_EXTRACT_TEMPLATE_REF)(catalog_text, chunk.content),
-            json_schema=_EXTRACT_SCHEMA_V2,
+            json_schema=_EXTRACT_SCHEMAS[_EXTRACT_TEMPLATE_REF],
             trace_id=trace_id,
         )
         candidates = data.get("candidates")
         if not isinstance(candidates, list):
             raise ModelUnavailableError(f"抽取输出缺 candidates 数组（chunk seq={chunk.seq}）")
+        if _EXTRACT_TEMPLATE_REF in _NUMBERED_CATALOG_REFS:  # K24-c：序号→IRI（校验前映射，越界/非整数交 K21 剪枝）
+            candidates = _map_class_indices(candidates, class_index)
         stats = await _persist_candidates(ctx, chunk, candidates, existing, catalog, trace_id, template_ref)
         for reason, count in stats.items():
             pruning_stats[reason] = pruning_stats.get(reason, 0) + count

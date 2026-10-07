@@ -40,15 +40,25 @@ def _face_for(suite: str, scenario: str) -> str:
 
 
 def load_results(results_path: Path) -> list[tuple[Path, dict[str, Any]]]:
-    """读结果：单文件或目录（目录=取 *.json，manifest 除外）；路径统一 resolve（evidence_uri 相对化用）。"""
+    """读结果：单文件或目录（目录=取 *.json，manifest 除外）；路径统一 resolve（evidence_uri 相对化用）。
+
+    citation_only 件（公开榜单引用表，benchmarks/suites/rag/leaderboard_citations/，
+    非实测数据）显式跳过——ORSI evidence 只收实测指标，文献引用不进能力注册建议。
+    """
     results_path = results_path.resolve()
     if results_path.is_file():
-        return [(results_path, json.loads(results_path.read_text(encoding="utf-8")))]
+        payload = json.loads(results_path.read_text(encoding="utf-8"))
+        if payload.get("nature") == "citation_only":
+            return []
+        return [(results_path, payload)]
     out: list[tuple[Path, dict[str, Any]]] = []
     for path in sorted(results_path.glob("*.json")):
         if path.name.endswith("manifest.json"):
             continue
-        out.append((path, json.loads(path.read_text(encoding="utf-8"))))
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        if payload.get("nature") == "citation_only":
+            continue
+        out.append((path, payload))
     return out
 
 

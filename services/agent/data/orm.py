@@ -218,6 +218,17 @@ class SessionFeedback(Base, PkMixin, TenantMixin):  # 飞轮采集环（docs/Age
         CheckConstraint("outcome IN ('completed','partial','failed')", name="ck_session_feedback_outcome"),
         UniqueConstraint("session_id", "run_id", "user_id", name="uk_session_feedback_session_run_user"),
     )
+# Bridge 会话映射表（docs/Agent/20 §2 G1 批；05 篇 §4.4「桥自持 platform_session ↔
+# (adapter, tool_session_id) 映射表」落库面；F3/F5 通用形态共用，一次建表）。
+# 外键 session_id→sessions.id：平台会话删除前置检查已挡（sessions 有引用拒删，api/01 §5.1）。
+# 列名 metadata 为 SQLAlchemy DeclarativeBase 保留属性名，ORM 属性名 meta + 列名 metadata。
+class AdapterSession(Base, PkMixin, TenantMixin, TimestampMixin):
+    __tablename__ = "adapter_sessions"
+    session_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("sessions.id"), nullable=False, index=True)
+    adapter: Mapped[str] = mapped_column(String(32), nullable=False)  # acp|http-generic|cli-generic|a2a（形态键）
+    foreign_id: Mapped[str] = mapped_column(String(256), nullable=False)  # 对端工具会话标识（ACP sessionId 等）
+    meta: Mapped[dict] = mapped_column("metadata", JSONB, default=dict, nullable=False)  # profile/停因等可追溯面
+    __table_args__ = (UniqueConstraint("session_id", "adapter", name="uk_adapter_sessions_session_id_adapter"),)
 
 
 # H-1 提示词工程治理批（api/01 §5.10 F-08/X12；standards/01 §5.1 版本化资产）：模板头表 + 版本表。

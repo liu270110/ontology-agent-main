@@ -1,0 +1,34 @@
+# Goose ACP profile（docs/Agent/20 §2.2 首批；画像源=05 篇 §2.1 总表 Goose 行 +
+# §5.2 Agent Profile 规范 v0.1 字段。驱动面=goose acp（stdio）；审批=mode 预设，
+# 无逐次审批 API——permission_map 置空=权限请求一律 fail-closed 默认拒绝）
+profile: goose-acp
+profile_version: 1
+tool: goose               # 工具注册名（agents 表引用口径）
+form: F4
+pinned:                   # 版本锚点（仓库迁移 block→aaif-goose 已钉）
+  repo: aaif-goose/goose
+  version: ">=1.0 <2"
+  verified: 2026-10-07
+transport:
+  cmd: ["goose", "acp"]    # stdio 变体（05 §2.1：goose serve=ACP over HTTP+WS:3284 属 F3 面，本批不接）
+  cwd: null
+  env: {}
+event_map:
+  agent_message_chunk: text_delta
+  agent_thought_chunk: reasoning_delta
+  tool_call: tool_call
+  tool_call_update: tool_call
+  plan: ""
+permission_map: null       # 05 §2.1：Goose 无逐次审批 API（mode 预设 approve/auto/chat）——
+                           # profile 声明即闸：连接层不挂权限 handler，入站权限请求 -32601 拒绝
+session_map:
+  tool_session_field: sessionId   # SQLite 会话持久（-r 续跑；跨进程 load 首波不启用）
+  load_supported: false
+sandbox:
+  container: true
+  network: egress-proxy
+capabilities:              # 审批降级明示（05 §6 风险：无审批回调工具→能力协商降级）
+  feed: false
+  approval: false          # 注册面明示降级：行动类白名单档约束（租户治理档，05 §4.3 nanobot 同款）
+  resume: true             # 会话持久（SQLite）
+  artifacts: false

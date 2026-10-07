@@ -1,0 +1,35 @@
+# OpenCode ACP profile（docs/Agent/20 §2.2 首批；画像源=05 篇 §2.1 总表 OpenCode 行 +
+# §5.2 Agent Profile 规范 v0.1 字段。驱动面=opencode acp（stdio JSON-RPC），审批一等）
+profile: opencode-acp
+profile_version: 1
+tool: opencode            # 工具注册名（agents 表引用口径）
+form: F4                  # ACP 标准协议形态
+pinned:                   # 版本锚点（05 §6 风险 1：上游漂移防护——仓库迁移 sst→anomalyco 已钉）
+  repo: anomalyco/opencode
+  version: ">=1.0 <2"
+  verified: 2026-10-07
+transport:
+  cmd: ["opencode", "acp"]   # stdio JSON-RPC 2.0（ndjson 帧）
+  cwd: null                  # null=进程缺省 cwd（session/new 参数要求绝对路径）
+  env: {}
+event_map:                  # session/update 判别式 → GenerationEvent kind（空串=丢弃，最小面）
+  agent_message_chunk: text_delta
+  agent_thought_chunk: reasoning_delta
+  tool_call: tool_call          # 最小面：{tool_call_id,title,status} JSON 串
+  tool_call_update: tool_call
+  plan: ""                      # plan 更新首波不归一（AG-UI PLAN 投影随事件批）
+permission_map:              # OpenCode 审批一等（05 §2.1）：request_permission options 直映
+  method: session/request_permission
+  option_kinds: [allow_once, allow_always, reject_once, reject_always]
+  allow_always_cache: true      # allow_always→平台授权缓存（05 §4.3）
+session_map:
+  tool_session_field: sessionId
+  load_supported: false         # ACP session/load 首波不启用（重绑=session/new 覆盖）
+sandbox:                     # 07 §7.5 v1 出口降级（F4 本地进程档）
+  container: true
+  network: egress-proxy
+capabilities:                # 能力声明（注册面/决策树探测面，05 §5.1）
+  feed: false                # turn 内不可 prompt→排队至 stopReason（05 §4.1）
+  approval: true
+  resume: false
+  artifacts: false

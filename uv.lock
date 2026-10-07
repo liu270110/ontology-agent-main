@@ -1740,7 +1740,7 @@ requires-dist = [
     { name = "arq", specifier = ">=0.28,<1" },
     { name = "cryptography", specifier = ">=42" },
     { name = "docker", specifier = ">=7.1" },
-    { name = "fastapi", specifier = ">=0.115" },
+    { name = "fastapi", specifier = ">=0.141,<0.142" },
     { name = "fastmcp", specifier = ">=2.12.5,<3" },
     { name = "httpx", specifier = ">=0.27" },
     { name = "minio", specifier = ">=7.2" },

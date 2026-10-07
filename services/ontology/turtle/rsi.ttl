@@ -1,0 +1,182 @@
+# services/ontology/turtle/rsi.ttl
+# rsi: 平台自进化本体 v0.1（architecture/09 §13.5「rsi: 改进项本体（候选池本体化，v0.1 草案）」
+# + §14.1「本体参与」；内建本体制品，随平台版本发布；mem.ttl 同款形态——TBox + SHACL shapes 一体）。
+# 装载器：services/ontology/core/rsi_tbox.py（mem_tbox.py 同款，进程内缓存只读）。
+#
+# 幂等追加纪律（09 §13.6 收编关系：不推翻，只升维）：
+# - rsi:Candidate 承载 §13.5 实文语义（evolvesSurface/targetsElement/carriesEvidence/hasEvalPlan
+#   + 生命周期 draft→evaluating→validated→promoted|rejected、promoted→reverted），本文件只声明
+#   不改写——运行期强制仍以 PG CHECK 枚举 + 代码校验为准（09:173 交付前口径），SHACL 形状
+#   v0.1 只上「本批最小切片」（§14.5 批次 A）；
+# - rsi:Contribution = rsi:Candidate 的**子类**（§14.1：只加子类，不改 Candidate 既有语义）；
+# - 八进化面 O1~O8 为封闭枚举（surfaces.py §13.2 同源），SHACL sh:in 机械拒绝非法面。
+
+@prefix rsi: <https://ontology-agent.dev/ontology/rsi#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+<https://ontology-agent.dev/ontology/rsi#> a owl:Ontology ;
+    rdfs:label "rsi 平台自进化本体 v0.1" ;
+    rdfs:comment "平台自进化类型系统（09 §13.5 候选池本体化 v0.1 草案 + §14.1 贡献者协议本体参与）：候选改进项 + 外部贡献者/贡献产物 + SHACL 写入门禁（批次 A 最小切片）。" .
+
+# ---------------------------------------------------------------------------
+# §13.5 候选改进项（本文件只声明承载实文语义，不改写——运行期强制仍以 PG CHECK + 代码校验为准）
+# ---------------------------------------------------------------------------
+
+rsi:Candidate a owl:Class ;
+    rdfs:label "候选改进项" ;
+    rdfs:comment "改进项即本体实例（09 §13.5）：候选不再是 PG 行 + JSON 信封，生命周期状态迁移被本体控制（v1 以 PG CHECK 枚举 + 代码校验承载同语义，09:173）。属性：evolvesSurface（指向八进化面枚举）、targetsElement（本体锚点 IRI）、carriesEvidence（来源轨迹/缺口工单）、hasEvalPlan。" .
+
+rsi:evolvesSurface a owl:DatatypeProperty ;
+    rdfs:label "进化面" ;
+    rdfs:comment "该候选改进的八大进化面（09 §13.2 封闭八面 O1~O8，surfaces.py 同源）。" ;
+    rdfs:domain rsi:Candidate ;
+    rdfs:range xsd:string .
+
+rsi:targetsElement a owl:ObjectProperty ;
+    rdfs:label "本体锚点" ;
+    rdfs:comment "改进落点在本体中的元素 IRI（09 §13.2 本体锚点）。" ;
+    rdfs:domain rsi:Candidate .
+
+rsi:carriesEvidence a owl:ObjectProperty ;
+    rdfs:label "证据" ;
+    rdfs:comment "来源轨迹/缺口工单（宪法 5 全程可追溯）。" ;
+    rdfs:domain rsi:Candidate .
+
+rsi:hasEvalPlan a owl:ObjectProperty ;
+    rdfs:label "评估计划" ;
+    rdfs:comment "候选的效果判据与评估方案（09 §13.5）。" ;
+    rdfs:domain rsi:Candidate .
+
+# ---------------------------------------------------------------------------
+# §14.1 外部贡献者（Contributor Protocol 本体参与：身份/档位/信誉分）
+# ---------------------------------------------------------------------------
+
+rsi:Contributor a owl:Class ;
+    rdfs:label "贡献者" ;
+    rdfs:comment "经配置参与平台 ORSI 的外部 agent（09 §14.1：DSH/Claude Code/pi/openclaw/自托管 agent）——身份与凭据复用 C4 远程认证，治理档位映射贡献权限，信誉分=转正率与回归失败率滑动窗（低于阈值自动降档，批次 C 实装）。" .
+
+rsi:contributorId a owl:DatatypeProperty ;
+    rdfs:label "贡献者标识" ;
+    rdfs:comment "平台内唯一 slug（contributor_id，claims 绑定用）。" ;
+    rdfs:domain rsi:Contributor ;
+    rdfs:range xsd:string .
+
+rsi:displayName a owl:DatatypeProperty ;
+    rdfs:label "显示名" ;
+    rdfs:comment "贡献者人类可读显示名。" ;
+    rdfs:domain rsi:Contributor ;
+    rdfs:range xsd:string .
+
+rsi:governanceTier a owl:DatatypeProperty ;
+    rdfs:label "治理档位" ;
+    rdfs:comment "治理三档（宪法 3）：solo=自用工具即生效留痕 / team=租户审批 / enterprise=双审（09 §14.1 治理档位映射贡献权限；硬门禁任何档不可跳过）。" ;
+    rdfs:domain rsi:Contributor ;
+    rdfs:range xsd:string .
+
+rsi:trustScore a owl:DatatypeProperty ;
+    rdfs:label "信誉分" ;
+    rdfs:comment "转正率与回归失败率滑动窗（09 §14.1）；初始 1.0，取值 [0,1]；低于阈值自动降档（enterprise→需人工全审，批次 C 实装滑动窗）。" ;
+    rdfs:domain rsi:Contributor ;
+    rdfs:range xsd:decimal .
+
+rsi:deliveryDir a owl:DatatypeProperty ;
+    rdfs:label "投递目录" ;
+    rdfs:comment "受沙箱约束的投递区约定路径 .oa/contributors/<contributor-id>/{inbox,workspace,products}（09 §14.1 投递目录约定；贡献者只见自己的沙箱投影，平台工作区隔离红线沿 08 篇）。" ;
+    rdfs:domain rsi:Contributor ;
+    rdfs:range xsd:string .
+
+# ---------------------------------------------------------------------------
+# §14.1 贡献产物（= rsi:Candidate 的子类：只加子类，不改 Candidate 既有语义）
+# ---------------------------------------------------------------------------
+
+rsi:Contribution a owl:Class ;
+    rdfs:subClassOf rsi:Candidate ;
+    rdfs:label "贡献产物" ;
+    rdfs:comment "外部贡献者的产物（09 §14.1）：rsi:Candidate 子类，hasContributor 溯源 + contributesSurface 指向八进化面——外部产物的进化挂靠与平台内产物同构；产物信封/审核队列/G1~G3 沿既有通道（零新通道），注册≠生效（apply 恒拒绝红线不变）。" .
+
+rsi:hasContributor a owl:ObjectProperty ;
+    rdfs:label "贡献者溯源" ;
+    rdfs:comment "产物归属的外部贡献者（09 §14.1 hasContributor 溯源）。" ;
+    rdfs:domain rsi:Contribution ;
+    rdfs:range rsi:Contributor .
+
+rsi:contributesSurface a owl:DatatypeProperty ;
+    rdfs:label "挂靠进化面" ;
+    rdfs:comment "产物挂靠的进化面（09 §14.1 contributesSurface 指向八进化面；面编号封闭枚举 O1~O8，surfaces.py §13.2 同源，非法面 SHACL 拒绝）。" ;
+    rdfs:domain rsi:Contribution ;
+    rdfs:range xsd:string .
+
+# ---------------------------------------------------------------------------
+# SHACL 写入门禁（批次 A 最小切片，09 §14.5：Contribution 必挂 Contributor 与进化面；
+# 非法 surface 拒绝；Contributor 身份三要素值域收口）
+# ---------------------------------------------------------------------------
+
+rsi:ContributorShape a sh:NodeShape ;
+    rdfs:label "贡献者形状" ;
+    sh:targetClass rsi:Contributor ;
+    sh:property [
+        sh:path rsi:contributorId ;
+        sh:name "贡献者标识" ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:datatype xsd:string ;
+        sh:minLength 1 ;
+        sh:message "贡献者必须携带唯一 contributorId（非空，恰一）" ;
+    ] ;
+    sh:property [
+        sh:path rsi:displayName ;
+        sh:name "显示名" ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:datatype xsd:string ;
+        sh:minLength 1 ;
+        sh:message "贡献者必须携带非空显示名（恰一）" ;
+    ] ;
+    sh:property [
+        sh:path rsi:governanceTier ;
+        sh:name "治理档位" ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:datatype xsd:string ;
+        sh:in ( "solo" "team" "enterprise" ) ;
+        sh:message "治理档位必须为 solo|team|enterprise 之一（宪法 3 三档，09 §14.1）" ;
+    ] ;
+    sh:property [
+        sh:path rsi:trustScore ;
+        sh:name "信誉分" ;
+        sh:maxCount 1 ;
+        sh:datatype xsd:decimal ;
+        sh:minInclusive 0 ;
+        sh:maxInclusive 1 ;
+        sh:message "信誉分须为 [0,1] 十进制小数（初始 1.0，09 §14.1 滑动窗口径）" ;
+    ] ;
+    sh:property [
+        sh:path rsi:deliveryDir ;
+        sh:name "投递目录" ;
+        sh:maxCount 1 ;
+        sh:datatype xsd:string ;
+        sh:message "投递目录约定路径至多一条（注册流生成，09 §14.1）" ;
+    ] .
+
+rsi:ContributionShape a sh:NodeShape ;
+    rdfs:label "贡献产物形状" ;
+    sh:targetClass rsi:Contribution ;
+    sh:property [
+        sh:path rsi:hasContributor ;
+        sh:name "贡献者溯源" ;
+        sh:minCount 1 ;
+        sh:class rsi:Contributor ;
+        sh:message "贡献产物必须挂接贡献者（rsi:hasContributor ≥1 且指向 rsi:Contributor，09 §14.1）" ;
+    ] ;
+    sh:property [
+        sh:path rsi:contributesSurface ;
+        sh:name "挂靠进化面" ;
+        sh:minCount 1 ;
+        sh:datatype xsd:string ;
+        sh:in ( "O1" "O2" "O3" "O4" "O5" "O6" "O7" "O8" ) ;
+        sh:message "贡献产物必须挂靠进化面且面编号 ∈ 封闭八面 O1~O8（非法面拒绝，09 §13.2/§14.1）" ;
+    ] .

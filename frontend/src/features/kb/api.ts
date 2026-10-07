@@ -178,6 +178,13 @@ export function createCollection(body: { name: string; description?: string; emb
 
 const COLLECTION_CACHE_KEY = 'oa-kb-collections'
 
+/** GET /kb/collections —— 集合列表（R53 live 已实装，{data,meta} 强信封 → api.list 归一）。
+ *  F4（联调 2026-10-06）：上传目标下拉与库设置入口改消费真列表（KB_TARGETS 硬编码退役为
+ *  空/失败回落），库设置不再经 ensureCollectionId 硬挂默认名（打开设置不自动建库）。 */
+export function listCollections() {
+  return api.list<KbCollectionOut>('/kb/collections?page_size=200')
+}
+
 function cachedCollectionId(name: string): string | null {
   try {
     return (JSON.parse(localStorage.getItem(COLLECTION_CACHE_KEY) ?? '{}') as Record<string, string>)[name] ?? null
@@ -213,7 +220,7 @@ function clearCollectionId(name: string) {
  *  ③ 仍未命中 → POST /kb/collections 创建并回填缓存（同名 409 交调用方行内错误提示）。 */
 export async function ensureCollectionId(name: string): Promise<string> {
   try {
-    const list = await api.list<KbCollectionOut>('/kb/collections?page_size=200')
+    const list = await listCollections()
     const hit = list.data.find(c => c.name === name)
     if (hit) {
       cacheCollectionId(name, hit.id)

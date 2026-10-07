@@ -3,38 +3,42 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { ApiError } from '@/api/client'
 import { Sheet } from '@/components/sheet'
-import { ErrorState, SkeletonRows } from '@/components/states'
-import { ensureCollectionId, getCollectionSettings, updateCollectionSettings, type KbCollectionSettings } from '../api'
-import { KB_TARGETS } from './UploadDialog'
+import { EmptyState, ErrorState, SkeletonRows } from '@/components/states'
+import { getCollectionSettings, listCollections, updateCollectionSettings, type KbCollectionSettings } from '../api'
+import { Select } from '@/components/select'
 
 /** 库设置抽屉（B3-Q 占位转实；画板 p-kb 顶栏入口）：
  *  分片大小（300–2000）/ 分片重叠（0–500）/ 抽取深度（standard|deep 两档 seg）
  *  / 上传后自动抽取开关（role=switch，ServerDetailSheet 同款）。GET 载入 → 脏态解锁保存
  *  → PUT 全量对象 → toast + 关抽屉。端点=api/01 §5.4 追加行。
- *  C3 live 对接：**先解析真实 collection id 再读 settings**——live 未知 id 404「知识库不存在」，
- *  旧 col-default 硬编码已废。挂载目标=默认上传目标库（UploadDialog KB_TARGETS[0] 同名，
- *  设置随库走）；ensureCollectionId 先 GET 列表按名查重，未命中才创建（R53 列表端点已实装）。 */
-const DEFAULT_KB_NAME = KB_TARGETS[0]
-
+ *  F4（联调 2026-10-06）：设置入口改**集合选择器**——抽屉内置「目标知识库」下拉，选项=
+ *  GET /kb/collections 真列表（listCollections），settings 对所选集合 id 直读直写。
+ *  旧实现硬挂 KB_TARGETS[0] 经 ensureCollectionId 解析（查重未命中即 POST 建库）——
+ *  打开设置会凭空创建「配网运检知识库」，已废：设置只读既有集合，列表为空出空态引导，
+ *  不再自动建库。 */
 export function CollectionSettingsSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
   const qc = useQueryClient()
-  // ① 目标库 id 解析（查重→创建；staleTime 内不重复发列表请求）
-  const idQuery = useQuery({
-    queryKey: ['kb', 'collection-id', DEFAULT_KB_NAME],
-    queryFn: () => ensureCollectionId(DEFAULT_KB_NAME),
+  // ① 集合真列表（设置目标的事实源；staleTime 内不重复发列表请求）
+  const colsQuery = useQuery({
+    queryKey: ['kb', 'collections'],
+    queryFn: listCollections,
     enabled: open,
     staleTime: 5 * 60_000,
   })
-  // ② settings 读/写（拿到真实 id 才启用；live 未知 id 404 由解析步前置挡掉）
+  const cols = colsQuery.data?.data ?? []
+  const [colId, setColId] = useState<string | null>(null)
+  // 生效集合：本地选择仍在列表内则用之；否则回落首列（列表刷新后选择失效自愈）
+  const activeId = colId && cols.some(c => c.id === colId) ? colId : (cols[0]?.id ?? null)
+  // ② settings 读/写（真 id 直读——列表即事实源；未知 id 404 走错误态）
   const query = useQuery({
-    queryKey: ['kb', 'collection-settings', idQuery.data],
-    queryFn: () => getCollectionSettings(idQuery.data!),
-    enabled: open && !!idQuery.data,
+    queryKey: ['kb', 'collection-settings', activeId],
+    queryFn: () => getCollectionSettings(activeId!),
+    enabled: open && !!activeId,
   })
   const [form, setForm] = useState<KbCollectionSettings | null>(null)
   const [saving, setSaving] = useState(false)
 
-  // 服务端值 → 表单（载入/保存后回填均走这里，脏态随之复位）
+  // 服务端值 → 表单（载入/保存/切换集合后回填均走这里，脏态随之复位）
   useEffect(() => {
     if (query.data) setForm({ ...query.data })
   }, [query.data])
@@ -49,19 +53,19 @@ export function CollectionSettingsSheet({ open, onClose }: { open: boolean; onCl
       form.auto_extract !== server.auto_extract)
   const valid = !!form && form.chunk_size >= 300 && form.chunk_size <= 2000 && form.chunk_overlap >= 0 && form.chunk_overlap <= 500
 
-  // 两段链路的加载/错误归一：id 解析失败与 settings 读取失败同走错误态
-  const loading = idQuery.isPending || (!!idQuery.data && query.isPending)
-  const error = idQuery.isError ? idQuery.error : query.isError ? query.error : null
+  // 两段链路的加载/错误归一：列表加载失败与 settings 读取失败同走错误态
+  const loading = colsQuery.isPending || (!!activeId && query.isPending)
+  const error = colsQuery.isError ? colsQuery.error : query.isError ? query.error : null
   function retry() {
-    if (idQuery.isError) void idQuery.refetch()
+    if (colsQuery.isError) void colsQuery.refetch()
     else void query.refetch()
   }
 
   async function onSave() {
-    if (!form || !dirty || !valid || saving || !idQuery.data) return
+    if (!form || !dirty || !valid || saving || !activeId) return
     setSaving(true)
     try {
-      await updateCollectionSettings(idQuery.data, form)
+      await updateCollectionSettings(activeId, form)
       toast.success('库设置已保存')
       await qc.invalidateQueries({ queryKey: ['kb', 'collection-settings'] })
       onClose()
@@ -88,8 +92,38 @@ export function CollectionSettingsSheet({ open, onClose }: { open: boolean; onCl
           />
         </div>
       )}
-      {form && (
+      {/* F4：无集合时出空态引导（不再自动建库兜底——先去上传链路创建目标库） */}
+      {!loading && !error && cols.length === 0 && (
+        <div className="p-5">
+          <EmptyState compact title="暂无知识库" desc="尚无知识库集合；上传文档时选择目标知识库即可创建，之后再回到这里配置。" />
+        </div>
+      )}
+      {!loading && !error && cols.length > 0 && (
         <div className="space-y-4 p-5">
+          {/* 目标知识库选择器（真列表；settings 随所选集合走） */}
+          <div>
+            <label htmlFor="cs-collection" className="text-xs font-semibold text-label-2">
+              目标知识库
+            </label>
+            <Select
+              id="cs-collection"
+              className="input mt-1.5 h-8 w-full text-xs"
+              aria-label="目标知识库"
+              data-testid="cs-collection"
+              value={activeId ?? ''}
+              onChange={e => setColId(e.target.value)}
+            >
+              {cols.map(c => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </Select>
+            <p className="mt-1 text-[11px] text-label-3">设置随所选库走；切换后未保存的修改即丢弃。</p>
+          </div>
+          {/* 设置表单（settings 载入后才渲染；切换集合即复位） */}
+          {form && (
+            <>
           <div>
             <label htmlFor="cs-chunk-size" className="text-xs font-semibold text-label-2">
               分片大小（tokens）
@@ -174,6 +208,8 @@ export function CollectionSettingsSheet({ open, onClose }: { open: boolean; onCl
               保存
             </button>
           </div>
+            </>
+          )}
         </div>
       )}
     </Sheet>

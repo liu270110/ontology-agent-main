@@ -149,7 +149,10 @@ class StepState(BaseModel):
             run_id = data.get("run_id")
             seq = data.get("seq")
             if run_id is not None and seq is not None:
-                data["step_id"] = deterministic_step_id(str(run_id), int(seq))
+                # 归一化非规范拼写（花括号/大小写/urn 前缀）——同 run 恒等派生
+                # （ocr/专家 P2 同题收口：before 校验器先归一再入哈希）。
+                canonical_run_id = uuid.UUID(str(run_id))
+                data["step_id"] = deterministic_step_id(str(canonical_run_id), int(seq))
         return data
 
     @property

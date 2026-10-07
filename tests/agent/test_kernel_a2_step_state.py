@@ -157,3 +157,15 @@ def test_step_id_显式直传保留_派生不覆盖():
     explicit = uuid.uuid4()
     state = StepState(run_id=uuid.uuid4(), seq=1, stage=LoopStage.PLANNING, step_id=explicit)
     assert state.step_id == explicit
+
+
+def test_run_id非规范拼写归一后恒等派生():
+    """ocr/专家 P2：{花括号}/大写形态与规范形态必须派生同 id（同 run 恒等）。"""
+    from services.agent.domain.model.step_state import deterministic_step_id
+    rid = "6f9619ff-8b86-d011-b42d-00c04fc964ff"
+    braced = "{" + rid + "}"
+    upper = rid.upper()
+    a = StepState(run_id=rid, seq=3)
+    b = StepState(run_id=braced, seq=3)
+    c = StepState(run_id=upper, seq=3)
+    assert a.step_id == b.step_id == c.step_id

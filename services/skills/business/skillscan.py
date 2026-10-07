@@ -26,12 +26,10 @@ frontmatter 解析在本模块内最小复刻（同 scanner.parse_frontmatter �
 from __future__ import annotations
 
 import ast
-import logging
 import re
 from dataclasses import dataclass
 from typing import Literal
 
-logger = logging.getLogger(__name__)
 
 Severity = Literal["CRITICAL", "WARN"]
 
@@ -267,7 +265,7 @@ def scan_declared_face(*, name: str, description: str, source_uri: str) -> list[
 def scan_skill(md_text: str, scripts: dict[str, str] | None = None) -> list[Finding]:
     """SKILL.md 全文 + scripts/*.py 源码的文本级扫描（K30-a 规则库：组①②③预备组）。
 
-    scripts={相对路径: 源码文本}（由调用方读盘传入——scan_repo_assets/reigster 扩展面）；
+    scripts={相对路径: 源码文本}（由调用方读盘传入——scan_repo_assets/register 扩展面）；
     AST 精查（语法/导入白名单/危险调用定位）另行 :func:`ast_check`，组合入口
     :func:`scan_skill_full`。
     """

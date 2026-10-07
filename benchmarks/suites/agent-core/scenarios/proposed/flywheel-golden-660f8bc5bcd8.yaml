@@ -1,0 +1,19 @@
+# 飞轮转化环候选草稿（docs/Agent/19 §5 批 F2）——审核队列：未过审不进正式套件（宪法 3：候选非成品）
+# 源 run: 6f1c2a34-9b7d-4e5a-8c21-77aa01fe33b4 | kind: golden | 归因: completed_clean | harvest: 2026-10-07T15:55:31+00:00
+# 脱敏说明：用户专有名词（UUID/邮箱/IP/绝对路径）已保守替换为 ⟪USER_n⟫ 占位（同词同号）
+version: 1
+scenario: "flywheel:golden:660f8bc5bcd8"
+description: |
+  飞轮 golden 候选：会话反馈收割（归因 completed_clean）。golden=用户确认完成的任务回归样；
+  regression=用户纠错/失败样——修复后重跑应以 params.expected_outcome 收敛。
+params:
+  task_prompt: "帮我把 ⟪USER_3⟫ 节点上 ⟪USER_1⟫ 里的停电工单按线路汇总，并发摘要到 ⟪USER_2⟫"
+  expected_outcome: "completed"
+  reported_outcome: "completed"
+  source_run_id: "6f1c2a34-9b7d-4e5a-8c21-77aa01fe33b4"
+  flywheel_kind: "golden"
+  harvested_at: "2026-10-07T15:55:31+00:00"
+asserts:
+  - metric: task_outcome_user_reported
+    op: "=="
+    value: true

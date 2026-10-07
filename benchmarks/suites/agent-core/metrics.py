@@ -11,6 +11,9 @@
     side_effect_duplication     ← C2 重试副作用重复
     invalid_retry_count         ← C1 恒失败工具无效重试
     recovery_time_s             ← A5/C 族 kill 后恢复时延
+
+飞轮转化环新增（docs/Agent/19 §5 批 F2，2026-10-07）：
+    task_outcome_user_reported  ← §5 采集环三元采集（session_feedback.outcome 用户上报）
 """
 
 from __future__ import annotations
@@ -219,4 +222,32 @@ def recovery_time(
         "converged_rate": round(sum(1 for f in converged_flags if f) / n, 6) if n else None,
         "recovery_rate": round(sum(1 for f in recovery_ok_flags if f) / n, 6) if n else None,
         "zombie_tasks_total": sum(zombie_tasks),
+    }
+
+
+# ---------------------------------------------------------------------------
+# ⑦ task_outcome_user_reported（docs/Agent/19 §5 转化环：用户上报任务结果三元）
+# ---------------------------------------------------------------------------
+
+
+def task_outcome_user_reported(outcomes: list[str]) -> dict[str, Any]:
+    """口径：飞轮场景「任务是否完成」的用户上报三元口径（docs/Agent/19 §5 采集环
+    session_feedback.outcome=user_reported：completed/failed/partial）。
+
+    飞轮转化环（19 §5 批 F2）golden/regression 草稿场景的统一通过判据：
+    task_outcome_user_reported=True 当且仅当上报样本非空且全部为 completed——
+    场景重跑（回流环 release-eval 带飞轮场景）后用户口径任务完成才计入通过；
+    failed/partial/未知值只计入分布计数，不参与通过判定。采集点=场景实跑后的
+    用户确认（三元采集面）；本函数为纯函数口径登记，供草稿断言白名单引用。
+    """
+    known = ("completed", "failed", "partial")
+    valid = [o for o in outcomes if o in known]
+    completed = sum(1 for o in valid if o == "completed")
+    return {
+        "reports_total": len(valid),
+        "completed_reports": completed,
+        "failed_reports": sum(1 for o in valid if o == "failed"),
+        "partial_reports": sum(1 for o in valid if o == "partial"),
+        "unknown_reports": len(outcomes) - len(valid),
+        "task_outcome_user_reported": bool(valid) and completed == len(valid),
     }

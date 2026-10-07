@@ -32,7 +32,7 @@ dependencies = [
   "pypdfium2>=4",
 ]
 [dependency-groups]
-dev = ["pytest>=7.0", "ruff>=0.6", "mypy>=1.10", "fakeredis>=2.23", "pytest-asyncio>=0.23", "httpx>=0.27", "import-linter>=2.15"]  # import 契约门禁 CLI（lint-imports）；此前仅主仓 venv 手装未声明，新 worktree uv sync 后缺工具（M4.6-D1）
+dev = ["pytest>=7.0", "ruff>=0.6", "mypy>=1.10", "fakeredis>=2.23", "pytest-asyncio>=0.23", "httpx>=0.27", "import-linter>=2.15", "aiosqlite>=0.20"]  # import 契约门禁 CLI（lint-imports）；此前仅主仓 venv 手装未声明，新 worktree uv sync 后缺工具（M4.6-D1）；aiosqlite=tests/kb 用量埋点用例内存库（同 fakeredis 先例：纯测试面依赖，此前仅主仓 venv 手装未声明——2026-10-07 全量 pytest 10 例 error 实证修复）
 [tool.ruff]
 line-length = 120
 # 02 §10 门2 豁免台账 2026-10-05:97a9a7d 研究快照带入,挂债后清(豁免区仅限下列四处,不得扩大;

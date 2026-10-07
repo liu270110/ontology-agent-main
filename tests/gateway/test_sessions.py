@@ -149,11 +149,14 @@ async def test_session_创建携带toolset_领域透传且落库(gateway_uow, se
         body=SessionCreateIn(agent_id=agent_id, toolset="readonly"), principal=principal, uow=gateway_uow
     )
     assert created.status == SessionStatus.CREATED
-    # 读回：行→领域映射携带 toolset（读面 SessionOut 未扩列，落库口径经仓储验证）
+    assert created.toolset == "readonly"  # K29-c2（13 §35）：读面 SessionOut.toolset 透出
+    # 读回：行→领域映射携带 toolset，详情端点读面同参（get_session → from_domain）
     async with gateway_uow.for_tenant(principal.tenant_id) as tx:
         session = await tx.sessions.get(created.id)
     assert session is not None
     assert session.toolset == "readonly"
+    detail = await get_session(created.id, principal=principal, uow=gateway_uow)
+    assert detail.toolset == "readonly"  # K29-c2：详情读面透出（列表读面同转换函数 from_domain）
 
 
 async def test_session_创建未知toolset_422拒绝且零副作用(gateway_uow, seed):

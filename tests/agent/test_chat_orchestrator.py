@@ -12,6 +12,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import uuid
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
@@ -430,3 +431,23 @@ async def test_会话工具集None_无遮蔽段_现行行为零变化() -> None:
     await _collect(orchestrator, _command())
     system = model.last_kwargs["system"]
     assert "【工具名录" not in system and "本轮可用工具" not in system  # 无遮蔽段
+
+
+async def test_会话工具集名漂移_交集为空告警留痕不阻断(caplog) -> None:
+    """K29-c3（docs/Agent/13 §35，K28 P2）：解析集与注册面交集为空（注册表成员名与绑定
+    meta.name 全对不上，典型=绑定改名/条件开关全关）→ logger.warning 带 session/toolset/
+    注册绑定数；告警只响铃不阻断（RUN_FINISHED 照常）。"""
+    model = FakeChatModel()
+    orchestrator = ChatOrchestrator(
+        adapters={"builtin": BuiltinAdapter(model)},
+        assembler=_assembler(FakeL1Store(), FakeKnowledge(_evidence())),
+        extra_tool_bindings=(),  # 注册面空集 → 任何具名集交集恒空（名漂移形态）
+    )
+    command = _command().model_copy(update={"toolset": "readonly"})
+    with caplog.at_level(logging.WARNING, logger="services.agent.business.chat_orchestrator"):
+        events = await _collect(orchestrator, command)
+    assert events[-1].name is ChatEventName.RUN_FINISHED  # 告警不阻断对话
+    drift = [r for r in caplog.records if "toolset 名漂移" in r.getMessage()]
+    assert len(drift) == 1
+    assert str(SESSION) in drift[0].getMessage()  # 含 session id
+    assert "readonly" in drift[0].getMessage() and "注册绑定数=0" in drift[0].getMessage()

@@ -318,6 +318,16 @@ class ChatOrchestrator:
         # toolset=None 走 select_toolset_bindings 全量支路（注册面零过滤=现行行为零变化，
         # 且不产遮蔽段）；具名=交集语义只减不增 + builtin 遮蔽段首接线（H-2 消费者）。
         turn_bindings, turn_binding_names = select_toolset_bindings(self._extra_tool_bindings, command.toolset)
+        if command.toolset is not None and not turn_binding_names:
+            # K29-c3（docs/Agent/13 §35，K28 P2）：名漂移告警——解析集与注册面交集为空
+            # （注册表成员名与绑定 meta.name 全对不上，典型=绑定改名/条件开关全关），
+            # 具名门形同虚设，响铃留痕排障；不阻塞 turn（最小实现=每 turn 一次）。
+            logger.warning(
+                "toolset 名漂移: session=%s toolset=%r 解析集与注册面交集为空（注册绑定数=%d）",
+                command.session_id,
+                command.toolset,
+                len(self._extra_tool_bindings),
+            )
         tools_segment = ""
         if command.toolset is not None:
             # H-2 遮蔽式工具 schema（builtin.py §H-2）：定义本体=组合根全量绑定（常驻稳定），

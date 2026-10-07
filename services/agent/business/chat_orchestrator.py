@@ -184,9 +184,16 @@ class ChatOrchestrator:
             },
             run_id=command.run_id,
         )
-        # ② 组装上下文（事务外）：本条消息先入 L1 窗（memory §4 热缓存），再读记忆+检索
+        # ② 组装上下文（事务外）：本条消息先入 L1 窗（memory §4 热缓存），再读记忆+检索。
+        # 幂等守卫（docs/Agent/18 §2·修复 B）：同 task 重试/重放重入（task_worker attempt 2+
+        # 重建命令）不重复入窗——键=(seed_task_id, seed_agent_id)，群聊逐成员以 agent_id 区分。
         await self._assembler.append_window_message(
-            command.tenant_id, command.session_id, role="user", content=command.message
+            command.tenant_id,
+            command.session_id,
+            role="user",
+            content=command.message,
+            seed_task_id=command.task_id,
+            seed_agent_id=command.agent_id,
         )
         context = await self._assembler.assemble(
             tenant_id=command.tenant_id,

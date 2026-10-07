@@ -8,7 +8,12 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Protocol
 
-from services.memory.business.retrieval_rrf import rrf_merge, rrf_scores, stale_observation_ids
+from services.memory.business.retrieval_rrf import (
+    channel_contributions,
+    rrf_merge,
+    rrf_scores,
+    stale_observation_ids,
+)
 from services.memory.data.repositories.records_repo import MemoryRepository
 from services.memory.domain.model.memory import MemoryLayer, MemoryRecord
 
@@ -17,9 +22,17 @@ logger = logging.getLogger(__name__)
 
 @dataclass(slots=True)
 class Scored:
+    """检索命中（fused 分 + 通道贡献明细，D-5 可解释召回=Agent/13 §26 / K20）。
+
+    channel_scores：各通道对该条 fused 分的贡献——键=通道名（per_channel 既有键），
+    值=1/(rrf_k+通道内名次)，与融合同源同参（Σ channel_scores 即 score）；
+    None=无通道分解（缺省向后兼容；空通道集不透出空壳）。
+    """
+
     record_id: uuid.UUID
     score: float
     record: MemoryRecord
+    channel_scores: dict[str, float] | None = None
 
 
 class RecallChannel(Protocol):
@@ -85,6 +98,7 @@ async def search_by_channels(
         pool = {rid: rec for rid, rec in pool.items() if rec.layer == layer}
     scores = rrf_scores(per_channel, k=rrf_k)
     ordered = rrf_merge(per_channel, k=rrf_k)
+    contrib = channel_contributions(per_channel, rrf_k)  # D-5/K20：与融合同一 per_channel 同一 rrf_k
 
     records = list(pool.values())
     stale = stale_observation_ids(records, now)
@@ -92,5 +106,5 @@ async def search_by_channels(
     for rid in ordered:
         if rid in stale:
             continue
-        out.append(Scored(record_id=rid, score=scores[rid], record=pool[rid]))
+        out.append(Scored(record_id=rid, score=scores[rid], record=pool[rid], channel_scores=(contrib or {}).get(rid)))
     return out[:limit]

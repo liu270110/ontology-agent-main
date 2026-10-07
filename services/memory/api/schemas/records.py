@@ -50,11 +50,20 @@ class SearchRequest(BaseModel):
 
 
 class SearchHitResponse(BaseModel):
+    """单条检索命中（POST /memory/records/search data 行）。
+
+    channel_scores（D-5 可解释召回，Agent/13 §26 / K20）：各通道贡献明细，键=通道名、
+    值=1/(rrf_k+通道内名次)，Σ=score（同源同参）；缺省 None=无通道分解。实装端点每条
+    命中至少一个通道贡献，None 不会以 null 形态出现在响应中（缺省兼容，不加 exclude_none
+    以免波及同模型既有可空字段 subject_iri 的线格式）。
+    """
+
     record_id: uuid.UUID
     score: float
     content: str
     record_type: str
     subject_iri: str | None
+    channel_scores: dict[str, float] | None = None
 
 
 class BlockPutRequest(BaseModel):

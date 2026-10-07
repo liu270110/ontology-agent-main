@@ -694,6 +694,7 @@ async def search_records(body: SearchRequest, svc: Svc, tid: Tid) -> RecordSearc
                 content=h.record.content,
                 record_type=str(h.record.record_type),
                 subject_iri=h.record.subject_iri,
+                channel_scores=h.channel_scores,  # D-5/K20：通道贡献明细随结果透传
             )
             for h in hits
         ]

@@ -22,7 +22,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from services.platform.kernel import DomainError
-from services.plugin.domain.model.manifest import manifest_tools, validate_manifest
+from services.plugin.domain.model.manifest import manifest_tools, rule_pack_tests_problems, validate_manifest
 
 # ---------------------------------------------------------------- 门禁 2：协议协商矩阵
 
@@ -347,7 +347,8 @@ def gate_behavior_fixture(server_json: dict[str, Any], ctx: GateContext) -> Gate
 
     binding 投影=manifest_tools()（install 用例同源），故本关即「未来 binding 与声明一致」的
     前置夹具：重名/非法名/越权 scopes 在此拦截；能力包五数组每一项强制本体语义标注
-    （Skills §3.4.2 铁律 2）、rule_packs default_enabled 必须 false（禁用待复核）。
+    （Skills §3.4.2 铁律 2）、rule_packs default_enabled 必须 false（禁用待复核）、
+    rule_packs 声明 tests 字段时格式校验（K30-c，manifest.rule_pack_tests_problems 同源）。
     本体公理正反例夹具生成器随 L2 能力包通道交付（模块报告遗留节）。
     """
     findings: list[str] = []
@@ -365,6 +366,16 @@ def gate_behavior_fixture(server_json: dict[str, Any], ctx: GateContext) -> Gate
         if beyond:
             findings.append(f"工具 {template.name} 声明 scopes 超出清单授权包络 x-platform.required_scopes: {beyond}")
     details: dict[str, Any] = {"tools_declared": len(templates)}
+    tests_declared = 0
+    for idx, item in enumerate(x_platform.get("rule_packs") or []):
+        # K30-c：tests 格式校验不限 package_type（manifest 门禁 1 同口径——声明即校验）
+        test_problems = rule_pack_tests_problems(item, f"x-platform.rule_packs[{idx}]")
+        findings.extend(test_problems)
+        if isinstance(item, dict) and item.get("tests") is not None:
+            tests_declared += 1
+    if tests_declared:
+        # K30-c 自测声明留痕：v1=格式校验（执行需规则 pattern 本体，随制品级校验批次）
+        details["rule_packs_tests_declared"] = tests_declared
     package_type = server_json.get("package_type")
     if package_type == "capability_pack":
         details["mode"] = "capability_pack"

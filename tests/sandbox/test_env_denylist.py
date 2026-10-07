@@ -147,6 +147,35 @@ def test_后缀通配_反序列化边界同步生效():
     assert spec.env == {"PATH": "/bin"}
 
 
+# ---------------------------------------------------------------- K29 残余敏感族扩表（13 §35，R30-3）
+
+
+def test_K29精确项_KUBECONFIG与DATABASE_URL入表且剥离():
+    # Assert：新精确项在表内（KUBECONFIG=集群凭证面、DATABASE_URL=连接串内嵌口令）
+    for name in ("KUBECONFIG", "DATABASE_URL"):
+        assert name in HOST_ENV_DENYLIST, name
+    # Act + Assert：两新精确项经 sanitize_env 命中即剥，普通变量透传
+    env = {"PATH": "/usr/bin", "KUBECONFIG": "/home/u/.kube/config", "DATABASE_URL": "postgresql://u:p@h/db"}
+    clean, stripped = sanitize_env(env)
+    assert clean == {"PATH": "/usr/bin"}
+    assert set(stripped) == {"KUBECONFIG", "DATABASE_URL"}
+
+
+def test_K29后缀族_DSN_PASSWORD_PRIVATE_KEY自动剥离():
+    # Arrange：三新后缀族未列名变量（POSTGRES_DSN/MY_PASSWORD/SSH_PRIVATE_KEY）+ 普通变量
+    env = {
+        "PATH": "/usr/bin",
+        "POSTGRES_DSN": "postgresql://u:p@h/db",
+        "MY_PASSWORD": "p.secret",
+        "SSH_PRIVATE_KEY": "-----BEGIN",
+    }
+    # Act
+    clean, stripped = sanitize_env(env)
+    # Assert：新后缀命中即剥（对齐 *_API_KEY 三元组同款通配语义）
+    assert clean == {"PATH": "/usr/bin"}
+    assert set(stripped) == {"POSTGRES_DSN", "MY_PASSWORD", "SSH_PRIVATE_KEY"}
+
+
 # ---------------------------------------------------------------- 假 docker client
 
 

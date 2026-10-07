@@ -70,6 +70,10 @@ class ChatTurn(BaseModel):
     skills_catalog: str = ""  # 技能目录段（竖线② L1：进程级稳定前缀，name+description 元数据
     # 层；空=未启用。渲染与装载面见 business/prompts/skills_catalog.py，正文不随提示注入）
     system_prompt: str | None = None  # 成员人格（27 篇群聊成员 system_prompt；None=平台缺省）
+    # K28-c（docs/Agent/13 §34）：工具 schema 遮蔽段（H-2 build_tools_segment 产出：全量
+    # 定义常驻 + 当轮启用清单）——编排器按会话具名工具集装配；空串=不遮蔽（None 会话，
+    # 现行行为零变化）。会话级恒定 → 置于 per-turn 上下文前保 KV-cache 前缀稳定。
+    tools_segment: str = ""
     num_ctx: int | None = None  # 上下文窗口注入（ModelPort 可选参，端点不支持时忽略）
     reasoning_effort: str | None = None  # 思考档位透传面（THINKING_START.reasoning_effort?，02
     # 协议注记；请求参数无此参时恒 None=载荷省略——上游接线随请求参数批）

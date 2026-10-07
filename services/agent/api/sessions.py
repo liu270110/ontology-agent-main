@@ -945,6 +945,7 @@ async def send_message(
         message=body.content,
         trace_id=getattr(request.state, "trace_id", "") or f"req-{run.id}",
         adapter=body.adapter,
+        toolset=session.toolset,  # K28-c：会话具名工具集随命令透传（Session 聚合字段）
         task_type=task.type,  # 40 篇 §4.2：RUN_STARTED.task_type 透传（chat 路径恒 chat）
     )
     return _chat_stream_response(

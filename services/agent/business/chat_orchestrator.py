@@ -25,8 +25,10 @@ from uuid import UUID
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from services.agent.business.adapters.base import ChatAdapter, ChatTurn, TurnBox
+from services.agent.business.adapters.builtin import build_tools_segment
 from services.agent.business.adapters.claude import ClaudeAdapter
 from services.agent.business.capabilities.run_scope import bind_run_scope, reset_run_scope
+from services.agent.business.capabilities.toolsets import select_toolset_bindings
 from services.agent.business.chat_context import ChatContext, ChatContextAssembler
 from services.agent.business.chat_events import (
     ChatCommand,
@@ -292,6 +294,14 @@ class ChatOrchestrator:
         finally:
             queue.put_nowait(_DONE)
 
+    def turn_tool_bindings(self, toolset: str | None) -> tuple[tuple[Any, ...], frozenset[str]]:
+        """本轮 extra_tool_bindings 注册面投影（K28-c 会话表面门，观测/测试口）。
+
+        toolset=None → 全量（现行行为零变化）；具名 → 交集过滤（capabilities/toolsets.py
+        select_toolset_bindings，未知名 ValueError fail-closed）。返回 (入选绑定, 入选名集)。
+        """
+        return select_toolset_bindings(self._extra_tool_bindings, toolset)
+
     async def _execute_turn(
         self,
         command: ChatCommand,
@@ -304,6 +314,22 @@ class ChatOrchestrator:
         if adapter is None:
             raise ModelPortError(int(ErrorCode.LLM_UNAVAILABLE), f"适配器未注册: {command.adapter}")
         window = context.memory.l1.window if context.memory is not None else []
+        # K28-c（docs/Agent/13 §34）：会话具名工具集 → 注册面过滤 + schema 遮蔽段。
+        # toolset=None 走 select_toolset_bindings 全量支路（注册面零过滤=现行行为零变化，
+        # 且不产遮蔽段）；具名=交集语义只减不增 + builtin 遮蔽段首接线（H-2 消费者）。
+        turn_bindings, turn_binding_names = select_toolset_bindings(self._extra_tool_bindings, command.toolset)
+        tools_segment = ""
+        if command.toolset is not None:
+            # H-2 遮蔽式工具 schema（builtin.py §H-2）：定义本体=组合根全量绑定（常驻稳定），
+            # available=本入选中名集（会话级恒定）；binding.description 为可选面（鸭子读取）。
+            definitions = {
+                getattr(b.meta, "name", ""): {
+                    "description": getattr(b, "description", None) or "",
+                    "version": getattr(b.meta, "version", ""),
+                }
+                for b in self._extra_tool_bindings
+            }
+            tools_segment = build_tools_segment(definitions, set(turn_binding_names))
         turn = ChatTurn(
             tenant_id=command.tenant_id,
             session_id=command.session_id,
@@ -312,6 +338,7 @@ class ChatOrchestrator:
             history=tuple((m.role, m.content) for m in window[1:7]),  # window[0]=本条消息
             context_text=context.context_text,
             skills_catalog=self._skills_catalog,  # 竖线②：技能目录段（L1 元数据层，进程级稳定）
+            tools_segment=tools_segment,  # K28-c：具名工具集 schema 遮蔽段（空串=不遮蔽）
             system_prompt=command.member_system_prompt,
         )
         dispatcher = ExtensionDispatcher()
@@ -319,7 +346,7 @@ class ChatOrchestrator:
         dispatcher.register_planning_strategy(adapter.turn_planner(turn))
         dispatcher.register_context_provider(adapter.turn_context_provider(turn))
         dispatcher.register_tool(adapter.turn_tool(turn, box, on_event))
-        for binding in self._extra_tool_bindings:  # 能力层 P0（docs/Agent/06）：fs/web 等工具经 B1 门禁链注册
+        for binding in turn_bindings:  # 能力层 P0（docs/Agent/06）：fs/web 等工具经 B1 门禁链注册；K28-c 按会话工具集过滤
             dispatcher.register_tool(binding)
         if self._criterion_projection is not None:  # E-4 K1-c：判据投影端口（唯一注册面，无注入=纯回执口径）
             dispatcher.register_criterion_projection(self._criterion_projection)

@@ -66,6 +66,7 @@ def compute_target_key(target_iris: list[str] | None) -> str | None:
         return None
     return sha256_canonical(sorted(set(target_iris)))
 
+
 # 治理档位（ontology §6.3 档位钩子；档位权威=08 §2.4 全平台定义）：判定单一收敛点=
 # services/review/domain/approval_chain（parse/required_signatures/resolve_decision）——本聚合
 # 只经调用链注入的 governance_tier 参数消费，禁直读租户 settings（L4 纯度）、禁散写档位裁决

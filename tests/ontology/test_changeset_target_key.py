@@ -102,12 +102,28 @@ async def test_同目标活跃单不双开_部分唯一索引兜底IntegrityErro
     factory, tenant_id, _user_id, ontology_id = target_env
     key = compute_target_key(TARGETS_A)
     async with factory() as db, db.begin():
-        db.add(OntologyChangesetORM(id=uuid.uuid4(), tenant_id=tenant_id, ontology_id=ontology_id,
-                                    title="first", status="draft", target_key=key))
+        db.add(
+            OntologyChangesetORM(
+                id=uuid.uuid4(),
+                tenant_id=tenant_id,
+                ontology_id=ontology_id,
+                title="first",
+                status="draft",
+                target_key=key,
+            )
+        )
     with pytest.raises(IntegrityError):  # 同 (tenant, ontology, target_key) 第二行活跃 → 冲突
         async with factory() as db, db.begin():
-            db.add(OntologyChangesetORM(id=uuid.uuid4(), tenant_id=tenant_id, ontology_id=ontology_id,
-                                        title="second", status="in_review", target_key=key))
+            db.add(
+                OntologyChangesetORM(
+                    id=uuid.uuid4(),
+                    tenant_id=tenant_id,
+                    ontology_id=ontology_id,
+                    title="second",
+                    status="in_review",
+                    target_key=key,
+                )
+            )
             await db.flush()
 
 
@@ -118,18 +134,42 @@ async def test_不同目标与终态行_部分唯一不拦(
     factory, tenant_id, _user_id, ontology_id = target_env
     key = compute_target_key(TARGETS_A)
     async with factory() as db, db.begin():
-        db.add(OntologyChangesetORM(id=uuid.uuid4(), tenant_id=tenant_id, ontology_id=ontology_id,
-                                    title="rejected 前单", status="rejected", target_key=key))
-        db.add(OntologyChangesetORM(id=uuid.uuid4(), tenant_id=tenant_id, ontology_id=ontology_id,
-                                    title="rejected 前单二", status="rejected", target_key=key))  # 终态不占唯一
-        db.add(OntologyChangesetORM(id=uuid.uuid4(), tenant_id=tenant_id, ontology_id=ontology_id,
-                                    title="活跃异目标", status="draft", target_key=compute_target_key(TARGETS_B)))
+        db.add(
+            OntologyChangesetORM(
+                id=uuid.uuid4(),
+                tenant_id=tenant_id,
+                ontology_id=ontology_id,
+                title="rejected 前单",
+                status="rejected",
+                target_key=key,
+            )
+        )
+        db.add(
+            OntologyChangesetORM(
+                id=uuid.uuid4(),
+                tenant_id=tenant_id,
+                ontology_id=ontology_id,
+                title="rejected 前单二",
+                status="rejected",
+                target_key=key,
+            )
+        )  # 终态不占唯一
+        db.add(
+            OntologyChangesetORM(
+                id=uuid.uuid4(),
+                tenant_id=tenant_id,
+                ontology_id=ontology_id,
+                title="活跃异目标",
+                status="draft",
+                target_key=compute_target_key(TARGETS_B),
+            )
+        )
         await db.flush()
         total = (
             await db.execute(
-                select(func.count()).select_from(OntologyChangesetORM).where(
-                    OntologyChangesetORM.tenant_id == tenant_id
-                )
+                select(func.count())
+                .select_from(OntologyChangesetORM)
+                .where(OntologyChangesetORM.tenant_id == tenant_id)
             )
         ).scalar_one()
         assert int(total) == 3

@@ -139,9 +139,7 @@ async def skills_env(monkeypatch) -> AsyncIterator[dict]:
             await session.execute(text("DELETE FROM user_roles WHERE tenant_id = :tid").bindparams(tid=tenant_id))
             # m46-d2 起登录签发落 device_sessions（FK users.id）——本夹具 _login_headers 每用例
             # 产生设备会话行，不先清即挡删用户（共享库 FKViolation，2026-10-07 门禁实测）
-            await session.execute(
-                text("DELETE FROM device_sessions WHERE tenant_id = :tid").bindparams(tid=tenant_id)
-            )
+            await session.execute(text("DELETE FROM device_sessions WHERE tenant_id = :tid").bindparams(tid=tenant_id))
             await session.execute(text("DELETE FROM users WHERE id = ANY(:ids)").bindparams(ids=[admin_id, plain_id]))
             await session.execute(text("DELETE FROM tenants WHERE id = :tid").bindparams(tid=tenant_id))
             await session.commit()

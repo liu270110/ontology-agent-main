@@ -346,15 +346,10 @@ def kb_pg() -> AsyncIterator[async_sessionmaker[AsyncSession]]:
             # 复刻迁移 0386f2520028 的 pgvector 条件 DDL（embedding 列迁移条件管理、不在 ORM；
             # 扩展不可用时容错跳过——检索侧 vector_ready 自动降级，迁移语义逐字对齐）
             await conn.execute(
-                text(
-                    "DO $$ BEGIN CREATE EXTENSION IF NOT EXISTS vector; "
-                    "EXCEPTION WHEN OTHERS THEN NULL; END $$;"
-                )
+                text("DO $$ BEGIN CREATE EXTENSION IF NOT EXISTS vector; EXCEPTION WHEN OTHERS THEN NULL; END $$;")
             )
             if (await conn.execute(text("SELECT to_regtype('vector') IS NOT NULL"))).scalar():
-                await conn.execute(
-                    text("ALTER TABLE document_chunks ADD COLUMN embedding vector(1024)")
-                )
+                await conn.execute(text("ALTER TABLE document_chunks ADD COLUMN embedding vector(1024)"))
                 await conn.execute(
                     text(
                         "CREATE INDEX ix_document_chunks_embedding ON document_chunks "

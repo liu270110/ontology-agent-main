@@ -1394,6 +1394,7 @@ def _dict_to_hit(row: dict) -> SearchHit:
         doc_name=row["doc_name"],
         minio_key=row.get("minio_key"),
         span=row.get("span"),
+        summary=row.get("summary"),  # L0 前缀摘要（G-14 零读直出；旧行/其他路无此键 → None）
     )
 
 

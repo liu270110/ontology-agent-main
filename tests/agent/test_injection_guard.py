@@ -64,9 +64,7 @@ class FakeL1Store:
     async def write_blocks(self, tenant_id: uuid.UUID, session_id: uuid.UUID, blocks: list[MemoryBlock]) -> int:
         return 0
 
-    async def append_window(
-        self, tenant_id: uuid.UUID, session_id: uuid.UUID, messages: list[WindowMessage]
-    ) -> int:
+    async def append_window(self, tenant_id: uuid.UUID, session_id: uuid.UUID, messages: list[WindowMessage]) -> int:
         self.appended_roles.extend(m.role for m in messages)
         return len(messages)
 
@@ -336,9 +334,7 @@ def test_skills目录全剔除_返回空段不注入裸表头(tmp_path: Path) ->
     """目录条目全命中 → 空串（不注入裸表头），会话以无目录继续（降级面）。"""
     # Arrange：仅毒技能
     _write_skill(tmp_path, "only-evil", INJECT_MD)
-    settings = SimpleNamespace(
-        skills_catalog_dir=str(tmp_path), skills_catalog_include="", skills_catalog_exclude=""
-    )
+    settings = SimpleNamespace(skills_catalog_dir=str(tmp_path), skills_catalog_include="", skills_catalog_exclude="")
 
     # Act
     segment = _build_skills_catalog_segment(settings)

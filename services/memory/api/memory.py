@@ -696,9 +696,7 @@ async def search_records(body: SearchRequest, svc: Svc, tid: Tid) -> RecordSearc
                 record_type=str(h.record.record_type),
                 subject_iri=h.record.subject_iri,
                 # D-5/K20：贡献与 score 同精度取整——Σ=score 在线格式可复现（ocr/专家 P2 同题收口）
-                channel_scores=(
-                    {ch: round(v, 6) for ch, v in h.channel_scores.items()} if h.channel_scores else None
-                ),
+                channel_scores=({ch: round(v, 6) for ch, v in h.channel_scores.items()} if h.channel_scores else None),
             )
             for h in hits
         ]

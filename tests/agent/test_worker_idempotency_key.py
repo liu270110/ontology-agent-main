@@ -183,9 +183,7 @@ async def test_审批resume重放_同attempt同键_审计行不重复():
     # Act ②：审批回执 resume 重放（同 Run 同 attempt）
     task.payload = {
         **(task.payload or {}),
-        "approvals": [
-            {"ticket_id": str(uuid.uuid4()), "run_id": str(run.id), "param_hash": "h", "approved_by": None}
-        ],
+        "approvals": [{"ticket_id": str(uuid.uuid4()), "run_id": str(run.id), "param_hash": "h", "approved_by": None}],
     }
     orch2 = CaptureOrchestrator()
     resume_worker = TaskRunWorker(

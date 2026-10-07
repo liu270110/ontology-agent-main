@@ -19,9 +19,7 @@ def rrf_scores(channels: Mapping[str, Sequence[UUID]], k: int = 60) -> dict[UUID
     return dict(scores)
 
 
-def channel_contributions(
-    channels: Mapping[str, Sequence[UUID]], k: int = 60
-) -> dict[UUID, dict[str, float]] | None:
+def channel_contributions(channels: Mapping[str, Sequence[UUID]], k: int = 60) -> dict[UUID, dict[str, float]] | None:
     """逐通道贡献分解（D-5 可解释召回，Agent/13 §26 / K20）：贡献=1/(k+通道内名次)，与 rrf_scores
     同源同参零新逻辑（mem0 explain 范式：分数明细随结果返回，单条 Σ贡献=fused 分）。
 

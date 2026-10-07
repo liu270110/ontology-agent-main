@@ -410,8 +410,6 @@ class ExecutionStage:
             # fail-closed（与上方非 dict 检查同款契约；ocr 2026-10-07 评审发现）。
             bad = [str(k) for k, v in raw_env.items() if not isinstance(v, (str, int, float, bool))]
             if bad:
-                raise KernelContractError(
-                    f"env 通道契约违规：env 值必须为标量（K18-a 门 3）：{','.join(bad)}"
-                )
+                raise KernelContractError(f"env 通道契约违规：env 值必须为标量（K18-a 门 3）：{','.join(bad)}")
         env = {str(k): str(v) for k, v in raw_env.items()} if raw_env is not None else None
         return SandboxSpec(image=str(step.parameters.get("image", "platform/sandbox:default")), env=env)

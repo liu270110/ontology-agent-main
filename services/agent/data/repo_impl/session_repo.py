@@ -765,9 +765,12 @@ class PgTaskRepository:
 
     async def list_by_workflow(self, workflow_id: uuid.UUID, *, offset: int = 0, limit: int = 20) -> list[Task]:
         """工作流运行任务列表（GET /workflows/{id}/runs；created_at 倒序，runs 不随载）。"""
-        stmt = self._workflow_tasks_stmt(workflow_id).order_by(
-            TaskORM.created_at.desc(), TaskORM.id.desc()
-        ).offset(offset).limit(limit)
+        stmt = (
+            self._workflow_tasks_stmt(workflow_id)
+            .order_by(TaskORM.created_at.desc(), TaskORM.id.desc())
+            .offset(offset)
+            .limit(limit)
+        )
         rows = (await self._db.execute(stmt)).scalars().all()
         return [_task_to_domain(r, runs=[]) for r in rows]
 
@@ -847,9 +850,7 @@ class PgTaskRepository:
 
     def _owned_session_ids(self, user_id: uuid.UUID) -> Any:
         """归属会话 id 子查询（A2 user_id 归属过滤的同源面，list/count 共用）。"""
-        return select(SessionORM.id).where(
-            SessionORM.tenant_id == self._tenant_id, SessionORM.user_id == user_id
-        )
+        return select(SessionORM.id).where(SessionORM.tenant_id == self._tenant_id, SessionORM.user_id == user_id)
 
     async def _load_runs(self, task_id: uuid.UUID) -> list[Run]:
         stmt = (

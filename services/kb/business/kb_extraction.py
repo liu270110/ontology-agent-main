@@ -1027,23 +1027,18 @@ async def _triage_after_validate(ctx: StepContext) -> None:
         raise PipelineError("409 候选审核端口未装配（T2 冲突工单建单必需）")
     async with ctx.session_factory() as session:  # 短事务：分诊池取数（幽灵候选排除）
         rows = (
-            (
-                await session.execute(
-                    select(KbFact.id, KbFact.violations)
-                    .where(
-                        KbFact.tenant_id == ctx.tenant_id,
-                        KbFact.document_id == ctx.document_id,
-                        KbFact.status == "candidate",
-                    )
-                    .order_by(KbFact.created_at, KbFact.id)
+            await session.execute(
+                select(KbFact.id, KbFact.violations)
+                .where(
+                    KbFact.tenant_id == ctx.tenant_id,
+                    KbFact.document_id == ctx.document_id,
+                    KbFact.status == "candidate",
                 )
+                .order_by(KbFact.created_at, KbFact.id)
             )
-            .all()
-        )
+        ).all()
     pool = [
-        {"id": str(fact_id)}
-        for fact_id, violations in rows
-        if not any(_is_pruning_mark(v) for v in (violations or []))
+        {"id": str(fact_id)} for fact_id, violations in rows if not any(_is_pruning_mark(v) for v in (violations or []))
     ]
     if not pool:
         return  # 无合规候选（空文档 / 全部门禁拒 / 全部幽灵候选）：无可分诊面

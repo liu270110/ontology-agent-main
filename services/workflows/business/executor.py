@@ -125,9 +125,7 @@ class NodePorts(Protocol):
         """tool 节点：能力层工具调用（27 篇 §3「注册表选取」）。"""
         ...
 
-    async def retrieve(
-        self, node: WorkflowNode, query: str, ctx: TenantContext, *, run_id: uuid.UUID
-    ) -> NodeOutcome:
+    async def retrieve(self, node: WorkflowNode, query: str, ctx: TenantContext, *, run_id: uuid.UUID) -> NodeOutcome:
         """retrieval 节点：kb 检索（GraphRAG 三模式 v1=local 缺省）。"""
         ...
 
@@ -145,9 +143,7 @@ class _UnwiredPorts:
     ) -> NodeOutcome:
         raise NodeExecutionError(5004, "tool 节点端口未装配（组合根未接线，fail-closed）")
 
-    async def retrieve(
-        self, node: WorkflowNode, query: str, ctx: TenantContext, *, run_id: uuid.UUID
-    ) -> NodeOutcome:
+    async def retrieve(self, node: WorkflowNode, query: str, ctx: TenantContext, *, run_id: uuid.UUID) -> NodeOutcome:
         raise NodeExecutionError(5004, "retrieval 节点端口未装配（组合根未接线，fail-closed）")
 
 
@@ -174,7 +170,7 @@ def _tokenize(expression: str) -> list[tuple[str, str]]:
         if match is None:
             if expression[pos:].strip() == "":
                 break
-            raise NodeExecutionError(3001, f"condition 表达式含非法记号（位置 {pos}）: {expression[pos:pos + 8]!r}")
+            raise NodeExecutionError(3001, f"condition 表达式含非法记号（位置 {pos}）: {expression[pos : pos + 8]!r}")
         kind = match.lastgroup or ""
         tokens.append((kind, match.group(kind)))
         pos = match.end()
@@ -192,7 +188,7 @@ class _ConditionParser:
     def parse(self) -> Any:
         value = self._or()
         if self._pos != len(self._tokens):
-            raise NodeExecutionError(3001, f"condition 表达式有未消费记号: {self._tokens[self._pos:]}")
+            raise NodeExecutionError(3001, f"condition 表达式有未消费记号: {self._tokens[self._pos :]}")
         return value
 
     def _peek_op(self, *ops: str) -> str | None:
@@ -245,7 +241,7 @@ class _ConditionParser:
             return value
         if kind in ("num", "str"):
             self._pos += 1
-            return (text[1:-1] if kind == "str" else (float(text) if "." in text else int(text)))
+            return text[1:-1] if kind == "str" else (float(text) if "." in text else int(text))
         if kind == "name":
             self._pos += 1
             if text == "true":
@@ -571,9 +567,7 @@ class WorkflowRunExecutor:
             if skippable:
                 for nid in skippable:
                     yield self._started_event(command, nodes[nid], parallel_id=parallel_of.get(nid))
-                    yield self._finished_event(
-                        command, nodes[nid], WorkflowNodeStatus.SKIPPED, duration_ms=0
-                    )
+                    yield self._finished_event(command, nodes[nid], WorkflowNodeStatus.SKIPPED, duration_ms=0)
                 await self._persist_state(command, state)
                 continue
 
@@ -608,10 +602,7 @@ class WorkflowRunExecutor:
             await self._persist_state(command, state)
 
             results = await asyncio.gather(
-                *(
-                    self._execute_node(command, nodes[nid], in_edges[nid], active, state)
-                    for nid in ready
-                ),
+                *(self._execute_node(command, nodes[nid], in_edges[nid], active, state) for nid in ready),
                 return_exceptions=False,
             )
 
@@ -771,8 +762,10 @@ class WorkflowRunExecutor:
             return NodeOutcome(output=dict(node_input))  # 分支组标记节点：直通（组并行归调度器波次）
         if kind is WfNodeKind.AGENT:
             prompt = params.get("prompt")
-            message = render_template(str(prompt), ctx_vars) if isinstance(prompt, str) and prompt else json.dumps(
-                node_input, ensure_ascii=False
+            message = (
+                render_template(str(prompt), ctx_vars)
+                if isinstance(prompt, str) and prompt
+                else json.dumps(node_input, ensure_ascii=False)
             )
             return await self._ports.agent_turn(node, message, ctx, run_id=_ctx_run_id(state))
         if kind is WfNodeKind.TOOL:
@@ -780,8 +773,10 @@ class WorkflowRunExecutor:
             return await self._ports.invoke_tool(node, args, ctx, run_id=_ctx_run_id(state))
         if kind is WfNodeKind.RETRIEVAL:
             query = params.get("query")
-            query_text = render_template(str(query), ctx_vars) if isinstance(query, str) and query else json.dumps(
-                node_input, ensure_ascii=False
+            query_text = (
+                render_template(str(query), ctx_vars)
+                if isinstance(query, str) and query
+                else json.dumps(node_input, ensure_ascii=False)
             )
             return await self._ports.retrieve(node, query_text, ctx, run_id=_ctx_run_id(state))
         raise NodeExecutionError(4802, f"未知节点类型: {kind}")
@@ -952,9 +947,7 @@ class WorkflowRunExecutor:
             trace_id=command.trace_id,
         )
 
-    def _started_event(
-        self, command: WorkflowRunCommand, node: WorkflowNode, *, parallel_id: str | None
-    ) -> ChatEvent:
+    def _started_event(self, command: WorkflowRunCommand, node: WorkflowNode, *, parallel_id: str | None) -> ChatEvent:
         payload = WorkflowNodeStartedPayload(
             workflow_run_id=str(command.run_id),
             node_id=node.id,
@@ -1184,9 +1177,7 @@ class _AgentTurnPort:
     ) -> NodeOutcome:
         raise NodeExecutionError(5004, "tool 节点端口未装配（_AgentTurnPort 仅承载 agent）")
 
-    async def retrieve(
-        self, node: WorkflowNode, query: str, ctx: TenantContext, *, run_id: uuid.UUID
-    ) -> NodeOutcome:
+    async def retrieve(self, node: WorkflowNode, query: str, ctx: TenantContext, *, run_id: uuid.UUID) -> NodeOutcome:
         raise NodeExecutionError(5004, "retrieval 节点端口未装配（_AgentTurnPort 仅承载 agent）")
 
 
@@ -1196,9 +1187,7 @@ class _KbRetrievalPort:
     def __init__(self, search_service: Any) -> None:
         self._search = search_service
 
-    async def retrieve(
-        self, node: WorkflowNode, query: str, ctx: TenantContext, *, run_id: uuid.UUID
-    ) -> NodeOutcome:
+    async def retrieve(self, node: WorkflowNode, query: str, ctx: TenantContext, *, run_id: uuid.UUID) -> NodeOutcome:
         result = await self._search.search(tenant_id=ctx.tenant_id, query=query, mode="local")
         return NodeOutcome(
             output={
@@ -1247,9 +1236,7 @@ class _CompositePorts:
             raise NodeExecutionError(5004, "tool 节点端口未装配（组合根未接线，fail-closed）")
         return await self._tool.invoke_tool(node, args, ctx, run_id=run_id)
 
-    async def retrieve(
-        self, node: WorkflowNode, query: str, ctx: TenantContext, *, run_id: uuid.UUID
-    ) -> NodeOutcome:
+    async def retrieve(self, node: WorkflowNode, query: str, ctx: TenantContext, *, run_id: uuid.UUID) -> NodeOutcome:
         if self._retrieval is None:
             raise NodeExecutionError(5004, "retrieval 节点端口未装配（组合根未接线，fail-closed）")
         return await self._retrieval.retrieve(node, query, ctx, run_id=run_id)

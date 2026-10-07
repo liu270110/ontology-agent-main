@@ -186,9 +186,7 @@ async def _drive_once_soft(rs: RunSeed, task_id: uuid.UUID, run_id: uuid.UUID, *
 
     worker = TaskRunWorker(
         uow=rs.uow,
-        poller=FakePoller(
-            claims=[WorkerClaim(kind=kind, tenant_id=rs.seed.tenant_id, task_id=task_id, run_id=run_id)]
-        ),
+        poller=FakePoller(claims=[WorkerClaim(kind=kind, tenant_id=rs.seed.tenant_id, task_id=task_id, run_id=run_id)]),
         orchestrator_provider=lambda: None,
         workflow_executor_provider=rs.executor,
     )
@@ -284,9 +282,7 @@ async def test_条件分支_否分支执行_是分支跳过(run_seed: RunSeed):
     )
     await _drive_once(rs, accepted.task_id, accepted.run_id)
     rows = await _task_events(rs, accepted.task_id)
-    finished = {
-        r.data["node_id"]: r.data["status"] for r in rows if r.event_type == "WORKFLOW_NODE_FINISHED"
-    }
+    finished = {r.data["node_id"]: r.data["status"] for r in rows if r.event_type == "WORKFLOW_NODE_FINISHED"}
     assert finished["low"] == "succeeded" and finished["high"] == "skipped"
     task = await _load_task(rs, accepted.task_id)
     assert task.payload["workflow_state"]["outputs"]["low"]["output"] == "低价:500"

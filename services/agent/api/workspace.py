@@ -70,9 +70,7 @@ async def _panel_call(out_type: type[_OutT], func: Any, *args: Any) -> _OutT:
 
 
 @router.get("/{session_id}/workspace/tree", summary="会话工作区文件树（31 篇 #1）")
-async def get_workspace_tree(
-    session_id: uuid.UUID, principal: SessionReadDep, base: WorkspaceBaseDep
-) -> WsTreeOut:
+async def get_workspace_tree(session_id: uuid.UUID, principal: SessionReadDep, base: WorkspaceBaseDep) -> WsTreeOut:
     _ = principal  # scope 门禁在依赖内完成；主体经审计中间件统一留痕
     return await _panel_call(WsTreeOut, workspace_tree, base, session_id)
 

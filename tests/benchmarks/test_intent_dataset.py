@@ -71,11 +71,8 @@ class TestGeneratorConsistency:
         gen = build_items()
         validate(gen, valid_actions={e.name for e in build_action_catalog()})
         # Assert：逐条相等（生成器=落盘唯一来源）
-        assert [
-            (it.id, it.query, it.expected_action, it.ambiguity_level, it.notes, it.expectation) for it in disk
-        ] == [
-            (g["id"], g["query"], g["expected_action"], g["ambiguity_level"], g["notes"], g["expectation"])
-            for g in gen
+        assert [(it.id, it.query, it.expected_action, it.ambiguity_level, it.notes, it.expectation) for it in disk] == [
+            (g["id"], g["query"], g["expected_action"], g["ambiguity_level"], g["notes"], g["expectation"]) for g in gen
         ]
 
     def test_指纹稳定(self):

@@ -12263,6 +12263,26 @@
         "title": "WindowMessageIn",
         "type": "object"
       },
+      "WorkflowAbortIn": {
+        "additionalProperties": false,
+        "description": "运行中止入参（POST /workflows/{id}/runs/{rid}/abort；对齐 tasks/cancel 语义）。",
+        "properties": {
+          "reason": {
+            "anyOf": [
+              {
+                "maxLength": 512,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          }
+        },
+        "title": "WorkflowAbortIn",
+        "type": "object"
+      },
       "WorkflowCreateIn": {
         "additionalProperties": false,
         "description": "建草稿（POST /workflows；前端 createWorkflow body；未知模板 id 回落 blank）。",
@@ -12440,6 +12460,59 @@
         "title": "WorkflowPublishOut",
         "type": "object"
       },
+      "WorkflowResumeIn": {
+        "additionalProperties": false,
+        "description": "断点恢复入参（POST /workflows/{id}/runs/{run_id}/resume；27 篇 §3 time-travel）。",
+        "properties": {
+          "decision": {
+            "default": "approve",
+            "enum": [
+              "approve",
+              "reject"
+            ],
+            "title": "Decision",
+            "type": "string"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "maxLength": 512,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "param_hash": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Param Hash"
+          },
+          "params": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Params"
+          }
+        },
+        "title": "WorkflowResumeIn",
+        "type": "object"
+      },
       "WorkflowRollbackIn": {
         "additionalProperties": false,
         "description": "回滚（POST /workflows/{id}/rollback；前端 rollbackWorkflow body={to_version: \"vN\"}）。\n\nto_version 版本**标签**字符串（WfVersion.version 形——画框 25 基线单选值），服务端\n解析为版本号（:attr:`version_number`）；\"v12\"/\"12\" 均收，其余 ValueError→FastAPI\n原生 422（3xxx DTO 校验段）。",
@@ -12487,6 +12560,329 @@
           "copied_from"
         ],
         "title": "WorkflowRollbackOut",
+        "type": "object"
+      },
+      "WorkflowRunAcceptedOut": {
+        "additionalProperties": false,
+        "description": "受理响应（202；tasks/runs 既有管道异步执行，前端轮询详情端点）。",
+        "properties": {
+          "kind": {
+            "enum": [
+              "workflow_run",
+              "workflow_test"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "run_id": {
+            "format": "uuid",
+            "title": "Run Id",
+            "type": "string"
+          },
+          "status": {
+            "const": "queued",
+            "default": "queued",
+            "title": "Status",
+            "type": "string"
+          },
+          "task_id": {
+            "format": "uuid",
+            "title": "Task Id",
+            "type": "string"
+          },
+          "version": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Version"
+          }
+        },
+        "required": [
+          "task_id",
+          "run_id",
+          "kind"
+        ],
+        "title": "WorkflowRunAcceptedOut",
+        "type": "object"
+      },
+      "WorkflowRunControlOut": {
+        "additionalProperties": false,
+        "description": "resume/abort 响应（202；续跑/中止异步生效，终态以详情端点轮询为准）。",
+        "properties": {
+          "decision": {
+            "title": "Decision",
+            "type": "string"
+          },
+          "resumed_node": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resumed Node"
+          },
+          "run_id": {
+            "format": "uuid",
+            "title": "Run Id",
+            "type": "string"
+          },
+          "run_status": {
+            "title": "Run Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "run_id",
+          "decision",
+          "run_status"
+        ],
+        "title": "WorkflowRunControlOut",
+        "type": "object"
+      },
+      "WorkflowRunDetailEnvelope": {
+        "additionalProperties": false,
+        "description": "详情响应（api/01 §3.1 {data, meta} 信封）。",
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/WorkflowRunDetailOut"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/EmptyMeta"
+          }
+        },
+        "required": [
+          "data"
+        ],
+        "title": "WorkflowRunDetailEnvelope",
+        "type": "object"
+      },
+      "WorkflowRunDetailOut": {
+        "additionalProperties": false,
+        "description": "运行详情（节点状态聚合视图；payload.workflow_state 投影——27 篇 §3 试运行面板取数口）。",
+        "properties": {
+          "created_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "nodes": {
+            "additionalProperties": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Nodes",
+            "type": "object"
+          },
+          "outputs": {
+            "additionalProperties": true,
+            "title": "Outputs",
+            "type": "object"
+          },
+          "paused_kind": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Paused Kind"
+          },
+          "paused_node": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Paused Node"
+          },
+          "run_id": {
+            "format": "uuid",
+            "title": "Run Id",
+            "type": "string"
+          },
+          "run_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Run Status"
+          },
+          "task_id": {
+            "format": "uuid",
+            "title": "Task Id",
+            "type": "string"
+          },
+          "task_status": {
+            "title": "Task Status",
+            "type": "string"
+          },
+          "version": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Version"
+          },
+          "workflow_id": {
+            "format": "uuid",
+            "title": "Workflow Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "run_id",
+          "task_id",
+          "workflow_id",
+          "kind",
+          "task_status",
+          "nodes"
+        ],
+        "title": "WorkflowRunDetailOut",
+        "type": "object"
+      },
+      "WorkflowRunIn": {
+        "additionalProperties": false,
+        "description": "正式运行入参（POST /workflows/{id}/runs；执行 head 不可变版本快照）。",
+        "properties": {
+          "variables": {
+            "additionalProperties": true,
+            "title": "Variables",
+            "type": "object"
+          }
+        },
+        "title": "WorkflowRunIn",
+        "type": "object"
+      },
+      "WorkflowRunSummaryOut": {
+        "additionalProperties": false,
+        "description": "运行历史行（GET /workflows/{id}/runs；对齐任务中心过滤视图）。",
+        "properties": {
+          "created_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "run_id": {
+            "format": "uuid",
+            "title": "Run Id",
+            "type": "string"
+          },
+          "run_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Run Status"
+          },
+          "task_id": {
+            "format": "uuid",
+            "title": "Task Id",
+            "type": "string"
+          },
+          "task_status": {
+            "title": "Task Status",
+            "type": "string"
+          },
+          "version": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Version"
+          }
+        },
+        "required": [
+          "run_id",
+          "task_id",
+          "kind",
+          "task_status"
+        ],
+        "title": "WorkflowRunSummaryOut",
+        "type": "object"
+      },
+      "WorkflowRunsOut": {
+        "additionalProperties": false,
+        "description": "运行历史响应（api/01 §3.1 {data, meta} 信封）。",
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/WorkflowRunSummaryOut"
+            },
+            "title": "Data",
+            "type": "array"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/PageMeta"
+          }
+        },
+        "required": [
+          "data",
+          "meta"
+        ],
+        "title": "WorkflowRunsOut",
         "type": "object"
       },
       "WorkflowSaveIn": {
@@ -12586,6 +12982,26 @@
           "items"
         ],
         "title": "WorkflowTemplatesOut",
+        "type": "object"
+      },
+      "WorkflowTestIn": {
+        "additionalProperties": false,
+        "description": "试运行入参（POST /workflows/{id}/test；27 篇 §3 试运行断点+入参变量）。",
+        "properties": {
+          "breakpoints": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Breakpoints",
+            "type": "array"
+          },
+          "variables": {
+            "additionalProperties": true,
+            "title": "Variables",
+            "type": "object"
+          }
+        },
+        "title": "WorkflowTestIn",
         "type": "object"
       },
       "WorkflowValidationOut": {
@@ -23899,6 +24315,359 @@
           }
         },
         "summary": "回滚（以目标版本内容新建草稿——27 篇 §3；版本行零触碰，head 历史保留）",
+        "tags": [
+          "workflows"
+        ]
+      }
+    },
+    "/api/v1/workflows/{workflow_id}/runs": {
+      "get": {
+        "operationId": "list_workflow_runs_api_v1_workflows__workflow_id__runs_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workflow_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workflow Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Page",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page_size",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Page Size",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkflowRunsOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "运行历史（对齐任务中心过滤 type=workflow_run|workflow_test）",
+        "tags": [
+          "workflows"
+        ]
+      },
+      "post": {
+        "description": "api/01 §5.11 正式运行：执行 head 不可变版本快照（版本不可变——27 篇 §3）；未发布\n4804→409。并发互斥 4102→409（同工作流至多一个活跃任务）。",
+        "operationId": "submit_workflow_run_api_v1_workflows__workflow_id__runs_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workflow_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workflow Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WorkflowRunIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkflowRunAcceptedOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "正式运行（→task type=workflow_run；执行 head 不可变版本快照，仅 published）",
+        "tags": [
+          "workflows"
+        ]
+      }
+    },
+    "/api/v1/workflows/{workflow_id}/runs/{run_id}": {
+      "get": {
+        "description": "节点状态聚合视图（27 篇 §3 底部抽屉「节点状态时间线」）：投影 payload.workflow_state\n（执行器落账）+ run/task 行终态；断线重连快照兜底同源（40 篇 §4.4 R3 口径）。",
+        "operationId": "get_workflow_run_api_v1_workflows__workflow_id__runs__run_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workflow_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workflow Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkflowRunDetailEnvelope"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "运行详情（节点状态聚合视图；试运行面板取数口）",
+        "tags": [
+          "workflows"
+        ]
+      }
+    },
+    "/api/v1/workflows/{workflow_id}/runs/{run_id}/abort": {
+      "post": {
+        "operationId": "abort_workflow_run_api_v1_workflows__workflow_id__runs__run_id__abort_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workflow_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workflow Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WorkflowAbortIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkflowRunControlOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "运行中止（对齐 tasks/cancel 语义；开放节点 FINISHED(cancelled) 标注）",
+        "tags": [
+          "workflows"
+        ]
+      }
+    },
+    "/api/v1/workflows/{workflow_id}/runs/{run_id}/resume": {
+      "post": {
+        "description": "核验链同 H-0b（waiting_tool→锚点→param_hash 绑定）；approve=票仓+run.start()+\n修参 params_override；reject=run cancel+task failed。409+4102（非暂停态/无锚点）、\n409+3001（哈希不一致/审批缺哈希）。",
+        "operationId": "resume_workflow_run_api_v1_workflows__workflow_id__runs__run_id__resume_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workflow_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workflow Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WorkflowResumeIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkflowRunControlOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "断点恢复（审批通过/修参续跑；27 篇 §3 time-travel 语义；worker resume 队列认领）",
+        "tags": [
+          "workflows"
+        ]
+      }
+    },
+    "/api/v1/workflows/{workflow_id}/test": {
+      "post": {
+        "description": "27 篇 §3「草稿可随意改→试运行→提交发布」：图=受理时草稿固化快照；breakpoints 命中\n暂停（waiting_approval 语义）。校验三件不过/同工作流活跃运行 → 409（4801/4802/4102）。",
+        "operationId": "submit_workflow_test_api_v1_workflows__workflow_id__test_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workflow_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workflow Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WorkflowTestIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkflowRunAcceptedOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "试运行（dry-run→task type=workflow_test；执行草稿固化快照，支持节点断点）",
         "tags": [
           "workflows"
         ]

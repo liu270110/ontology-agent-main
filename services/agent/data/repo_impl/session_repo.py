@@ -751,6 +751,41 @@ class PgTaskRepository:
         row = (await self._db.execute(stmt)).scalar_one_or_none()
         return _task_to_domain(row, runs=await self._load_runs(row.id)) if row is not None else None
 
+    # ── X16 工作流运行（2026-10-07 批；api/01 §5.11 runs/resume/abort 端点取数口）────
+    # 归属投影=task.payload->>'workflow_id'（任务行不冗余 workflow_id 列；task_poller
+    # approvals jsonb 计数同款 JSONB 查询面先例）。jsonb 守卫：payload 非对象行的
+    # ->> 操作 PG 侧对非对象返回 NULL，不加额外 typeof 谓词（list/count 只读面零炸点）。
+
+    def _workflow_tasks_stmt(self, workflow_id: uuid.UUID) -> Any:
+        return select(TaskORM).where(
+            TaskORM.tenant_id == self._tenant_id,
+            TaskORM.type.in_(("workflow_run", "workflow_test")),
+            TaskORM.payload.op("->>")("workflow_id") == str(workflow_id),
+        )
+
+    async def list_by_workflow(self, workflow_id: uuid.UUID, *, offset: int = 0, limit: int = 20) -> list[Task]:
+        """工作流运行任务列表（GET /workflows/{id}/runs；created_at 倒序，runs 不随载）。"""
+        stmt = self._workflow_tasks_stmt(workflow_id).order_by(
+            TaskORM.created_at.desc(), TaskORM.id.desc()
+        ).offset(offset).limit(limit)
+        rows = (await self._db.execute(stmt)).scalars().all()
+        return [_task_to_domain(r, runs=[]) for r in rows]
+
+    async def count_by_workflow(self, workflow_id: uuid.UUID) -> int:
+        stmt = select(func.count()).select_from(self._workflow_tasks_stmt(workflow_id).subquery())
+        return int((await self._db.execute(stmt)).scalar_one())
+
+    async def find_active_by_workflow(self, workflow_id: uuid.UUID) -> Task | None:
+        """活跃任务预检（同工作流并发互斥 4102；running 最近一行）。"""
+        stmt = (
+            self._workflow_tasks_stmt(workflow_id)
+            .where(TaskORM.status == "running")
+            .order_by(TaskORM.created_at.desc(), TaskORM.id.desc())
+            .limit(1)
+        )
+        row = (await self._db.execute(stmt)).scalar_one_or_none()
+        return _task_to_domain(row, runs=await self._load_runs(row.id)) if row is not None else None
+
     async def delete_by_session(self, session_id: uuid.UUID) -> None:
         """删除会话关联任务及其 Run/事件（DELETE /sessions 级联；FK 逆序 task_events→runs→tasks）。"""
         task_ids = select(TaskORM.id).where(TaskORM.session_id == session_id, TaskORM.tenant_id == self._tenant_id)

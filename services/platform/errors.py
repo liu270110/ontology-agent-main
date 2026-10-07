@@ -83,6 +83,10 @@ class ErrorCode(IntEnum):
     WORKFLOW_GRAPH_INVALID = 4801
     WORKFLOW_NODE_INVALID = 4802
     WORKFLOW_NOT_DRAFT = 4803
+    # 2026-10-07 X16 执行引擎批登记（api/01 §5.11 POST /workflows/{id}/runs 409* 口径）：
+    # 4804=工作流未发布（正式运行仅 published；试运行走 /test 跑草稿——27 篇 §3「草稿可随意改
+    # → 试运行 → 提交发布」）；02 §7 表格回填随文档批。
+    WORKFLOW_NOT_PUBLISHED = 4804
     INTERNAL_ERROR = 5999
 
 

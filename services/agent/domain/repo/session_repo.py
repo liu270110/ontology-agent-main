@@ -145,6 +145,24 @@ class TaskRepository(Protocol):
         """按 Run 反查所属任务（POST /sessions/{id}/cancel 定位 run 载体；runs 全量随载）。"""
         ...
 
+    # ── X16 工作流运行（2026-10-07 批；api/01 §5.11 runs/resume/abort 端点取数口）────
+    # 任务行不冗余 workflow_id 列，归属经 payload->>'workflow_id' JSONB 投影查询
+    # （task_poller approvals 计数同款 jsonb 面先例）；跨模块消费方=workflows.business.runs。
+
+    async def list_by_workflow(self, workflow_id: UUID, *, offset: int = 0, limit: int = 20) -> list[Task]:
+        """工作流的运行任务列表（GET /workflows/{id}/runs；type∈{workflow_run,workflow_test}，
+        created_at 倒序；runs 不随载——节点态投影自 payload.workflow_state）。"""
+        ...
+
+    async def count_by_workflow(self, workflow_id: UUID) -> int:
+        """工作流运行总数（列表分页 meta.total；过滤口径与 list_by_workflow 同源）。"""
+        ...
+
+    async def find_active_by_workflow(self, workflow_id: UUID) -> Task | None:
+        """工作流的活跃任务预检（POST /workflows/{id}/runs|test 4102 同工作流并发互斥；
+        status='running' 的最近一行；None=无活跃）。"""
+        ...
+
     async def delete_by_session(self, session_id: UUID) -> None:
         """删除会话关联任务及其 Run/事件时间线（DELETE /sessions 级联；FK 逆序 task_events→runs→tasks）。"""
         ...

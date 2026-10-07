@@ -128,8 +128,18 @@ class Run(BaseModel):
         return self.status in _ACTIVE_RUN_STATES
 
     def start(self) -> None:
-        """认领执行（queued→running，04 §3「适配器 spawn 成功」）：worker 认领/内联受理共用。"""
+        """认领执行（queued→running，04 §3「适配器 spawn 成功」）：worker 认领/内联受理共用；
+        waiting_tool→running 的审批恢复同用本方法承载 resume 语义（H-0b，approval_service 先例）。"""
         self._transition(RunStatus.RUNNING)
+
+    def wait_external(self) -> None:
+        """进入外部回执等待（running→waiting_tool，04 §3 七态之一）。
+
+        X16（2026-10-07）：工作流审批节点/试运行断点暂停的行态承载——合法长等不入孤儿
+        回收面（task_poller.find_orphans WHERE running 同口径排除），恢复走 /resume 端点
+        （run.start() 承载 waiting_tool→running）。
+        """
+        self._transition(RunStatus.WAITING_TOOL)
 
     def complete(self, usage: dict[str, Any] | None = None) -> None:
         """正常完成（running→completed），用量随终态落账。"""

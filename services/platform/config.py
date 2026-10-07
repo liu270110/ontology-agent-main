@@ -128,6 +128,11 @@ class Settings(BaseSettings):
     # 新会话拒绑、存量 Run 跑完；成功清零自愈）
     agent_degrade_threshold: int = 3
 
+    # X16 工作流执行引擎（2026-10-07 批；api/01 §5.11 test/runs 端点）：节点执行超时上限。
+    # per-node 配置=节点 params.timeout_s（秒，夹取 [1,3600]）；未配置回落本缺省值
+    # （统一配置层铁律——08 篇，OA_WORKFLOW_NODE_TIMEOUT_DEFAULT_S 覆盖）。
+    workflow_node_timeout_default_s: float = 60.0
+
     # B-① Run 内并行工具调度（docs/Agent/10 §3，T6 唯一事实源）：并行调度段内最大并发度；
     # =1 时所有段退化为单步=串行（零行为变化）。内核构造参数显式注入优先，缺省读此值（D2 纪律）。
     kernel_tool_parallelism: int = Field(default=4, ge=1, le=16)

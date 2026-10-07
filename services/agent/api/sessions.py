@@ -433,6 +433,9 @@ def _build_chat_capability_bindings(state: Any) -> tuple:
       InMemoryAskUserBoard（v1 单事件循环形态，并发上限护栏随板自带）；TOOL_CALL_* 投影经
       run_scope Run 级事件口（编排器绑定 on_event，未绑定=静默跳过）；run_id/session_id
       归因字段本批留空（ctx.tenant/trace 照常贯穿，静态绑定无每 Run 值可注入）。
+    - **jev.detect**（READ，docs/Agent/17 §1 批次 A，红队 E1 闭环）：GLiNER 本地判定工具
+      条件装配——``jev_enabled`` 默认 False=零行为变化（不注册、不加载模型）；开启后
+      依赖缺失由工具 invoke 返回结构化不可用错误（装配不受影响）。
     """
     settings = state.settings
     bindings: list = list(build_capability_tool_bindings(settings))
@@ -456,6 +459,12 @@ def _build_chat_capability_bindings(state: Any) -> tuple:
             from services.agent.business.capabilities.run_scope import emit_via_run_scope
 
             bindings.extend(build_ask_user_bindings(InMemoryAskUserBoard(), emit=emit_via_run_scope))
+        if getattr(settings, "jev_enabled", False):  # JEV L0 通道（docs/Agent/17 §1 批次 A，红队 E1 闭环）：
+            # 默认关=零行为变化（不注册工具、不加载模型）；开启后 jev.detect 只读工具进
+            # 逐轮分发器（依赖可选——gliner/torch/jieba 缺库时 invoke 返回结构化不可用错误）
+            from services.agent.business.capabilities.jev import build_jev_binding
+
+            bindings.append(build_jev_binding(settings=settings))
     except Exception:  # noqa: BLE001 ——装配失败应用以「无能力绑定」继续（fail-soft，留痕排障）
         logger.exception("chat 能力绑定装配失败（以 MCP 桥绑定继续）: subagent/ask_user 未注册")
     return tuple(bindings)

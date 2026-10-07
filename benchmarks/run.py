@@ -1,11 +1,11 @@
 """benchmarks 统一入口（docs/Agent/16 §3）：python benchmarks/run.py --suite rag [--smoke]。
 
 套件分发：rag（benchmarks/suites/rag/runner.py）、agent-core（suites/agent-core/runner.py，
-2026-10-07 恢复入口）、intent（suites/intent/runner.py，双档对照 A0 直觉/A1 本体约束）
-已实现；ontology-scale 随波次落地，此处显式报错不静默。
-2026-10-07 恢复入口——rag 批合并时误摘，红队修复批需 --suite agent-core 复验）与
-ontology-scale（suites/ontology-scale/runner.py，2026-10-07 G1/F3 落地——合成本体梯度
-三档×三指标）已实现；intent 随各自波次落地，此处显式报错不静默。
+场景型文件位加载）、intent（suites/intent/runner.py，三档对照 A0 直觉/A1 本体约束/A2=jev 通道）、
+ontology-scale（suites/ontology-scale/runner.py，本体梯度三档×三指标）均已实现；
+未实现套件显式报错不静默。
+（2026-10-07 评测A 批顺带修复：历史合并残留的双 _IMPLEMENTED_SUITES 赋值与未定义的
+`_run_agent_core` 分支——agent-core 实走 _SCENARIO_SUITES 通用路径，该分支为死代码 F821。）
 
 示例（仓库根）：
     python benchmarks/run.py --suite rag --smoke          # 全链冒烟：进库+检索+基线+六维落盘
@@ -32,8 +32,7 @@ sys.path.insert(0, str(ROOT))
 
 from benchmarks.suites.rag.config import RagBenchSettings  # noqa: E402
 
-_IMPLEMENTED_SUITES = ("rag", "agent-core", "intent")
-_IMPLEMENTED_SUITES = ("rag", "agent-core", "ontology-scale")
+_IMPLEMENTED_SUITES = ("rag", "agent-core", "intent", "ontology-scale")
 
 # 场景型套件（目录含连字符，runner.py 文件位加载；run_suite(smoke, only) 契约）
 _SCENARIO_SUITES = ("agent-core", "ontology-scale")
@@ -84,8 +83,6 @@ def main(argv: list[str] | None = None) -> int:
     if args.suite not in _IMPLEMENTED_SUITES:
         print(f"suite {args.suite!r} 未实现（当前已实现：{_IMPLEMENTED_SUITES}）", file=sys.stderr)
         return 2
-    if args.suite == "agent-core":
-        return _run_agent_core(args)
     if args.suite == "intent":
         return _run_intent(args)
     if args.suite in _SCENARIO_SUITES:
@@ -175,15 +172,27 @@ def _run_intent(args: argparse.Namespace) -> int:
         f"  clarification_trigger  {gain['clarification_trigger_rate']:+.3f}\n"
         f"  out_of_scope_reject    {gain['out_of_scope_reject_rate']:+.3f}"
     )
+    jev = result.get("jev_vs_llm")
+    if jev:
+        d = jev["diff"]
+        print(
+            "\njev_vs_llm（A2=jev 通道 − A1，E1 核心产出）：\n"
+            f"  intent_accuracy        {d['intent_accuracy']:+.3f}\n"
+            f"  clarification_trigger  {d['clarification_trigger_rate']:+.3f}\n"
+            f"  out_of_scope_reject    {d['out_of_scope_reject_rate']:+.3f}\n"
+            f"  latency_p50_ms         {d['latency_p50_ms']:+.0f}"
+        )
     print(f"\n结果 JSON: {result['artifacts']['result_json']}")
     print(f"SUMMARY:   {result['artifacts']['summary_md']}")
     return 0
 
 
 def _intent_digest(result: dict) -> dict:
-    """控制台摘要：双档四指标对比表（全量数据看结果 JSON）。"""
+    """控制台摘要：三档四指标对比表（全量数据看结果 JSON）。"""
     rows = {}
-    for tier in ("a0", "a1"):
+    for tier in ("a0", "a1", "a2"):
+        if tier not in result["tiers"]:
+            continue  # A2 显式跳过（jev_tier_enabled=False）时不占行
         mt = result["tiers"][tier]["metrics"]
         rows[tier] = {
             "intent_accuracy": round(mt["intent_accuracy"], 3),

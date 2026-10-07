@@ -109,6 +109,16 @@ class Settings(BaseSettings):
     # （kernel_subagent_max_depth）不受本值影响。
     kernel_subagent_derivable_agents: str = ""  # 逗号分隔 agent 类型名
 
+    # JEV L0 通道（docs/Agent/17 §1 批次 A；红队审查 E1「GLiNER 装了没接线」闭环）：
+    # 本地 GLiNER 判定引擎（services/devtools/jev-local 收编件，urchade/gliner_multi-v2.1）
+    # 提供 jev_detect 结构化意图/实体抽取（毫秒级、无生成式幻觉）。gliner/torch/jieba 为可选
+    # 依赖（不进主依赖，importlib 懒加载；缺库=工具结构化不可用错误，不炸进程）。
+    # **默认关=零行为变化**：不注册工具、不加载模型；开启后注册 jev.detect 只读工具。
+    jev_enabled: bool = False
+    jev_threshold: float = Field(default=0.25, ge=0.0, le=1.0)  # GLiNER 判定阈值（demo_jev 路由档同值）
+    jev_timeout_s: float = Field(default=10.0, gt=0)  # 单次判定超时钳制（超时=结构化 5001，不挂起 Run）
+    jev_model_id: str = "urchade/gliner_multi-v2.1"  # HF 模型 id（本机 ~/.cache/huggingface 已缓存）
+
     # 网关运行
     api_prefix: str = "/api/v1"
     sse_heartbeat_seconds: int = 15  # 建议值，压测后冻结（02 §5）

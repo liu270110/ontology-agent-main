@@ -33,6 +33,11 @@ class IntentBenchSettings(BaseSettings):
     # 判分口径
     out_of_scope_confidence_floor: float = Field(default=0.5, ge=0.0, le=1.0)  # 越界「映射最近+低置信」判拒下限
 
+    # A2=jev 档（docs/Agent/17 §1 批次 A，红队 E1 闭环）：GLiNER 通道直调（不走 LLM）。
+    # 引擎参数（threshold/timeout/model_id）复用平台 Settings（OA_JEV_*，D2 单一事实源）；
+    # 本开关只控 bench 侧是否跑 A2 档（False=跳过，flat 指标三键如实置 None）。
+    jev_tier_enabled: bool = True
+
     # 产物
     results_dir: Path = Path("benchmarks/results")  # 相对仓库根（run.py 以 cwd=仓库根运行）
     suite_name: str = "intent"

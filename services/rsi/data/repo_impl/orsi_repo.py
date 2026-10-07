@@ -36,6 +36,7 @@ def _to_domain(row: OrsiCapabilityORM) -> OrsiCapability:
         source_face_track=GapFaceTrack(row.source_face_track),
         status=OrsiCapabilityStatus(row.status),
         evidence_uri=row.evidence_uri,
+        promotion_evidence=row.promotion_evidence,
         id=row.id,
         capability_fingerprint=row.capability_fingerprint,
         created_at=row.created_at,
@@ -69,6 +70,7 @@ class PgOrsiCapabilityRepository:
             status=capability.status.value,
             capability_fingerprint=capability.capability_fingerprint,
             evidence_uri=capability.evidence_uri,
+            promotion_evidence=capability.promotion_evidence,
             deleted_at=capability.deleted_at,
         )
         try:

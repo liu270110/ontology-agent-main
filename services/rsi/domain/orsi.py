@@ -16,6 +16,14 @@ O7 检索策略 / O8 模型权重。封闭注册表：新增面=代码变更=人
    ``OrsiPromotionBlockedError``（挂接点=M5+ review_workflow
    target_type=orsi_capability，随审核工作流批次接线后在此替换为工单存在性校验）。
 
+promotion_evidence（17 篇 §3.3「版本迭代质量依据」，C 批 orsi_link v2 挂接）：
+可选结构化证据（URI+version_diff 摘要五键，键集见 ``PROMOTION_EVIDENCE_KEYS``）——
+**仅承载，不激活任何迁移**：promote() 红线原样恒拒；本字段是 M5+ 审查工单
+（review_workflow target_type=orsi_capability）的**必填证据挂接点**——工单面接线后，
+promote 校验「工单存在且其引用的 version_diff trend 不劣化」即读本字段（对应 suite 的
+version_diff 即两代能力的质量证据链）。挂接点前该字段对注册表仅是登记元数据，
+与 source_channel 同类：不作授权依据、不触发任何迁移。
+
 本模块零第三方依赖（stdlib + 本包 surfaces），L4 领域纯度同款纪律。
 """
 
@@ -27,6 +35,7 @@ import uuid
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from enum import StrEnum
+from typing import Any
 
 from services.rsi.surfaces import EvolutionSurface  # noqa: F401  (re-export 供 domain 消费方统一入口)
 
@@ -67,6 +76,56 @@ class OrsiCapabilityStatus(StrEnum):
     NOMINAL = "nominal"  # 常规在册（已在服役的能力登记）
     CANDIDATE = "candidate"  # 候选（候选非成品宪法 3：仅标记，晋升必经人工审核工单）
     PROMOTED = "promoted"  # 已晋升（经审核工单终审；v1 恒不可达）
+
+
+# ---------------------------------------------------------------- 证据 payload 口径（17 篇 §3.1/§3.3）
+
+# promotion_evidence 键集（17 篇 §3.1 注册 payload 五字段；闭集——缺键/多键皆拒）：
+# - eval_tag         本次评测 tag（版本迭代曲线锚点，如 v0.2.0-m4.7）；
+# - scenario_hash    场景集哈希（场景集变=指纹变=能力需重评，orsi_link 基准侧同源算法）；
+# - metrics_digest   本次指标快照摘要（sha256，评审可比对依据）；
+# - baseline_digest  上一 tag 同场景集的指标摘要（首轮 None——曲线首点无基线）；
+# - version_diff_uri version_diff 产物路径（B 批 diff.py 产出；M5+ 工单审查的必读证据）。
+PROMOTION_EVIDENCE_KEYS: tuple[str, ...] = (
+    "eval_tag",
+    "scenario_hash",
+    "metrics_digest",
+    "baseline_digest",
+    "version_diff_uri",
+)
+# 必填非空键（eval_tag=版本迭代曲线锚点；version_diff_uri 首轮基线可 None——
+# 无上一 tag 即无 diff 产物，M5+ 工单面对无 diff 的晋升可要求补跑基线后受理）
+PROMOTION_EVIDENCE_REQUIRED: tuple[str, ...] = ("eval_tag",)
+
+
+def validate_promotion_evidence(payload: dict[str, Any] | None) -> dict[str, Any] | None:
+    """promotion_evidence 值域校验（构造期收口；非法即抛 OrsiCapabilityError 不静默）。
+
+    规则：None=未挂证据（合法）；dict 且键集恰为 ``PROMOTION_EVIDENCE_KEYS``（闭集，
+    API DTO extra="forbid" 同词汇表）；必填键值非空字符串，其余键值 str|None。
+    返回规范化后的原 dict（就地校验语义，不改写内容）。
+    """
+    if payload is None:
+        return None
+    if not isinstance(payload, dict):
+        raise OrsiCapabilityError(f"promotion_evidence 必须为 dict 或 None，收到: {type(payload).__name__}")
+    keys = set(payload)
+    expected = set(PROMOTION_EVIDENCE_KEYS)
+    missing = expected - keys
+    extra = keys - expected
+    if missing or extra:
+        raise OrsiCapabilityError(
+            f"promotion_evidence 键集不符（五键闭集 {sorted(expected)}）："
+            f"缺 {sorted(missing)} 多 {sorted(extra)}（17 篇 §3.1 payload 口径）"
+        )
+    for key in PROMOTION_EVIDENCE_KEYS:
+        value = payload[key]
+        if key in PROMOTION_EVIDENCE_REQUIRED:
+            if not isinstance(value, str) or not value.strip():
+                raise OrsiCapabilityError(f"promotion_evidence.{key} 必填且须非空字符串，收到: {value!r}")
+        elif value is not None and not isinstance(value, str):
+            raise OrsiCapabilityError(f"promotion_evidence.{key} 须为 str 或 None，收到: {value!r}")
+    return payload
 
 
 # ---------------------------------------------------------------- 错误
@@ -152,6 +211,7 @@ class OrsiCapability:
     created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     updated_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     deleted_at: datetime | None = None  # 软删列（Agent14 §5；v1 无删除端点，列随表落）
+    promotion_evidence: dict[str, Any] | None = None  # 晋升证据挂接点（17 篇 §3.3；仅承载不激活迁移——见模块 docstring）
 
     def __post_init__(self) -> None:
         if not isinstance(self.face, EvolutionSurface):
@@ -171,6 +231,7 @@ class OrsiCapability:
         if self.status is OrsiCapabilityStatus.PROMOTED:
             # 红线 2 的注册侧半边：promoted 不可直达（含构造期），晋升仅经 promote()——v1 亦恒拒
             raise OrsiPromotionBlocked("promoted 不可注册直达（status→promoted 必经 review 工单迁移位，Agent14 §4）")
+        validate_promotion_evidence(self.promotion_evidence)  # 17 篇 §3：五键闭集+必填键非空
         computed = capability_fingerprint(
             face=self.face, name=self.name, source_channel=self.source_channel, version=self.version
         )
@@ -190,7 +251,9 @@ class OrsiCapability:
 
         **挂接点（M5+ 审核工作流批次替换本实现）**：此处改为校验 review 工单存在且有效
         （open/approved 工单 target_type=orsi_capability 且 target_id=本能力 id），校验过
-        方置 status=promoted；迁移留痕由服务层审计承接（09 §6 红线 7）。
+        方置 status=promoted；迁移留痕由服务层审计承接（09 §6 红线 7）。届时工单审查的
+        必填证据=本聚合 ``promotion_evidence``（version_diff trend 不劣化，17 篇 §3.3）——
+        本批仅落字段承载，本实现不消费该字段（红线不动）。
         """
         _ = review_ticket_id  # v1 不消费：无工单挂接面，携带引用亦不可自证（防伪造工单号绕过）
         raise OrsiPromotionBlocked(

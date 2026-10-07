@@ -23,6 +23,34 @@ ChannelValues = Literal["L0", "L1", "L2", "L3"]
 StatusFilterValues = Literal["nominal", "candidate", "promoted"]
 
 
+class OrsiPromotionEvidenceIn(BaseModel):
+    """晋升证据 payload（POST 请求体；17 篇 §3.1/§3.3 五键闭集，键集权威=domain/orsi.py）。
+
+    仅承载不激活迁移：promote 红线原样恒拒（Agent14 §4）——本 payload 是 M5+ 审查工单
+    （review_workflow target_type=orsi_capability）的必填证据挂接点。
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    eval_tag: str = Field(min_length=1)  # 本次评测 tag（版本迭代曲线锚点；唯一必填非空键）
+    version_diff_uri: str | None = None  # version_diff 产物路径（首轮基线可 None——无上一 tag 即无 diff）
+    scenario_hash: str | None = None  # 场景集哈希（场景集变=指纹变=能力需重评）
+    metrics_digest: str | None = None  # 本次指标快照摘要
+    baseline_digest: str | None = None  # 上一 tag 同场景集指标摘要（首轮 None）
+
+
+class OrsiPromotionEvidenceOut(BaseModel):
+    """晋升证据回显（读面；与 In 同词汇表——查重/证据链检索消费面）。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    eval_tag: str
+    version_diff_uri: str | None  # 首轮基线可 None（与 In 同词汇表）
+    scenario_hash: str | None
+    metrics_digest: str | None
+    baseline_digest: str | None
+
+
 class OrsiCapabilityRegisterIn(BaseModel):
     """注册请求（POST /api/v1/orsi/capabilities；docs/Agent/14 §3 orsi 行）。
 
@@ -39,6 +67,7 @@ class OrsiCapabilityRegisterIn(BaseModel):
     source_face_track: TrackValues = "normal"
     status: Literal["nominal", "candidate"] = "candidate"
     evidence_uri: str | None = Field(default=None, max_length=512)
+    promotion_evidence: OrsiPromotionEvidenceIn | None = None  # 晋升证据挂接点（17 篇 §3.3；仅承载）
 
 
 class OrsiCapabilityOut(BaseModel):
@@ -55,12 +84,16 @@ class OrsiCapabilityOut(BaseModel):
     status: str
     capability_fingerprint: str
     evidence_uri: str | None
+    promotion_evidence: OrsiPromotionEvidenceOut | None  # 晋升证据回显（17 篇 §3.3）
     created_at: datetime
     updated_at: datetime
 
     @classmethod
     def from_domain(cls, capability: OrsiCapability) -> OrsiCapabilityOut:
         """领域聚合 → DTO（单一收敛点，plugin PluginOut.from_domain 同款）。"""
+        evidence = (
+            OrsiPromotionEvidenceOut(**capability.promotion_evidence) if capability.promotion_evidence else None
+        )
         return cls(
             id=capability.id,
             face=capability.face.value,
@@ -71,6 +104,7 @@ class OrsiCapabilityOut(BaseModel):
             status=capability.status.value,
             capability_fingerprint=capability.capability_fingerprint,
             evidence_uri=capability.evidence_uri,
+            promotion_evidence=evidence,
             created_at=capability.created_at,
             updated_at=capability.updated_at,
         )

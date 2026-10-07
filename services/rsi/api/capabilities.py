@@ -120,6 +120,9 @@ async def register_orsi_capability(
             source_face_track=body.source_face_track,
             status=body.status,
             evidence_uri=body.evidence_uri,
+            promotion_evidence=(
+                body.promotion_evidence.model_dump() if body.promotion_evidence is not None else None
+            ),
             trace_id=getattr(request.state, "trace_id", None),
         )
     except OrsiDuplicateFingerprint as exc:

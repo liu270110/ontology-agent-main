@@ -11,6 +11,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import uuid
 from datetime import UTC, datetime
 from types import SimpleNamespace
@@ -744,6 +745,57 @@ async def test_K19_同工单重复approve_锚点已消费4102_候选不重复():
     assert "4102" in ei.value.message
     rows = [o for o in uow.repo.orm_added if isinstance(o, KbRuleCandidate)]
     assert len(rows) == 1  # 重放未产生第二条候选
+
+
+async def test_K23_同工单跨run同hint_两次approve各落候选_rule_key不撞():
+    """K19 P2① 收口（K23 项 1）：同 task 两个 run 各携相同 hint，两次 approve 均成功、
+    两条候选各落——rule_key 哈希源并入 run_id 后跨 run 不再撞 uk（修复前第二个 run 回流
+    即撞 uk → 500）。幂等边界随之收窄为「同 run 同 hint」。"""
+    uow = FakeUow()
+    task = _waiting_task()
+    uow.repo.tasks[task.id] = task
+    run1 = task.runs[0]
+    service = _service(uow, ticket_port=FakeTicketPort())
+    first = await service.decide(
+        tenant_id=_TENANT,
+        approver_id=_USER,
+        task_id=task.id,
+        run_id=run1.id,
+        decision="approve",
+        param_hash=_HASH,
+        rule_hint=_HINT,
+    )
+    assert first.run_status == "running"
+    # Arrange：worker 侧同一工单第二个 run 再落 waiting_tool 锚点（运行中再审批场景）
+    run2 = Run(id=uuid.uuid4(), tenant_id=_TENANT, task_id=task.id, status=RunStatus.WAITING_TOOL)
+    task.runs.append(run2)
+    task.active_run_id = run2.id
+    task.payload[PENDING_KEY] = {
+        "run_id": str(run2.id),
+        "action_iri": _ACTION,
+        "param_hash": _HASH,
+        "execution_mode": "external_write",
+        "waiting_since": _WAITING_SINCE,
+    }
+    second = await service.decide(
+        tenant_id=_TENANT,
+        approver_id=_USER,
+        task_id=task.id,
+        run_id=run2.id,
+        decision="approve",
+        param_hash=_HASH,
+        rule_hint=_HINT,  # 跨 run 同 hint：修复前 rule_key 相撞 → uk 冲突 500
+    )
+    assert second.run_status == "running"  # 第二次裁决亦成功（不再 500）
+    rows = [o for o in uow.repo.orm_added if isinstance(o, KbRuleCandidate)]
+    assert len(rows) == 2  # 两条候选各落
+    keys = {row.rule_key for row in rows}
+    assert len(keys) == 2  # rule_key 互异（run_id 并入哈希源，uk 不再相撞）
+    assert keys == {
+        hashlib.sha256(f"approval|{_HINT}|{task.id}|{run1.id}".encode()).hexdigest()[:32],
+        hashlib.sha256(f"approval|{_HINT}|{task.id}|{run2.id}".encode()).hexdigest()[:32],
+    }  # 哈希源形态钉死：approval|hint|task_id|run_id 截断 32
+    assert {row.evidence["source_ref"]["run_id"] for row in rows} == {str(run1.id), str(run2.id)}
 
 
 async def test_K19_reject携rule_hint_不回流():

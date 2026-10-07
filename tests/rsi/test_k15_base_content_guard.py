@@ -80,6 +80,22 @@ async def test_K15a_缺省None向后兼容_两字段皆空() -> None:
     assert proposal.baseline_hash is None
 
 
+async def test_K23_repr不含原文快照_泄漏面收口() -> None:
+    """K23 P2①（K15 P2① 收口）：baseline_content 进 repr=False——原文快照不落 repr/
+    日志面；baseline_hash 摘要照旧可见（摘要非原文，无泄漏面）。
+
+    「有原文快照 + 条目删除」组合用例已存在：tests/rsi/test_k9_concurrency.py
+    test_条目消失视为漂移（携 baseline_content 提交 + entries={} 删除后 apply），
+    本批不重复落。"""
+    service, _trail = _service({TARGET: ENTRY_CONTENT_V1})
+    proposal = await _submit(service, baseline_content=ENTRY_CONTENT_V1)
+    text = repr(proposal)
+    assert ENTRY_CONTENT_V1 not in text  # 原文快照整体不进 repr
+    assert "extract_power v1" not in text  # 原文首行特征片段双保险（不与 envelope/target 撞串）
+    assert proposal.baseline_content == ENTRY_CONTENT_V1  # 字段本体不受 repr 排除影响
+    assert entry_baseline_hash(ENTRY_CONTENT_V1) in text  # hash 摘要通道照旧可见
+
+
 # ── K15-b 第三道直比：hash 一致但原文漂移 → 命中 ──────────────────────────
 
 

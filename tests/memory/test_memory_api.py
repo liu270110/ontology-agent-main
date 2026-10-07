@@ -28,6 +28,7 @@ from services.memory.api.memory import (
     read_l1_snapshot,
     read_memory,
     search_memory,
+    search_records,
     write_memory,
 )
 from services.memory.api.schemas.memory import (
@@ -39,8 +40,11 @@ from services.memory.api.schemas.memory import (
     SourceRefsIn,
     WindowMessageIn,
 )
+from services.memory.api.schemas.records import SearchRequest
+from services.memory.business.retrieval_pg import Scored
 from services.memory.data.l1 import RedisL1Store
 from services.memory.domain.model.l2_fact import FactCategory, FactStatus, L2Fact
+from services.memory.domain.model.memory import MemoryLayer, MemoryRecord, MemoryType
 
 if TYPE_CHECKING:
     from tests.memory.conftest import MemorySeed
@@ -202,6 +206,46 @@ async def test_POST_memory_search_命中带来源标注(mem_seed):
     # Assert：命中 + 逐条来源层标注（api/01 §6.6）
     assert [i.fact_id for i in out.items] == [fact.id]
     assert out.items[0].source == "l2"
+
+
+async def test_POST_records_search_channel_scores透传_各值round6位():
+    """K20 P2② 收口（K23 项 3）：records 检索端点 channel_scores JSON 透传 + 逐值 6 位取整。
+
+    方案 §29 原指向 legacy /memory/search（上方 test_POST_memory_search 用例）——该端点
+    无 channel_scores 字段且随 M3 退役（13 篇 §27 K20 合入纪要：透传实装面=
+    SearchHitResponse /memory/records/search，SearchHitOut 命名系方案侧笔误），按实装面
+    落断言（端点函数直调，桩服务注入携带通道贡献的命中）。
+    """
+    tenant = uuid4()
+    now = datetime(2026, 10, 7, tzinfo=UTC)
+    record = MemoryRecord(
+        id=uuid4(),
+        tenant_id=tenant,
+        layer=MemoryLayer.USER,
+        record_type=MemoryType.FACT_CLAIM,
+        content="停电分析先核对变压器台账",
+        created_at=now,
+        updated_at=now,
+    )
+    fused = 1 / 61 + 1 / 62  # 双通道 RRF 贡献之和（keyword 冠军 + time 亚军，k=60 手算口径）
+    hit = Scored(
+        record_id=record.id,
+        score=fused,
+        record=record,
+        channel_scores={"keyword": 1 / 61, "time": 1 / 62},
+    )
+
+    class _StubRecordsService:
+        async def search(self, query, *, now):  # 形参对齐端点调用面（SearchQuery, now）
+            return [hit]
+
+    out = await search_records(SearchRequest(text_q="变压器 台账"), _StubRecordsService(), tenant)
+    row = out.data[0]
+    assert row.record_id == record.id and row.content == record.content
+    assert row.score == round(fused, 6)  # score 与通道贡献同精度取整（Σ=score 在线格式可复现）
+    dumped = row.model_dump()  # JSON 线格式（response_model 序列化同源）
+    assert dumped["channel_scores"] == {"keyword": round(1 / 61, 6), "time": round(1 / 62, 6)}
+    assert dumped["channel_scores"]["keyword"] != 1 / 61  # 长尾确被截到 6 位（非原样透传）
 
 
 async def test_POST_invalidate_202墓碑_幂等与404(mem_seed):

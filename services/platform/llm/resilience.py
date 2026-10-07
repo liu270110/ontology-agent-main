@@ -32,7 +32,7 @@ from services.platform.llm.gateway import (
     ModelGatewayError,
     ModelGatewayOutputInvalidError,
 )
-from services.platform.ports.model_port import ModelPort, ModelPortError
+from services.platform.ports.model_port import ModelPort, ModelPortError, ModelStreamPiece
 
 logger = logging.getLogger("services.platform.llm.resilience")
 
@@ -237,6 +237,85 @@ class FailoverModelPort:
                 tool_choice=tool_choice,
                 trace_id=trace_id,
             ):
+                yield piece
+        except Exception as exc:
+            if _is_transient_error(exc):
+                self._record_failure(model_name)
+            raise
+        self._record_success(model_name)
+
+    def stream_complete_events(
+        self,
+        messages: list[dict[str, Any]],
+        *,
+        temperature: float | None = None,
+        max_tokens: int | None = None,
+        num_ctx: int | None = None,
+        timeout_s: float | None = None,
+        tools: list[dict[str, Any]] | None = None,
+        tool_choice: str | dict[str, Any] | None = None,
+        trace_id: str | None = None,
+    ) -> Any:
+        """结构化真流式（reasoning 透传批，2026-10-07）：与 stream_complete 同口径。
+
+        仅模型选择（冷却降级）与成败计数，**不做调用级重试**（首字节后重放无法对调用方
+        透明）；inner 具备 stream_complete_events → 透传两路增量，缺席（旧桩）→ 退化消费
+        纯文本面并装箱为仅 content 的 ModelStreamPiece（reasoning 丢弃，语义不变）。
+        """
+        return self._stream_complete_events(
+            messages,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            num_ctx=num_ctx,
+            timeout_s=timeout_s,
+            tools=tools,
+            tool_choice=tool_choice,
+            trace_id=trace_id,
+        )
+
+    async def _stream_complete_events(
+        self,
+        messages: list[dict[str, Any]],
+        *,
+        temperature: float | None,
+        max_tokens: int | None,
+        num_ctx: int | None,
+        timeout_s: float | None,
+        tools: list[dict[str, Any]] | None,
+        tool_choice: str | dict[str, Any] | None,
+        trace_id: str | None,
+    ) -> Any:
+        model_name, port = await self._select_port(trace_id)
+        events = getattr(port, "stream_complete_events", None)
+
+        async def _source() -> Any:
+            if events is not None:
+                async for piece in events(
+                    messages,
+                    temperature=temperature,
+                    max_tokens=max_tokens,
+                    num_ctx=num_ctx,
+                    timeout_s=timeout_s,
+                    tools=tools,
+                    tool_choice=tool_choice,
+                    trace_id=trace_id,
+                ):
+                    yield piece
+                return
+            async for text in port.stream_complete(
+                messages,
+                temperature=temperature,
+                max_tokens=max_tokens,
+                num_ctx=num_ctx,
+                timeout_s=timeout_s,
+                tools=tools,
+                tool_choice=tool_choice,
+                trace_id=trace_id,
+            ):
+                yield ModelStreamPiece(content=text)
+
+        try:
+            async for piece in _source():
                 yield piece
         except Exception as exc:
             if _is_transient_error(exc):

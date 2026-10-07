@@ -19,7 +19,7 @@ from typing import Any
 
 from services.agent.business.adapters.builtin import BuiltinAdapter
 from services.agent.business.chat_context import ChatContextAssembler
-from services.agent.business.chat_events import ChatCommand, ChatEvent, ChatEventName, ChatOutcome
+from services.agent.business.chat_events import ChatCommand, ChatEvent, ChatEventName, ChatOutcome, wire_data
 from services.agent.business.chat_orchestrator import ChatOrchestrator
 from services.agent.business.exec_events import EXEC_STRUCTURE_EVENTS
 from services.kb.business.search_service import KnowledgeCitation, KnowledgeSearchResult
@@ -201,9 +201,22 @@ async def test_一次对话产出主干波_11_事件族完整序列() -> None:
     # INBOX_SPLICED 为运行中输入面回执，仅 inbox API 提交路径产出——M4.5-A §1.4）。
     # 执行结构波六事件（40 篇 §4.1 R2）：无子代理对话仅含 PLAN_UPDATED（R4 规划发射点）；
     # SUBRUN_*/WORKFLOW_NODE_* 仅随子 run/节点执行器产出。
+    # 思考流三事件（02 协议 THINKING_* 注记）：仅端口具备结构化流式面（reasoning 透传批）
+    # 才产出——本文件 FakeChatModel 无 stream_complete_events（纯文本桩），不出现。
     assert set(names) == (
         set(ChatEventName)
-        - {ChatEventName.RUN_ERROR, ChatEventName.ROUTING_DECISION, ChatEventName.INBOX_SPLICED}
+        - {
+            ChatEventName.RUN_ERROR,
+            ChatEventName.ROUTING_DECISION,
+            ChatEventName.INBOX_SPLICED,
+            ChatEventName.THINKING_START,
+            ChatEventName.THINKING_CONTENT,
+            ChatEventName.THINKING_END,
+            # 审批波双事件（02 协议行 67/68，W2-2）：发射点=kernel.approval_pending 转译 /
+            # approval_service.decide 成功路径 outbox——本流无审批锚点，不出现。
+            ChatEventName.APPROVAL_REQUIRED,
+            ChatEventName.APPROVAL_RESOLVED,
+        }
         - EXEC_STRUCTURE_EVENTS
     ) | {ChatEventName.PLAN_UPDATED}
     assert (
@@ -214,6 +227,21 @@ async def test_一次对话产出主干波_11_事件族完整序列() -> None:
     tool_result = next(e for e in events if e.name is ChatEventName.TOOL_CALL_RESULT)
     assert tool_result.data["ok"] is True and tool_result.data["cost_ms"] >= 0
     assert model.calls == 1  # 单轮单次生成（模板规划零 token，不走模型）
+
+
+async def test_TOOL_CALL_RESULT_可选增补字段_形状对照02协议() -> None:
+    """02 §2.2 RESULT 增补（2026-10-05）：tool_name（重连后卡片恢复名）/args_digest
+    （08 §3 脱敏摘要：≤200 截断+sha256_32，无明文）/trace_id（发射侧赋值经 wire_data 只补缺）。"""
+    orchestrator = _orchestrator(_assembler(FakeL1Store(), FakeKnowledge(_evidence())), FakeChatModel())
+    events = await _collect(orchestrator, _command())
+    result = next(e for e in events if e.name is ChatEventName.TOOL_CALL_RESULT)
+    payload = wire_data(result)
+    assert payload["ok"] is True and payload["summary"] and payload["cost_ms"] >= 0  # 既有四字段不变
+    assert payload["tool_name"] == "chat_answer"  # CHAT_ACTION_IRI 尾段（START 同源）
+    digest = payload["args_digest"]
+    assert set(digest) == {"sha256_32", "len", "truncated"}  # mcp/audit.digest_params 形状（禁明文）
+    assert digest["truncated"] is False and digest["len"] > 0 and len(digest["sha256_32"]) == 32
+    assert payload["trace_id"] == "trace-chat-test"  # wire_data 只补缺（ChatCommand.trace_id）
 
 
 async def test_RETRIEVAL_EVIDENCE_携带_citations_与图路引用() -> None:

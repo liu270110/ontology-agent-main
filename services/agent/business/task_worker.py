@@ -38,7 +38,11 @@ from datetime import UTC, datetime
 from typing import Any, Protocol
 
 from services.agent.business.chat_events import ChatCommand, ChatEventName, ChatOutcome, wire_data
-from services.agent.business.exec_events import EXEC_PERSISTED_EVENTS, EXEC_REALTIME_ONLY_EVENTS
+from services.agent.business.exec_events import (
+    EXEC_PERSISTED_EVENTS,
+    EXEC_REALTIME_ONLY_EVENTS,
+    THINKING_REALTIME_ONLY_EVENTS,
+)
 from services.agent.business.resume_repair import plan_interrupted_closures
 from services.agent.domain.model.kernel_actions import ApprovalTicket
 from services.agent.domain.model.task import RunStatus, TaskEvent, TaskStatus
@@ -645,6 +649,8 @@ class TaskRunWorker:
 
         RUN_FINISHED/RUN_ERROR 的落账归结果汇（含 usage/citations 全载荷），此处跳过防双写；
         SUBRUN_UPDATED 心跳纯实时不落库（40 篇 §4.1，控回放窗口挤占；SSE 双写钩子同口径）；
+        THINKING_CONTENT 思考增量同款豁免（02 协议 THINKING_* 注记：增量体量大、回放非必
+        需），THINKING_START/END 落账本；
         执行结构事件按回放根重试追加（R11 replay_root=True，失败仍按本路径既有口径转义留痕）。
         落库失败结构化转义留痕不阻断执行（审计不阻塞主流程，02 §3 ⑥ 纪律）。
         全部事件（含终态与心跳）经 _publish_sse 同步转发会话 hub——202 受理形态下订阅者
@@ -667,8 +673,8 @@ class TaskRunWorker:
                 # 终态：落账归结果汇（防 DB 双写），SSE 仍推（订阅者实时收终态）
                 await self._publish_sse(command.session_id, event.name.value, payload)
                 continue
-            if event.name in EXEC_REALTIME_ONLY_EVENTS:
-                # 40 篇 §4.1：SUBRUN_UPDATED 纯实时不落库，仅推送
+            if event.name in EXEC_REALTIME_ONLY_EVENTS or event.name in THINKING_REALTIME_ONLY_EVENTS:
+                # 40 篇 §4.1 / 02 协议 THINKING_* 注记：心跳与思考增量纯实时不落库，仅推送
                 await self._publish_sse(command.session_id, event.name.value, payload)
                 continue
             try:

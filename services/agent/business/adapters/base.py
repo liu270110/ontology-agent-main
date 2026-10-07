@@ -44,6 +44,7 @@ from services.agent.domain.model.kernel_context import (
 )
 from services.agent.domain.model.kernel_gates import RunOutcome
 from services.agent.domain.model.kernel_planning import PlanCandidate, PlanMode, PlanStep
+from services.mcp.audit import digest_params
 from services.platform.errors import ErrorCode
 
 # chat 行动类与授权面：计划步 required_scopes ⊆ 租户 scopes（B1 R3，授权唯一依据）；
@@ -70,6 +71,8 @@ class ChatTurn(BaseModel):
     # 层；空=未启用。渲染与装载面见 business/prompts/skills_catalog.py，正文不随提示注入）
     system_prompt: str | None = None  # 成员人格（27 篇群聊成员 system_prompt；None=平台缺省）
     num_ctx: int | None = None  # 上下文窗口注入（ModelPort 可选参，端点不支持时忽略）
+    reasoning_effort: str | None = None  # 思考档位透传面（THINKING_START.reasoning_effort?，02
+    # 协议注记；请求参数无此参时恒 None=载荷省略——上游接线随请求参数批）
 
     @property
     def message_id(self) -> str:
@@ -101,11 +104,16 @@ class TurnBox:
 
 
 class GenerationEvent(BaseModel):
-    """适配器生成事件（frozen）：text_delta 流式增量 / finish 终态（含用量）。"""
+    """适配器生成事件（frozen）：text_delta/reasoning_delta 流式增量 / finish 终态（含用量）。
+
+    reasoning_delta（reasoning 透传批，2026-10-07）：vLLM/DeepSeek ``delta.reasoning_content``
+    的投影，与 text_delta 并存互不干扰（reasoning 通常先于 content）；消费方
+    :class:`ChatAnswerTool` 投影为 THINKING_* SSE 事件（每消息至多一对 START/END）。
+    """
 
     model_config = ConfigDict(frozen=True)
 
-    kind: str  # text_delta | finish
+    kind: str  # text_delta | reasoning_delta | finish
     delta: str = ""
     usage: dict[str, Any] = Field(default_factory=dict)
     finish_reason: str | None = None
@@ -177,7 +185,13 @@ class ChatAnswerTool:
     """chat 生成工具（tools.bindings，行动类=CHAT_ACTION_IRI）：流式翻译 + 结构化失败。
 
     SSE 投影（02 §5 载荷形状）：TOOL_CALL_START/ARGS/END → TEXT_MESSAGE_* →
-    TOOL_CALL_RESULT（{tool_call_id, ok, summary, cost_ms}）；ModelPortError 族
+    TOOL_CALL_RESULT（{tool_call_id, ok, summary, cost_ms} + 2026-10-05 可选增补
+    tool_name/args_digest（08 §3 脱敏摘要）/trace_id（发射侧赋值经 wire_data 只补缺））；
+    思考流投影（02 协议
+    THINKING_* 注记，reasoning 透传批 2026-10-07）：首条 reasoning_delta → THINKING_START
+    {message_id, reasoning_effort?}，逐条 THINKING_CONTENT {message_id, delta}，切换到
+    text_delta 或终态（finish/error）前 THINKING_END {message_id}——每消息至多一对
+    START/END（幂等守卫），END 后迟到的 reasoning_delta 丢弃不重开。ModelPortError 族
     （5xxx 已登记码）结构化返回，不裸异常（02 §4.1 ④ 契约）。
     """
 
@@ -204,6 +218,11 @@ class ChatAnswerTool:
         tool_call_id = str(call.call_id)
         message_id = self._turn.message_id
         started = time.monotonic()
+        # 02 §2.2 RESULT 可选字段增补（2026-10-05）：tool_name 供断线重连后卡片恢复名称
+        # （现仅 START 期可得名）；args_digest=08 §3 脱敏摘要（≤200 截断+sha256_32，禁明文，
+        # digest 输入=ARGS 投影同源参数 {message}）；trace_id 发射侧赋值经 wire_data 只补缺。
+        tool_name = CHAT_ACTION_IRI.rsplit("/", 1)[-1]
+        args_digest = digest_params({"message": self._turn.message})
         self._box.tool_call_id = tool_call_id
         self._emit(
             ChatEvent(
@@ -232,9 +251,50 @@ class ChatAnswerTool:
         parts: list[str] = []
         usage: dict[str, Any] = {}
         finish_reason = "stop"
+        thinking_state = "none"  # THINKING_* 幂等守卫：none→open→closed（每消息至多一对 START/END）
+
+        def _close_thinking() -> None:
+            """切换到 text/终态前收口思考流（02 协议注记：END {message_id}；未开即 no-op）。"""
+            nonlocal thinking_state
+            if thinking_state != "open":
+                return
+            thinking_state = "closed"
+            self._emit(
+                ChatEvent(
+                    name=ChatEventName.THINKING_END,
+                    data={"message_id": message_id},
+                    run_id=self._turn.run_id,
+                    trace_id=ctx.trace_id,
+                )
+            )
+
         try:
             async for generated in self._adapter.stream_chat(self._turn, ctx, timeout_ms=timeout_ms):
-                if generated.kind == "text_delta":
+                if generated.kind == "reasoning_delta":
+                    if thinking_state == "none":  # 首条推理增量：START {message_id, reasoning_effort?}
+                        thinking_state = "open"
+                        start_data: dict[str, Any] = {"message_id": message_id}
+                        if self._turn.reasoning_effort:  # effort 从请求参数透传（无参省略）
+                            start_data["reasoning_effort"] = self._turn.reasoning_effort
+                        self._emit(
+                            ChatEvent(
+                                name=ChatEventName.THINKING_START,
+                                data=start_data,
+                                run_id=self._turn.run_id,
+                                trace_id=ctx.trace_id,
+                            )
+                        )
+                    if thinking_state == "open":  # closed（text 后迟到的推理增量）丢弃：不重开
+                        self._emit(
+                            ChatEvent(
+                                name=ChatEventName.THINKING_CONTENT,
+                                data={"message_id": message_id, "delta": generated.delta},
+                                run_id=self._turn.run_id,
+                                trace_id=ctx.trace_id,
+                            )
+                        )
+                elif generated.kind == "text_delta":
+                    _close_thinking()  # 切换到 text_delta 前发 END（协议注记）
                     parts.append(generated.delta)
                     self._emit(
                         ChatEvent(
@@ -244,6 +304,7 @@ class ChatAnswerTool:
                         )
                     )
                 elif generated.kind == "finish":
+                    _close_thinking()  # finish 前收口（协议注记）
                     usage = dict(generated.usage)
                     finish_reason = generated.finish_reason or "stop"
         except asyncio.CancelledError:
@@ -260,6 +321,7 @@ class ChatAnswerTool:
             self._box.error_message = message
             cost_ms = int((time.monotonic() - started) * 1000)
             self._box.cost_ms = cost_ms
+            _close_thinking()  # 失败侧同样收口思考流（防线上悬挂 START，帧配对完整）
             self._emit(
                 ChatEvent(
                     name=ChatEventName.TEXT_MESSAGE_END,
@@ -270,8 +332,16 @@ class ChatAnswerTool:
             self._emit(
                 ChatEvent(
                     name=ChatEventName.TOOL_CALL_RESULT,
-                    data={"tool_call_id": tool_call_id, "ok": False, "summary": message[:200], "cost_ms": cost_ms},
+                    data={
+                        "tool_call_id": tool_call_id,
+                        "ok": False,
+                        "summary": message[:200],
+                        "cost_ms": cost_ms,
+                        "tool_name": tool_name,
+                        "args_digest": args_digest,
+                    },
                     run_id=self._turn.run_id,
+                    trace_id=ctx.trace_id,
                 )
             )
             return ToolResult(ok=False, error_code=code, error_message=message, usage=usage)
@@ -292,8 +362,16 @@ class ChatAnswerTool:
         self._emit(
             ChatEvent(
                 name=ChatEventName.TOOL_CALL_RESULT,
-                data={"tool_call_id": tool_call_id, "ok": True, "summary": summary, "cost_ms": cost_ms},
+                data={
+                    "tool_call_id": tool_call_id,
+                    "ok": True,
+                    "summary": summary,
+                    "cost_ms": cost_ms,
+                    "tool_name": tool_name,
+                    "args_digest": args_digest,
+                },
                 run_id=self._turn.run_id,
+                trace_id=ctx.trace_id,
             )
         )
         total_tokens = sum(v for v in usage.values() if isinstance(v, int))

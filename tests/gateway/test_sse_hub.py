@@ -40,12 +40,16 @@ def test_帧编码按_02_5_帧格式输出_id_event_data_与空行() -> None:
 
 def test_主干波事件名与生产侧单一事实源一致() -> None:
     """主干波=11 事件（02 §5 M3 主干行）+ 执行结构波：编码侧校验集与 ChatEventName 同源同值。"""
-    # 11 主干波 + 群聊 ROUTING_DECISION（27 篇 X15）+ INBOX_SPLICED（M4.5-A §1.4）+ 执行结构波 6（40 篇 R2）
-    assert len(ChatEventName) == 19
+    # 11 主干波 + 群聊 ROUTING_DECISION（27 篇 X15）+ INBOX_SPLICED（M4.5-A §1.4）
+    # + 执行结构波 6（40 篇 R2）+ 思考流 3（02 协议 THINKING_* 注记，reasoning 透传批 2026-10-07）
+    # + 审批波 2（02 协议行 67/68，W2-2：转译/裁决侧发射）
+    assert len(ChatEventName) == 24
 
     assert MAINSTREAM_EVENT_NAMES == {name.value for name in ChatEventName}
     assert "GATE_VERDICT" not in MAINSTREAM_EVENT_NAMES  # 扩展波不入主干（协议向前兼容）
     assert "INBOX_SPLICED" in MAINSTREAM_EVENT_NAMES  # M4.5-A 运行中输入面回执（前端对未知名忽略已核实）
+    assert {"THINKING_START", "THINKING_CONTENT", "THINKING_END"} <= MAINSTREAM_EVENT_NAMES  # 思考流入校验集
+    assert {"APPROVAL_REQUIRED", "APPROVAL_RESOLVED"} <= MAINSTREAM_EVENT_NAMES  # 审批波入校验集
 
 
 # ── publish / seq 单调 ────────────────────────────────────────────────────

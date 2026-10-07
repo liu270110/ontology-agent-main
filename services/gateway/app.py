@@ -190,30 +190,19 @@ def _build_model_port(s: Settings) -> ModelPort | None:
 def _build_capability_bindings(settings: Any) -> tuple:
     """能力层 P0 工具绑定（docs/Agent/06）：fs 工作区白名单 + web 出口白名单，配置门控。
 
-    workspace_root 未配置 → fs 不注册；web 白名单为空 → web 全拒 fail-closed（注册但不可出网）。
-    spill 存储（K14-c，docs/Agent/13 §20）：task_spill_dir 配置即装配，注入 fs 截断换
-    locator 与 web 正文 spill（未配置=None，两侧维持现状向后兼容）。
-    terminal 绑定待沙箱会话供给批次接线（每 Run 一个沙箱会话句柄）。
+    W2-4（2026-10-07 批）起本函数为 **gateway 侧委托入口**：组装面收
+    services/agent/api/sessions.build_capability_tool_bindings（真实消费点=
+    build_chat_orchestrator(extra_tool_bindings)；此前本函数定义后全仓零调用属死代码，
+    且 agent.api 禁 import gateway——import-linter 契约二，方向只能 gateway→sessions）。
+    权限/沙箱评估注释随迁并保持：
+    workspace_root 未配置 → fs 不注册；web 白名单为空 → web 全拒 fail-closed（注册但
+    不可出网）；fs 只读三件默认注册、写类（write/edit）默认关闭（kernel_capability_write，
+    开启仍走内核 B5 审批路由）；terminal 绑定待沙箱会话供给批次接线（每 Run 一个沙箱
+    会话句柄）。
     """
-    bindings: list = []
-    spill_store = None
-    spill_dir = getattr(settings, "task_spill_dir", None)
-    if spill_dir:
-        from services.agent.data.spill_store import LocalDirSpillStore
+    from services.agent.api.sessions import build_capability_tool_bindings
 
-        spill_store = LocalDirSpillStore(spill_dir)
-    if settings.workspace_root:
-        from services.agent.business.capabilities.fs import build_fs_bindings
-
-        bindings.extend(build_fs_bindings(settings.workspace_root, spill_store=spill_store))
-    from services.agent.business.capabilities.web import build_web_bindings
-
-    allowlist = tuple(d.strip() for d in settings.web_egress_allowlist.split(",") if d.strip())
-    fetch_tool, search_tool = build_web_bindings(
-        fetch_allowlist=allowlist, search_backend=None, spill_store=spill_store
-    )
-    bindings.extend((fetch_tool, search_tool))
-    return tuple(bindings)
+    return build_capability_tool_bindings(settings)
 
 
 def _build_candidate_review(session_factory: async_sessionmaker[AsyncSession]) -> CandidateReviewPort:

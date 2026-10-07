@@ -22,6 +22,9 @@
   summary?, artifact?, usage?, error?}
 - ``kernel.plan_updated``    data={plan_id（=run_id，kernel/plan.py 发射面）, revision,
   items[{id, content, status}]}（发射点=规划 R4：kernel/plan.py PlanProjection）
+- ``kernel.approval_pending`` data={step_seq, param_hash, action_iri, execution_mode}
+  （发射点=kernel/execution.py B5 缺回执缺省拒绝路径；内核 waiting 挂起语义=W2-2b 另案，
+  本转译只把锚点呈上 wire，不改内核发射逻辑一字）
 
 session_id/trace_id 不来自内核 data：session_id 由转译器上下文补齐（内核无会话概念），
 trace_id 取 KernelEvent.trace_id（C2 强制既有，内核账本拒收空 trace）。
@@ -31,6 +34,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Callable
+from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Any
 from uuid import UUID
@@ -48,10 +52,14 @@ __all__ = [
     "EXEC_PERSISTED_EVENTS",
     "EXEC_REALTIME_ONLY_EVENTS",
     "EXEC_STRUCTURE_EVENTS",
+    "KERNEL_APPROVAL_PENDING",
     "KERNEL_PLAN_UPDATED",
     "KERNEL_SUBRUN_FINISHED",
     "KERNEL_SUBRUN_STARTED",
     "KERNEL_SUBRUN_UPDATED",
+    "ApprovalRequiredPayload",
+    "ApprovalDecision",
+    "ApprovalResolvedPayload",
     "ExecEventTranslator",
     "PlanItemPayload",
     "PlanUpdatedPayload",
@@ -59,6 +67,8 @@ __all__ = [
     "SubRunStartedPayload",
     "SubRunTerminalStatus",
     "SubRunUpdatedPayload",
+    "THINKING_PERSISTED_EVENTS",
+    "THINKING_REALTIME_ONLY_EVENTS",
     "WorkflowNodeFinishedPayload",
     "WorkflowNodeStartedPayload",
     "WorkflowNodeStatus",
@@ -69,6 +79,8 @@ __all__ = [
 # 常量本体归内核发射侧自有（kernel/subagent.py、kernel/plan.py；02 §7 import 白名单禁内核
 # 触 business 层），本模块顶部反向 import 再导出=转译侧唯一对照（漂移即 ImportError fail-fast）。
 KERNEL_SUBRUN_UPDATED = "kernel.subrun_updated"  # 心跳事件 v1 无发射点（R5 可缓发），仅登记
+KERNEL_APPROVAL_PENDING = "kernel.approval_pending"  # 审批锚点（发射侧=kernel/execution.py 内联字面量；
+# 提常量入内核发射侧随 W2-2b 挂起语义另案——红线：内核发射逻辑本批一字不动，此处登记对照）
 
 
 # ── 枚举（40 篇 §3.2/§4.2）────────────────────────────────────────────────
@@ -94,6 +106,18 @@ class SubRunPhase(StrEnum):
     TOOL = "tool"
     TEXT = "text"
     THINKING = "thinking"
+
+
+class ApprovalDecision(StrEnum):
+    """APPROVAL_RESOLVED.decision wire 枚举（02 协议审批波行 68 两值）。
+
+    裁决侧动词（approve/reject，REST 入参 Literal）与本 wire 值（过去式 approved/
+    rejected）由发射侧映射——StrEnum 保证 wire 序列化即成员值，禁裸 str 漂移
+    （SubRunTerminalStatus 同款纪律，宪法 2 确定性校验面）。
+    """
+
+    APPROVED = "approved"
+    REJECTED = "rejected"
 
 
 class PlanItemStatus(StrEnum):
@@ -230,6 +254,45 @@ class WorkflowNodeFinishedPayload(BaseModel):
     trace_id: str
 
 
+class ApprovalRequiredPayload(BaseModel):
+    """APPROVAL_REQUIRED（02 协议审批波行 67；waiting_since=30min SLA 倒计时权威起点）。
+
+    转译源=``kernel.approval_pending`` 锚点（execution.py 发射载荷无 task_id/时间/描述类
+    字段）：task_id 由转译器上下文补齐（subrun 同款口径）；waiting_since 取锚点事件
+    occurred_at（内核发射侧未赋值时=转译受理时刻，即锚点到达观测面时刻）；summary 从
+    锚点步描述类字段截 80 字，无则 None（dump exclude_none 省略，02 协议「无则省略」）。
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    run_id: str
+    task_id: str
+    step_seq: int
+    action_iri: str | None = None
+    param_hash: str
+    execution_mode: str
+    summary: str | None = None  # 步描述截 80 字（锚点无描述类字段→省略）
+    waiting_since: str  # ISO8601
+    trace_id: str
+
+
+class ApprovalResolvedPayload(BaseModel):
+    """APPROVAL_RESOLVED（02 协议审批波行 68；发射点=approval_service.decide 成功路径）。
+
+    decision wire 值=approved|rejected（:class:`ApprovalDecision` 枚举，裁决侧 approve/
+    reject 由发射侧映射）；本模型同作 outbox ``approval.resolved`` 投影载荷（审批波裁决
+    的事件通道契约单一事实源）。
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    run_id: str
+    decision: ApprovalDecision
+    approver: str
+    ticket_id: str | None = None  # reject 无票（dump exclude_none 省略）
+    trace_id: str
+
+
 # ── 落库集合（40 篇 §4.1 持久化列；event_type=事件名 ≤32 字符已核）────────────
 
 EXEC_STRUCTURE_EVENTS: frozenset[ChatEventName] = frozenset(
@@ -256,6 +319,15 @@ EXEC_PERSISTED_EVENTS: frozenset[ChatEventName] = frozenset(
 # 纯实时心跳（40 篇 §4.1：✘ 不落库；双写钩子与 task_worker 落库路径共同豁免）
 EXEC_REALTIME_ONLY_EVENTS: frozenset[ChatEventName] = EXEC_STRUCTURE_EVENTS - EXEC_PERSISTED_EVENTS
 
+# ── 思考流落库分类（02 协议 THINKING_* 注记，reasoning 透传批 2026-10-07）──────────────
+# THINKING_CONTENT 纯实时不落库（增量体量大、回放非必需——SUBRUN_UPDATED 同款豁免口径，
+# 控回放窗口挤占；双写钩子与 task_worker 落库路径共同豁免）；THINKING_START/END 落
+# task_events 账本（回放侧重建思考块结构）。
+THINKING_PERSISTED_EVENTS: frozenset[ChatEventName] = frozenset(
+    {ChatEventName.THINKING_START, ChatEventName.THINKING_END}
+)
+THINKING_REALTIME_ONLY_EVENTS: frozenset[ChatEventName] = frozenset({ChatEventName.THINKING_CONTENT})
+
 
 # ── 转译 observer（H-0a on_kernel_event）──────────────────────────────────
 
@@ -267,6 +339,23 @@ def _id_str(value: Any) -> str:
 
 def _opt_str(value: Any) -> str | None:
     return None if value is None else str(value)
+
+
+_APPROVAL_SUMMARY_MAX_CHARS = 80  # 02 协议行 67：summary 截 80 字
+_APPROVAL_SUMMARY_KEYS = ("description", "step_description", "summary")  # 步描述类字段逐键探测
+
+
+def _approval_summary(d: dict[str, Any]) -> str | None:
+    """锚点载荷步描述类字段 → summary（截 80 字）；无则 None=wire 省略（02 协议「无则省略」）。
+
+    v1 锚点载荷（execution.py）无描述类字段恒 None；键名单现挂 W2-2b 挂起语义裁决后
+    锚点增列时转译侧自动透出，无需再改本函数。
+    """
+    for key in _APPROVAL_SUMMARY_KEYS:
+        value = d.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()[:_APPROVAL_SUMMARY_MAX_CHARS]
+    return None
 
 
 class ExecEventTranslator:
@@ -302,6 +391,16 @@ class ExecEventTranslator:
         trace_id = event.trace_id or self._trace_id
         data = event.data
         try:
+            if event.event_type == KERNEL_APPROVAL_PENDING:
+                # 审批波例外：可选字段 None 不进 wire（02 协议行 67「无则省略」）；
+                # 执行结构波保持 model_dump 全字段（null 在场）现状不破坏既有 wire 形状。
+                approval = self._approval_required(event, data, trace_id)
+                return ChatEvent(
+                    name=ChatEventName.APPROVAL_REQUIRED,
+                    data=approval.model_dump(mode="json", exclude_none=True),
+                    run_id=event.run_id,
+                    trace_id=trace_id,
+                )
             if event.event_type == KERNEL_SUBRUN_STARTED:
                 name, payload = ChatEventName.SUBRUN_STARTED, self._subrun_started(data, trace_id)
             elif event.event_type == KERNEL_SUBRUN_UPDATED:
@@ -367,5 +466,24 @@ class ExecEventTranslator:
             plan_id=_id_str(d["plan_id"]) if d.get("plan_id") is not None else str(event.run_id),
             revision=d["revision"],
             items=[PlanItemPayload.model_validate(item) for item in d.get("items", [])],
+            trace_id=trace_id,
+        )
+
+    def _approval_required(self, event: KernelEvent, d: dict[str, Any], trace_id: str) -> ApprovalRequiredPayload:
+        """kernel.approval_pending → APPROVAL_REQUIRED（02 协议行 67 逐字段）。
+
+        waiting_since=锚点时刻（event.occurred_at；内核发射侧 loop._emit 未赋值时退化为
+        转译受理时刻——锚点到达观测面的当下，即 02 协议注记的「受理时刻」口径）。
+        """
+        waiting_since = event.occurred_at or datetime.now(tz=UTC)
+        return ApprovalRequiredPayload(
+            run_id=_id_str(event.run_id),
+            task_id=str(self._task_id),  # 锚点载荷无 task_id：转译器上下文补齐（subrun 同款口径）
+            step_seq=d["step_seq"],
+            action_iri=_opt_str(d.get("action_iri")),
+            param_hash=_id_str(d["param_hash"]),
+            execution_mode=_opt_str(d.get("execution_mode")),
+            summary=_approval_summary(d),
+            waiting_since=waiting_since.isoformat(),
             trace_id=trace_id,
         )

@@ -14,6 +14,12 @@ risk_flag 列语义（宪法第 3 条底线）：规则类候选 100% 人工终�
 enterprise）无自动通道——列级 CHECK (risk_flag) 在数据库层强制恒真，应用层误写 False 即
 IntegrityError，不是约定而是约束。终审通过后的 TBox 写回不经本表（走 ontology 既有
 changeset 五动词链，见 business/rule_extraction.py docstring「终审写回」段）。
+
+source 列与 document_id 可空（K19 批，2026-10-07，13 篇 §25）：规则候选本就有两来源——
+文档抽取（source='extraction'，缺省，存量行语义不变）与审批回流（source='approval'，
+H-0b approve 携 rule_hint 时由 approval_service 同事务构造）；document_id 对审批回流
+语义上应可空（系统占位锚会污染文档列表且语义失真，立项裁决采放宽 nullable 而非占位），
+doc 索引（idx_kb_rule_candidates_doc）对 NULL 键自然跳过，抽取路径零感知。
 """
 
 from __future__ import annotations
@@ -41,7 +47,9 @@ class KbRuleCandidate(Base, PkMixin, TenantMixin, TimestampMixin):  # 只追加�
     """
 
     __tablename__ = "kb_rule_candidates"
-    document_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("documents.id"), nullable=False)
+    # K19 起 nullable：抽取路径必带文档坐标；审批回流（source='approval'）无文档出处，None
+    document_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("documents.id"), nullable=True)
+    source: Mapped[str] = mapped_column(String(16), default="extraction", nullable=False)  # extraction|approval
     chunk_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("document_chunks.id"))
     rule_id: Mapped[str] = mapped_column(String(64), nullable=False)  # 模板 id（RD-001 式，人读坐标）
     rule_key: Mapped[str] = mapped_column(String(64), nullable=False)  # 幂等去重键（uk 半边）
@@ -63,6 +71,8 @@ class KbRuleCandidate(Base, PkMixin, TenantMixin, TimestampMixin):  # 只追加�
             name="ck_kb_rule_candidates_kind",
         ),
         CheckConstraint("status IN ('candidate','approved','rejected')", name="ck_kb_rule_candidates_status"),
+        # K19：来源枚举（抽取=缺省存量语义；审批回流恒 risk_flag=True 同底线 3 口径）
+        CheckConstraint("source IN ('extraction','approval')", name="ck_kb_rule_candidates_source"),
         # 宪法第 3 条数据库级强制：规则候选行恒为高风险（100% 人工终审，任何档不可跳过）
         CheckConstraint("risk_flag", name="ck_kb_rule_candidates_risk_flag_true"),
         UniqueConstraint("tenant_id", "rule_key", name="uk_kb_rule_candidates_tenant_id_rule_key"),

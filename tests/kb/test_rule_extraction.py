@@ -433,3 +433,81 @@ async def test_文档不存在与评审端口未装配(kb_factory: async_session
             "trace-rule-1",
             review=None,
         )
+
+
+# ---------------------------------------------------------------- K19-c：source 来源列（13 篇 §25）
+
+
+@sqlite_needed
+async def test_K19_source缺省extraction_存量兼容_审批回流形态同表共存(
+    kb_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    """K19-c：source 缺省 'extraction'——存量行零回填语义不变（迁移 server_default 同口径）；
+    审批回流形态（document_id=None + source='approval'，13 篇 §25 放宽 nullable 立项裁决）
+    与抽取行同表共存；越枚举写入库级 CHECK 拒绝（kind/status 同款纪律）。"""
+    async with kb_factory() as db, db.begin():
+        db.add(
+            KbRuleCandidate(  # 抽取形态：不带 source（存量写入路径，ORM Python 端缺省兜底）
+                tenant_id=TENANT,
+                document_id=kb_factory.document_id,  # type: ignore[attr-defined]
+                chunk_id=None,
+                rule_id="RD-001",
+                rule_key="e" * 32,
+                kind="invariant",
+                trigger="t",
+                consequence="c",
+                target_class=f"{PW}Feeder",
+                evidence={},
+                draft_shacl=DRAFT_VALID,
+                confidence=0.5,
+                meta={},
+            )
+        )
+        db.add(
+            KbRuleCandidate(  # 审批回流形态（K19-b）：无文档出处 + 来源标记
+                tenant_id=TENANT,
+                document_id=None,
+                chunk_id=None,
+                rule_id="approval-x",
+                rule_key="a" * 32,
+                kind="precondition",
+                trigger="同类工单满足同一前置条件时自动放行",
+                consequence="",
+                target_class="",
+                evidence={
+                    "quote": "同类工单满足同一前置条件时自动放行",
+                    "span": None,
+                    "source_ref": {"kind": "approval"},
+                },
+                draft_shacl="",
+                confidence=0.0,
+                source="approval",
+                meta={"template_ref": "agent/k19/approval_reflux@v1"},
+            )
+        )
+    async with kb_factory() as db:
+        rows = (await db.execute(select(KbRuleCandidate).order_by(KbRuleCandidate.rule_id))).scalars().all()
+    assert [(r.rule_id, r.source, r.document_id is None) for r in rows] == [
+        ("RD-001", "extraction", False),  # 缺省=extraction（存量兼容）
+        ("approval-x", "approval", True),  # 回流行 document_id 可空
+    ]
+    async with kb_factory() as db, db.begin():
+        db.add(
+            KbRuleCandidate(  # 越枚举：ck_kb_rule_candidates_source 数据库级拒绝
+                tenant_id=TENANT,
+                document_id=None,
+                rule_id="RD-BAD",
+                rule_key="b" * 32,
+                kind="invariant",
+                trigger="t",
+                consequence="c",
+                target_class=f"{PW}Feeder",
+                evidence={},
+                draft_shacl=DRAFT_VALID,
+                confidence=0.5,
+                source="bogus",
+                meta={},
+            )
+        )
+        with pytest.raises(IntegrityError):
+            await db.flush()

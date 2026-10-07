@@ -232,6 +232,11 @@ ignore_imports = [
     # 的传递链；2026-10-07 静态清账批补登记，同 kb.retrieval 契约 P1-1 注释口径）
     "services.gateway.app -> services.mcp.bootstrap",
     "services.mcp.bootstrap -> services.kb.business.search_service",
+    # K19-b 审批回流：approve 携 rule_hint 时同事务构造 kb_rule_candidates 候选行
+    # （approval_service 经 uow.session 裸 add ORM，事务边界归 agent UoW 唯一所有；
+    # uow->writeback.data.orm 跨模块同事务写同款先例，TODO(M4) 端口化收口同批；
+    # 方案依据=docs/Agent/13 §25）
+    "services.agent.business.approval_service -> services.kb.data.rule_orm",
 ]
 
 [[tool.importlinter.contracts]]

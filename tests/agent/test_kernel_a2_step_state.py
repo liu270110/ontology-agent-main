@@ -165,7 +165,7 @@ def test_run_id非规范拼写归一后恒等派生():
     rid = "6f9619ff-8b86-d011-b42d-00c04fc964ff"
     braced = "{" + rid + "}"
     upper = rid.upper()
-    a = StepState(run_id=rid, seq=3)
-    b = StepState(run_id=braced, seq=3)
-    c = StepState(run_id=upper, seq=3)
+    a = StepState(run_id=rid, seq=3, stage=LoopStage.PLANNING)
+    b = StepState(run_id=braced, seq=3, stage=LoopStage.PLANNING)
+    c = StepState(run_id=upper, seq=3, stage=LoopStage.PLANNING)
     assert a.step_id == b.step_id == c.step_id

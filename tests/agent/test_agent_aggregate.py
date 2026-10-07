@@ -44,12 +44,14 @@ def test_注册成功_默认启用且config副本隔离():
     assert "temperature" not in a2.config
 
 
-def test_注册_agent_tool枚举收窄_M3双枚举加_G1_acp():
-    # M3 落地顺序裁决（Agent 服务设计 §3.2）+ 20 篇 §2/§3.3（2026-10-07 G1 批）：
-    # Bridge 通用形态第一波 acp 进枚举；http-generic/cli-generic 随 G2，a2a 下波
-    assert set(ALLOWED_AGENT_TOOLS) == {"builtin", "claude", "acp"}
+def test_注册_agent_tool枚举收窄_四适配器_G1G2并集终态():
+    # M3 双枚举 + G1（acp）+ G2（http-generic/cli-generic）合入并集终态（20 篇 §2/§3.3；a2a 下波）
+    assert set(ALLOWED_AGENT_TOOLS) == {"builtin", "claude", "acp", "http-generic", "cli-generic"}
     with pytest.raises(AgentError, match="agent_tool"):
         make_agent(agent_tool="pi")  # 未进枚举的长尾 harness 仍拒（profile 化通道未放开）
+
+    with pytest.raises(AgentError, match="agent_tool"):
+        make_agent(agent_tool="mystery")  # 白名单外恒拒
 
 
 def test_注册_name纪律_空与超长拒绝():

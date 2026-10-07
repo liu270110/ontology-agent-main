@@ -150,6 +150,16 @@ class Settings(BaseSettings):
     acp_spawn_timeout_s: float = 10.0  # 子进程 spawn + initialize 握手超时
     acp_request_timeout_s: float = 60.0  # session/prompt 等请求缺省超时（调用方 timeout_ms 显式值优先）
     acp_permission_wait_s: float = 300.0  # 审批工单等待上限（超时默认拒绝——B5 SLA 同语义）
+    # Bridge G2 通用适配器装配（docs/Agent/20 §3；全部缺省空=零行为变化，不装配不注册）：
+    # profile=数据文件（services/agent/business/adapters/profiles/***.yaml，05 篇 §5.2）——
+    # 自定义接入新 agent=写一份 YAML 不写一行 Python；部署期参数（base_url/凭据/模型）唯一
+    # 入口=本配置层（禁各适配器直读 env，api_key 环境变量名走 profile.transport.auth 声明）。
+    agent_http_generic_profile: str = ""  # 非空=装配 http-generic（profile id，profiles/service/*.yaml）
+    agent_http_generic_base_url: str = ""  # 覆盖 profile transport.base_url（部署期端点注入）
+    agent_http_generic_api_key: str = ""  # bearer/apikey 凭据值（优先于 profile api_key_env 环境变量）
+    agent_http_generic_model: str = ""  # openai-chat 模式模型名（空=profile transport.model）
+    agent_cli_generic_profile: str = ""  # 非空=装配 cli-generic（profile id，profiles/cli/*.yaml）
+    agent_adapter_profiles_root: str = ""  # profile 目录覆盖（空=内置 adapters/profiles/ 目录）
 
     # X16 工作流执行引擎（2026-10-07 批；api/01 §5.11 test/runs 端点）：节点执行超时上限。
     # per-node 配置=节点 params.timeout_s（秒，夹取 [1,3600]）；未配置回落本缺省值

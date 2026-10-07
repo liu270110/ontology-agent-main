@@ -43,6 +43,7 @@ from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.middleware.cors import CORSMiddleware
 
+from services.agent.api.adapter_profiles import router as adapter_profiles_router  # G2：adapter-profiles（20 篇 §4）
 from services.agent.api.agents import router as agents_router
 from services.agent.api.approvals import router as approvals_router  # H-0b 运行中审批（api/01 §5.15 ★，2026-09-29）
 from services.agent.api.control import router as run_control_router  # M4.5-A：运行中输入面（inbox+estop）
@@ -523,6 +524,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(me_domain_router, prefix=settings.api_prefix)  # me 域六端点（api/01 §5.13/§5.15，2026-10-05）
     app.include_router(totp_router, prefix=settings.api_prefix)  # totp 四端点（api/01 §5.9/§5.15，同上）
     app.include_router(agents_router, prefix=settings.api_prefix)  # M3.1：agents CRUD（api/01 §5.1）
+    app.include_router(adapter_profiles_router, prefix=settings.api_prefix)  # G2：bridge profile 清单（20 篇 §4）
     app.include_router(sessions_router, prefix=settings.api_prefix)
     app.include_router(workspace_router, prefix=settings.api_prefix)  # 31 篇：工作区面板（tree/file/exec/resources）
     app.include_router(run_control_router, prefix=settings.api_prefix)  # M4.5-A：inbox 提交 + admin estop（§1.4）

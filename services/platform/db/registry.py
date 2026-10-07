@@ -5,6 +5,7 @@
 """
 
 from services.agent.data.orm import (  # noqa: F401
+    AdapterSession,
     Agent,
     AgentAdapter,
     Message,

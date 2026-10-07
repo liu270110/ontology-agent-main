@@ -1,0 +1,30 @@
+# nanobot gateway 画像（docs/Agent/05 §2.1 实测口径 + 20 篇 §3.1 首批 profile）
+profile: nanobot-gateway
+profile_version: 1
+tool: http-generic
+form: F3
+protocol: openai-chat             # HKUDS/nanobot gateway：OpenAI 兼容 POST /v1/chat/completions（SSE 至 [DONE]）
+pinned:
+  repo: "HKUDS/nanobot"
+  version: ">=0.1（gateway 常驻形态）"
+  verified: "2026-10-07"
+transport:
+  base_url: ""                    # 部署期注入（如 http://127.0.0.1:8000/v1）
+  model: ""                       # 部署期注入（nanobot 后端任意 OpenAI 兼容模型）
+  auth:
+    type: bearer                  # nanobot：绑 0.0.0.0 必须设 apiKey 否则拒启（05 篇 §6 安全默认照抄）
+    api_key_env: NANOBOT_API_KEY
+  health_path: /models            # OpenAI 兼容面通用探活
+  session_body_field: session_id  # 请求体 session_id（缺省共享 api:default——平台侧恒显式传，禁共享）
+event_map: {}                     # openai-chat 固定归一
+permission_map: {}                # 无审批回调（05 篇 §4.3：降级只读/白名单档）
+session_map:
+  tool_session_field: ""
+sandbox:
+  container: true
+  network: egress-proxy
+capabilities:
+  feed: false
+  approval: false                 # 无回调 → 行动类白名单档强制（注册时明示降级）
+  resume: true                    # gateway 持久会话，无显式 resume API（session_id 复用即恢复）
+  artifacts: false

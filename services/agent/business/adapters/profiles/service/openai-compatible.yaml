@@ -1,0 +1,31 @@
+# OpenAI 兼容通用模板（docs/Agent/20 §3.1：企业 agent 最常见形态——任何 OpenAI 兼容端点零代码接入）
+# zcode 对接裁决（20 篇 §3.1）：zcode 公开面=OpenAI 兼容 API——走本 profile（对话面）。
+profile: openai-compatible
+profile_version: 1
+tool: http-generic
+form: F3
+protocol: openai-chat
+pinned:
+  repo: "openai/openai-openapi（OpenAI Chat Completions 兼容面，供应商无关）"
+  version: "chat/completions v1（SSE，data: [DONE] 终止）"
+  verified: "2026-10-07"
+transport:
+  base_url: ""                    # 部署期注入：Settings.agent_http_generic_base_url（如 https://api.deepseek.com/v1）
+  model: ""                       # 部署期注入：Settings.agent_http_generic_model
+  auth:
+    type: bearer                  # none | bearer | apikey
+    api_key_env: ""               # 凭据环境变量名（值不进仓库——脱敏门禁）；部署期亦可 Settings.agent_http_generic_api_key
+  health_path: /models            # 探活 GET（探活失败 N 次→degraded 既有裁决）
+  session_body_field: session_id  # nanobot 口径：对端会话 id 注入请求体（缺省共享 api:default 的对端须显式传）
+event_map: {}                     # openai-chat 固定归一（choices[0].delta + usage 末块），无自定义映射
+permission_map: {}                # 无审批回调（nanobot 类）→ 能力协商降级（只读/白名单档，注册时明示）
+session_map:
+  tool_session_field: ""          # 会话由请求体 session_id 客户端供给（非 new_session 响应提取）
+sandbox:
+  container: true
+  network: egress-proxy           # 07 §7.5 v1 出口降级
+capabilities:
+  feed: false
+  approval: false                 # 无审批回调（05 篇 §4.3 nanobot 行：行动类白名单档强制）
+  resume: true                    # 对端 gateway 持久会话（session_body_field 复用）
+  artifacts: false

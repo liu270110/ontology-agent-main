@@ -1,0 +1,29 @@
+# 纯文本 CLI 兜底画像（docs/Agent/05 §5.1 决策树叶：只有 CLI 且仅纯文本输出）
+# 功能受限档：事件只有 TEXT_MESSAGE（text-tail 尾部提取），注册时明示降级——零结构化事件/零审批面。
+profile: text-tail
+profile_version: 1
+tool: cli-generic
+form: F2
+protocol: text-tail
+pinned:
+  repo: "（部署期指定 CLI——本画像为通用模板，cmd 必须部署期注入）"
+  version: ""
+  verified: "2026-10-07"
+transport:
+  cmd: []                        # 部署期注入（如 ["my-agent", "--run"]；{prompt} 占位符可选）
+  prompt_mode: arg
+  prompt_template: ""            # 空=内置缺省 L1 重放模板
+  env: {}
+event_map: {}                    # text-tail 无事件映射（stdout 尾部即答案全文）
+permission_map: {}
+session_map: {}
+text_tail:
+  max_chars: 4000                # 尾部提取上限（答案=stdout 末 N 字符；0=不截断）
+sandbox:
+  container: true
+  network: egress-proxy
+capabilities:
+  feed: false
+  approval: false
+  resume: false
+  artifacts: false

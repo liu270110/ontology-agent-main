@@ -560,6 +560,7 @@ def get_or_build_chat_orchestrator(state: Any) -> Any:
         l1_store=l1_store,
         session_factory=get_session_factory(settings),
         ollama_base_url=settings.ollama_base_url,
+        extra_adapters=_build_generic_adapters(settings),  # G2：http-generic/cli-generic（20 篇 §3，未配置=零行为）
         result_sink=build_chat_result_sink(state.uow),  # lifespan 装配于 app.state（06 §1）
         kernel_ledger_sink_factory=build_kernel_ledger_sink_factory(state.uow),  # C1 锚点投影（2026-09-27 批）
         llm_event_emitter_factory=build_llm_event_emitter_factory(
@@ -580,6 +581,18 @@ def get_or_build_chat_orchestrator(state: Any) -> Any:
 def _get_chat_orchestrator(request: Request) -> Any:
     """端点侧入口：转发到 state 级构建函数（worker 与请求共享同一编排器实例）。"""
     return get_or_build_chat_orchestrator(request.app.state)
+
+
+def _build_generic_adapters(settings: Any) -> dict[str, Any]:
+    """G2 通用适配器装配（20 篇 §3）：Settings 六键全空=空字典（零行为变化）；profile
+    缺失/装载失败跳过+告警（compose.py fail-soft 口径）。惰性 import（同组合根先例）。"""
+    from services.agent.business.adapters.compose import build_generic_adapters
+
+    try:
+        return build_generic_adapters(settings, session_factory=get_session_factory(settings))
+    except Exception:  # noqa: BLE001 ——装配失败不阻塞对话编排器构建（fail-soft，留痕）
+        logger.exception("G2 通用适配器装配失败（以无通用适配器继续）")
+        return {}
 
 
 @router.post("", status_code=status.HTTP_201_CREATED, summary="创建会话（绑定 agent）")

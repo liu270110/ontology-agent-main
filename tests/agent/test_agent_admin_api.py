@@ -234,6 +234,8 @@ async def test_adapter_schemas_空表回落常量_字段对齐mock(agent_env):
     assert set(body) == {"items"}
     # 空库表 → ALLOWED_AGENT_TOOLS 常量回落（builtin/claude/acp；M3 裁决 + 20 篇 §2 G1 扩枚举）
     assert [item["key"] for item in body["items"]] == ["builtin", "claude", "acp"]
+    # 空库表 → ALLOWED_AGENT_TOOLS 常量回落（M3 双适配器 + G2 通用形态，20 篇 §3.3 口径）
+    assert [item["key"] for item in body["items"]] == ["builtin", "claude", "http-generic", "cli-generic"]
     for item in body["items"]:
         assert set(item) == {"key", "name", "vendor", "capability", "schema"}  # mock ADAPTER_SCHEMAS 逐字段
         props = item["schema"]["properties"]
@@ -244,6 +246,12 @@ async def test_adapter_schemas_空表回落常量_字段对齐mock(agent_env):
     builtin = body["items"][0]
     assert "ModelPort" in builtin["capability"] and builtin["vendor"] == "平台内置"
     assert builtin["schema"]["properties"]["temperature"]["title"] == "采样温度 temperature"
+    # G2 通用形态两条：登记面齐备（非「未登记」兜底），profile 驱动声明可见
+    by_key = {item["key"]: item for item in body["items"]}
+    assert by_key["http-generic"]["vendor"] == "Bridge F3 · profile 驱动"
+    assert "adapter_sessions" in by_key["http-generic"]["capability"]
+    assert by_key["cli-generic"]["vendor"] == "Bridge F2 · profile 驱动"
+    assert "L1 重放" in by_key["cli-generic"]["capability"]
 
 
 async def test_adapter_schemas_有库表数据按行枚举(agent_env):

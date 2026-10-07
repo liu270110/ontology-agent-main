@@ -18,6 +18,8 @@ htmlcov/
 .u3a_gate_last.log
 # ONT-1 门禁完整输出日志（ont1_gate.py 同款纪律）
 .ont1_gate_last.log
+# ONT-2 门禁完整输出日志（ont2_gate.py 同款纪律）
+.ont2_gate_last.log
 
 # IDE
 .idea/

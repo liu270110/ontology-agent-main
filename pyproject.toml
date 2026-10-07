@@ -101,6 +101,12 @@ ignore_imports = [
     "services.platform.db.registry -> services.workflows.data.orm",  # 工作流两表注册（docs/Agent/15 §1.2，F1 批）
     "services.platform.db.registry -> services.rsi.data.orm",  # M4.6-S3：orsi_capabilities 注册（docs/Agent/14 §4）
     "services.platform.db.uow -> services.writeback.data.orm",
+    # ONT-2（2026-10-07）登记注记：能力种子迁移（versions/20261007_f4d6b8e0a2c4_ont2_seed_
+    # capabilities_21.py）物理 import services.ontology.business.capability_seed——06 篇
+    # §ONT-2.4「种子唯一走 Alembic 数据迁移、读代码常量生成行」的直接后果（侦察批上报的
+    # 迁移编程模型冲突裁决落法）。迁移文件为 alembic 版本文件（数字前缀非可导入模块名），
+    # importlinter 图不含该模块（豁免条目无法匹配反成配置错误），故仅以本注释登记物理边，
+    # 待 M4 迁移装配收口时随组合点白名单一并复核。
 ]
 
 [[tool.importlinter.contracts]]
@@ -144,6 +150,7 @@ ignore_imports = [
     "services.gateway.app -> services.agent.api.runs",  # 2026-10-07 静态清账批补登记：子 Run 快照（api/01 §5.2；挂载边同 tasks 先例）
     "services.gateway.app -> services.kb.api.kb",
     "services.gateway.app -> services.ontology.api.ontology",
+    "services.gateway.app -> services.ontology.api.capabilities",  # ONT-2 能力只读路由挂载边（api.ontology 先例同款；api/01 §5.3 扩展）
     "services.gateway.app -> services.memory.api.memory",  # 计划 3.3：memory 六端点挂载边（同上逐边豁免）
     # UoW 仓储装配组合点（契约一同款豁免；TODO(M4) 收口）
     "services.platform.db.uow -> services.agent.data.repo_impl.session_repo",
@@ -224,6 +231,7 @@ source_modules = ["services.gateway", "services.iam", "services.agent", "service
 forbidden_modules = ["services.ontology.data"]
 ignore_imports = [
     "services.gateway.app -> services.ontology.api.ontology",
+    "services.gateway.app -> services.ontology.api.capabilities",  # ONT-2 能力只读路由挂载边（api.ontology 先例同款）
     "services.gateway.app -> services.ontology.data.repo_impl.ontology_repo",
 ]
 

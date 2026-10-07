@@ -356,6 +356,31 @@ framesBySession[TRAJ_SID] = [
   trajFrame(920, 'TEXT_MESSAGE_END', { message_id: 'm_traj_2', finish_reason: 'stop' }),
 ]
 
+// ---- Agent 工作区面板（31 篇：文件树 + 终端 + 资源，画框23）----
+// C3 live 投影（2026-10-07 后端实装，services/agent/api/workspace.py）：信封=裸 DTO/{items}
+// （无 code 字段，apiFetch 双形态兼容直取）。字段与 WsTreeOut/WsFileOut/WsExecOut/WsResourceListOut
+// 名级一致：recycle_in_minutes v1 恒 null（休眠回收随沙箱生命周期批，不放假倒计时）；
+// updated_at=ISO8601（相对时间文案退役）；dirty v1 恒缺省（无改动追踪，WS 批接入）；
+// 二进制拒读 415/3004；终端白名单九命令（4001=TERMINAL_CMD_NOT_ALLOWED 结构化拒绝）；
+// 资源=M1 顶层产出扫描（扩展名白名单 md/txt/csv/json/…、uploaded_by='sandbox'、
+// id='ws-'+sha256(name)[:12]、mtime 降序；子目录/二进制不进资源面）。
+
+/** 可读文本文件镜像（file 端点与终端 cat/head/tail/grep 共用；language=预览高亮键） */
+const WS_FILES: Record<string, { language: string; content: string }> = {
+  '/workspace/artifacts/排查报告草稿 v0.1.md': {
+    language: 'markdown',
+    content: '# 动力电池故障排查报告（草稿 v0.1）\n\n## 一、结论摘要\n台账 3 条缺陷记录中，2 条涉及电芯循环衰减，1 条为 BMS 采样线束接触不良。\n\n## 二、证据清单\n1. 台账导出.xlsx · Sheet1 · 行 42 —— 循环寿命 812 次（低于 GB/T 36276 的 1000 次阈值）\n2. 台账导出.xlsx · Sheet1 · 行 57 —— 容量保持率 76%\n3. 台账导出.xlsx · Sheet1 · 行 63 —— 采样线束阻抗异常\n\n## 三、建议\n对 F12 馈线供电的储能站安排循环寿命复测；BMS 采样线束列入季度检修。',
+  },
+  '/workspace/artifacts/台账数据.json': {
+    language: 'json',
+    content: '{\n  "defects": [\n    { "row": 42, "type": "循环衰减", "cell": "A32", "cycles": 812 },\n    { "row": 57, "type": "容量保持率", "cell": "A32", "sov": 0.76 },\n    { "row": 63, "type": "采样线束", "cell": "BMS-07", "impedance_mohm": 42.6 }\n  ]\n}',
+  },
+  '/workspace/故障研判简报.md': {
+    language: 'markdown',
+    content: '# 停电故障研判简报\n\n1. F5 馈线单相接地，重合闸失败后按规程禁止强送。\n2. 台区 K-77 影响 32 户，复电时间 23:47，责任原因登记计划检修。\n3. 采样线束阻抗异常列入季度检修清单。',
+  },
+}
+
 export const handlers = [
   ...groupHandlers, // S7 协作域（api/01 §5.2 群聊 X15 + §5.11 workflows X16，见 group-handlers.ts；注册于首位，重叠路径非群聊请求 return undefined 放行）
   ...kbHandlers, // S3 知识域（api/01 §5.4/§6.2，见 kb-handlers.ts）
@@ -547,78 +572,114 @@ export const handlers = [
   //  无 SUBRUN_* 帧；空态纪律=不渲染执行卡与执行页签）。
   http.get('*/api/v1/runs/:id/subruns', () => HttpResponse.json({ items: [] })),
 
-  // ---- Agent 工作区面板（31 篇：文件树 + 终端 + 资源，画框23）----
-  // GET /sessions/:id/workspace/tree —— 沙箱 /workspace 层级树（20 篇 SBX-3 daemon 代理；M1 静态 mock）
+  // ---- Agent 工作区面板（31 篇：文件树 + 终端 + 资源，画框23；live 投影——WS_FILES 见文件头段）----
+
+  // GET /sessions/:id/workspace/tree —— 会话工作目录层级树（live WsTreeOut 裸 DTO；
+  // 目录优先排序软链不进树；这里静态镜像 demo 工作区：二进制 xlsx 进树，但不进资源/预览面）
   http.get('*/api/v1/sessions/:id/workspace/tree', () =>
     HttpResponse.json({
-      code: 0, message: 'ok',
-      data: {
-        recycle_in_minutes: 26,
-        root: {
-          name: '/workspace/', path: '/', type: 'dir',
-          children: [
-            {
-              name: 'artifacts', path: '/workspace/artifacts', type: 'dir',
-              children: [
-                { name: '排查报告草稿 v0.1.md', path: '/workspace/artifacts/排查报告草稿 v0.1.md', type: 'file', size: 1229, updated_at: '刚刚创建', dirty: true },
-                { name: '台账数据.json', path: '/workspace/artifacts/台账数据.json', type: 'file', size: 4860, updated_at: '2 分钟前' },
-              ],
-            },
-            { name: 'uploads', path: '/workspace/uploads', type: 'dir', children: [] },
-            { name: '台账导出.xlsx', path: '/workspace/台账导出.xlsx', type: 'file', size: 860288, updated_at: '10 分钟前' },
-          ],
-        },
+      recycle_in_minutes: null,
+      root: {
+        name: '/workspace/', path: '/', type: 'dir',
+        children: [
+          {
+            name: 'artifacts', path: '/workspace/artifacts', type: 'dir',
+            children: [
+              { name: '排查报告草稿 v0.1.md', path: '/workspace/artifacts/排查报告草稿 v0.1.md', type: 'file', size: 1229, updated_at: '2026-09-27T14:20:40Z' },
+              { name: '台账数据.json', path: '/workspace/artifacts/台账数据.json', type: 'file', size: 4860, updated_at: '2026-09-27T14:20:44Z' },
+            ],
+          },
+          { name: 'uploads', path: '/workspace/uploads', type: 'dir', children: [] },
+          { name: '停电事件时序表.csv', path: '/workspace/停电事件时序表.csv', type: 'file', size: 5730, updated_at: '2026-09-27T14:18:02Z' },
+          { name: '故障研判简报.md', path: '/workspace/故障研判简报.md', type: 'file', size: 2140, updated_at: '2026-09-27T14:21:37Z' },
+          { name: '台账导出.xlsx', path: '/workspace/台账导出.xlsx', type: 'file', size: 860288, updated_at: '2026-09-27T14:02:11Z' },
+        ],
       },
     }),
   ),
 
-  // GET /sessions/:id/workspace/file?path=... —— 只读文件内容（≤1MB 内联）
+  // GET /sessions/:id/workspace/file?path=... —— 只读单文件（live WsFileOut 裸 DTO；≤1MB 内联；
+  // 二进制 415/3004 三重拒读；缺文件 404——错误码 404 同 live，mock 旧 3404 退役）
   http.get('*/api/v1/sessions/:id/workspace/file', ({ request }) => {
     const path = new URL(request.url).searchParams.get('path') ?? ''
-    const FILES: Record<string, { content: string; language: string }> = {
-      '/workspace/artifacts/排查报告草稿 v0.1.md': {
-        language: 'markdown',
-        content: '# 动力电池故障排查报告（草稿 v0.1）\n\n## 一、结论摘要\n台账 3 条缺陷记录中，2 条涉及电芯循环衰减，1 条为 BMS 采样线束接触不良。\n\n## 二、证据清单\n1. 台账导出.xlsx · Sheet1 · 行 42 —— 循环寿命 812 次（低于 GB/T 36276 的 1000 次阈值）\n2. 台账导出.xlsx · Sheet1 · 行 57 —— 容量保持率 76%\n3. 台账导出.xlsx · Sheet1 · 行 63 —— 采样线束阻抗异常\n\n## 三、建议\n对 F12 馈线供电的储能站安排循环寿命复测；BMS 采样线束列入季度检修。',
-      },
-      '/workspace/artifacts/台账数据.json': {
-        language: 'json',
-        content: '{\n  "defects": [\n    { "row": 42, "type": "循环衰减", "cell": "A32", "cycles": 812 },\n    { "row": 57, "type": "容量保持率", "cell": "A32", "sov": 0.76 },\n    { "row": 63, "type": "采样线束", "cell": "BMS-07", "impedance_mohm": 42.6 }\n  ]\n}',
-      },
-    }
-    const hit = FILES[path]
-    if (hit) return HttpResponse.json({ code: 0, message: 'ok', data: { path, ...hit } })
+    const hit = WS_FILES[path]
+    if (hit) return HttpResponse.json({ path, language: hit.language, content: hit.content })
     if (path.endsWith('.xlsx'))
-      return HttpResponse.json({ code: 0, message: 'ok', data: { path, language: 'binary', content: '（二进制文件 · xlsx 工作簿 840KB，请下载后用本地应用打开）' } })
-    return jsonErr(3404, '文件不存在或已回收', 404)
+      return jsonErr(3004, '.xlsx 为二进制文件，不支持内联预览（下载通道随 M4 批）', 415)
+    return jsonErr(404, '文件不存在或已回收', 404)
   }),
 
-  // POST /sessions/:id/terminal/exec —— 受限 shell（20 篇 exec.run；M1 回放 canned 输出）
+  // POST /sessions/:id/terminal/exec —— 受限只读终端（live WsExecOut 裸 DTO {command,exit_code,lines}；
+  // 白名单九命令 ls/pwd/cat/head/tail/echo/grep/find/wc——白名单外/参数越界 4001 结构化拒绝，
+  // 空命令 422/3001；exit_code 非零透传（127 可执行缺失 / 124 超时；输出行承载语义）
   http.post('*/api/v1/sessions/:id/terminal/exec', async ({ request }) => {
     const body = (await request.json()) as { command?: string }
     const cmd = (body.command ?? '').trim()
-    if (!cmd) return jsonErr(3401, '命令不能为空', 422)
-    let out: string[]
-    if (/^ls\b/.test(cmd)) {
-      out = cmd.includes('artifacts') ? ['排查报告草稿 v0.1.md', '台账数据.json'] : ['artifacts/', 'uploads/', '台账导出.xlsx']
-    } else if (/^(pwd)\b/.test(cmd)) out = ['/workspace']
-    else if (/^(cat|head|tail)\b/.test(cmd)) out = [`cat: 只读代理放行 · ${cmd.split(/\s+/)[1] ?? '(缺参数)'}`]
-    else out = [`bash: ${cmd.split(/\s+/)[0]}: 受限 shell 未放行（信任级 L2 · 白名单 ls/pwd/cat/head/tail）`]
-    return HttpResponse.json({ code: 0, message: 'ok', data: { command: cmd, exit_code: 0, lines: out } })
+    if (!cmd) return jsonErr(3001, '命令不能为空', 422)
+    const argv = cmd.split(/\s+/)
+    const head = argv[0]
+    const WHITELIST = ['ls', 'pwd', 'cat', 'head', 'tail', 'echo', 'grep', 'find', 'wc']
+    if (!WHITELIST.includes(head)) {
+      // 文案逐字对齐 live WorkspacePanelError（Python !r 单引号形）
+      return jsonErr(4001, `命令 '${head}' 不在只读白名单（允许: ${WHITELIST.join('/')})`, 400)
+    }
+    // 参数工作区锁定（live _confine_arg 同口径）：/workspace 前缀归一后禁绝对路径/盘符/.. 穿越
+    for (const tok of argv.slice(1)) {
+      const norm = tok.replace(/\\/g, '/')
+      const rel =
+        norm === '/workspace' || norm === '/workspace/' ? '.' : norm.startsWith('/workspace/') ? norm.slice('/workspace/'.length) : norm
+      if (rel === '.') continue
+      if (rel.startsWith('/') || /^[A-Za-z]:/.test(rel)) {
+        return jsonErr(4001, `只读终端锁定会话工作区：参数不允许绝对路径: '${tok}'`, 400)
+      }
+      if (rel.split('/').includes('..')) {
+        return jsonErr(4001, `只读终端锁定会话工作区：参数不允许 .. 穿越: '${tok}'`, 400)
+      }
+    }
+    const reply = (exit_code: number, lines: string[]) => HttpResponse.json({ command: cmd, exit_code, lines })
+    if (head === 'pwd') return reply(0, ['/workspace'])
+    if (head === 'echo') return reply(0, [argv.slice(1).filter(t => !/^-[neE]+$/.test(t)).join(' ')])
+    if (head === 'ls') {
+      const target = argv[1] && !argv[1].startsWith('-') ? argv[1].replace(/^\.\/?/, '').replace(/\/$/, '') : ''
+      if (target === 'artifacts') return reply(0, ['排查报告草稿 v0.1.md', '台账数据.json'])
+      return reply(0, ['artifacts', 'uploads', '停电事件时序表.csv', '故障研判简报.md', '台账导出.xlsx'])
+    }
+    if (head === 'find') {
+      // 相对路径清单（真实 find . 形态：目录优先，无 ./ 前缀）
+      return reply(0, ['artifacts', 'artifacts/排查报告草稿 v0.1.md', 'artifacts/台账数据.json', 'uploads', '停电事件时序表.csv', '故障研判简报.md', '台账导出.xlsx'])
+    }
+    const arg = argv.find(t => !t.startsWith('-') && t !== head) ?? ''
+    // grep 语义：最后非旗标参数为文件（中间为首参=模式）
+    const fileArg = head === 'grep' ? (argv.slice(1).filter(t => !t.startsWith('-')).at(-1) ?? '') : arg
+    const hitKey = Object.keys(WS_FILES).find(k => k.endsWith(`/${fileArg.replace(/^\.\//, '')}`))
+    if (head === 'grep') {
+      if (!hitKey) return reply(2, [`grep: ${fileArg || '(缺参数)'}: No such file or directory`])
+      const pat = argv.slice(1).filter(t => !t.startsWith('-'))[0] ?? ''
+      const lines = WS_FILES[hitKey].content.split('\n').filter(l => l.includes(pat))
+      return reply(lines.length ? 0 : 1, lines)
+    }
+    if (head === 'wc') {
+      if (!hitKey) return reply(1, [`wc: ${fileArg}: No such file or directory`])
+      const n = WS_FILES[hitKey].content.split('\n').length
+      return reply(0, [argv.some(t => /^-\S*l/.test(t)) ? `${n} ${fileArg}` : `${n} ${n} 2140 ${fileArg}`])
+    }
+    // cat / head / tail
+    if (!hitKey) return reply(1, [`${head}: ${arg || '(缺参数)'}: No such file or directory`])
+    const all = WS_FILES[hitKey].content.split('\n')
+    const n = Number(argv.find(t => /^-\d+$/.test(t))?.slice(1) ?? 10)
+    const lines = head === 'head' ? all.slice(0, n) : head === 'tail' ? all.slice(-n) : all
+    return reply(0, lines)
   }),
 
-  // GET /sessions/:id/resources —— 会话资源四分组（30 篇对象模型）
+  // GET /sessions/:id/resources —— 会话资源（live WsResourceListOut {items}：M1 顶层产出扫描，
+  // 扩展名白名单 + mtime 降序 + uploaded_by='sandbox' + id='ws-'+sha256(name)[:12]；artifacts 表
+  // 行并入随建表批——attachment/本体快照/导出分组 v1 恒空，UI 兜底「（无）」）
   http.get('*/api/v1/sessions/:id/resources', () =>
     HttpResponse.json({
-      code: 0, message: 'ok',
-      data: {
-        items: [
-          { id: 'res-2481-a1', type: 'attachment', name: '台账导出.xlsx', size: 860288, status: 'ready', uploaded_by: 'user', created_at: '2026-09-27T14:02:11Z', ocr_status: 'done', extract_status: 'archived' },
-          { id: 'res-2481-b2', type: 'artifact', name: '排查报告草稿 v0.1.md', size: 1229, status: 'ready', uploaded_by: 'sandbox', created_at: '2026-09-27T14:20:40Z' },
-          { id: 'res-2481-b3', type: 'artifact', name: '台账数据.json', size: 4860, status: 'ready', uploaded_by: 'sandbox', created_at: '2026-09-27T14:20:44Z' },
-          { id: 'res-2481-c4', type: 'ontology_snapshot', name: 'power-ont v1.4.ttl', size: 214018, status: 'ready', uploaded_by: 'agent:claude', created_at: '2026-09-27T11:08:02Z' },
-          { id: 'res-2481-d5', type: 'export', name: '故障研判简报.pdf', size: 431216, status: 'processing', uploaded_by: 'agent:claude', created_at: '2026-09-27T14:21:37Z' },
-        ],
-      },
+      items: [
+        { id: 'ws-58b878dacb37', type: 'artifact', name: '故障研判简报.md', size: 2140, status: 'ready', uploaded_by: 'sandbox', created_at: '2026-09-27T14:21:37Z' },
+        { id: 'ws-a274a1f33753', type: 'artifact', name: '停电事件时序表.csv', size: 5730, status: 'ready', uploaded_by: 'sandbox', created_at: '2026-09-27T14:18:02Z' },
+      ],
     }),
   ),
 ]

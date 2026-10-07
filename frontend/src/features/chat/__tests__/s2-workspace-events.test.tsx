@@ -255,13 +255,14 @@ describe('S2 工作区 SSE 实时联动', () => {
     fireEvent.click(screen.getByTestId('right-tab-workspace'))
     fireEvent.click(await screen.findByTestId('ws-tab-res'))
 
-    const btn = await screen.findByTestId('ws-ref-res-2481-b2')
+    // C3 live 投影资源 id（ws-<sha12>）
+    const btn = await screen.findByTestId('ws-ref-ws-58b878dacb37')
     fireEvent.click(btn)
     const input = screen.getByTestId('chat-input')
-    expect(input).toHaveValue('@排查报告草稿 v0.1.md')
+    expect(input).toHaveValue('@故障研判简报.md')
 
     // 再点另一条：追加（空格分隔），Enter 直发约定不受影响
-    fireEvent.click(screen.getByTestId('ws-ref-res-2481-c4'))
-    expect(input).toHaveValue('@排查报告草稿 v0.1.md @power-ont v1.4.ttl')
+    fireEvent.click(screen.getByTestId('ws-ref-ws-a274a1f33753'))
+    expect(input).toHaveValue('@故障研判简报.md @停电事件时序表.csv')
   }, 25_000)
 })

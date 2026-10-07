@@ -372,7 +372,7 @@ class ChatOrchestrator:
         dispatcher.register_context_provider(adapter.turn_context_provider(turn))
         dispatcher.register_tool(adapter.turn_tool(turn, box, on_event))
         # 能力层 P0（docs/Agent/06）：fs/web 等工具经 B1 门禁链注册；K28-c 按会话工具集过滤
-        for binding in turn_bindings:
+        for binding in turn_bindings:  # 能力层 P0（docs/Agent/06）：工具经 B1 门禁链注册；K28-c 按会话工具集过滤
             dispatcher.register_tool(binding)
         if self._criterion_projection is not None:  # E-4 K1-c：判据投影端口（唯一注册面，无注入=纯回执口径）
             dispatcher.register_criterion_projection(self._criterion_projection)
@@ -550,6 +550,7 @@ def build_chat_orchestrator(
     ollama_base_url: str,
     policy: ChatPolicy | None = None,
     claude_adapter: ClaudeAdapter | None = None,
+    extra_adapters: Mapping[str, ChatAdapter] | None = None,
     result_sink: Callable[[ChatOutcome], Awaitable[None]] | None = None,
     kernel_ledger_sink_factory: Callable[[UUID, UUID], Callable[[KernelEvent], Awaitable[None]]] | None = None,
     llm_event_emitter_factory: Callable[[ChatCommand], LlmEventEmitter] | None = None,
@@ -564,6 +565,9 @@ def build_chat_orchestrator(
     - model_port 缺失（无 LLM 配置）→ builtin 不注册，调用报 5002（与 kb extract 同口径）；
     - claude 恒注册（无 key 注册成功、调用 5002，任务口径）；组合根对 kb 零直接 import
       ——检索服务在 chat_context 工厂内装配（import 链收敛，报告附新契约需求）；
+    - extra_adapters（G2 批，docs/Agent/20 §3）：通用形态适配器追加注册面（http-generic/
+      cli-generic，组合根按 Settings/profile 装配后传入；G1 的 acp 同款通道）——键=适配器
+      路由键（command.adapter），同名覆盖内置双适配器由调用方负责（本批不发生）；
     - llm_event_emitter_factory（M4.5-C）：llm.* 事件汇工厂（factory(command) → emitter），
       None=不绑定（事件丢弃）；组合根经 sessions.build_llm_event_emitter_factory 装配；
     - faithfulness 抽检开关（08 §7.4）缺省读统一配置层（OA_ 环境变量，默认开/1%）；显式
@@ -603,6 +607,8 @@ def build_chat_orchestrator(
         )
     except AcpProfileNotFoundError as exc:
         logger.info("acp 默认 profile 缺失，编排器不装配 acp 适配器（adapter=acp 调用 5002）: %s", exc)
+    if extra_adapters:  # G2：通用形态适配器追加注册（http-generic/cli-generic；20 篇 §3）
+        adapters.update(extra_adapters)
     if policy is None:
         from services.platform.config import get_settings
 

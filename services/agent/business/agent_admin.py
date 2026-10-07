@@ -69,6 +69,19 @@ class _AcpConfigSchema(BaseModel):
     tool_whitelist: list[str] = Field(
         default_factory=list, title="工具白名单 tool_whitelist", description="该 agent 可绑定的工具清单"
     )
+class _GenericConfigSchema(BaseModel):
+    """通用形态适配器（http-generic/cli-generic）config 面板（键集=领域 config 白名单同键）。
+
+    端点/命令/凭据等部署参数不进 agent config——走 Settings 六键 + profile 数据文件
+    （20 篇 §3/§4：自定义接入=写一份 YAML），config 面板只保留四登记键。
+    """
+
+    model: str = Field(default="", title="模型 model", description="对端模型名（openai-chat 模式）；空=Settings 注入")
+    temperature: float = Field(default=0.7, title="采样温度 temperature", description="0~2（通用形态当前不透传）")
+    tool_whitelist: list[str] = Field(
+        default_factory=list, title="工具白名单 tool_whitelist", description="该 agent 可绑定的工具清单"
+    )
+    num_ctx: int = Field(default=0, title="上下文窗口 num_ctx", description="上下文预算上限；端点不支持时忽略")
 
 
 class AdapterSchemaEntry(BaseModel):
@@ -105,6 +118,21 @@ _ADAPTER_REGISTRY: dict[str, AdapterSchemaEntry] = {
         vendor="Bridge · 通用形态 F4",
         capability="stdio JSON-RPC · profile 驱动 · 权限桥接审批中心",
         schema=_AcpConfigSchema.model_json_schema(by_alias=True),
+    ),
+    # G2 批（docs/Agent/20 §3）：通用形态两键——profile 数据文件驱动（05 篇 §5.1）；acp 归 G1。
+    "http-generic": AdapterSchemaEntry(
+        key="http-generic",
+        name="http-generic（常驻服务通用）",
+        vendor="Bridge F3 · profile 驱动",
+        capability="OpenAI 兼容/custom-rest · SSE/WS 事件 · adapter_sessions 会话映射",
+        schema=_GenericConfigSchema.model_json_schema(by_alias=True),
+    ),
+    "cli-generic": AdapterSchemaEntry(
+        key="cli-generic",
+        name="cli-generic（CLI 子进程通用）",
+        vendor="Bridge F2 · profile 驱动",
+        capability="JSONL 事件归一 · text-tail 受限档 · run-per-turn L1 重放",
+        schema=_GenericConfigSchema.model_json_schema(by_alias=True),
     ),
 }
 

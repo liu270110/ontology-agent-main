@@ -1,0 +1,39 @@
+# pi CLI JSONL 画像（docs/Agent/05 §2.1/§4.2 + 20 篇 §3.2 首批 profile）
+# run-per-turn 形态：pi --mode rpc 常驻双面归 F1/F4（05 篇裁决）；本画像为 F2 行式 JSON 单轮档
+# （05 篇 §2.1：pi 另有 `--mode json` 行式事件面；agent_settled=RUN 终止判据，不是 agent_end）。
+profile: pi-jsonl
+profile_version: 1
+tool: cli-generic
+form: F2
+protocol: jsonl
+pinned:
+  repo: "earendil-works/pi"
+  version: ">=0.1（--mode json 行式事件面）"
+  verified: "2026-10-07"
+transport:
+  cmd: ["pi", "--mode", "json", "{prompt}"]  # {prompt} 占位符（L1 重放全文注入）；stdin 模式改 prompt_mode
+  prompt_mode: arg
+  prompt_template: ""            # 空=内置缺省（时序 role: content 行 + 本条消息）
+  env: {}
+event_map:
+  kind_path: "$.type"            # 行 JSON 判别字段路径
+  rules:
+    - match: "message_update"    # 05 篇 §4.2：message_update(text_delta)
+      emit: text_delta
+      delta_path: "$.data.delta"
+    - match: "reasoning_update"  # 推理增量（透传面，20 篇同构 openai reasoning_content）
+      emit: reasoning_delta
+      delta_path: "$.data.reasoning"
+    - match: "agent_settled"     # RUN 终止判据（05 篇 §4.2 pi 行）
+      emit: finish
+      usage_path: "$.data.usage"
+permission_map: {}               # 扩展 tool_call 阻断/放行映射随 B5 审批桥批
+session_map: {}
+sandbox:
+  container: true
+  network: egress-proxy
+capabilities:
+  feed: false                    # run-per-turn：feed 不支持（05 篇 §4.1 F2 行）
+  approval: false
+  resume: false                  # 无跨进程会话 → L1 重放替代（05 篇 §4.4）
+  artifacts: false

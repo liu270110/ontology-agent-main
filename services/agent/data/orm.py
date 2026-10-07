@@ -228,7 +228,10 @@ class AdapterSession(Base, PkMixin, TenantMixin, TimestampMixin):
     adapter: Mapped[str] = mapped_column(String(32), nullable=False)  # acp|http-generic|cli-generic|a2a（形态键）
     foreign_id: Mapped[str] = mapped_column(String(256), nullable=False)  # 对端工具会话标识（ACP sessionId 等）
     meta: Mapped[dict] = mapped_column("metadata", JSONB, default=dict, nullable=False)  # profile/停因等可追溯面
-    __table_args__ = (UniqueConstraint("session_id", "adapter", name="uk_adapter_sessions_session_id_adapter"),)
+    __table_args__ = (
+        UniqueConstraint("session_id", "adapter", name="uk_adapter_sessions_session_id_adapter"),
+        Index("ix_adapter_sessions_foreign", "adapter", "foreign_id"),  # G2：反查（对端 id→平台会话）
+    )
 
 
 # H-1 提示词工程治理批（api/01 §5.10 F-08/X12；standards/01 §5.1 版本化资产）：模板头表 + 版本表。
@@ -260,3 +263,6 @@ class PromptVersion(Base, PkMixin, TenantMixin):  # 只追加（版本不可变�
         UniqueConstraint("template_id", "version", name="uk_prompt_versions_template_version"),
         CheckConstraint("version >= 1", name="ck_prompt_versions_version"),
     )
+
+
+

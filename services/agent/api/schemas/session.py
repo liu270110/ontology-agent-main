@@ -54,14 +54,15 @@ class SendMessageIn(BaseModel):
 
     adapter（计划 3.2 增补，向后兼容可选）：适配器路由键（builtin|claude，缺省 builtin，
     Agent 服务设计 §3.2）；api/01 登记册回填随报告待办。acp=G1 批追加（20 篇 §2/§3.3，
-    Bridge 六 adapter_type 收敛口径第一波）。
+    Bridge 六 adapter_type 收敛口径第一波）；G2 批（2026-10-07，docs/Agent/20
+    §3.3）：+http-generic|cli-generic（未装配 profile 时编排器报「适配器未注册」，fail-closed）。
     """
 
     model_config = ConfigDict(extra="forbid")
     content: str = Field(min_length=1, max_length=65_536)
     content_type: str = Field(default="text", max_length=32)
     agent_id: uuid.UUID | None = None
-    adapter: str = Field(default="builtin", pattern="^(builtin|claude|acp)$")
+    adapter: str = Field(default="builtin", pattern="^(builtin|claude|acp|http-generic|cli-generic)$")  # G1(acp)+G2(http/cli) 并集
 
 
 class SessionOut(BaseModel):

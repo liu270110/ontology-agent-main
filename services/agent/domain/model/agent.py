@@ -26,7 +26,9 @@ from pydantic import BaseModel, ConfigDict, Field
 # 走标准协议接入不自研适配器）；新增类型=此处扩枚举 + DTO pattern 同步，禁绕过聚合直写。
 # 20 篇 §2/§3.3（2026-10-07）：Bridge 通用形态扩枚举——acp（F4 标准协议，G1 批）；
 # http-generic/cli-generic/a2a 随 G2/下波追加（注册面 profile 缺失=422，见 agents.py）。
-ALLOWED_AGENT_TOOLS: tuple[str, ...] = ("builtin", "claude", "acp")
+# G1 批：+acp（F4 ACP 通用）；G2 批（2026-10-07，docs/Agent/20 §3.3）：+http-generic|cli-generic
+# （F3 常驻服务/F2 CLI 通用，profile 数据文件驱动——05 §5.1「写一份 YAML 不写一行 Python」）。
+ALLOWED_AGENT_TOOLS: tuple[str, ...] = ("builtin", "claude", "acp", "http-generic", "cli-generic")
 
 # G1（20 篇 §2）：acp_profile=ACP 画像名（adapters/profiles/acp/<名>.yaml；注册面校验 profile
 # 在位否则 422，值域收窄同其余键——api/01「未知字段一律拒绝」同构）。

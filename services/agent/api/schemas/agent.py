@@ -15,7 +15,9 @@ from pydantic import BaseModel, ConfigDict, Field
 from services.agent.domain.model.agent import Agent, AgentAdapterInfo
 from services.platform.schemas import PageMeta
 
-_AGENT_TOOL_PATTERN = "^(builtin|claude|acp)$"  # 领域 ALLOWED_AGENT_TOOLS 同源（acp=G1 批，20 篇 §2）
+# G2 批（2026-10-07，docs/Agent/20 §3.3）：+http-generic|cli-generic（F3/F2 通用适配器）；
+# acp 归 G1 批；与领域层 ALLOWED_AGENT_TOOLS 同源。
+_AGENT_TOOL_PATTERN = "^(builtin|claude|acp|http-generic|cli-generic)$"  # G1(acp)+G2(http/cli) 并集
 
 
 class AgentCreateIn(BaseModel):

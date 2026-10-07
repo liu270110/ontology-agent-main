@@ -2129,214 +2129,6 @@
         "title": "CandidateEditIn",
         "type": "object"
       },
-      "CapabilityListOut": {
-        "additionalProperties": false,
-        "description": "GET /ontologies/{id}/capabilities 清单（offset/limit 分页 + total）。",
-        "properties": {
-          "items": {
-            "items": {
-              "$ref": "#/components/schemas/CapabilityOut"
-            },
-            "title": "Items",
-            "type": "array"
-          },
-          "limit": {
-            "title": "Limit",
-            "type": "integer"
-          },
-          "offset": {
-            "title": "Offset",
-            "type": "integer"
-          },
-          "ontology_id": {
-            "format": "uuid",
-            "title": "Ontology Id",
-            "type": "string"
-          },
-          "total": {
-            "title": "Total",
-            "type": "integer"
-          }
-        },
-        "required": [
-          "ontology_id",
-          "items",
-          "total",
-          "offset",
-          "limit"
-        ],
-        "title": "CapabilityListOut",
-        "type": "object"
-      },
-      "CapabilityOut": {
-        "additionalProperties": false,
-        "description": "能力行（capabilities 读模型直映；withdrawn 双标记随行留痕，ONT-1.3 同口径）。",
-        "properties": {
-          "binds_action": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Binds Action"
-          },
-          "constrained_by": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Constrained By"
-          },
-          "created_at": {
-            "anyOf": [
-              {
-                "format": "date-time",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Created At"
-          },
-          "current_definition_version_id": {
-            "anyOf": [
-              {
-                "format": "uuid",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Current Definition Version Id"
-          },
-          "description": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Description"
-          },
-          "execution": {
-            "additionalProperties": true,
-            "title": "Execution",
-            "type": "object"
-          },
-          "grants": {
-            "default": [],
-            "items": {},
-            "title": "Grants",
-            "type": "array"
-          },
-          "id": {
-            "format": "uuid",
-            "title": "Id",
-            "type": "string"
-          },
-          "iri": {
-            "title": "Iri",
-            "type": "string"
-          },
-          "kind": {
-            "title": "Kind",
-            "type": "string"
-          },
-          "label": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Label"
-          },
-          "name": {
-            "title": "Name",
-            "type": "string"
-          },
-          "ontology_id": {
-            "format": "uuid",
-            "title": "Ontology Id",
-            "type": "string"
-          },
-          "produces": {
-            "default": [],
-            "items": {},
-            "title": "Produces",
-            "type": "array"
-          },
-          "requires": {
-            "default": [],
-            "items": {},
-            "title": "Requires",
-            "type": "array"
-          },
-          "serves_task": {
-            "default": [],
-            "items": {},
-            "title": "Serves Task",
-            "type": "array"
-          },
-          "source": {
-            "title": "Source",
-            "type": "string"
-          },
-          "version_id": {
-            "format": "uuid",
-            "title": "Version Id",
-            "type": "string"
-          },
-          "withdrawn_at": {
-            "anyOf": [
-              {
-                "format": "date-time",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Withdrawn At"
-          },
-          "withdrawn_reason": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Withdrawn Reason"
-          }
-        },
-        "required": [
-          "id",
-          "ontology_id",
-          "version_id",
-          "iri",
-          "kind",
-          "name",
-          "execution",
-          "source"
-        ],
-        "title": "CapabilityOut",
-        "type": "object"
-      },
       "ChangesetApproveIn": {
         "additionalProperties": false,
         "description": "approve（五动词之二）：solo 档提交人即审批人（ontology §6.3），审批留痕入 changeset。",
@@ -12143,6 +11935,127 @@
         "title": "TraceStepOut",
         "type": "object"
       },
+      "UsageDayPointOut": {
+        "description": "按日桶（仅回有数据日；day=本地聚合日期 YYYY-MM-DD）。",
+        "properties": {
+          "calls": {
+            "title": "Calls",
+            "type": "integer"
+          },
+          "cost_usd": {
+            "title": "Cost Usd",
+            "type": "number"
+          },
+          "day": {
+            "title": "Day",
+            "type": "string"
+          },
+          "tokens": {
+            "title": "Tokens",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "day",
+          "calls",
+          "tokens",
+          "cost_usd"
+        ],
+        "title": "UsageDayPointOut",
+        "type": "object"
+      },
+      "UsageModelRowOut": {
+        "description": "按模型分组行（cost 降序）。",
+        "properties": {
+          "calls": {
+            "title": "Calls",
+            "type": "integer"
+          },
+          "cost_usd": {
+            "title": "Cost Usd",
+            "type": "number"
+          },
+          "model": {
+            "title": "Model",
+            "type": "string"
+          },
+          "tokens": {
+            "title": "Tokens",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "model",
+          "calls",
+          "tokens",
+          "cost_usd"
+        ],
+        "title": "UsageModelRowOut",
+        "type": "object"
+      },
+      "UsageOverviewOut": {
+        "description": "GET /admin/usage/overview 响应体（B9 §D-C 契约形状，三键恒在）。",
+        "properties": {
+          "by_day": {
+            "items": {
+              "$ref": "#/components/schemas/UsageDayPointOut"
+            },
+            "title": "By Day",
+            "type": "array"
+          },
+          "by_model": {
+            "items": {
+              "$ref": "#/components/schemas/UsageModelRowOut"
+            },
+            "title": "By Model",
+            "type": "array"
+          },
+          "summary": {
+            "$ref": "#/components/schemas/UsageSummaryOut"
+          }
+        },
+        "required": [
+          "summary",
+          "by_day",
+          "by_model"
+        ],
+        "title": "UsageOverviewOut",
+        "type": "object"
+      },
+      "UsageSummaryOut": {
+        "description": "窗口内汇总（含失败行；cost_usd=列合计，latency_ms_p50=非空延迟连续中位取整）。",
+        "properties": {
+          "calls": {
+            "title": "Calls",
+            "type": "integer"
+          },
+          "cost_usd": {
+            "title": "Cost Usd",
+            "type": "number"
+          },
+          "latency_ms_p50": {
+            "title": "Latency Ms P50",
+            "type": "integer"
+          },
+          "tokens_in": {
+            "title": "Tokens In",
+            "type": "integer"
+          },
+          "tokens_out": {
+            "title": "Tokens Out",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "calls",
+          "tokens_in",
+          "tokens_out",
+          "cost_usd",
+          "latency_ms_p50"
+        ],
+        "title": "UsageSummaryOut",
+        "type": "object"
+      },
       "ValidationError": {
         "properties": {
           "ctx": {
@@ -15391,6 +15304,54 @@
         "summary": "创建租户（管理员初始密码一次性返回）",
         "tags": [
           "iam"
+        ]
+      }
+    },
+    "/api/v1/admin/usage/overview": {
+      "get": {
+        "description": "本租户 llm_calls 窗口聚合（B9 §D-C；空表全零/空数组，前端空态）。\n\ndays 白名单显式校验（Literal[7,30] 不做 str→int 松绑，query 串恒 422——实测弃用）；\n白名单外 422+3001 与 DTO 校验统一错误体同口径。",
+        "operationId": "get_usage_overview_api_v1_admin_usage_overview_get",
+        "parameters": [
+          {
+            "description": "聚合窗口天数（7|30）",
+            "in": "query",
+            "name": "days",
+            "required": false,
+            "schema": {
+              "default": 7,
+              "description": "聚合窗口天数（7|30）",
+              "maximum": 90,
+              "minimum": 1,
+              "title": "Days",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UsageOverviewOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "用量总览聚合（llm_calls 按 days=7|30 窗口：summary+by_day+by_model；B9 §D-C 成本看板）",
+        "tags": [
+          "usage"
         ]
       }
     },
@@ -20844,154 +20805,6 @@
           }
         },
         "summary": "LLM 候选拒绝（仅 source=llm_candidate 的 axiom/rule；防重提层三，ONT-1.3）",
-        "tags": [
-          "ontology"
-        ]
-      }
-    },
-    "/api/v1/ontologies/{ontology_id}/capabilities": {
-      "get": {
-        "operationId": "list_capabilities_api_v1_ontologies__ontology_id__capabilities_get",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "ontology_id",
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "title": "Ontology Id",
-              "type": "string"
-            }
-          },
-          {
-            "description": "含撤除标记行（撤除=标记）",
-            "in": "query",
-            "name": "include_withdrawn",
-            "required": false,
-            "schema": {
-              "default": false,
-              "description": "含撤除标记行（撤除=标记）",
-              "title": "Include Withdrawn",
-              "type": "boolean"
-            }
-          },
-          {
-            "in": "query",
-            "name": "kind",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "pattern": "^(atomic|composite)$",
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Kind"
-            }
-          },
-          {
-            "in": "query",
-            "name": "offset",
-            "required": false,
-            "schema": {
-              "default": 0,
-              "minimum": 0,
-              "title": "Offset",
-              "type": "integer"
-            }
-          },
-          {
-            "in": "query",
-            "name": "limit",
-            "required": false,
-            "schema": {
-              "default": 50,
-              "maximum": 200,
-              "minimum": 1,
-              "title": "Limit",
-              "type": "integer"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/CapabilityListOut"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "能力清单（head 挂靠版本内；本批只读）",
-        "tags": [
-          "ontology"
-        ]
-      }
-    },
-    "/api/v1/ontologies/{ontology_id}/capabilities/{capability_id}": {
-      "get": {
-        "operationId": "get_capability_api_v1_ontologies__ontology_id__capabilities__capability_id__get",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "ontology_id",
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "title": "Ontology Id",
-              "type": "string"
-            }
-          },
-          {
-            "in": "path",
-            "name": "capability_id",
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "title": "Capability Id",
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/CapabilityOut"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "能力详情（跨租户/跨本体一律 404 不泄露）",
         "tags": [
           "ontology"
         ]

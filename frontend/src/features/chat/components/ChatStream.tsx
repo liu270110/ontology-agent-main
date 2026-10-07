@@ -416,6 +416,7 @@ export function ChatStream({
   onBaselineReload,
   onBaselineContinue,
   baselineTick = 0,
+  approvalTakeoverActive = false,
 }: {
   sessionId: string
   onOpenEvidence: (f: EvidenceFocus) => void
@@ -432,6 +433,10 @@ export function ChatStream({
   onBaselineContinue?: () => void
   /** 重载计数：变化 → 重挂 hydrating 基线（骨架期盖过错误态，互斥矩阵） */
   baselineTick?: number
+  /** D-A 运行审批接管卡在岗（ChatPage 传 useRunApprovals.onDuty，34 §D-A）：
+   *  遗留兜底审批槽位（下方 approvalSlots 末项）让位——避免同 run 双卡+双轮询；
+   *  SSE 主源建卡后兜底槽位本就不挂（!cards[activeRunId] 条件），不受影响 */
+  approvalTakeoverActive?: boolean
 }) {
   const messages = useSessionStore(s => s.messages)
   const toolCalls = useSessionStore(s => s.toolCalls)
@@ -526,7 +531,8 @@ export function ChatStream({
   const approvalSlots = [
     ...cardIds.filter(id => cards[id].cardStatus === 'waiting').sort(byNewest),
     ...cardIds.filter(id => cards[id].cardStatus !== 'waiting').sort(byNewest),
-    ...(running && activeRunId && !cards[activeRunId] ? [activeRunId] : []),
+    // D-A（34 §D-A）：接管审批卡在岗（approvalTakeoverActive）→ 本兜底槽位让位（双卡防抖）
+    ...(running && activeRunId && !cards[activeRunId] && !approvalTakeoverActive ? [activeRunId] : []),
   ]
 
   return (

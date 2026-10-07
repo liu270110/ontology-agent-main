@@ -48,10 +48,7 @@ def test_白名单投影_白名单外键被剔除且改定义字段保留() -> N
     projected = project_definition("class", CLASS_A)
     assert set(projected) == {"subclass_of", "is_behavior"}  # label 剔除
     assert projected["subclass_of"] == ["http://p/#Device"]
-    # 四类型 + ONT-2 扩型 capability（06 §ONT-2.2：requires/produces/constrained_by/execution/
-    # binds_action 算定义字段；ck_ont_elem_versions_element_type 随 ONT-2 迁移①同步扩型）
-    assert set(DEFINITION_FIELDS) == {"class", "property", "axiom", "rule", "capability"}
-    assert DEFINITION_FIELDS["capability"] == ("requires", "produces", "constrained_by", "execution", "binds_action")
+    assert set(DEFINITION_FIELDS) == {"class", "property", "axiom", "rule"}  # 四类型齐备（单点定义）
     for fields in DEFINITION_FIELDS.values():
         assert fields, "白名单不得为空"
 
@@ -59,7 +56,7 @@ def test_白名单投影_白名单外键被剔除且改定义字段保留() -> N
 def test_白名单投影_未知元素类型显式拒绝() -> None:
     """未知类型不得静默得空投影（坏类型在投影层即拒，不产生空定义快照）。"""
     with pytest.raises(ValueError, match="未知元素类型"):
-        project_definition("widget", {"irrelevant": 1})  # 'capability' 已随 ONT-2 入白名单（原用例口径）
+        project_definition("capability", {"irrelevant": 1})
 
 
 def test_canonical_json_键序无关且判等口径单点() -> None:

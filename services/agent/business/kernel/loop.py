@@ -39,7 +39,7 @@ from services.agent.business.kernel.loop_guard import (
     register_step,
 )
 from services.agent.business.kernel.plan import KERNEL_PLAN_UPDATED, PlanProjection, plan_updated_data
-from services.agent.business.kernel.run_context import RunContext
+from services.agent.business.kernel.run_context import FrozenStepContext, RunContext
 from services.agent.business.kernel.spill import SpillStore
 from services.agent.business.kernel.subagent import ParentBindable
 from services.agent.business.kernel.tool_dispatch import ToolGroupDispatcher, segment_steps
@@ -287,6 +287,19 @@ class AgentKernel:
                     if len(group) == 1:  # 单步段=完全现状串行路径（B-① 零行为差异面）
                         step = group[0]
                         rc.tracker.check()  # A4 检查点：步前预算断言（超限优雅终止）
+                        # K33-a A-4 半级：步初冻结快照（docs/Agent/13 §39）——构造点在预算
+                        # 检查点后、register_step 前（nudge 注入前纯净态；预算耗尽的步未真正
+                        # 开始，不留步初快照）。快照只记步初基线，不改变任何执行语义
+                        # （rc.states 对象身份/写回回路/段边界三写点原样保留）；nudge 属本步
+                        # 可见面、下一轮边界才可能出现，半级范围并行多步段不刷新快照。
+                        rc.last_step_snapshot = FrozenStepContext(
+                            step_seq=step.seq,
+                            step_id=str(rc.states[step.seq].step_id),  # K32 确定性派生 id
+                            context_blocks=rc.context_blocks,
+                            state_snapshot=rc.states[step.seq].model_copy(deep=True),
+                            watermark=rc.tracker.watermark(),
+                            results_count=len(rc.results),
+                        )
                         # A-1 循环记账（docs/Agent/13 §2 K1-a）：步前逐步记账——同签名连续
                         # 重复第 1 次注入 kernel.loop_nudge 软警告，达阈值抛 LoopDetectedError
                         # （KernelError 家族 → run() 结构化终止，账本可追溯）
@@ -714,6 +727,13 @@ class AgentKernel:
                 "verdict": state.gate_verdict,
                 "strategy": candidate.strategy_name,
                 "stage": str(LoopStage.GATE),
+                # K33-b A-4 半级（docs/Agent/13 §39）：步初冻结快照锚（additive 摘要字段，
+                # 完整快照经 kernel.last_run_context.last_step_snapshot 可查）。串行步=本步
+                # 步初快照（构造点保证先于门禁存在）；并行段=最近一次串行步快照或 None
+                # （半级范围并行段不构造快照，诚实呈现）。
+                "snapshot_seq": (
+                    rc.last_step_snapshot.step_seq if rc.last_step_snapshot is not None else None
+                ),
             },
         )
 

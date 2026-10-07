@@ -7,6 +7,7 @@ import { RolesTab } from '../components/RolesTab'
 import { ModelsTab } from '../components/ModelsTab'
 import { AuditTab } from '../components/AuditTab'
 import { AnalyticsTab } from '../components/AnalyticsTab'
+import { UsageAnalyticsTab } from '../components/UsageAnalyticsTab'
 import { TenantsTab } from '../components/TenantsTab'
 import { SystemLogsTab } from '../components/SystemLogsTab'
 import { WritebackLedgerTab } from '../components/WritebackLedgerTab'
@@ -68,7 +69,13 @@ export function AdminPage() {
         {tab === 'models' && <ModelsTab />}
         {tab === 'audit' && <AuditTab />}
         {tab === 'writeback' && <WritebackLedgerTab />}
-        {tab === 'analytics' && <AnalyticsTab />}
+        {/* B9 §D-C（34 篇）：用量总览主卡（ekko usage 三视图，llm_calls 聚合 live 面）+ 既有轻量版（预算/归因/策略） */}
+        {tab === 'analytics' && (
+          <>
+            <UsageAnalyticsTab />
+            <AnalyticsTab />
+          </>
+        )}
         {tab === 'logs' && <SystemLogsTab />}
         {tab === 'tenants' && <TenantsTab />}
       </div>

@@ -80,8 +80,8 @@ from services.mcp.api.management import (
 )
 from services.memory.api.memory import router as memory_router  # 装配接缝（契约③正道，B7 接线）
 from services.memory.api.memory import wire_memory
-from services.ontology.api.capabilities import router as capability_router  # ONT-2：能力读模型只读面
 from services.ontology.api.ontology import router as ontology_router
+from services.platform.api.usage import router as usage_overview_router  # B9 §D-C 用量总览（api/01 §5.8 ★）
 from services.platform.db.uow import AsyncUnitOfWork
 from services.platform.deps import dispose_gateways, get_engine, get_redis
 from services.platform.errors import error_response
@@ -529,7 +529,6 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(prompts_router, prefix=settings.api_prefix)  # H-1：提示词模板库（api/01 §5.10）
     app.include_router(kb_router, prefix=settings.api_prefix)  # M2：知识库基线（上传/流水线/混合检索）
     app.include_router(ontology_router, prefix=settings.api_prefix)  # M2：本体域（CRUD+changeset 五动词+validate）
-    app.include_router(capability_router, prefix=settings.api_prefix)  # ONT-2：能力清单/详情（只读；api/01 §5.3 扩展）
     app.include_router(memory_router, prefix=settings.api_prefix)  # 计划 3.3：记忆域（L1/L2 六端点）
     app.include_router(plugin_router, prefix=settings.api_prefix)  # M5-1：插件市场（api/01 §5.6 八端点）
     app.include_router(skills_router, prefix=settings.api_prefix)  # S2 技能集市四端点（docs/Agent/14 §3）
@@ -541,6 +540,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(orsi_router, prefix=settings.api_prefix)  # M4.6-S3：ORSI 注册表三端点（docs/Agent/14 §3）
     app.include_router(health_router, prefix=settings.api_prefix)  # M3 销项：readyz 聚合探活（health.py）
     app.include_router(writeback_ledger_router, prefix=settings.api_prefix)  # api/01 §5.8 ★：台账查询（writeback.api）
+    app.include_router(usage_overview_router, prefix=settings.api_prefix)  # api/01 §5.8 ★：用量总览（B9 §D-C，platform.api）
 
     # DTO 校验异常 → 统一错误体 3001（02 §6；默认 422 体不合错误码契约，改写）
     app.add_exception_handler(RequestValidationError, _validation_error_body)

@@ -62,8 +62,6 @@ from services.memory.data.orm_records import (  # noqa: F401  M4 计划 1+2：re
 )
 from services.ontology.data.orm import (  # noqa: F401
     Axiom,
-    Capability,
-    CapabilityRun,
     OntoClass,
     Ontology,
     OntologyChangeset,

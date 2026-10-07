@@ -8,8 +8,8 @@ import { getAnalyticsOverview, type AnalyticsOverview } from '../api'
  *  四统计卡（复用 kb 统计带卡片样式）+ 预算水位（.meter 渐变条，warn/bad 随水位换档）+
  *  降级策略三开关（role=switch，与 MemoryPrefsTab 同构）+ Agent 用量归因 barlist——
  *  纯 CSS 图形不引图表库（barlist 用 div 宽度百分比），趋势/漏斗/热力留二期。
- *  数据口径诚实：端点未实装（api/01 R 清单），MSW 仿真=画板示例值，页头以「示例数据」
- *  徽标明示，不冒充真实统计。 */
+ *  F6（联调 2026-10-06）：GET /admin/analytics/overview 后端已实装
+ *  （services/iam/api/admin.py，实时聚合口径）——「示例数据/未实装」过期徽标与口径注释摘除。 */
 
 type Policy = AnalyticsOverview['policy']
 
@@ -58,13 +58,7 @@ export function AnalyticsTab() {
 
   return (
     <div data-testid="analytics-tab">
-      {/* 口径声明：端点未实装，MSW 仿真=画板示例值（后端实装后自动切真） */}
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="badge b-gray">示例数据</span>
-        <span className="fhint !mt-0">
-          数据分析聚合端点未登记（后端实装待办）· 当前为画板 p-analytics 示例口径 · 统计窗口 {data.window.from} → {data.window.to}
-        </span>
-      </div>
+      {/* F6：「示例数据/未实装」过期横幅摘除——聚合端点已 live（services/iam/api/admin.py） */}
 
       {/* 四统计卡（画板 grid4；卡片样式复用 kb 统计带） */}
       <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -154,7 +148,7 @@ function AttributionCard({ attribution }: { attribution: AnalyticsOverview['attr
           </div>
         ))}
       </div>
-      <div className="fhint">按消费方归因的 Token 用量（示例口径）· 趋势 / 漏斗 / 热力留二期引图表库。</div>
+      <div className="fhint">按消费方归因的 Token 用量 · 趋势 / 漏斗 / 热力留二期引图表库。</div>
     </div>
   )
 }

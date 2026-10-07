@@ -1,6 +1,6 @@
-"""ontology 模块 ORM：ontologies/ontology_versions + changesets + 读模型四表 + 元素定义快照（8 表）。
+"""ontology 模块 ORM：ontologies/ontology_versions + changesets + 读模型四表 + 元素定义快照 + 能力读模型（10 表）。
 
-DDL 权威：database/01 §3.3~§3.4 + §ONT-1；2026-09-27 模块轴重构自 kb_ontology_audit/m2_semantic_review 拆分。
+DDL 权威：database/01 §3.3~§3.4 + §ONT-1 + §ONT-2；2026-09-27 模块轴重构自 kb_ontology_audit/m2_semantic_review 拆分。
 """
 
 from __future__ import annotations
@@ -227,7 +227,9 @@ class OntologyElementVersion(Base, PkMixin):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     __table_args__ = (
         CheckConstraint(
-            "element_type IN ('class','property','axiom','rule')", name="ck_ont_elem_versions_element_type"
+            # ONT-2 扩型：'capability'（迁移①同步；快照机制复用见类 docstring 与 §ONT-2.2）
+            "element_type IN ('class','property','axiom','rule','capability')",
+            name="ck_ont_elem_versions_element_type",
         ),
         Index(
             "uk_ont_elem_versions_active",
@@ -238,4 +240,96 @@ class OntologyElementVersion(Base, PkMixin):
             postgresql_where=text("superseded_at IS NULL"),
         ),
         Index("ix_ont_elem_versions_tenant", "tenant_id", "ontology_id"),
+    )
+
+
+class Capability(_WithdrawMixin, Base, PkMixin):
+    """能力读模型行（ONT-2.2，database/01 §ONT-2 DDL 逐列对照）。
+
+    - 挂靠：ontology_id/version_id=cap TBox 版本（种子迁移内建「平台能力本体」项目，nil 租户）；
+      不用 _ReadModelMixin（其 changeset_id 列为四读模型表专有，不在 §ONT-2 契约列面内）；
+    - iri UNIQUE(version_id, iri)；kind/source CHECK 与 DDL 同口径；
+    - requires/produces/grants/serves_task：JSONB 白名单结构由 pydantic 校验
+      （business.capability_seed.CapabilitySeedRow）；execution=执行语义四元 JSONB NOT NULL；
+    - current_definition_version_id：ONT-1 快照机制复用（element_type='capability'，
+      requires/produces/constrained_by/execution/binds_action 算定义字段）；
+    - 撤除=标记（ONT-1.3 同款），部分索引 ix_capabilities_tenant_iri 仅覆盖在役行。
+    """
+
+    __tablename__ = "capabilities"
+    tenant_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False, index=True)
+    ontology_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("ontologies.id"), nullable=False)
+    version_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("ontology_versions.id"), nullable=False)
+    iri: Mapped[str] = mapped_column(String(256), nullable=False)
+    kind: Mapped[str] = mapped_column(String(16), nullable=False)  # atomic|composite
+    name: Mapped[str] = mapped_column(String(128), nullable=False)
+    label: Mapped[str | None] = mapped_column(String(256))
+    description: Mapped[str | None] = mapped_column(Text)
+    requires: Mapped[list] = mapped_column(JSONB, default=list, nullable=False)
+    produces: Mapped[list] = mapped_column(JSONB, default=list, nullable=False)
+    grants: Mapped[list] = mapped_column(JSONB, default=list, nullable=False)
+    constrained_by: Mapped[str | None] = mapped_column(String(256))
+    execution: Mapped[dict] = mapped_column(JSONB, nullable=False)  # 执行语义四元（形状见模块 docstring 顶部契约）
+    serves_task: Mapped[list] = mapped_column(JSONB, default=list, nullable=False)
+    binds_action: Mapped[str | None] = mapped_column(String(256))
+    current_definition_version_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("ontology_element_versions.id")
+    )
+    source: Mapped[str] = mapped_column(String(16), default="manual", nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    __table_args__ = (
+        CheckConstraint("kind IN ('atomic','composite')", name="ck_capabilities_kind"),
+        CheckConstraint("source IN ('manual','seed','llm_candidate')", name="ck_capabilities_source"),
+        UniqueConstraint("version_id", "iri", name="uk_capabilities_version_id_iri"),
+        Index(
+            "ix_capabilities_tenant_iri",
+            "tenant_id",
+            "iri",
+            unique=False,
+            postgresql_where=text("withdrawn_at IS NULL"),
+        ),
+    )
+
+
+class CapabilityRun(Base, PkMixin):
+    """能力运行台账（ONT-2.3，database/01 §ONT-2 DDL 逐列对照；0034 runs + 0050 五态修正）。
+
+    - capability_iri 值引用不 FK（台账比对象活得久）；capability_id FK ON DELETE SET NULL
+      （对象删除台账存活）；本批只记台账不接调用点（派发去抖 E3 待专题，06 篇 §ONT-2.3）；
+    - 状态推进由 repo（CapabilityRunRepository）守卫：pending→despatched→{succeeded,partial,failed}。
+    """
+
+    __tablename__ = "capability_runs"
+    tenant_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False, index=True)
+    capability_iri: Mapped[str] = mapped_column(String(256), nullable=False)
+    capability_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("capabilities.id", ondelete="SET NULL"))
+    action_iri: Mapped[str | None] = mapped_column(String(256))
+    status: Mapped[str] = mapped_column(String(16), nullable=False)
+    channel: Mapped[str] = mapped_column(String(16), nullable=False)
+    requested_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"))
+    session_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
+    trace_id: Mapped[str | None] = mapped_column(String(64))
+    input_digest: Mapped[dict | None] = mapped_column(JSONB)
+    result_digest: Mapped[dict | None] = mapped_column(JSONB)
+    target_ref_type: Mapped[str | None] = mapped_column(String(32))
+    target_ref_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('pending','despatched','succeeded','partial','failed')", name="ck_capability_runs_status"
+        ),
+        CheckConstraint("channel IN ('kernel','mcp','api','skill')", name="ck_capability_runs_channel"),
+        Index(
+            "ix_capability_runs_lookup",
+            "tenant_id",
+            "capability_iri",
+            text("created_at DESC"),
+        ),
+        Index(
+            "ix_capability_runs_open",
+            "tenant_id",
+            unique=False,
+            postgresql_where=text("status IN ('pending','despatched')"),
+        ),
     )

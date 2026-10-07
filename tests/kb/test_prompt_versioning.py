@@ -1,7 +1,7 @@
 """提示词版本化治理用例（18 篇 §1 / standards/01 §5.1）：快照断言锁现网逐字节输出。
 
 - 快照：模板正文/渲染输出对现网字面量逐字节锁定——重构或换版本时快照字面量不得随手改，
-  断言失败即提示词行为漂移；变更模板必须发新版本（extract_v2）并更新快照走评审回归
+  断言失败即提示词行为漂移；变更模板必须发新版本（extract_v2→extract_v3）并更新快照走评审回归
   （18 篇 §1.3），禁止原地改写 active 版本；
 - 注册表：PROMPTS 按 ref（"模板 id@version"）登记渲染函数，未知 ref 明确抛错（version pin 不回退）；
 - 信封：kb_facts.meta.template_ref / 审核票据 payload.template_ref 与所用模板 ref 同源落库。
@@ -28,6 +28,7 @@ from services.kb.business.kb_extraction import (
     _candidate_fact,
     _ChunkRef,
     _ticket_envelope,
+    load_seed_catalog,
     run_extract,
 )
 from services.kb.business.kb_pipeline import run_pipeline
@@ -37,6 +38,7 @@ from services.kb.business.prompts import (
     UnknownTemplateRefError,
     extract_v1,
     extract_v2,
+    extract_v3,
     get_prompt,
     get_system_prompt,
 )
@@ -102,11 +104,40 @@ _EXPECTED_USER_PROMPT = (
     f"\n\n## 抽取文本\n{_SNAPSHOT_CHUNK}"
 )
 
+# ---- v3 快照字面量（K24 批，docs/Agent/13 §30：编号目录制 + 序号口径；v2 段按现状保留）
+
+_EXPECTED_SYSTEM_PROMPT_V3 = """你是电力配电网领域的知识抽取引擎。从「抽取文本」中抽取实体/属性/关系/事件候选。
+规则（违反即无效）：
+1. 禁止凭空创造：只抽取文本明确提及的内容，每条候选必须能在原文中找到依据；
+2. ontology_class 与 object_class 只能填「本体引导清单」类条目的序号（整数，如 2）——清单
+   未展示类 IRI，禁止自行构造；清单没有合适类时省略该字段；
+3. predicate（如有）优先取清单中的属性本地名（如 hasStatus/orderNo）；
+4. confidence ∈ [0,1]，反映该候选的确定性；
+5. evidence 必须是「抽取文本」中的原文逐字片段（禁止改写、概括、拼接，每条候选附一条）；
+   出处四元组（source_ref）由系统自动附加，禁止生成，候选之间不得互为证据；
+6. 只输出 JSON 对象：{"candidates": [{"kind", "name", "ontology_class", "predicate",
+   "object", "evidence", "confidence", "detail", "properties"}]}，kind ∈ entity|relation|attribute|event，
+   relation/attribute 必须附 predicate 与 object，properties 为「属性本地名 → 字符串值」；
+7. 文本没有任何可抽取内容时返回 {"candidates": []}。"""
+
+_EXPECTED_CATALOG_TEXT_V3 = (
+    "- 1. 类 馈线（Feeder）\n- 2. 类 抢修工单（OutageOrder）\n- 属性 hasStatus（标签：工单状态）"
+)
+
+_EXPECTED_USER_PROMPT_V3 = (
+    "## 本体引导清单\n"
+    "- 1. 类 馈线（Feeder）\n"
+    "- 2. 类 抢修工单（OutageOrder）\n"
+    "- 属性 hasStatus（标签：工单状态）"
+    f"\n\n## 抽取文本\n{_SNAPSHOT_CHUNK}"
+)
+
 
 def test_snapshot_template_ref_版本钉死() -> None:
-    """version pin（18 篇 §1.1）：v1 冻结为历史，active ref = kb_extract@v2。"""
+    """version pin（18 篇 §1.1）：v1/v2 冻结为历史（v2 留注册表可回退），active ref = kb_extract@v3。"""
     assert extract_v1.TEMPLATE_REF == "kb_extract@v1"  # 历史版本不可变
-    assert extract_v2.TEMPLATE_REF == "kb_extract@v2"  # 现役
+    assert extract_v2.TEMPLATE_REF == "kb_extract@v2"  # 历史（可回退）
+    assert extract_v3.TEMPLATE_REF == "kb_extract@v3"  # 现役（K24 §30）
 
 
 def test_snapshot_system_prompt_v1_历史冻结_byte_exact() -> None:
@@ -137,6 +168,28 @@ def test_snapshot_user_prompt_byte_exact() -> None:
     assert extract_v2.render(_EXPECTED_CATALOG_TEXT, _SNAPSHOT_CHUNK) == _EXPECTED_USER_PROMPT
 
 
+def test_snapshot_system_prompt_v3_byte_exact() -> None:
+    """v3 系统提示词正文与 K24 批字面量逐字节一致（规则 2 序号口径=编号制硬幻觉门禁提示词面）。"""
+    assert extract_v3.SYSTEM_PROMPT == _EXPECTED_SYSTEM_PROMPT_V3
+
+
+def test_snapshot_catalog_text_v3_byte_exact() -> None:
+    """v3 编号目录渲染逐字节一致：类行=「序号. 标签（本地名）」不带 IRI（序号=声明序 1 起）、
+    属性行同 v2 口径。"""
+    catalog = SeedCatalog(
+        _SNAPSHOT_CLASSES,
+        frozenset(iri for iri, _, _ in _SNAPSHOT_CLASSES),
+        _SNAPSHOT_PROPERTIES,
+        Graph(),
+    )
+    assert extract_v3.render_catalog(catalog) == _EXPECTED_CATALOG_TEXT_V3
+
+
+def test_snapshot_user_prompt_v3_byte_exact() -> None:
+    """v3 用户提示词组装逐字节一致（两段式结构同 v2——FakeModelPort 依「## 抽取文本」切分兼容）。"""
+    assert extract_v3.render(_EXPECTED_CATALOG_TEXT_V3, _SNAPSHOT_CHUNK) == _EXPECTED_USER_PROMPT_V3
+
+
 # ---------------------------------------------------------------- 注册表治理（version pin）
 
 
@@ -144,9 +197,11 @@ def test_registry_binds_active_template() -> None:
     """注册表按 ref 登记渲染函数与系统提示词正文（两表同键集；取用函数同源）。"""
     assert PROMPTS[extract_v1.TEMPLATE_REF] is extract_v1.render
     assert PROMPTS[extract_v2.TEMPLATE_REF] is extract_v2.render
+    assert PROMPTS[extract_v3.TEMPLATE_REF] is extract_v3.render
     assert SYSTEM_PROMPTS[extract_v2.TEMPLATE_REF] is extract_v2.SYSTEM_PROMPT
-    assert get_prompt(extract_v2.TEMPLATE_REF) is extract_v2.render
-    assert get_system_prompt(extract_v2.TEMPLATE_REF) is extract_v2.SYSTEM_PROMPT
+    assert SYSTEM_PROMPTS[extract_v3.TEMPLATE_REF] is extract_v3.SYSTEM_PROMPT
+    assert get_prompt(extract_v3.TEMPLATE_REF) is extract_v3.render
+    assert get_system_prompt(extract_v3.TEMPLATE_REF) is extract_v3.SYSTEM_PROMPT
     assert set(PROMPTS) == set(SYSTEM_PROMPTS)
 
 
@@ -178,11 +233,20 @@ def test_candidate_envelopes_carry_active_template_ref() -> None:
     assert fact["meta"]["template_ref"] in PROMPTS  # 落库 ref 必须是注册表在册版本
     ticket = _ticket_envelope(fact, "kb-extract:trace", extract_v2.TEMPLATE_REF)
     assert ticket["template_ref"] == "kb_extract@v2"
+    fact_v3 = _candidate_fact(ctx, chunk, cand, "kb-extract:trace", extract_v3.TEMPLATE_REF)  # 现役版同源
+    assert fact_v3["meta"]["template_ref"] == "kb_extract@v3"
+    ticket_v3 = _ticket_envelope(fact_v3, "kb-extract:trace", extract_v3.TEMPLATE_REF)
+    assert ticket_v3["template_ref"] == "kb_extract@v3"
 
 
 # ---------------------------------------------------------------- 集成：template_ref 落库（PG 夹具风格同存量用例）
 
 CONTENT = "馈线F001 由城东变电站供电。\n"
+
+
+def _seed_class_index(iri: str) -> int:
+    """K24 序号口径：种子类在声明序（=v3 目录渲染序=映射序）中的 1 起序号（FakeModelPort 序号桩用）。"""
+    return next(i for i, (c_iri, _, _) in enumerate(load_seed_catalog().classes, start=1) if c_iri == iri)
 
 
 async def _instant_backoff(attempt: int) -> None:
@@ -239,7 +303,7 @@ async def extract_env(kb_pg: async_sessionmaker[AsyncSession]) -> AsyncIterator[
         "tenant_id": tenant.id,
         "collection_id": collection.id,
         "document_id": doc.id,
-        "model": FakeModelPort(keyword_classes={"馈线F001": f"{_PW}Feeder"}),
+        "model": FakeModelPort(keyword_classes={"馈线F001": _seed_class_index(f"{_PW}Feeder")}),
         "review": ReviewTicketService(kb_pg),
     }
     yield env
@@ -281,5 +345,5 @@ async def test_extract_persists_template_ref_into_envelopes(
             .all()
         )
     assert facts and tickets  # FakeModelPort 确定性产出 ≥1 候选
-    assert all(fact.meta["template_ref"] == extract_v2.TEMPLATE_REF for fact in facts)
-    assert all(ticket.payload["template_ref"] == extract_v2.TEMPLATE_REF for ticket in tickets)
+    assert all(fact.meta["template_ref"] == extract_v3.TEMPLATE_REF for fact in facts)
+    assert all(ticket.payload["template_ref"] == extract_v3.TEMPLATE_REF for ticket in tickets)

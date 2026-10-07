@@ -45,6 +45,12 @@ if sys.platform == "win32":
 
 PW = "http://ontology-agent.local/o/t1/power#"
 
+
+def _seed_class_index(iri: str) -> int:
+    """K24 序号口径（docs/Agent/13 §30）：种子类在声明序（=extract_v3 目录渲染序=映射序）中的 1 起序号。"""
+    return next(i for i, (c_iri, _, _) in enumerate(load_seed_catalog().classes, start=1) if c_iri == iri)
+
+
 # 双形态内容：空格分词句喂 BM25（'simple' 配置）；连写关键词喂 FakeModelPort 抽取匹配。
 CONTENT = (
     "# 停电抽取联调\n"
@@ -52,7 +58,8 @@ CONTENT = (
     "\n## 抢修工单\n"
     "馈线F001 工单OO-123456 已创建，工单状态为 created。\n"
 )
-MODEL_KEYWORDS = {"馈线F001": f"{PW}Feeder", "工单OO-123456": f"{PW}OutageOrder"}
+# K24：extract_v3 编号目录制下模型只回类序号（整数），解析侧映射回 IRI——IRI 直出会被硬幻觉门禁误剪。
+MODEL_KEYWORDS = {"馈线F001": _seed_class_index(f"{PW}Feeder"), "工单OO-123456": _seed_class_index(f"{PW}OutageOrder")}
 MODEL_PROPERTIES = {"工单OO-123456": {"orderNo": "OO-123456", "hasStatus": "created"}}
 
 

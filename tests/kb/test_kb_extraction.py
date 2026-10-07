@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import re
 import sys
 import uuid
 from collections.abc import AsyncIterator
@@ -33,6 +34,7 @@ from services.kb.business.kb_extraction import (
     run_validate,
 )
 from services.kb.business.kb_pipeline import M2_FULL_STEPS, run_pipeline
+from services.kb.business.prompts import extract_v3
 from services.kb.data.orm import Document as DocumentORM
 from services.kb.data.orm import DocumentChunk as DocumentChunkORM
 from services.kb.data.orm import KbCollection as KbCollectionORM
@@ -52,7 +54,21 @@ if sys.platform == "win32":
 
 PW = "http://ontology-agent.local/o/t1/power#"
 CONTENT = "# 停电抽取联调\n馈线F001 由城东变电站供电。\n\n## 抢修工单\n工单OO-123456 已创建，工单状态为 created。\n"
-MODEL_KEYWORDS = {"馈线F001": f"{PW}Feeder", "工单OO-123456": f"{PW}OutageOrder"}
+
+
+def _seed_class_index(iri: str) -> int:
+    """K24 序号口径（docs/Agent/13 §30）：种子类在声明序（=v3 目录渲染序=映射序）中的 1 起序号。"""
+    return next(i for i, (c_iri, _, _) in enumerate(load_seed_catalog().classes, start=1) if c_iri == iri)
+
+
+IDX_FEEDER = _seed_class_index(f"{PW}Feeder")
+IDX_OUTAGE_ORDER = _seed_class_index(f"{PW}OutageOrder")
+IDX_SUBSTATION = _seed_class_index(f"{PW}Substation")
+IDX_POWER_DEVICE = _seed_class_index(f"{PW}PowerDevice")
+IDX_TRANSFORMER = _seed_class_index(f"{PW}Transformer")
+# FakeModelPort 序号桩（K24 适配）：v3 编号目录制下模型只回类序号（整数）——集成用例传序号，
+# 经解析侧映射回 IRI 走既有链（传 IRI 文本会被硬幻觉门禁剪除=全池误剪）。
+MODEL_KEYWORDS = {"馈线F001": IDX_FEEDER, "工单OO-123456": IDX_OUTAGE_ORDER}
 MODEL_PROPERTIES = {"工单OO-123456": {"orderNo": "OO-123456", "hasStatus": "created"}}
 
 
@@ -240,13 +256,13 @@ async def test_extract_writes_candidate_facts_and_tickets_idempotent(
         assert source_ref["doc_version"] == 1 and len(source_ref["span"]) == 2
         assert fact.evidence["quote"] == fact.subject  # 引语=关键词本身（逐字命中，extract 只保留不裁决）
         assert fact.evidence["span"] and len(fact.evidence["span"]) == 2  # chunk 内定位可回指
-        assert fact.meta["fact_key"] and fact.meta["template_ref"] == "kb_extract@v2"
+        assert fact.meta["fact_key"] and fact.meta["template_ref"] == "kb_extract@v3"
         assert fact.meta["properties"] == MODEL_PROPERTIES.get(fact.subject, {})
     assert len(tickets) == len(facts)  # 一候选一 open 单
     assert all(t.target_type == "knowledge_instance" and t.status == "pending_review" for t in tickets)
     for ticket in tickets:  # 统一信封（standards/01 §5.3）
         assert ticket.payload["envelope_version"] == "v1"
-        assert ticket.payload["template_ref"] == "kb_extract@v2"
+        assert ticket.payload["template_ref"] == "kb_extract@v3"
         assert ticket.payload["payload"]["source_ref"]["chunk_id"]
         assert ticket.payload["payload"]["quote"]  # 引语随单透出（终审可直接对回原文）
         assert ticket.payload["payload"]["fact"]["violations"] == []  # 干净候选：fact 面零留痕（K21 P2-3）
@@ -429,14 +445,14 @@ async def test_validate_marks_evidence_not_in_chunk_without_blocking_review(
                 {  # 引语杜撰：不在任何 chunk 内（Feeder 无 shape，SHACL 本身合规 → 隔离出规则侧违例）
                     "kind": "entity",
                     "name": "馈线F001",
-                    "ontology_class": f"{PW}Feeder",
+                    "ontology_class": IDX_FEEDER,  # K24 序号口径：解析侧映射回 IRI 后走既有链
                     "confidence": 0.9,
                     "evidence": "这句引语纯属模型杜撰",
                 },
                 {  # 无引语（旧模板/确定性桩形态）：无可证伪 → 不判违例
                     "kind": "entity",
                     "name": "变压器T-09",
-                    "ontology_class": f"{PW}Transformer",
+                    "ontology_class": IDX_TRANSFORMER,
                     "confidence": 0.8,
                 },
             ]
@@ -506,10 +522,10 @@ async def test_align_tier3_llm_whitelist_boundary_rejection(
                 {  # 两者一级均未命中（无类标签/本地名包含关系）→ 落二/三级（embedder 未装配跳二级）
                     "kind": "entity",
                     "name": "配网环网柜",
-                    "ontology_class": f"{PW}PowerDevice",
+                    "ontology_class": IDX_POWER_DEVICE,  # K24 序号口径：映射回 IRI 后走既有链
                     "confidence": 0.9,
                 },
-                {"kind": "entity", "name": "神秘设备", "ontology_class": f"{PW}PowerDevice", "confidence": 0.8},
+                {"kind": "entity", "name": "神秘设备", "ontology_class": IDX_POWER_DEVICE, "confidence": 0.8},
             ]
         },
         align={
@@ -727,7 +743,9 @@ async def test_extract_pruned_items_marked_not_discarded(
     model = ScriptedModelPort(
         {
             "candidates": [
-                {"kind": "entity", "name": "馈线F001", "ontology_class": f"{PW}Feeder", "confidence": 0.9},
+                # K24 序号口径：合法序号映射回 IRI（干净候选）；直出 IRI 文本=违反序号口径的
+                # 幻觉回包，经哨兵化后照常落 K21 剪枝留痕（硬幻觉门禁回归面）
+                {"kind": "entity", "name": "馈线F001", "ontology_class": IDX_FEEDER, "confidence": 0.9},
                 {
                     "kind": "entity",
                     "name": "神秘设备",
@@ -841,3 +859,144 @@ async def test_extract_pruning_stats_meta_and_gate_preserves_marks(
         assert "conflict_triage" not in (fact.meta or {})  # T4/T3 亦未标注（整池排除，非仅挡 T2）
         gate = ticket_by_target[fact.id].payload["gate_result"]
         assert gate["conforms"] is True and gate["violation_count"] == 0 and gate["mark_count"] == 1  # P2-2 计数自洽
+
+
+# ---------------------------------------------------------------- K24 序号→IRI 映射门禁（docs/Agent/13 §30 E-3）
+
+
+def test_v3_catalog_numbering_matches_declaration_order():
+    """K24-c 序不变式：v3 编号目录的类行号 = SeedCatalog.classes 声明序（声明序=渲染序=映射序，
+    真实种子全量核对——解析侧 idx→IRI 映射表与提示词目录两处 enumerate 必须一致）。"""
+    catalog = load_seed_catalog()
+    class_lines = [line for line in extract_v3.render_catalog(catalog).splitlines() if re.match(r"- \d+\. 类 ", line)]
+    assert len(class_lines) == len(catalog.classes)  # 类行与声明一一对应（属性行不入此列）
+    for idx, (_iri, label, local) in enumerate(catalog.classes, start=1):
+        assert class_lines[idx - 1] == f"- {idx}. 类 {label}（{local}）"
+
+
+async def test_extract_v3_index_hit_maps_back_to_iri_end_to_end(
+    kb_pg: async_sessionmaker[AsyncSession], extract_env: dict
+) -> None:
+    """K24-c 命中路径（端到端）：模型回目录序号（实体类+关系双端点）→ 解析侧在剪枝/落库前映射回
+    种子类 IRI 走既有链——subject_type/object_type=IRI、violations=[]、template_ref=kb_extract@v3、
+    evidence 引语照常保留、零剪除 pruning_stats 显式落账。"""
+    model = ScriptedModelPort(
+        {
+            "candidates": [
+                {
+                    "kind": "entity",
+                    "name": "馈线F001",
+                    "ontology_class": IDX_FEEDER,
+                    "confidence": 0.9,
+                    "evidence": "馈线F001",
+                },
+                {
+                    "kind": "relation",
+                    "name": "馈线F001",
+                    "ontology_class": IDX_FEEDER,
+                    "predicate": "suppliedBy",
+                    "object": "城东变电站",
+                    "object_class": IDX_SUBSTATION,
+                    "confidence": 0.8,
+                    "evidence": "馈线F001",
+                },
+            ]
+        }
+    )
+    ctx = _ctx(kb_pg, extract_env, model=model)
+    await run_extract(ctx)
+    async with kb_pg() as db:
+        facts = (
+            (await db.execute(select(KbFactORM).where(KbFactORM.document_id == extract_env["document_id"])))
+            .scalars()
+            .all()
+        )
+        doc = await db.get(DocumentORM, extract_env["document_id"])
+    entities = [f for f in facts if f.fact_type == "entity"]
+    relations = [f for f in facts if f.fact_type == "relation"]
+    assert entities and relations  # 2 候选 × 每 chunk 各落一条
+    for fact in entities:
+        assert fact.subject_type == f"{PW}Feeder"  # 序号已映射回 IRI（非序号原文落库）
+        assert fact.violations == [] and fact.status == "candidate"
+        assert fact.meta["template_ref"] == "kb_extract@v3"
+        assert fact.evidence["quote"] == "馈线F001"  # evidence 链不受映射影响
+    for fact in relations:
+        assert fact.subject_type == f"{PW}Feeder" and fact.object_type == f"{PW}Substation"  # 双端点映射
+        assert fact.violations == []  # 端点在目：不触发 invalid_relation_endpoint
+    assert doc.meta["pruning_stats"] == {}  # 零剪除显式落账（K21 口径）
+
+
+async def test_extract_v3_out_of_range_index_pruned_with_mark(
+    kb_pg: async_sessionmaker[AsyncSession], extract_env: dict
+) -> None:
+    """K24-c 越界路径：序号 0/超目录长度 → 复用 K21 剪枝管线 OUT_OF_TAXONOMY 留痕（detail 注
+    「序号越界」），剪除不丢弃照常落候选进审（不加新枚举不 hard-raise）；pruning_stats 精确落账。"""
+    catalog = load_seed_catalog()
+    model = ScriptedModelPort(
+        {
+            "candidates": [
+                {
+                    "kind": "entity",
+                    "name": "越界设备甲",
+                    "ontology_class": len(catalog.classes) + 1,
+                    "confidence": 0.9,
+                },
+                {
+                    "kind": "entity",
+                    "name": "越界设备乙",
+                    "ontology_class": 0,  # 目录序从 1 起，0 必越界（falsy 陷阱不漏剪：映射层先行哨兵化）
+                    "confidence": 0.8,
+                },
+            ]
+        }
+    )
+    ctx = _ctx(kb_pg, extract_env, model=model)
+    await run_extract(ctx)  # 不 hard-raise：双写/进审主流程不变
+    async with kb_pg() as db:
+        facts = (
+            (await db.execute(select(KbFactORM).where(KbFactORM.tenant_id == extract_env["tenant_id"]))).scalars().all()
+        )
+        tickets = (
+            (await db.execute(select(ReviewTicketORM).where(ReviewTicketORM.tenant_id == extract_env["tenant_id"])))
+            .scalars()
+            .all()
+        )
+        doc = await db.get(DocumentORM, extract_env["document_id"])
+    assert {f.subject for f in facts} == {"越界设备甲", "越界设备乙"}  # 剪除不丢弃：照常落候选
+    assert len(facts) == 4 and len(tickets) == 4  # 2 候选 × 2 chunks：一候选一 open 单
+    ticket_by_target = {t.target_id: t for t in tickets}
+    for fact in facts:
+        assert fact.status == "candidate"  # 剪除≠裁决：候选非成品交终审
+        assert [v["rule"] for v in fact.violations] == ["out_of_taxonomy"]
+        assert "序号越界" in fact.violations[0]["detail"]
+        envelope = ticket_by_target[fact.id].payload["payload"]
+        assert [v["rule"] for v in envelope["fact"]["violations"]] == ["out_of_taxonomy"]  # 留痕随单透出
+    assert doc.meta["pruning_stats"] == {"out_of_taxonomy": 4}  # 2 候选 × 2 chunks 精确计数
+
+
+async def test_extract_v3_non_integer_index_pruned_with_mark(
+    kb_pg: async_sessionmaker[AsyncSession], extract_env: dict
+) -> None:
+    """K24-c 非整数容错：文本/浮点序号与模型直出 IRI 文本（违反序号口径的幻觉回包）→ 同落 K21
+    OUT_OF_TAXONOMY 留痕（detail 注「非整数」），不 hard-raise；哨兵串保留原值可回溯。"""
+    model = ScriptedModelPort(
+        {
+            "candidates": [
+                {"kind": "entity", "name": "文本序号候选", "ontology_class": "Feeder", "confidence": 0.9},
+                {"kind": "entity", "name": "浮点序号候选", "ontology_class": 2.5, "confidence": 0.8},
+                {"kind": "entity", "name": "直出IRI候选", "ontology_class": f"{PW}Feeder", "confidence": 0.7},
+            ]
+        }
+    )
+    ctx = _ctx(kb_pg, extract_env, model=model)
+    await run_extract(ctx)
+    async with kb_pg() as db:
+        facts = (
+            (await db.execute(select(KbFactORM).where(KbFactORM.tenant_id == extract_env["tenant_id"]))).scalars().all()
+        )
+    assert {f.subject for f in facts} == {"文本序号候选", "浮点序号候选", "直出IRI候选"}
+    assert len(facts) == 6  # 3 候选 × 2 chunks（跨 chunk 不判重）
+    for fact in facts:
+        assert [v["rule"] for v in fact.violations] == ["out_of_taxonomy"]
+        assert "非整数" in fact.violations[0]["detail"]
+        assert (fact.subject_type or "").startswith("非整数:")  # 哨兵串=失效形态:原值，终审可回溯

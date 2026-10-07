@@ -181,6 +181,7 @@ class ChangesetOut(BaseModel):
     id: uuid.UUID
     title: str
     status: str
+    target_key: str | None = None  # ONT-1.5 目标指纹（纯新增类 NULL）
     gate_ok: bool = False
     applicant_id: uuid.UUID | None = None
     reviewer_id: uuid.UUID | None = None
@@ -209,8 +210,32 @@ class OntologyListOut(BaseModel):
 
 
 class ChangesetCreateIn(BaseModel):
+    """新建变更单（ONT-1.5 防重提层一）：`target_iris`=拟变更目标 IRI 清单，创建期定格为
+    target_key 指纹（sha256(canonical_json(sorted)))；纯新增类（None/空）target_key=NULL。
+    同目标活跃单冲突=409（uk_changesets_one_target 部分唯一索引兜底）。"""
+
     model_config = ConfigDict(extra="forbid")
     title: str = Field(min_length=1, max_length=256)
+    target_iris: list[str] | None = Field(default=None, max_length=200)  # 纯新增类缺省 None
+
+
+class ElementWithdrawIn(BaseModel):
+    """元素撤除（ONT-1.3 撤除=标记）：元素类型+键放 body（IRI 含 / # 不宜走路径段），必附理由。
+
+    element_key 口径：class/property=iri；rule=name；axiom=行 id（UUID 字符串，表无自身 IRI）。
+    """
+
+    model_config = ConfigDict(extra="forbid")
+    element_type: str = Field(pattern="^(class|property|axiom|rule)$")
+    element_key: str = Field(min_length=1, max_length=256)
+    reason: str = Field(min_length=1, max_length=256)
+
+
+class CandidateDeclineIn(BaseModel):
+    """LLM 候选拒绝（ONT-1.3 防重提层三）：必附理由，落 declined_reason + proposal.declined 审计。"""
+
+    model_config = ConfigDict(extra="forbid")
+    reason: str = Field(min_length=1, max_length=256)
 
 
 class ChangesetSubmitIn(BaseModel):
@@ -310,6 +335,7 @@ def changeset_from_domain(cs: OntologyChangeset) -> ChangesetOut:
         id=cs.id,
         title=cs.title,
         status=cs.status.value,
+        target_key=cs.target_key,
         gate_ok=cs.gate_ok,
         applicant_id=cs.applicant_id,
         reviewer_id=cs.reviewer_id,

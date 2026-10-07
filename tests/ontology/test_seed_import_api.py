@@ -7,7 +7,8 @@
 - 重复 slug 导入被拒：409（uk_ontologies_tenant_id_iri_base）且零孤儿制品、零冗余行；
 - inspect 失败拒绝导入：lint 违例 / 解析失败均 4204，项目行不落库。
 
-夹具纪律（同 test_publish_projection）：真实 PG（本地 deploy compose），不可达即跳过整用例；
+夹具纪律（同 test_publish_projection）：真实 PG 一次性测试库（conftest ont1_pg——ONT-1 批起共享
+开发库 schema 落后 ORM 不可直连，create_all 建表即含本批新列），不可达即跳过整用例；
 制品库指向 tmp_path（M2 本地目录实现，不污染 deploy/artifacts）；Windows psycopg 要求
 Selector 事件循环——导入期固定策略。API 装配（照 tests/mcp/test_a2a_http.py 的
 ASGITransport 模式）：最小 FastAPI 挂 ontology 真实路由，dependency_overrides 注入测试
@@ -29,8 +30,7 @@ import pytest
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import delete, func, select
-from sqlalchemy.exc import SQLAlchemyError
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 
@@ -45,7 +45,6 @@ from services.ontology.data.orm import OntologyChangeset as OntologyChangesetORM
 from services.ontology.data.orm import OntologyVersion as OntologyVersionORM
 from services.ontology.data.orm import OntoProperty as OntoPropertyORM
 from services.ontology.data.orm import Rule as RuleORM
-from services.platform.config import Settings
 from services.platform.deps import Principal, get_current_principal, get_session
 from services.platform.errors import GatewayError, error_response
 
@@ -118,20 +117,11 @@ async def _gateway_error_body(request: Request, exc: GatewayError) -> JSONRespon
 
 
 @pytest.fixture
-async def seed_api(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> AsyncIterator[SeedApiEnv]:
-    """真实 PG + 真实路由 + tmp_path 制品库；PG 不可达即跳过整用例（同 tests/ontology 夹具纪律）。"""
-    settings = Settings()
-    probe = create_async_engine(settings.pg_dsn, pool_pre_ping=True)
-    try:
-        async with probe.connect():
-            pass
-    except (OSError, SQLAlchemyError):
-        await probe.dispose()
-        pytest.skip("本地 PG 不可达，跳过种子导入 API 集成用例")
-    await probe.dispose()
-
-    engine = create_async_engine(settings.pg_dsn)
-    factory = async_sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
+async def seed_api(
+    ont1_pg: async_sessionmaker[AsyncSession], tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> AsyncIterator[SeedApiEnv]:
+    """真实 PG 一次性测试库 + 真实路由 + tmp_path 制品库（conftest ont1_pg，ONT-1 批转换口径同 gap_api）。"""
+    factory = ont1_pg
     async with factory() as db, db.begin():
         tenant = TenantORM(name="seed-it-租户", slug=f"seed-it-{uuid.uuid4().hex[:12]}")
         db.add(tenant)
@@ -180,7 +170,7 @@ async def seed_api(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> AsyncIter
             await db.execute(delete(orm).where(orm.tenant_id == tenant.id))
         await db.execute(delete(UserORM).where(UserORM.id == user.id))
         await db.execute(delete(TenantORM).where(TenantORM.id == tenant.id))
-    await engine.dispose()
+    # 引擎归 conftest ont1_pg 所有（模块级一次性库，用毕统一 DROP），此处不 dispose
 
 
 def _artifact_names(env: SeedApiEnv) -> list[str]:

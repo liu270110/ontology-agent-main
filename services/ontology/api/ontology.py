@@ -30,12 +30,14 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from services.ontology.api.schemas.ontology import (
+    CandidateDeclineIn,
     ChangesetApproveIn,
     ChangesetCreateIn,
     ChangesetOut,
     ChangesetPublishIn,
     ChangesetRejectIn,
     ChangesetSubmitIn,
+    ElementWithdrawIn,
     OntologyCreateIn,
     OntologyImportSeedIn,
     OntologyListOut,
@@ -61,6 +63,13 @@ from services.ontology.business.changeset_service import (
     project_published_version,
     submit_changeset_for_review,
 )
+from services.ontology.business.element_service import (
+    UsageGuardTriggered,
+    withdraw_read_model_element,
+)
+from services.ontology.business.element_service import (
+    decline_candidate as decline_candidate_usecase,
+)
 from services.ontology.business.ontology_gate import GateReport, run_changeset_gate
 from services.ontology.business.seed_service import import_seed_as_project
 from services.ontology.core import (
@@ -78,6 +87,7 @@ from services.ontology.core.diff import ProjectionDiff
 from services.ontology.core.query import SparqlRejected
 from services.ontology.core.reasoning import ReasonReport
 from services.ontology.data.repo_impl.ontology_repo import PgOntologyRepository, VersionSummary
+from services.ontology.domain.model.audit_actions import OntologyAuditAction
 from services.ontology.domain.model.ontology import DomainError, Ontology, OntologyStatus
 from services.ontology.domain.model.ontology_read_model import ReadModelProjection
 from services.platform.deps import Principal, SessionDep, domain_error, require_scope
@@ -237,10 +247,21 @@ async def create_changeset(
 ) -> ChangesetOut:
     try:
         ontology = await _require_ontology(db, principal.tenant_id, ontology_id)
-        changeset = ontology.open_changeset(body.title, applicant_id=principal.user_id)  # 4202 单活跃裁决
+        # ONT-1.5 防重提层一：target_iris 创建期定格为 target_key 指纹（纯新增类 None）
+        changeset = ontology.open_changeset(
+            body.title, applicant_id=principal.user_id, target_iris=body.target_iris
+        )  # 4202 单活跃裁决
         await _repo(db, principal.tenant_id).save(ontology)
     except DomainError as exc:
         raise domain_error(exc, fallback_code=4202) from exc
+    except IntegrityError as exc:  # 同活跃冲突的两枚部分唯一索引兜底（并发竞态内存裁决拦不住）
+        # 按约束名分支文案（psycopg 诊断串含约束名）：uk_changesets_one_active=本体级单活跃、
+        # uk_changesets_one_target=同目标不双开（ONT-1.5）——诊断串缺失时归入防重提兜底口径
+        if "uk_changesets_one_active" in str(exc):
+            message = "同一本体已存在活跃变更单（uk_changesets_one_active 单活跃）——先发布或驳回既有变更单"
+        else:
+            message = "同一本体已存在同目标的活跃变更单（uk_changesets_one_target 防重提）——先发布或驳回既有变更单"
+        raise GatewayError(409, message, status_code=409) from exc
     return changeset_from_domain(changeset)
 
 
@@ -255,6 +276,7 @@ async def submit_changeset(
     body: ChangesetSubmitIn,
     principal: OntologySubmitDep,
     db: SessionDep,
+    request: Request,
 ) -> ChangesetOut:
     repo = _repo(db, principal.tenant_id)
     try:
@@ -268,6 +290,15 @@ async def submit_changeset(
             turtle=body.turtle,
             client_gate_ok=body.gate_ok,
             client_gate_report=body.gate_report,
+        )
+        await repo.record_audit(  # ONT-1.6 状态迁移审计（同事务，回滚随业务写一并消失）
+            actor_id=principal.user_id,
+            action=OntologyAuditAction.CHANGESET_SUBMITTED,
+            ontology_id=ontology.id,
+            digest={"changeset_id": str(changeset.id), "title": changeset.title},
+            trace_id=getattr(request.state, "trace_id", None),
+            subject="changeset",
+            subject_id=changeset.id,
         )
     except DomainError as exc:
         raise domain_error(exc, fallback_code=4203) from exc
@@ -291,10 +322,18 @@ async def approve_changeset(
         ontology = await _require_ontology(db, principal.tenant_id, ontology_id)
         changeset = _require_changeset(ontology, changeset_id)
         # 档位注入（08 §2.4 收敛点接线）：租户 settings 读取留在 L2，聚合只收参数（L4 纯度）
-        changeset.approve(
-            principal.user_id, body.note, governance_tier=await _tenant_tier(request, principal.tenant_id)
-        )
+        tier = await _tenant_tier(request, principal.tenant_id)
+        changeset.approve(principal.user_id, body.note, governance_tier=tier)
         await _repo(db, principal.tenant_id).save(ontology)
+        await _repo(db, principal.tenant_id).record_audit(  # ONT-1.6 状态迁移审计（同事务）
+            actor_id=principal.user_id,
+            action=OntologyAuditAction.CHANGESET_APPROVED,
+            ontology_id=ontology.id,
+            digest={"changeset_id": str(changeset.id), "tier": tier},
+            trace_id=getattr(request.state, "trace_id", None),
+            subject="changeset",
+            subject_id=changeset.id,
+        )
     except DomainError as exc:
         raise domain_error(exc, fallback_code=4203) from exc
     return changeset_from_domain(changeset)
@@ -311,12 +350,23 @@ async def reject_changeset(
     body: ChangesetRejectIn,
     principal: OntologyApproveDep,
     db: SessionDep,
+    request: Request,
 ) -> ChangesetOut:
+    repo = _repo(db, principal.tenant_id)
     try:
         ontology = await _require_ontology(db, principal.tenant_id, ontology_id)
         changeset = _require_changeset(ontology, changeset_id)
         changeset.reject(principal.user_id, body.reason)
-        await _repo(db, principal.tenant_id).save(ontology)
+        await repo.save(ontology)
+        await repo.record_audit(  # ONT-1.6 状态迁移审计（同事务）
+            actor_id=principal.user_id,
+            action=OntologyAuditAction.CHANGESET_REJECTED,
+            ontology_id=ontology.id,
+            digest={"changeset_id": str(changeset.id), "reason": body.reason},
+            trace_id=getattr(request.state, "trace_id", None),
+            subject="changeset",
+            subject_id=changeset.id,
+        )
     except DomainError as exc:
         raise domain_error(exc, fallback_code=4203) from exc
     return changeset_from_domain(changeset)
@@ -374,6 +424,21 @@ async def publish_changeset(
             # 投影属发布后内部不变式（过门禁不应失败）：回收制品后按未处理异常透出（500），会话回滚
             repo.artifacts.discard(version_ref.artifact_key)
             raise
+        trace = getattr(request.state, "trace_id", None)
+        for action in (OntologyAuditAction.CHANGESET_PUBLISHED, OntologyAuditAction.VERSION_PUBLISHED):
+            await repo.record_audit(  # ONT-1.6 状态迁移审计（同事务：变更单终态 + 版本发布两动作）
+                actor_id=principal.user_id,
+                action=action,
+                ontology_id=ontology.id,
+                digest={
+                    "changeset_id": str(changeset.id),
+                    "version": version_ref.version,
+                    "checksum": version_ref.checksum,
+                },
+                trace_id=trace,
+                subject="changeset" if action is OntologyAuditAction.CHANGESET_PUBLISHED else "ontology",
+                subject_id=changeset.id,
+            )
     except DomainError as exc:
         raise domain_error(exc, fallback_code=4203) from exc
     return from_domain(ontology)
@@ -389,6 +454,7 @@ async def rollback_changeset(
     changeset_id: uuid.UUID,
     principal: OntologyPublishDep,
     db: SessionDep,
+    request: Request,
 ) -> OntologyOut:
     repo = _repo(db, principal.tenant_id)
     try:
@@ -409,9 +475,97 @@ async def rollback_changeset(
         except ValueError:
             repo.artifacts.discard(version_ref.artifact_key)
             raise
+        await repo.record_audit(  # ONT-1.6 状态迁移审计（同事务）
+            actor_id=principal.user_id,
+            action=OntologyAuditAction.CHANGESET_ROLLED_BACK,
+            ontology_id=ontology.id,
+            digest={"changeset_id": str(changeset.id), "restored_version": version_ref.version},
+            trace_id=getattr(request.state, "trace_id", None),
+            subject="changeset",
+            subject_id=changeset.id,
+        )
     except DomainError as exc:
         raise domain_error(exc, fallback_code=4203) from exc
     return from_domain(ontology)
+
+
+# ---- 元素生命周期（ONT-1.3 撤除=标记 / 防重提层三候选拒绝） ----
+
+
+@router.post(
+    "/{ontology_id}/elements/withdraw",
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="撤除读模型元素（撤除=标记，永不物理删；类/属性 kb 引用守卫 409；ONT-1.3/1.4）",
+)
+async def withdraw_element(
+    ontology_id: uuid.UUID,
+    body: ElementWithdrawIn,
+    principal: OntologyWriteDep,
+    db: SessionDep,
+    request: Request,
+) -> dict:
+    """四表撤除共用端点（element_type/element_key 走 body——IRI 含 / # 不宜作路径段）：
+    usage 守卫（类/属性，409+守卫审计）→ withdrawn 标记 → element.withdrawn 审计
+    （rule/axiom 另审计 criterion.changed；L3 用例承载，同会话单事务）。"""
+    repo = _repo(db, principal.tenant_id)
+    try:
+        ontology = await _require_ontology(db, principal.tenant_id, ontology_id)
+        marked = await withdraw_read_model_element(
+            repo,
+            ontology,
+            element_type=body.element_type,
+            key=body.element_key,
+            reason=body.reason,
+            actor_id=principal.user_id,
+            trace_id=getattr(request.state, "trace_id", None),
+        )
+    except UsageGuardTriggered as exc:
+        # 守卫拒绝路径显式提交：事务内仅 usage.guard_triggered 审计写入（无业务变更），
+        # 提交令审计越过拒绝存活（可追溯，ONT-1.4 第 1 档）；SessionDep 异常路径不再有内容可回滚。
+        await db.commit()
+        raise domain_error(exc, fallback_code=4202) from exc
+    except DomainError as exc:
+        raise domain_error(exc, fallback_code=4202) from exc
+    except ValueError as exc:  # axiom 非法 UUID / 版本行缺失等路径面无效
+        raise GatewayError(4202, str(exc), status_code=404) from exc
+    return {
+        "ontology_id": str(ontology_id),
+        "element_type": body.element_type,
+        "element_key": body.element_key,
+        "withdrawn": True,
+        "marked_rows": marked,
+    }
+
+
+@router.post(
+    "/{ontology_id}/candidates/{element_type}/{row_id}/decline",
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="LLM 候选拒绝（仅 source=llm_candidate 的 axiom/rule；防重提层三，ONT-1.3）",
+)
+async def decline_candidate_endpoint(
+    ontology_id: uuid.UUID,
+    element_type: str,
+    row_id: uuid.UUID,
+    body: CandidateDeclineIn,
+    principal: OntologyApproveDep,
+    db: SessionDep,
+    request: Request,
+) -> dict:
+    repo = _repo(db, principal.tenant_id)
+    try:
+        ontology = await _require_ontology(db, principal.tenant_id, ontology_id)
+        await decline_candidate_usecase(
+            repo,
+            ontology,
+            element_type=element_type,
+            row_id=row_id,
+            reason=body.reason,
+            actor_id=principal.user_id,
+            trace_id=getattr(request.state, "trace_id", None),
+        )
+    except DomainError as exc:
+        raise domain_error(exc, fallback_code=4202) from exc
+    return {"ontology_id": str(ontology_id), "element_type": element_type, "row_id": str(row_id), "declined": True}
 
 
 @router.post(

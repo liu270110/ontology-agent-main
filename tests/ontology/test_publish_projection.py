@@ -3,8 +3,8 @@
 
 链路：submit（服务端实跑门禁）→ approve → append_version（制品写成功→PG 版本行）→
 聚合 publish → project_published_version（L3 用例 → L6 替换写 classes/properties/axioms/rules），
-全链真实 PG（本地 deploy compose；不可达即跳过，同 tests/kb 夹具纪律）。制品库指向
-tmp_path 临时目录（M2 本地目录实现，不污染 deploy/artifacts）。
+全链真实 PG（一次性测试库，conftest ont1_pg——ONT-1 批起共享开发库 schema 落后 ORM 不可直连；
+不可达即跳过）。制品库指向 tmp_path 临时目录（M2 本地目录实现，不污染 deploy/artifacts）。
 
 替换式投影（database/01 §3.3）：同 ontology+version 先删后插——同版本二次投影重放
 不产生重复行（uk_*_version_id_iri 唯一约束由先删后插保证）。
@@ -23,8 +23,7 @@ from pathlib import Path
 
 import pytest
 from sqlalchemy import delete, func, select
-from sqlalchemy.exc import SQLAlchemyError
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from services.iam.data.orm import Tenant as TenantORM
 from services.iam.data.orm import User as UserORM
@@ -41,7 +40,6 @@ from services.ontology.data.orm import OntoProperty as OntoPropertyORM
 from services.ontology.data.orm import Rule as RuleORM
 from services.ontology.data.repo_impl.ontology_repo import LocalArtifactStore, PgOntologyRepository
 from services.ontology.domain.model.ontology import Ontology
-from services.platform.config import Settings
 
 if sys.platform == "win32":
     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
@@ -68,20 +66,14 @@ class PublishedContext:
 
 
 @pytest.fixture
-async def ontology_pg() -> AsyncIterator[async_sessionmaker[AsyncSession]]:
-    """本地 PG 会话工厂；不可达即跳过整用例（同 tests/kb 夹具纪律）。"""
-    settings = Settings()
-    probe = create_async_engine(settings.pg_dsn, pool_pre_ping=True)
-    try:
-        async with probe.connect():
-            pass
-    except (OSError, SQLAlchemyError):
-        await probe.dispose()
-        pytest.skip("本地 PG 不可达，跳过 ontology 发布投影集成用例")
-    await probe.dispose()
-    engine = create_async_engine(settings.pg_dsn)
-    yield async_sessionmaker(engine, expire_on_commit=False)
-    await engine.dispose()
+def ontology_pg(ont1_pg: async_sessionmaker[AsyncSession]) -> async_sessionmaker[AsyncSession]:
+    """一次性测试库会话工厂（conftest ont1_pg；ONT-1 批起替代共享开发库直连）。
+
+    变更动因：ONT-1 ORM 增列（withdrawn_*/declined_*/evidence_count/target_key）先行于共享
+    开发库 schema（其 alembic 版本戳失效无法 upgrade），ORM 全列 SELECT 即 UndefinedColumn；
+    一次性库 create_all 建表即含本批新列（tests/agent/pg_testdb.py 同款机制），用例其余不变。
+    """
+    return ont1_pg
 
 
 @pytest.fixture

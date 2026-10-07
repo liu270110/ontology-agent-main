@@ -11,7 +11,8 @@
 - POST /ontologies/{id}/reason：consistency（gate.v1 门禁级）/ classification|entailment（owl2_rl 闭包）/
   semantic 显式拒绝（LLM 不入确定性推理面，宪法 2/3）。
 
-夹具纪律（同 test_seed_import_api）：真实 PG（本地 deploy compose），不可达即跳过整用例；
+夹具纪律（同 test_seed_import_api）：真实 PG 一次性测试库（conftest ont1_pg——ONT-1 批起共享
+开发库 schema 落后 ORM 不可直连，create_all 建表即含本批新列），不可达即跳过整用例；
 制品库指向 tmp_path；Windows psycopg 要求 Selector 事件循环；ASGITransport 最小 app 挂真实路由。
 """
 
@@ -30,8 +31,7 @@ from httpx import ASGITransport, AsyncClient
 from rdflib import Graph, Literal, Namespace
 from rdflib.namespace import OWL, RDF, RDFS
 from sqlalchemy import delete
-from sqlalchemy.exc import SQLAlchemyError
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 
@@ -46,7 +46,6 @@ from services.ontology.data.orm import OntologyChangeset as OntologyChangesetORM
 from services.ontology.data.orm import OntologyVersion as OntologyVersionORM
 from services.ontology.data.orm import OntoProperty as OntoPropertyORM
 from services.ontology.data.orm import Rule as RuleORM
-from services.platform.config import Settings
 from services.platform.deps import Principal, get_current_principal, get_session
 from services.platform.errors import GatewayError, error_response
 
@@ -102,20 +101,15 @@ class _FakeTierReader:
 
 
 @pytest.fixture
-async def gap_api(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> AsyncIterator[GapApiEnv]:
-    """真实 PG + 真实路由 + tmp_path 制品库；PG 不可达即跳过整用例（同 tests/ontology 夹具纪律）。"""
-    settings = Settings()
-    probe = create_async_engine(settings.pg_dsn, pool_pre_ping=True)
-    try:
-        async with probe.connect():
-            pass
-    except (OSError, SQLAlchemyError):
-        await probe.dispose()
-        pytest.skip("本地 PG 不可达，跳过 ontology 缺口端点 API 用例")
-    await probe.dispose()
+async def gap_api(
+    ont1_pg: async_sessionmaker[AsyncSession], tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> AsyncIterator[GapApiEnv]:
+    """真实 PG 一次性测试库 + 真实路由 + tmp_path 制品库；PG 不可达即跳过整用例（夹具纪律同前）。
 
-    engine = create_async_engine(settings.pg_dsn)
-    factory = async_sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
+    ONT-1 批起改一次性库（conftest ont1_pg）：共享开发库 schema 落后 ORM（增列 UndefinedColumn）
+    且 alembic 版本戳失效无法 upgrade——create_all 建表即含本批新列，用例逻辑不变。
+    """
+    factory = ont1_pg
     async with factory() as db, db.begin():
         tenant = TenantORM(name="gap-it-租户", slug=f"gap-it-{uuid.uuid4().hex[:12]}")
         db.add(tenant)
@@ -165,7 +159,7 @@ async def gap_api(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> AsyncItera
             await db.execute(delete(orm).where(orm.tenant_id == tenant.id))
         await db.execute(delete(UserORM).where(UserORM.id == user.id))
         await db.execute(delete(TenantORM).where(TenantORM.id == tenant.id))
-    await engine.dispose()
+    # 引擎归 conftest ont1_pg 所有（模块级一次性库，用毕统一 DROP），此处不 dispose
 
 
 # ---- 装配辅助

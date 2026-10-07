@@ -9,9 +9,10 @@
 from __future__ import annotations
 
 import builtins
-from typing import Protocol, runtime_checkable
+from typing import Any, Protocol, runtime_checkable
 from uuid import UUID
 
+from services.ontology.domain.model.audit_actions import OntologyAuditAction
 from services.ontology.domain.model.ontology import Ontology, OntologyStatus, OntologyVersionRef
 from services.ontology.domain.model.ontology_read_model import ReadModelProjection
 
@@ -67,4 +68,47 @@ class OntologyRepository(Protocol):
         必须在调用方 UoW/会话事务内调用（投影与发布版本行同事务=单事务边界，§9）；
         `version` 为版本标识（append_version 返回的 version_ref.version），实现层解析版本行 id。
         """
+        ...
+
+    # ---- ONT-1（06 篇 §ONT-1）：审计 / usage 守卫 / 撤除=标记 / 候选拒绝 ----
+
+    async def record_audit(
+        self,
+        *,
+        actor_id: UUID | None,
+        action: OntologyAuditAction | str,  # 动作词汇单点（audit_actions）；str 仅留迁移余地
+        ontology_id: UUID,
+        digest: dict[str, Any],
+        trace_id: str | None = None,
+        subject: str = "ontology",
+        subject_id: UUID | None = None,
+    ) -> None:
+        """ontology.* 审计行（audit_logs，ONT-1.6 动作族；同事务写入）。"""
+        ...
+
+    async def kb_usage_count(self, element_type: str, iri: str) -> int:
+        """kb 域对 IRI 的全历史引用计数（ONT-1.4 第 1 档 usage 守卫计数面；不筛 status）。"""
+        ...
+
+    async def withdraw_head_element(
+        self, ontology_id: UUID, *, version: str, element_type: str, key: str, reason: str
+    ) -> int:
+        """撤除=标记（ONT-1.3）：head 版本行打 withdrawn 双标记；返回标记行数（0=不存在/已撤）。"""
+        ...
+
+    async def decline_candidate(
+        self,
+        ontology_id: UUID,
+        *,
+        element_type: str,
+        row_id: UUID,
+        reason: str,
+        actor_id: UUID | None,
+        trace_id: str | None = None,
+    ) -> bool:
+        """候选拒绝（ONT-1.3 防重提层三）：llm_candidate 行打 declined_reason + 审计；False=不可拒。"""
+        ...
+
+    async def declined_evidence_floor(self, ontology_id: UUID, *, element_type: str, element_key: str) -> int | None:
+        """同形候选再提证据量下限（翻倍判据）；无 declined 历史 → None。"""
         ...

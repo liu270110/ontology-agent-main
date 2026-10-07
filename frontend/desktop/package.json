@@ -1,0 +1,26 @@
+{
+  "name": "ontology-agent-desktop",
+  "productName": "ontology-agent",
+  "private": true,
+  "version": "0.2.0",
+  "description": "ontology-agent 桌面端 Electron 壳（FE-ADR-FE9）：宿主 Web 同一 dist 构建物，壳只负责窗口/协议/托盘宿主能力",
+  "author": "ontology-agent platform team",
+  "main": "dist-electron/main.js",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "build": "esbuild electron/main.ts electron/preload.ts --bundle --platform=node --format=cjs --target=node20 --outdir=dist-electron --external:electron --loader:.png=dataurl --sourcemap",
+    "dev": "npm run build && cross-env ELECTRON_START_URL=http://localhost:5173 electron .",
+    "start": "npm run build && electron .",
+    "build:web": "cross-env VITE_API_BASE=http://localhost:8000/api/v1 npm --prefix .. run build",
+    "icons": "node tools/make-icon.mjs",
+    "dir": "npm run build && electron-builder --dir"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.3",
+    "cross-env": "^10.1.0",
+    "electron": "^44.4.5",
+    "electron-builder": "^26.15.3",
+    "esbuild": "^0.28.2",
+    "typescript": "^7.0.2"
+  }
+}

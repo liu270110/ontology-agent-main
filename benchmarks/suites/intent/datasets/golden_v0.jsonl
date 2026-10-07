@@ -1,0 +1,100 @@
+{"ambiguity_level": "clear", "expectation": "map", "expected_action": "file_read", "id": "intent-001", "notes": "直白通读请求，动词「读」+单文件全路径", "query": "帮我读一下 README.md 的内容"}
+{"ambiguity_level": "clear", "expectation": "map", "expected_action": "file_read", "id": "intent-002", "notes": "「打开…看看写了什么」=通读内容", "query": "打开 config/app.yaml 看看里面写了什么"}
+{"ambiguity_level": "clear", "expectation": "map", "expected_action": "file_read", "id": "intent-003", "notes": "行窗口读取=fs_read 的 offset/limit 面", "query": "把 src/main.py 前 50 行显示出来"}
+{"ambiguity_level": "clear", "expectation": "map", "expected_action": "file_read", "id": "intent-004", "notes": "通读理解请求", "query": "我需要查看 docs/plan.md 讲了什么"}
+{"ambiguity_level": "clear", "expectation": "map", "expected_action": "file_write", "id": "intent-005", "notes": "新建文件+整文件内容=整文件写入", "query": "新建 notes/meeting.txt，内容是「周三例会纪要」"}
+{"ambiguity_level": "clear", "expectation": "map", "expected_action": "file_write", "id": "intent-006", "notes": "整文件落盘（新文件）", "query": "把这段配置原样保存成 settings.json"}
+{"ambiguity_level": "clear", "expectation": "map", "expected_action": "file_write", "id": "intent-007", "notes": "新文件整写", "query": "帮我生成 todo.md，内容用这份模板"}
+{"ambiguity_level": "clear", "expectation": "map", "expected_action": "file_edit", "id": "intent-008", "notes": "既有文件内精确旧串替换=file_edit 语义", "query": "把 README 里的版本号 0.9 改成 1.0"}
+{"ambiguity_level": "clear", "expectation": "map", "expected_action": "file_edit", "id": "intent-009", "notes": "单点修改既有文件", "query": "app.yaml 中 debug 那行改成 false"}
+{"ambiguity_level": "clear", "expectation": "map", "expected_action": "file_edit", "id": "intent-010", "notes": "精确替换", "query": "修正 main.py 里的拼写错误 recieve，改成 receive"}
+{"ambiguity_level": "clear", "expectation": "map", "expected_action": "file_glob", "id": "intent-011", "notes": "按 glob 模式列文件名（非内容检索）", "query": "列出 src 目录下所有的 .py 文件"}
+{"ambiguity_level": "clear", "expectation": "map", "expected_action": "file_glob", "id": "intent-012", "notes": "按扩展名匹配文件", "query": "项目里有哪些 markdown 文件"}
+{"ambiguity_level": "clear", "expectation": "map", "expected_action": "file_glob", "id": "intent-013", "notes": "按文件名模式匹配", "query": "找出所有文件名带 test 的文件"}
+{"ambiguity_level": "clear", "expectation": "map", "expected_action": "file_grep", "id": "intent-014", "notes": "按内容正则搜索", "query": "搜一下哪些文件里出现了 deprecated 这个词"}
+{"ambiguity_level": "clear", "expectation": "map", "expected_action": "file_grep", "id": "intent-015", "notes": "逐行内容检索", "query": "在代码里找一下所有 TODO 标记"}
+{"ambiguity_level": "clear", "expectation": "map", "expected_action": "file_grep", "id": "intent-016", "notes": "按内容定位定义处", "query": "哪个文件定义了 run_pipeline 函数"}
+{"ambiguity_level": "clear", "expectation": "map", "expected_action": "todo_write", "id": "intent-017", "notes": "新增计划项", "query": "新建一个任务：周五前完成周报"}
+{"ambiguity_level": "clear", "expectation": "map", "expected_action": "todo_write", "id": "intent-018", "notes": "新增待办项", "query": "加一条待办：给客户回电话"}
+{"ambiguity_level": "clear", "expectation": "map", "expected_action": "todo_write", "id": "intent-019", "notes": "新增计划项", "query": "把「部署验证」加进我的计划清单"}
+{"ambiguity_level": "clear", "expectation": "map", "expected_action": "todo_update", "id": "intent-020", "notes": "更新既有任务状态", "query": "把待办清单里第 3 条标记为已完成"}
+{"ambiguity_level": "clear", "expectation": "map", "expected_action": "todo_update", "id": "intent-021", "notes": "更新既有任务状态", "query": "周报那条任务改成进行中"}
+{"ambiguity_level": "clear", "expectation": "map", "expected_action": "todo_update", "id": "intent-022", "notes": "更新既有任务属性", "query": "给「回电话」这条任务加个高优先级"}
+{"ambiguity_level": "clear", "expectation": "map", "expected_action": "todo_read", "id": "intent-023", "notes": "读看板", "query": "看看我现在待办清单上都有什么"}
+{"ambiguity_level": "clear", "expectation": "map", "expected_action": "todo_read", "id": "intent-024", "notes": "读看板过滤未完成", "query": "我还有哪些没完成的任务"}
+{"ambiguity_level": "clear", "expectation": "map", "expected_action": "web_fetch", "id": "intent-025", "notes": "给定 URL 取内容", "query": "抓取 https://fastapi.tiangolo.com/docs/ 这个页面的正文"}
+{"ambiguity_level": "clear", "expectation": "map", "expected_action": "web_fetch", "id": "intent-026", "notes": "给定 URL 取内容", "query": "把 https://example.org/report 的内容拉下来"}
+{"ambiguity_level": "clear", "expectation": "map", "expected_action": "web_fetch", "id": "intent-027", "notes": "给定 URL 取内容", "query": "读取网页 https://docs.example.com/guide 并给我正文"}
+{"ambiguity_level": "clear", "expectation": "map", "expected_action": "web_search", "id": "intent-028", "notes": "无 URL 按关键词找资料", "query": "帮我搜一下 FastAPI 最新版本的发布说明"}
+{"ambiguity_level": "clear", "expectation": "map", "expected_action": "web_search", "id": "intent-029", "notes": "无 URL 搜索", "query": "网上查一下 pydantic v2 迁移指南"}
+{"ambiguity_level": "clear", "expectation": "map", "expected_action": "web_search", "id": "intent-030", "notes": "无 URL 搜索", "query": "搜索一下 ontology engineering 入门教程"}
+{"ambiguity_level": "clear", "expectation": "map", "expected_action": "run_terminal", "id": "intent-031", "notes": "明确命令执行请求（沙箱面）", "query": "在沙箱里执行 pytest -q 看看测试结果"}
+{"ambiguity_level": "clear", "expectation": "map", "expected_action": "run_terminal", "id": "intent-032", "notes": "明确 shell 命令", "query": "跑一下 ls -la 列一下当前目录"}
+{"ambiguity_level": "clear", "expectation": "map", "expected_action": "subagent_spawn", "id": "intent-033", "notes": "委派独立子任务=派生", "query": "派一个子代理去整理这份 50 页的报告"}
+{"ambiguity_level": "clear", "expectation": "map", "expected_action": "subagent_spawn", "id": "intent-034", "notes": "批量派生", "query": "让子任务分头处理这三个目录的文档"}
+{"ambiguity_level": "clear", "expectation": "map", "expected_action": "subagent_wait", "id": "intent-035", "notes": "取回派生结果", "query": "等子代理跑完，把结果取回来"}
+{"ambiguity_level": "clear", "expectation": "map", "expected_action": "subagent_interrupt", "id": "intent-036", "notes": "取消在途派生", "query": "取消正在跑的那个子代理任务"}
+{"ambiguity_level": "clear", "expectation": "map", "expected_action": "chat_answer", "id": "intent-037", "notes": "基于证据直接回答（不新增工具动作）", "query": "根据刚才检索到的证据，直接给我解释停电原因"}
+{"ambiguity_level": "clear", "expectation": "map", "expected_action": "chat_answer", "id": "intent-038", "notes": "直接问答", "query": "直接回答我：什么是本体工程"}
+{"ambiguity_level": "clear", "expectation": "map", "expected_action": "spill_get", "id": "intent-039", "notes": "spill 指针兑换原文（溢出续读面）", "query": "把刚才被截断的那篇文章的完整原文取回来"}
+{"ambiguity_level": "clear", "expectation": "map", "expected_action": "spill_get", "id": "intent-040", "notes": "spill 兑换", "query": "取回之前溢出存储的网页正文"}
+{"ambiguity_level": "ambiguous", "expectation": "map", "expected_action": "file_grep", "id": "intent-041", "notes": "问「有没有某内容」=按内容定位（grep），非通读", "query": "看看 requirements.txt 里装没装 redis"}
+{"ambiguity_level": "ambiguous", "expectation": "map", "expected_action": "file_read", "id": "intent-042", "notes": "要看内容段落=通读窗口（read），非关键词检索", "query": "帮我看下 CHANGELOG 最新的版本段写了什么"}
+{"ambiguity_level": "ambiguous", "expectation": "map", "expected_action": "file_grep", "id": "intent-043", "notes": "定位具体键值=grep；金标取定位语义（近义对：read）", "query": "config 里数据库地址是多少"}
+{"ambiguity_level": "ambiguous", "expectation": "map", "expected_action": "file_read", "id": "intent-044", "notes": "「通读+讲解」=read 全文", "query": "通读一遍 agent.py，给我讲讲结构"}
+{"ambiguity_level": "ambiguous", "expectation": "map", "expected_action": "file_grep", "id": "intent-045", "notes": "按内容搜索", "query": "找出所有包含 password 字样的配置"}
+{"ambiguity_level": "ambiguous", "expectation": "map", "expected_action": "file_glob", "id": "intent-046", "notes": "按文件名找=glob（内容检索是 grep——近义对题眼）", "query": "项目里有没有叫 bench 的文件"}
+{"ambiguity_level": "ambiguous", "expectation": "map", "expected_action": "file_grep", "id": "intent-047", "notes": "按内容找文件=grep", "query": "找找哪个文件里提到了 ontology"}
+{"ambiguity_level": "ambiguous", "expectation": "map", "expected_action": "file_glob", "id": "intent-048", "notes": "按模式列文件=glob", "query": "看看有哪些 yaml 配置文件"}
+{"ambiguity_level": "ambiguous", "expectation": "map", "expected_action": "file_grep", "id": "intent-049", "notes": "按内容甄别=grep", "query": "这几个 yaml 里哪个配了 redis"}
+{"ambiguity_level": "ambiguous", "expectation": "map", "expected_action": "file_glob", "id": "intent-050", "notes": "列文件名=glob", "query": "把 tests 目录下的文件都列出来"}
+{"ambiguity_level": "ambiguous", "expectation": "map", "expected_action": "file_grep", "id": "intent-051", "notes": "逐行内容检查=grep", "query": "检查一下代码里还有没有 print 调试语句"}
+{"ambiguity_level": "ambiguous", "expectation": "map", "expected_action": "file_edit", "id": "intent-052", "notes": "改既有文件=edit（write 是整文件覆盖写——近义对题眼）", "query": "把结论追加到 report.md 末尾"}
+{"ambiguity_level": "ambiguous", "expectation": "map", "expected_action": "file_edit", "id": "intent-053", "notes": "既有文件单点替换", "query": "文件里的日期写错了，把 10 月 3 日改成 10 月 8 日"}
+{"ambiguity_level": "ambiguous", "expectation": "map", "expected_action": "file_write", "id": "intent-054", "notes": "新文件整写", "query": "把这份分析结果保存成 summary.md"}
+{"ambiguity_level": "ambiguous", "expectation": "map", "expected_action": "file_write", "id": "intent-055", "notes": "整文件重写（overwrite 面）", "query": "result.txt 内容不对，重新生成一份完整的"}
+{"ambiguity_level": "ambiguous", "expectation": "map", "expected_action": "file_edit", "id": "intent-056", "notes": "精确替换既有段落", "query": "把方案文档里过时的架构描述替换成新版的"}
+{"ambiguity_level": "ambiguous", "expectation": "map", "expected_action": "file_write", "id": "intent-057", "notes": "整文件写入（新文件）", "query": "把最终结论写进 conclusion.txt"}
+{"ambiguity_level": "ambiguous", "expectation": "map", "expected_action": "todo_write", "id": "intent-058", "notes": "新增计划项", "query": "帮我记一下明天下午要开会"}
+{"ambiguity_level": "ambiguous", "expectation": "map", "expected_action": "todo_update", "id": "intent-059", "notes": "改既有项", "query": "把开会那条改成下午四点"}
+{"ambiguity_level": "ambiguous", "expectation": "map", "expected_action": "todo_read", "id": "intent-060", "notes": "读看板", "query": "我的任务都做完了吗"}
+{"ambiguity_level": "ambiguous", "expectation": "map", "expected_action": "todo_write", "id": "intent-061", "notes": "批量新增", "query": "再加两条待办：买服务器、续域名"}
+{"ambiguity_level": "ambiguous", "expectation": "map", "expected_action": "todo_update", "id": "intent-062", "notes": "更新既有项状态", "query": "把已完成的那几条任务归档掉"}
+{"ambiguity_level": "ambiguous", "expectation": "map", "expected_action": "todo_read", "id": "intent-063", "notes": "读看板", "query": "看下这周计划还剩几件事"}
+{"ambiguity_level": "ambiguous", "expectation": "map", "expected_action": "web_search", "id": "intent-064", "notes": "无 URL 找资料=search", "query": "查一下 RAG 会议论文都有哪些经典的"}
+{"ambiguity_level": "ambiguous", "expectation": "map", "expected_action": "web_fetch", "id": "intent-065", "notes": "给定 URL 取内容=fetch（搜索近义对题眼）", "query": "打开 https://arxiv.org/abs/2005.11401 看下摘要"}
+{"ambiguity_level": "ambiguous", "expectation": "map", "expected_action": "web_search", "id": "intent-066", "notes": "无 URL 搜索", "query": "网上有没有 ontology-agent 平台的介绍资料"}
+{"ambiguity_level": "ambiguous", "expectation": "map", "expected_action": "web_fetch", "id": "intent-067", "notes": "给定 URL 抓取", "query": "把 https://example.com/spec 这个页面的表格抓下来"}
+{"ambiguity_level": "ambiguous", "expectation": "map", "expected_action": "subagent_spawn", "id": "intent-068", "notes": "委派独立子任务=spawn（确定性计算走 terminal——近义对题眼）", "query": "让一个助手分头去把两个目录的文档都总结一遍"}
+{"ambiguity_level": "ambiguous", "expectation": "map", "expected_action": "run_terminal", "id": "intent-069", "notes": "确定性命令（wc -l）=沙箱执行", "query": "统计一下代码总行数"}
+{"ambiguity_level": "ambiguous", "expectation": "map", "expected_action": "spill_get", "id": "intent-070", "notes": "溢出指针兑换（非工作区文件——近义对题眼）", "query": "刚才那篇长文被截断了，把剩余部分给我"}
+{"ambiguity_level": "need_clarification", "expectation": "clarify", "expected_action": "ask_user", "id": "intent-071", "notes": "目标文件与改动内容均未给出——信息不足应澄清", "query": "帮我改一下那个文件"}
+{"ambiguity_level": "need_clarification", "expectation": "clarify", "expected_action": "ask_user", "id": "intent-072", "notes": "「记录」对象与整理目标不明", "query": "把上周的记录整理一下"}
+{"ambiguity_level": "need_clarification", "expectation": "clarify", "expected_action": "ask_user", "id": "intent-073", "notes": "未指明配置项与目标值", "query": "更新一下配置"}
+{"ambiguity_level": "need_clarification", "expectation": "clarify", "expected_action": "ask_user", "id": "intent-074", "notes": "搜索范围与关键词均不明", "query": "搜一下那个报错"}
+{"ambiguity_level": "need_clarification", "expectation": "clarify", "expected_action": "ask_user", "id": "intent-075", "notes": "文档主题/内容/落点全部缺失", "query": "帮我写个文档"}
+{"ambiguity_level": "need_clarification", "expectation": "clarify", "expected_action": "ask_user", "id": "intent-076", "notes": "执行对象与命令不明", "query": "把那个东西跑一下"}
+{"ambiguity_level": "need_clarification", "expectation": "clarify", "expected_action": "ask_user", "id": "intent-077", "notes": "缺 URL", "query": "看看网页"}
+{"ambiguity_level": "need_clarification", "expectation": "clarify", "expected_action": "ask_user", "id": "intent-078", "notes": "未指明哪条任务改成什么状态", "query": "把任务状态改一下"}
+{"ambiguity_level": "need_clarification", "expectation": "clarify", "expected_action": "ask_user", "id": "intent-079", "notes": "查询主题缺失", "query": "查一下资料"}
+{"ambiguity_level": "need_clarification", "expectation": "clarify", "expected_action": "ask_user", "id": "intent-080", "notes": "未指明文件路径", "query": "读一下文件"}
+{"ambiguity_level": "need_clarification", "expectation": "clarify", "expected_action": "ask_user", "id": "intent-081", "notes": "对象与清理动作均不明（且无删除行动类，须澄清意图）", "query": "清理一下没用的东西"}
+{"ambiguity_level": "need_clarification", "expectation": "clarify", "expected_action": "ask_user", "id": "intent-082", "notes": "存哪/存什么未指明", "query": "把结果存一下"}
+{"ambiguity_level": "need_clarification", "expectation": "clarify", "expected_action": "ask_user", "id": "intent-083", "notes": "补充方向不明", "query": "再多搜点相关的东西"}
+{"ambiguity_level": "need_clarification", "expectation": "clarify", "expected_action": "ask_user", "id": "intent-084", "notes": "盯哪个句柄/盯什么未指明", "query": "帮我盯着子任务"}
+{"ambiguity_level": "need_clarification", "expectation": "clarify", "expected_action": "ask_user", "id": "intent-085", "notes": "缺 URL", "query": "把那个链接打开看看"}
+{"ambiguity_level": "need_clarification", "expectation": "clarify", "expected_action": "ask_user", "id": "intent-086", "notes": "文件与缺陷描述均缺失", "query": "修一下代码里那个 bug"}
+{"ambiguity_level": "need_clarification", "expectation": "clarify", "expected_action": "ask_user", "id": "intent-087", "notes": "完全无可执行信息", "query": "把东西都准备好"}
+{"ambiguity_level": "need_clarification", "expectation": "clarify", "expected_action": "ask_user", "id": "intent-088", "notes": "安排什么/何时全部缺失", "query": "帮我安排一下"}
+{"ambiguity_level": "need_clarification", "expectation": "clarify", "expected_action": "ask_user", "id": "intent-089", "notes": "「上次」无引用上下文，任务不明", "query": "接着上次的继续"}
+{"ambiguity_level": "need_clarification", "expectation": "clarify", "expected_action": "ask_user", "id": "intent-090", "notes": "「这些」指代不明", "query": "把这些都处理了"}
+{"ambiguity_level": "out_of_scope", "expectation": "reject", "expected_action": null, "id": "intent-091", "notes": "平台 17 静态行动类无 deploy；最近亦无——应拒（或极低置信映射 run_terminal）", "query": "帮我把这个服务部署到生产环境"}
+{"ambiguity_level": "out_of_scope", "expectation": "reject", "expected_action": null, "id": "intent-092", "notes": "无 email 行动类——应拒（最近无）", "query": "给我发封邮件通知老板"}
+{"ambiguity_level": "out_of_scope", "expectation": "reject", "expected_action": null, "id": "intent-093", "notes": "无日历/预订行动类——应拒", "query": "帮我订明天下午的会议室"}
+{"ambiguity_level": "out_of_scope", "expectation": "reject", "expected_action": null, "id": "intent-094", "notes": "无翻译行动类；最近为 chat_answer（基于证据问答≠翻译）——映射须低置信", "query": "把这段话翻译成英文"}
+{"ambiguity_level": "out_of_scope", "expectation": "reject", "expected_action": null, "id": "intent-095", "notes": "无绘图行动类；最近为 chat_answer——映射须低置信", "query": "画一张系统架构图"}
+{"ambiguity_level": "out_of_scope", "expectation": "reject", "expected_action": null, "id": "intent-096", "notes": "fs 族无删除行动类（read/write/edit/glob/grep）——应拒", "query": "把 tmp 目录整个删掉"}
+{"ambiguity_level": "out_of_scope", "expectation": "reject", "expected_action": null, "id": "intent-097", "notes": "无支付行动类——应拒", "query": "帮我付款续费域名"}
+{"ambiguity_level": "out_of_scope", "expectation": "reject", "expected_action": null, "id": "intent-098", "notes": "无监控告警行动类——应拒", "query": "监控线上流量异常并告警"}
+{"ambiguity_level": "out_of_scope", "expectation": "reject", "expected_action": null, "id": "intent-099", "notes": "无训练行动类——应拒", "query": "把知识库模型重新训练一遍"}
+{"ambiguity_level": "out_of_scope", "expectation": "reject", "expected_action": null, "id": "intent-100", "notes": "无语音行动类——应拒", "query": "把这段录音转成文字"}

@@ -1,0 +1,128 @@
+{
+  "generated_at": "2026-10-04T22:10:28.679750+00:00",
+  "base_url": "http://127.0.0.1:18001/v1",
+  "model": "local-main",
+  "corpus": [
+    "d00",
+    "d03",
+    "d06"
+  ],
+  "documents": 3,
+  "structural": {
+    "facts_total": 119,
+    "facts_candidate": 74,
+    "facts_rejected": 45,
+    "subjects": 65,
+    "tickets_knowledge_instance": 119,
+    "ticket_coverage": 1.0,
+    "align_aligned": 80,
+    "align_needs_review": 39,
+    "chunk_refs": {
+      "total": 11,
+      "resolved": 11,
+      "dangling": 0,
+      "dangling_refs": []
+    },
+    "gate_aggregate": {
+      "hit": 74,
+      "miss": 45,
+      "absent": 0,
+      "known_gap": 0,
+      "total": 119,
+      "precision": 0.6218487394957983,
+      "recall": 0.6218487394957983,
+      "f1": 0.6218487394957983
+    }
+  },
+  "calibration_confidence_vs_gate": {
+    "total": 119,
+    "confidence_missing": 0,
+    "bins": [
+      {
+        "bin": "0.0-0.1",
+        "total": 0,
+        "correct": 0,
+        "precision": null,
+        "avg_confidence": null
+      },
+      {
+        "bin": "0.1-0.2",
+        "total": 0,
+        "correct": 0,
+        "precision": null,
+        "avg_confidence": null
+      },
+      {
+        "bin": "0.2-0.3",
+        "total": 0,
+        "correct": 0,
+        "precision": null,
+        "avg_confidence": null
+      },
+      {
+        "bin": "0.3-0.4",
+        "total": 0,
+        "correct": 0,
+        "precision": null,
+        "avg_confidence": null
+      },
+      {
+        "bin": "0.4-0.5",
+        "total": 0,
+        "correct": 0,
+        "precision": null,
+        "avg_confidence": null
+      },
+      {
+        "bin": "0.5-0.6",
+        "total": 0,
+        "correct": 0,
+        "precision": null,
+        "avg_confidence": null
+      },
+      {
+        "bin": "0.6-0.7",
+        "total": 6,
+        "correct": 6,
+        "precision": 1.0,
+        "avg_confidence": 0.7
+      },
+      {
+        "bin": "0.7-0.8",
+        "total": 0,
+        "correct": 0,
+        "precision": null,
+        "avg_confidence": null
+      },
+      {
+        "bin": "0.8-0.9",
+        "total": 19,
+        "correct": 19,
+        "precision": 1.0,
+        "avg_confidence": 0.8079
+      },
+      {
+        "bin": "0.9-1.0",
+        "total": 94,
+        "correct": 49,
+        "precision": 0.5213,
+        "avg_confidence": 0.9064
+      }
+    ],
+    "ece": 0.35,
+    "true_positives": 74,
+    "false_positives": 45
+  },
+  "known_gaps": [
+    {
+      "doc_id": "01a108c8-1d17-78d2-9ad9-04377ff121c6",
+      "step": "extract",
+      "error_class": "model_output_invalid",
+      "error": "ModelGatewayOutputInvalidError: 输出非合法 JSON: Unterminated string starting at: line 2149 column 15 (char 52513)",
+      "reason": "本机 4B 模型在叙事密集 chunk 复读失控（截断 JSON），生产 3 次重试语义耗尽"
+    }
+  ],
+  "docs_completed": 2,
+  "docs_failed_model_capability": 1,
+  "notes": "两组数字：structural=结构面产出与完整性；calibration=自报置信度×门禁结论 proxy 校准（正类=过 SHACL+证据门禁，非金标命中——v2 模板类级抽取与实例三元组金标口径不同源，poc2_calibration.py 头注同款口径注记）"
+}

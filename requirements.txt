@@ -1,1 +1,19 @@
 pytest>=7.0
+fastmcp>=2.12.5,<3  # 4.x 需 starlette>=1.0 与 fastapi starlette<0.51 冲突——禁解锁
+fastapi>=0.115
+uvicorn[standard]>=0.30
+alembic>=1.13
+sqlalchemy[asyncio]>=2.0  # asyncio extra 拉 greenlet（与 pyproject 同步）
+psycopg[binary]>=3.1
+pydantic>=2.7
+pydantic-settings>=2.2
+redis>=5,<6  # <6 上限随 arq 元数据显式落声明（与 pyproject 同步；ocr 16f32b1b）
+arq>=0.28,<1  # memory 域分布式任务队列（<1 防 0.x 小版本隐式破坏；与 pyproject 同步）
+uuid-utils>=0.12
+pyjwt>=2.8
+docker>=7.1
+rdflib>=7
+pyshacl>=0.26
+httpx>=0.27
+pgvector>=0.3
+click>=8.1  # services/cli oa CLI（Click 命令框架）

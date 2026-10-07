@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>样式库预览 · frontend/src/design-system/styles</title>
+<!-- 直接加载真实样式库（冒烟验收：改动任一 css 后打开本页核对） -->
+<link rel="stylesheet" href="./index.css">
+<style>
+  body{font-family:var(--font);background:var(--bg);color:var(--label);-webkit-font-smoothing:antialiased;
+    max-width:1080px;margin:0 auto;padding:32px 24px 80px;font-size:14px}
+  h1{font-size:24px;font-weight:700;letter-spacing:-.4px;margin-bottom:4px}
+  .sub{font-size:12px;color:var(--label-2);margin-bottom:24px}
+  h2{font-size:15px;font-weight:700;margin:28px 0 12px}
+  .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px}
+</style>
+</head>
+<body>
+<h1>样式库预览</h1>
+<p class="sub">frontend/src/design-system/styles · 令牌 → 玻璃 → 基元 → 模式 → 工具类 · 亮暗切换：<button class="btn btn-g btn-sm" onclick="document.documentElement.classList.toggle('dark')">切换亮 / 暗</button></p>
+
+<h2>按钮 Buttons</h2>
+<div class="row">
+  <button class="btn btn-p">新建本体</button><button class="btn btn-s">导入文档</button>
+  <button class="btn btn-g">取消</button><button class="btn btn-d">删除项目</button>
+  <button class="btn btn-gl">玻璃操作</button><button class="btn btn-gl-p">玻璃主操作</button>
+  <button class="btn btn-dis">已禁用</button>
+</div>
+
+<h2>输入 / 徽标 / 分段</h2>
+<div class="grid">
+  <div class="card">
+    <div class="field"><label class="field-label">实体类型名称</label><input class="input" placeholder="Standard"></div>
+    <div class="field" style="margin:0"><label class="field-label">校验失败态</label><input class="input err" value="Standrd"><div class="field-err">术语唯一性校验失败：已存在近似术语 Standard（0.96）</div></div>
+  </div>
+  <div class="card">
+    <div class="row" style="margin-bottom:14px">
+      <span class="badge b-green">已发布</span><span class="badge b-orange">审核中</span>
+      <span class="badge b-red">已驳回</span><span class="badge b-blue">官方认证</span>
+      <span class="badge b-purple">重型本体</span><span class="badge b-gray">草稿</span>
+    </div>
+    <div class="row" style="margin-bottom:14px">
+      <div class="seg"><button class="seg-btn on">全部</button><button class="seg-btn">已发布</button><button class="seg-btn">草稿</button></div>
+    </div>
+    <div class="row"><span class="dot d-green"></span><span class="dot d-orange"></span><span class="dot d-red"></span><span class="kbd">⌘</span><span class="kbd">K</span><span class="ev-chip">GB/T 31486-2024 · §6.2.3</span></div>
+  </div>
+</div>
+
+<h2>玻璃材质（控制/导航层专用）</h2>
+<div class="row">
+  <div class="glass" style="border-radius:var(--r-card);padding:14px 18px;width:300px">
+    <b style="font-size:13px">Regular 面板</b><p class="text-dim" style="font-size:12px;margin-top:4px">侧边栏 / 顶栏 / 对话框 / 输入栏</p>
+  </div>
+  <div class="glass-clear" style="border-radius:var(--r-pill);padding:10px 16px;display:flex;gap:8px;align-items:center">
+    <span class="text-dim" style="font-size:12px">Clear 悬浮工具条</span><button class="btn btn-p btn-sm">运行</button>
+  </div>
+  <div class="term"><span class="ps">$</span><span>oa ontology validate battery-std</span><span class="term-copy">复制</span></div>
+</div>
+
+<h2>模式：命令面板 / 数据表 / 轨迹 / 时间线</h2>
+<div class="grid">
+  <div class="glass cmdk">
+    <div class="cmdk-input"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="11" cy="11" r="6.5"/><path d="m20 20-4.4-4.4"/></svg>
+      <span class="text-faint" style="font-size:13px">搜索页面、本体类、工具…</span></div>
+    <div class="cmdk-list">
+      <div class="cmdk-group">页面</div>
+      <div class="cmdk-item on">本体工作台 · 动力电池标准本体<span class="sub">↵</span></div>
+      <div class="cmdk-item">抽取审核台 · 待审 41<span class="sub">G R</span></div>
+      <div class="cmdk-group">操作</div>
+      <div class="cmdk-item">新建对话<span class="sub">⌘ N</span></div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="traj-item"><span class="traj-badge system">系统</span><span class="text-dim">任务模板已注入（prompt v12）</span></div>
+    <div class="traj-item"><span class="traj-badge user">用户</span><span>对比 31486 与 36276…</span></div>
+    <div class="traj-item"><span class="traj-badge tool">工具</span><span class="text-dim">knowledge.search → 6 实体</span></div>
+    <div class="traj-item"><span class="traj-badge subagent">子Agent</span><span class="text-dim">条款抽取并行 ×2</span></div>
+    <div class="traj-item"><span class="traj-badge context">上下文</span><span class="text-dim">L2 记忆召回 1 条</span></div>
+    <div style="margin-top:12px">
+      <div class="text-dim" style="font-size:11px;margin-bottom:5px">Token 预算</div>
+      <div class="meter" style="height:8px"><i style="width:62%"></i></div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="tl">
+      <div class="tl-item"><span class="tl-dot" style="background:var(--green)"></span>
+        <div class="tl-c" style="padding:8px 12px">版本 v1.4.0 发布 · SHACL 0 违规<div class="tl-meta">8 分钟前</div></div></div>
+      <div class="tl-item" style="padding-bottom:0"><span class="tl-dot" style="background:var(--orange)"></span>
+        <div class="tl-c" style="padding:8px 12px">CL-014 变更请求待审<div class="tl-meta">1 小时前</div></div></div>
+    </div>
+    <div class="diffline del" style="margin-top:12px">- gb:CycleLife500 rdfs:label "500次循环寿命"</div>
+    <div class="diffline add">+ gb:CycleLife rdfs:label "循环寿命"</div>
+  </div>
+</div>
+
+<h2>步骤条 / 上传 / 批量条 / 空态</h2>
+<div class="card">
+  <div class="steps" style="margin-bottom:16px">
+    <div class="step done"><span class="s-dot">✓</span><span class="s-name">预处理</span></div>
+    <div class="step done"><span class="s-dot">✓</span><span class="s-name">批量抽取</span></div>
+    <div class="step cur"><span class="s-dot"></span><span class="s-name">人工归档</span></div>
+  </div>
+  <div class="upzone">拖拽文件到此处，或 <span style="color:var(--accent);font-weight:600">浏览</span></div>
+  <div class="empty" style="padding:24px">
+    <span class="t">还没有本体项目</span><span class="d">从一份领域文档开始，七步构建可推理的业务本体</span>
+    <div class="acts"><button class="btn btn-p btn-sm">新建本体项目</button><button class="btn btn-g btn-sm">导入文档</button></div>
+  </div>
+  <!-- 生产用法：置于滚动容器内 position:sticky 吸底；此处静态演示外观 -->
+  <div class="batchbar" style="position:static;margin-top:14px">已选 <b>1</b> 项<button class="btn btn-p btn-sm">批量通过</button><button class="btn btn-g btn-sm">驳回</button></div>
+</div>
+
+<h2>Tooltip + ECharts 色板（theme.ts 同源）</h2>
+<div class="grid">
+  <div class="card">
+    <div class="text-dim" style="font-size:11px;margin-bottom:10px">Tooltip（patterns.css .tooltip，hover 查看；React 基元 = components/tooltip.tsx，另支持下方方位 / focus / Esc）</div>
+    <div class="row" style="gap:16px">
+      <span class="tooltip"><button class="btn btn-g btn-sm">悬停我</button><span class="tip">SHACL 校验通过 · 0 违规</span></span>
+      <span class="tooltip"><span class="badge b-blue" style="cursor:help">GB/T 31486</span><span class="tip">国家标准 · 动力电池循环寿命要求</span></span>
+    </div>
+  </div>
+  <div class="card">
+    <div class="text-dim" style="font-size:11px;margin-bottom:8px">ECharts 分类色板（echartsTheme / echartsThemeDark.color，序 1~6 为 palette 稳定序，7~8 补 red / label-3）</div>
+    <div class="row" style="margin-bottom:10px">
+      <span style="display:inline-flex;align-items:center;gap:4px;font-size:10px;color:var(--label-2)"><i style="width:14px;height:14px;border-radius:4px;background:#0071e3"></i>0071e3</span>
+      <span style="display:inline-flex;align-items:center;gap:4px;font-size:10px;color:var(--label-2)"><i style="width:14px;height:14px;border-radius:4px;background:#30b0c7"></i>30b0c7</span>
+      <span style="display:inline-flex;align-items:center;gap:4px;font-size:10px;color:var(--label-2)"><i style="width:14px;height:14px;border-radius:4px;background:#af52de"></i>af52de</span>
+      <span style="display:inline-flex;align-items:center;gap:4px;font-size:10px;color:var(--label-2)"><i style="width:14px;height:14px;border-radius:4px;background:#34c759"></i>34c759</span>
+      <span style="display:inline-flex;align-items:center;gap:4px;font-size:10px;color:var(--label-2)"><i style="width:14px;height:14px;border-radius:4px;background:#ff9500"></i>ff9500</span>
+      <span style="display:inline-flex;align-items:center;gap:4px;font-size:10px;color:var(--label-2)"><i style="width:14px;height:14px;border-radius:4px;background:#5856d6"></i>5856d6</span>
+      <span style="display:inline-flex;align-items:center;gap:4px;font-size:10px;color:var(--label-2)"><i style="width:14px;height:14px;border-radius:4px;background:#ff3b30"></i>ff3b30</span>
+      <span style="display:inline-flex;align-items:center;gap:4px;font-size:10px;color:var(--label-2)"><i style="width:14px;height:14px;border-radius:4px;background:#aeaeb2"></i>aeaeb2</span>
+    </div>
+    <div class="row" style="background:#1c1c1e;border-radius:8px;padding:8px 10px">
+      <span style="display:inline-flex;align-items:center;gap:4px;font-size:10px;color:#a1a1a6"><i style="width:14px;height:14px;border-radius:4px;background:#0a84ff"></i>0a84ff</span>
+      <span style="display:inline-flex;align-items:center;gap:4px;font-size:10px;color:#a1a1a6"><i style="width:14px;height:14px;border-radius:4px;background:#40c8e0"></i>40c8e0</span>
+      <span style="display:inline-flex;align-items:center;gap:4px;font-size:10px;color:#a1a1a6"><i style="width:14px;height:14px;border-radius:4px;background:#bf5af2"></i>bf5af2</span>
+      <span style="display:inline-flex;align-items:center;gap:4px;font-size:10px;color:#a1a1a6"><i style="width:14px;height:14px;border-radius:4px;background:#30d158"></i>30d158</span>
+      <span style="display:inline-flex;align-items:center;gap:4px;font-size:10px;color:#a1a1a6"><i style="width:14px;height:14px;border-radius:4px;background:#ff9f0a"></i>ff9f0a</span>
+      <span style="display:inline-flex;align-items:center;gap:4px;font-size:10px;color:#a1a1a6"><i style="width:14px;height:14px;border-radius:4px;background:#7d7aff"></i>7d7aff</span>
+      <span style="display:inline-flex;align-items:center;gap:4px;font-size:10px;color:#a1a1a6"><i style="width:14px;height:14px;border-radius:4px;background:#ff453a"></i>ff453a</span>
+      <span style="display:inline-flex;align-items:center;gap:4px;font-size:10px;color:#a1a1a6"><i style="width:14px;height:14px;border-radius:4px;background:#636366"></i>636366</span>
+    </div>
+  </div>
+</div>
+
+<p class="sub" style="margin-top:32px">样式库 v1.2 · 全部类名与设计稿画板同源 · 验收：23 篇 DoD · 详见 docs/架构设计/24 篇</p>
+
+<h2>效果 Effects（v1.4 · Magic UI 模式令牌化）</h2>
+<div class="grid">
+  <div class="card bg-dots" style="height:120px;position:relative;overflow:hidden"></div>
+  <div class="card bg-grid bg-fade-radial" style="height:120px;position:relative;overflow:hidden"></div>
+  <div class="card" style="height:120px;display:flex;align-items:center;justify-content:center">
+    <b class="text-shimmer" style="font-size:18px;letter-spacing:-.2px">本体推理引擎持续运行</b>
+  </div>
+  <div class="card beam-border" style="height:120px;overflow:hidden">
+    <b style="font-size:13px">边框光束 · 进行中</b>
+    <div style="font-size:12px;color:var(--label-2);margin-top:6px">重点容器/长任务卡可用；6s 一周</div>
+  </div>
+</div>
+
+<h2>空状态 Empty（v1.4 · EmptyState 基元同源）</h2>
+<div class="grid">
+  <div class="card" style="min-height:180px;display:flex;align-items:center;justify-content:center">
+    <div class="empty">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg>
+      <div class="t">暂无待审候选</div>
+      <div class="d">抽取完成或调整筛选条件后，候选将出现在左侧队列。</div>
+      <div class="acts"><button class="btn btn-s btn-sm">去知识库</button></div>
+    </div>
+  </div>
+  <div class="card" style="min-height:180px;display:flex;align-items:center;justify-content:center">
+    <div class="empty sm">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/><line x1="8" x2="14" y1="11" y2="11"/></svg>
+      <div class="t">无匹配会话</div>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>

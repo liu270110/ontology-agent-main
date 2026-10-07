@@ -1,0 +1,115 @@
+/* =============================================================
+   ontology-agent 设计令牌 v1.2 —— 全站唯一颜色/字体/圆角/阴影事实源
+   依据：docs/架构设计/03 篇 §2（液态玻璃 + 分辨率适配）
+   规则：组件只消费本文件变量；新增令牌必须先改这里（23 篇铁律 1）
+   落位：03 篇 §2.5 / 16 篇 L0（tokens/ 三件套之 CSS 部分）
+   ============================================================= */
+:root{
+  /* 表面与文字 */
+  --bg:#f5f5f7;
+  --surface:#ffffff;
+  --surface-2:#fbfbfd;
+  --material:rgba(255,255,255,.72);          /* 兼容别名：逐步并入 glass 系 */
+  --label:#1d1d1f;
+  --label-2:#6e6e73;
+  --label-3:#aeaeb2;
+  --separator:rgba(0,0,0,.08);
+
+  /* 强调与语义 */
+  --accent:#0071e3;
+  --on-accent:#ffffff;                  /* 强调色上的文字（不随主题变） */
+  --accent-soft:rgba(0,113,227,.12);         /* 兼容别名：= --accent-a5 */
+  --green:#34c759;  --green-soft:rgba(52,199,89,.14);
+  --red:#ff3b30;    --red-soft:rgba(255,59,48,.12);
+  --orange:#ff9500; --orange-soft:rgba(255,149,0,.14);
+  --purple:#af52de; --purple-soft:rgba(175,45,222,.12);
+  --teal:#30b0c7;   --teal-soft:rgba(48,176,199,.14);
+  --indigo:#5856d6; --indigo-soft:rgba(88,86,214,.12);
+
+  /* 液态玻璃（03 篇 §2.2/§3.0） */
+  --glass-regular:rgba(255,255,255,.52);     /* Regular：承载文字的浮层 */
+  --glass-clear:rgba(255,255,255,.38);       /* Clear：悬浮控件 */
+  --glass-tint:rgba(255,255,255,.28);        /* 折射渐变着色 */
+  --glass-hi:rgba(255,255,255,.65);          /* 顶部镜面高光 */
+  --glass-lo:rgba(0,0,0,.08);                /* 底部内阴影 */
+  --glass-border:rgba(255,255,255,.7);
+
+  /* Aurora 极光/幻彩/追光（液态玻璃进阶效果） */
+  --aurora-1:rgba(10,132,255,.5);
+  --aurora-2:rgba(88,86,214,.38);
+  --aurora-3:rgba(48,176,199,.45);
+  --spotlight:rgba(255,255,255,.35);
+  --glass-tinted:rgba(0,113,227,.78);       /* Tinted：强调色着色玻璃（主操作/选中，iOS 26） */
+  --glass-tinted-border:rgba(255,255,255,.4);
+  --glass-halo:rgba(255,255,255,.55);        /* Clear 档文字光晕（三档纪律：Clear 上文字加 text-shadow 承托） */
+
+  /* 几何 / 阴影 / 动效 / 字体 */
+  --r-card:18px; --r-panel:14px; --r-ctl:10px; --r-pill:999px;
+  --sh-card:0 2px 8px rgba(0,0,0,.04),0 8px 24px rgba(0,0,0,.06);
+  --sh-float:0 4px 12px rgba(0,0,0,.06),0 16px 48px rgba(0,0,0,.12);
+  --glow-accent:0 0 0 1px var(--glass-border),0 8px 32px var(--accent-soft);
+  --ease:cubic-bezier(.25,.1,.25,1);
+  --spring:cubic-bezier(.34,1.3,.64,1);
+  --spring-soft:linear(0,0.0088,0.0347,0.0766,0.1327,0.2007,0.278,0.3616,0.4479,0.5339,0.6168,0.6938,0.763,0.8229,0.8724,0.9113,0.9397,0.9584,0.9688,0.9742,0.977,0.9789,0.9807,0.9836,0.9882,0.9941,1); /* linear() 物理弹簧，overshoot≤5% */
+  --expo-out:cubic-bezier(.16,1,.3,1); /* Linear 标志曲线 */
+  --z-nav:50; --z-tip:60; --z-modal:100; --z-popover:120; --z-toast:200;
+  --dur-1:150ms;   /* 微交互：hover/按下/焦点 */
+  --dur-2:250ms;   /* 标准过渡：面板/抽屉/淡入 */
+  --dur-3:400ms;   /* 强调入场：弹窗/页面块 */
+  --dur-4:700ms;   /* 环境动效：光扫/漂移（仅氛围，不承载信息） */
+  --font:-apple-system,"SF Pro Display","SF Pro Text","PingFang SC","HarmonyOS Sans SC","Microsoft YaHei UI","Microsoft YaHei",sans-serif;
+  --mono:"SF Mono","JetBrains Mono",ui-monospace,Consolas,monospace;
+
+  /* 布局令牌（03 篇 §2.6：禁止硬编码三栏尺寸） */
+  --sb-w:208px;                              /* 侧边栏 lg 以下 72px / md 抽屉，由实现层切换 */
+  --topbar-h:52px;
+  --edge:rgba(0,0,0,.18);                    /* 图谱连线 */
+  color-scheme:light;
+}
+.dark{
+  --bg:#000000;
+  --surface:#1c1c1e;
+  --surface-2:#2c2c2e;
+  --material:rgba(28,28,30,.72);
+  --label:#f5f5f7;
+  --label-2:#a1a1a6;
+  --label-3:#636366;
+  --separator:rgba(255,255,255,.12);
+  --accent:#0a84ff;
+  --on-accent:#ffffff;
+  --accent-soft:rgba(10,132,255,.2);
+  --green:#30d158;  --green-soft:rgba(48,209,88,.2);
+  --red:#ff453a;    --red-soft:rgba(255,69,58,.18);
+  --orange:#ff9f0a; --orange-soft:rgba(255,159,10,.2);
+  --purple:#bf5af2; --purple-soft:rgba(191,90,242,.18);
+  --teal:#40c8e0;   --teal-soft:rgba(64,200,224,.18);
+  --indigo:#7d7aff; --indigo-soft:rgba(125,122,255,.2);
+  --glass-regular:rgba(28,28,30,.62);
+  --glass-clear:rgba(44,44,46,.38);
+  --glass-tint:rgba(255,255,255,.08);
+  --glass-hi:rgba(255,255,255,.22);
+  --glass-lo:rgba(0,0,0,.3);
+  --glass-border:rgba(255,255,255,.14);
+  --glass-tinted:rgba(10,132,255,.6);
+  --glass-tinted-border:rgba(255,255,255,.25);
+  --glass-halo:rgba(0,0,0,.6);
+  /* Aurora/追光暗色成对（audit「亮暗成对」）：色相跟随 .dark 已有的 accent/indigo/teal
+     暗变体，透明度较亮色收敛——黑底上等值发光会过曝；spotlight 白光 .35→.16 防眩 */
+  --aurora-1:rgba(10,132,255,.42);
+  --aurora-2:rgba(125,122,255,.34);
+  --aurora-3:rgba(64,200,224,.4);
+  --spotlight:rgba(255,255,255,.16);
+  --sh-card:0 2px 8px rgba(0,0,0,.3),0 8px 24px rgba(0,0,0,.35);
+  --sh-float:0 4px 12px rgba(0,0,0,.4),0 16px 48px rgba(0,0,0,.55);
+  --edge:rgba(255,255,255,.22);
+  color-scheme:dark;
+}
+/* 轨迹/审计来源着色（24 篇 §4.5，三处共用：轨迹、审计、通知） */
+:root{
+  --src-system:var(--indigo);
+  --src-user:var(--accent);
+  --src-tool:var(--teal);
+  --src-subagent:var(--purple);
+  --src-context:var(--orange);
+  --src-assistant:var(--green);
+}

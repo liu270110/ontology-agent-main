@@ -1,0 +1,24 @@
+/* =============================================================
+   令牌 → shadcn/ui 变量映射（三件套之一；值全部引用 tokens.css，
+   亮暗随 .dark 自动切换，勿在此写死色值）
+   ============================================================= */
+:root{
+  --background:var(--bg);
+  --foreground:var(--label);
+  --card:var(--surface);
+  --card-foreground:var(--label);
+  --popover:var(--surface);
+  --popover-foreground:var(--label);
+  --primary:var(--accent);
+  --primary-foreground:var(--on-accent);
+  --secondary:var(--surface-2);
+  --secondary-foreground:var(--label);
+  --muted:var(--surface-2);
+  --muted-foreground:var(--label-2);
+  --destructive:var(--red);
+  --destructive-foreground:var(--on-accent);
+  --border:var(--separator);
+  --input:var(--separator);
+  --ring:var(--accent);
+  --radius:var(--r-ctl);
+}

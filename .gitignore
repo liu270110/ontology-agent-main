@@ -14,6 +14,10 @@ venv/
 .mypy_cache/
 .coverage
 htmlcov/
+# U-③a 门禁完整输出日志（u3a_gate.py 每次运行覆盖，本地诊断用）
+.u3a_gate_last.log
+# ONT-1 门禁完整输出日志（ont1_gate.py 同款纪律）
+.ont1_gate_last.log
 
 # IDE
 .idea/
@@ -27,3 +31,44 @@ Thumbs.db
 # 本地数据
 *.db
 *.sqlite3
+
+# 参考项目区：只读研究用，绝不入库（2026-09-26 用户裁决）
+ods-project/
+
+# 凭据与密钥（架构 07 §6.2 / 架构设计 14 §5：仅本地，绝不入库）
+.env
+.env.local
+.env.test
+deploy/.env
+docker/.env
+*.pem
+*.key
+credentials*
+
+# 文档本地化（2026-09-27 用户指令：docs/ 仅本地保留，不上传）
+docs/
+.backup_module_axis/
+
+.qa_*
+# 会话与临时产物（2026-09-28）
+.zcode/
+node_modules/
+_patch_*.py
+.pytest_cache/
+
+# ORSI G0/G1 缺口轨本地留痕（B9/B10 批：JSONL 事件/工单文件态，PG rsi_proposals 随改表流程批次）
+.orsi-g0/
+.orsi-g1/
+.scratch-g1/
+
+# 客户样图目录（含图纸 PDF），永不入库（锚定注释保留原语义；模块轴 data 层反豁免见下）
+data/
+# 模块轴裁决（2026-09-27）：每模块 data/=仓储层（services/<m>/data）必须入库——
+# 反豁免模块 data 层（M4.6-S3 起 services/rsi/data 即将被误伤的实例；plugin/kb 先行落库未中招）
+!services/*/data/
+
+# 旧 tools/ 路径本地残留（已迁 services/devtools/）：训练运行产物不入库
+tools/onto-train/runs/
+
+# S2 技能集市模块源码层（services/skills/data 为 Python data 层，非客户样图数据目录）
+!services/skills/data/

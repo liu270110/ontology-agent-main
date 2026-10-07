@@ -1,0 +1,26 @@
+{
+  "poc": "PoC⑥-full",
+  "ran_at": "2026-09-29T07:07:02",
+  "neo4j_load": "N/A（lite 部署档无 Neo4j；full 档上线补测）",
+  "projection": {
+    "triples": 1455,
+    "cold_build_ms": 21.9,
+    "warm_cache_ms": 26.2,
+    "cache_target_hit_rate": 1.0
+  },
+  "equivalence": {
+    "incremental_triples": 1470,
+    "full_rebuild_triples": 1470,
+    "identical": true,
+    "isomorphic": true,
+    "raw_diff_only_bnode_labels": true,
+    "raw_only_in_incremental": 20,
+    "raw_only_in_full": 20,
+    "note": "等价=同构比较（BNode 规范化）；原始三元组集合逐字相等不适用于含匿名形状的图"
+  },
+  "focus_node": {
+    "delta_shacl_ms_07b": "~20（07b 冻结）",
+    "full_projection_shacl_ms": 9.8,
+    "conforms": true
+  }
+}

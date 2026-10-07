@@ -1,0 +1,10 @@
+{
+  "suite": "agent-core",
+  "scenario": "graceful_degradation",
+  "status": "ok",
+  "smoke": false,
+  "benchmark_ref": "docs/Agent/17 §3（C 批注册演练伪数据）",
+  "metrics": {
+    "success_rate": 0.95
+  }
+}

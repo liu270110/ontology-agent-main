@@ -1,0 +1,223 @@
+{
+  "generated_at": "2026-09-26T21:36:20.678744+00:00",
+  "ollama_base_url": "http://localhost:11434",
+  "chunking": {
+    "docs": 18,
+    "chunks_total": 102,
+    "chars_total": 21464,
+    "tokens_total_est": 10643,
+    "chunk_tokens_min": 4,
+    "chunk_tokens_median": 74.5,
+    "chunk_tokens_max": 632,
+    "chunks_oversized": 0,
+    "chunks_table_rowgroup": 2,
+    "per_doc": [
+      {
+        "doc_id": "d00_供电概况_城东片区",
+        "chars": 693,
+        "chunks": 5,
+        "tokens": 342
+      },
+      {
+        "doc_id": "d01_设备台账_城东片区一次设备",
+        "chars": 3055,
+        "chunks": 9,
+        "tokens": 1517
+      },
+      {
+        "doc_id": "d02_台区客户与计量表台账",
+        "chars": 2842,
+        "chunks": 8,
+        "tokens": 1411
+      },
+      {
+        "doc_id": "d03_抢修班组与人员名册",
+        "chars": 477,
+        "chunks": 4,
+        "tokens": 235
+      },
+      {
+        "doc_id": "d04_故障报告_0418雷雨滨河线故障",
+        "chars": 775,
+        "chunks": 6,
+        "tokens": 380
+      },
+      {
+        "doc_id": "d05_故障报告_0418雷雨城网线柳荫线故障",
+        "chars": 932,
+        "chunks": 5,
+        "tokens": 460
+      },
+      {
+        "doc_id": "d06_故障报告_0422翠湖线电缆故障",
+        "chars": 719,
+        "chunks": 6,
+        "tokens": 352
+      },
+      {
+        "doc_id": "d07_故障报告_0502开发区线树障与0508温泉线配变烧损",
+        "chars": 1031,
+        "chunks": 4,
+        "tokens": 509
+      },
+      {
+        "doc_id": "d08_故障报告_0526城网线配变低压侧故障",
+        "chars": 633,
+        "chunks": 6,
+        "tokens": 310
+      },
+      {
+        "doc_id": "d09_调度日志_0418雷雨夜",
+        "chars": 945,
+        "chunks": 3,
+        "tokens": 469
+      },
+      {
+        "doc_id": "d10_调度日志_0502大风与0516预警",
+        "chars": 689,
+        "chunks": 4,
+        "tokens": 340
+      },
+      {
+        "doc_id": "d11_操作票_0422翠湖线故障隔离",
+        "chars": 581,
+        "chunks": 5,
+        "tokens": 285
+      },
+      {
+        "doc_id": "d12_操作票_0428柳荫线计划检修",
+        "chars": 684,
+        "chunks": 5,
+        "tokens": 335
+      },
+      {
+        "doc_id": "d13_停电工单台账",
+        "chars": 1930,
+        "chunks": 5,
+        "tokens": 995
+      },
+      {
+        "doc_id": "d14_停电分析报告_0418雷雨与0422电缆故障",
+        "chars": 830,
+        "chunks": 4,
+        "tokens": 408
+      },
+      {
+        "doc_id": "d15_停电分析报告_0502大风与0508温泉线",
+        "chars": 797,
+        "chunks": 4,
+        "tokens": 393
+      },
+      {
+        "doc_id": "d16_抢修完成与复电记录_四月",
+        "chars": 1319,
+        "chunks": 6,
+        "tokens": 652
+      },
+      {
+        "doc_id": "d17_抢修完成与复电记录_五月",
+        "chars": 2532,
+        "chunks": 13,
+        "tokens": 1250
+      }
+    ],
+    "note": "token 口径 = len(text)//2（中文近似，chunking.estimate_tokens 同源）"
+  },
+  "embedding": {
+    "status": "实测",
+    "model": "bge-m3",
+    "batch_size": 32,
+    "chunks": 102,
+    "est_tokens_total": 10643,
+    "wall_seconds": 11.35,
+    "est_tokens_per_s": 937.8,
+    "chunks_per_s": 8.99,
+    "dim": 1024,
+    "storage_mb_all_chunks": 0.4
+  },
+  "llm_extraction_samples": {
+    "status": "实测",
+    "model": "qwen3:8b",
+    "candidate_probes": "",
+    "calls": 3,
+    "samples": [
+      {
+        "call": 1,
+        "wall_seconds": 4.36,
+        "prompt_tokens": 134,
+        "completion_tokens": 13,
+        "content_head": "{\n  \"entities\": [],\n  \"relations\": []\n}"
+      },
+      {
+        "call": 2,
+        "wall_seconds": 57.07,
+        "prompt_tokens": 389,
+        "completion_tokens": 346,
+        "content_head": "{\n  \"entities\": [\n    {\n      \"name\": \"10kV柳荫线\",\n      \"type\": \"LineSection\"\n    },\n    {\n      \"name\": \"EV-041803\",\n   "
+      },
+      {
+        "call": 3,
+        "wall_seconds": 43.81,
+        "prompt_tokens": 343,
+        "completion_tokens": 313,
+        "content_head": "{\n  \"entities\": [\n    {\n      \"name\": \"LY-402\",\n      \"type\": \"Switch\"\n    },\n    {\n      \"name\": \"EV-042801\",\n      \"ty"
+      }
+    ],
+    "call_seconds_avg": 35.08,
+    "prompt_tokens_avg": 288.7,
+    "completion_tokens_avg": 224
+  },
+  "full_graphrag_extrapolation": {
+    "assumption_entities_per_chunk": 6,
+    "estimated_entities": 612,
+    "communities_l0_l1_l2": [
+      61,
+      15,
+      3
+    ],
+    "communities_total": 79,
+    "extraction_calls": 102,
+    "summary_calls": 79,
+    "llm_calls_total": 181,
+    "llm_tokens_total_est": 147095.4,
+    "extraction_tokens_est": 52295.4,
+    "summary_tokens_est": 94800,
+    "index_seconds_est": 7735.1,
+    "storage_extra_mb_est": 0.43,
+    "measured_basis": "单次抽取实测 35.08s / 288.7+224 tok"
+  },
+  "comparison": {
+    "lazygraphrag": {
+      "llm_calls": 0,
+      "llm_tokens": 0,
+      "embed_tokens_est": 10643,
+      "index_seconds": 11.35,
+      "storage_mb": 0.4,
+      "note": "索引期只做 chunks/实体描述向量；图遍历留到查询时（§4.0 默认档）"
+    },
+    "full_graphrag": {
+      "llm_calls": 181,
+      "llm_tokens_est": 147095.4,
+      "embed_tokens_est": 10643,
+      "index_seconds_est": 7746.5,
+      "storage_mb_est": 0.83,
+      "note": "叠加实体抽取（每 chunk 1 调用）+ Leiden 社区摘要（社区数 × 1 调用）"
+    },
+    "cost_ratio_full_over_lazy": {
+      "llm_calls": 181,
+      "time_x": 681.5
+    },
+    "per_query_lazy_est": {
+      "llm_calls": 1,
+      "llm_tokens_est": 1500,
+      "note": "查询时图遍历 + 1 次作答调用（输入含邻域 chunk，估算口径）"
+    }
+  },
+  "measurement_notes": [
+    "token 口径 = len(text)//2（中文近似；嵌入吞吐另可对照 Ollama prompt_eval_count）",
+    "实测项：chunk 数量与尺寸、bge-m3 嵌入耗时、qwen 抽取样本调用；",
+    "外推项：完整 GraphRAG 的抽取/摘要调用数与总耗时（公式 × 实测单次均值）；",
+    "估算项：每 chunk 实体数 6、社区比例 E/10 与 E/40、摘要输入输出 800/400 tok、存储字节数",
+    "（以上三项在报告中必须与实测分列，禁止包装成实测）"
+  ]
+}

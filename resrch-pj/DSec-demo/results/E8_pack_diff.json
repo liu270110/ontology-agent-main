@@ -1,0 +1,16 @@
+{
+  "experiment": "E8_pack_diff",
+  "snapshot": {
+    "env_id": "pack-sbx-edge-1-9b03bf30cca8-1",
+    "alias": "pack-swe-build-env-v1",
+    "parent_image": "dsec-sandbox-debian:latest",
+    "image_size_bytes": 494277626,
+    "incremental_bytes": 365728802,
+    "duration_ms": 2914
+  },
+  "restore_verify": true,
+  "restore_create_ms": 882.7,
+  "rebuild_time_s": 83.5,
+  "restore_vs_rebuild_speedup": 94.6,
+  "passed": true
+}

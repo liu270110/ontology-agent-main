@@ -1,0 +1,27 @@
+{
+  "mode": "register",
+  "eval_tag": "v0.2.0-cbatch",
+  "suite": "agent-core",
+  "scenario_hash": "2b5dd874d0d7ab86e1497217870b9d56e2eac8540cba0470a9bacfd3513be8be",
+  "metrics_digest": "9f8c32ddac13300bd8e4301c186cd8531b546962f68d82b83f1c5e36c0fc7cfd",
+  "baseline_digest": null,
+  "version_diff_uri": "benchmarks/results/evalsuite-c-demo/version_diff.json",
+  "registered": [
+    {
+      "id": "01a1157b-bbe9-77c2-b005-9de8d5feb55e",
+      "name": "bench.agent-core.eval.2b5dd874d0d7",
+      "face": "O4",
+      "reused": false
+    }
+  ],
+  "regressions": [
+    {
+      "metric": "recall_at_k",
+      "id": "01a1157b-bc06-7622-96c8-e60afc95d6aa",
+      "name": "quality_regression:recall_at_k",
+      "face": "O7",
+      "reused": false,
+      "rel_drop": 0.2
+    }
+  ]
+}

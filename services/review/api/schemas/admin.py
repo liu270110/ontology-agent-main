@@ -1,0 +1,164 @@
+"""review admin API DTO（api/01 §5.8 ★ 两端点口径；Pydantic v2）。
+
+铁律：extra="forbid"、snake_case、只数据无行为（02 篇 §6）。
+"""
+
+from __future__ import annotations
+
+from datetime import datetime
+from typing import Any, Literal
+from uuid import UUID
+
+from pydantic import BaseModel, ConfigDict, Field, model_validator
+
+from services.platform.schemas import PageMeta
+
+# 与 review_tickets CheckConstraint 同词汇表（database/01 DDL 权威；ORM=services/review/data/orm.py）
+# conflict = KB-G1a 冲突分诊 T2 工单（OntRAG §8.1 冲突分诊四型；KB-G1a 批扩展）
+# workflow_publish = 工作流发布审批（第七类对象候选，27 篇 §3/§5、X16；F1 批就近最小增）
+TargetTypeFilter = Literal[
+    "ontology_candidate",
+    "knowledge_instance",
+    "memory_l2_upgrade",
+    "plugin_listing",
+    "writeback_incident",
+    "conflict",
+    "workflow_publish",
+]
+StatusFilter = Literal["draft", "pending_review", "approved", "rejected", "published", "cancelled"]
+
+# R50 联调修复（2026-09-28）：前端审批中心经 GET /admin/reviews?status=pending|done 查询
+# （frontend/src/features/approvals/api.ts listReviews），别名到工单六态的收敛映射——
+# pending=待审队列（=缺省口径 pending_review），done=已裁决终态（approved/rejected/published）。
+StatusQuery = Literal[StatusFilter, "pending", "done"]  # 嵌套 Literal 扁平（PEP 586）
+STATUS_QUERY_MAP: dict[str, tuple[str, ...]] = {
+    "pending": ("pending_review",),
+    "done": ("approved", "rejected", "published"),
+    "draft": ("draft",),
+    "pending_review": ("pending_review",),
+    "approved": ("approved",),
+    "rejected": ("rejected",),
+    "published": ("published",),
+    "cancelled": ("cancelled",),
+}
+
+
+class DecisionIn(BaseModel):
+    """审批裁决请求（api/01 §5.8 POST /admin/reviews/{id}/decision；approve=通过，reject=驳回附理由）。
+
+    「驳回必附理由」在 DTO 前置校验（08 §4 REJ 回边；校验失败→3001 统一错误体），
+    避免服务层留痕后回滚产生悬挂 approvals 记录。
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    action: Literal["approve", "reject"]
+    note: str = Field(default="", max_length=2000)
+
+    @model_validator(mode="after")
+    def _reject_requires_note(self) -> DecisionIn:
+        if self.action == "reject" and not self.note.strip():
+            raise ValueError("驳回必附理由（08 §4 REJ 回边）")
+        return self
+
+
+class DecisionOut(BaseModel):
+    """审批决策结果（complete=签名集齐；approved 不等于生效，published 由业务联动方显式推进——08 §4）。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    ticket_id: UUID
+    status: str
+    governance_tier: str
+    signatures_required: int
+    signatures_collected: int
+    complete: bool
+
+
+class AdminReviewOut(BaseModel):
+    """审核工单条目（admin 队列视图）。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    id: UUID
+    target_type: str
+    target_id: UUID
+    status: str
+    submitter_id: UUID | None
+    reviewer_id: UUID | None
+    decision_note: str | None
+    sla_deadline: datetime | None
+    created_at: datetime
+
+
+class AdminReviewListOut(BaseModel):
+    """审核工单列表（api/01 §3.1 信封：{data, meta:{page,page_size,total}}，B1 批统一——
+    原 {code,message,data:{items,total,offset,limit,next_cursor}} 旧信封废止，A-5 证据端点；
+    R50 前端别名 pending/done 的 status 过滤面保留不变）。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    data: list[AdminReviewOut] = Field(default_factory=list)
+    meta: PageMeta
+
+
+# ---------------------------------------------------------------- W1 缺口补齐批（2026-10-04）
+
+
+class AdminReviewDetailOut(AdminReviewOut):
+    """审核工单详情（api/01 §5.8 W1 实装行 GET /admin/reviews/{ticket_id}；契约源=
+    frontend/src/features/approvals/api.ts getReview → normalizeReview）。
+
+    详情=列表查询面加 id 过滤 + 全量富字段：payload（review_tickets.payload JSONB 原样透传，
+    含 gate_result/approvals 审批留痕）+ chain（由 payload.approvals 派生的前端
+    ApprovalChainStep 视图，见路由层 _chain_from_payload；终态单无 current 步）。
+    前端 normalizeReview 对 title/summary/applicant 等富字段可选兜底（缺省回退
+    target_type/target_id 等），后端不伪造、缺省不返回。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    payload: dict[str, Any] = Field(default_factory=dict)
+    chain: list[dict[str, Any]] = Field(default_factory=list)
+
+
+class BatchDecisionIn(BaseModel):
+    """批量审批请求（api/01 §5.8 W1 实装行 POST /admin/reviews/batch；契约卡二（W2 冻结
+    2026-10-04）+ frontend approvals/api.ts batchReviews body {ids, action, note}——意见字段名
+    定稿=note（与单条 DecisionIn 同词汇，W2 已废止旧 reason 键，本轮追认同名词汇）。
+
+    「驳回必附理由」与单条 DecisionIn 同规（08 §4 REJ 回边，DTO 前置校验→422）；
+    ids 空列表 422（Field min_length=1，前端批量按钮不可能发出，防御面）。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    ids: list[UUID] = Field(min_length=1, max_length=100)
+    action: Literal["approve", "reject"]
+    note: str = Field(default="", max_length=2000)
+
+    @model_validator(mode="after")
+    def _reject_requires_note(self) -> BatchDecisionIn:
+        if self.action == "reject" and not self.note.strip():
+            raise ValueError("驳回必附理由（08 §4 REJ 回边，与单条 decision 同规）")
+        return self
+
+
+class BatchDecisionFailure(BaseModel):
+    """批量审批逐单失败项（id + 原因文案；不中断整批——逐单独立决策、失败不回滚已成功单）。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    id: UUID
+    reason: str
+
+
+class BatchDecisionOut(BaseModel):
+    """批量审批结果（{succeeded, failed} 为本端点冻结口径；updated/ids 为前端
+    api.ts batchReviews 返回类型 {updated:number, ids:string[]} 的兼容镜像面，
+    值恒等于 succeeded——消费方两形状皆可用）。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    succeeded: list[UUID] = Field(default_factory=list)
+    failed: list[BatchDecisionFailure] = Field(default_factory=list)
+    updated: int = 0
+    ids: list[UUID] = Field(default_factory=list)

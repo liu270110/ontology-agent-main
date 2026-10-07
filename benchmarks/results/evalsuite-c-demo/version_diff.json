@@ -1,0 +1,21 @@
+{
+  "suite": "agent-core",
+  "from_tag": "v0.1.9",
+  "to_tag": "v0.2.0-cbatch",
+  "items": [
+    {
+      "metric": "recall_at_k",
+      "prev": 0.5,
+      "curr": 0.4,
+      "delta": -0.1,
+      "trend": "↓"
+    },
+    {
+      "metric": "session_mutex_rate",
+      "prev": 0.98,
+      "curr": 0.99,
+      "delta": 0.01,
+      "trend": "↑"
+    }
+  ]
+}

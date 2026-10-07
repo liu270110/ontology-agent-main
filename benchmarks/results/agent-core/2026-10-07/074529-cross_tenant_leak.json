@@ -1,0 +1,53 @@
+{
+  "suite": "agent-core",
+  "scenario": "cross_tenant_leak",
+  "benchmark_ref": "docs/Agent/16-基准对比体系设计 §2 + docs/评审/红队攻击性审查-2026-10-06",
+  "orsi_face_suggestion": "O5",
+  "smoke": true,
+  "started_at": "2026-10-06T23:45:38+00:00",
+  "params": {
+    "attack_rounds": 1,
+    "smoke": true
+  },
+  "metrics": {
+    "attacks_total": 12,
+    "attacks_rejected": 8,
+    "attacks_leaked": 4,
+    "reject_rate": 0.666667,
+    "leaked_endpoints": [
+      {
+        "endpoint": "/sessions/{sid}",
+        "attacker": "same_tenant",
+        "status": 200
+      },
+      {
+        "endpoint": "/sessions/{sid}/messages",
+        "attacker": "same_tenant",
+        "status": 200
+      },
+      {
+        "endpoint": "/tasks/{tid}",
+        "attacker": "same_tenant",
+        "status": 200
+      },
+      {
+        "endpoint": "/tasks/{tid}/events",
+        "attacker": "same_tenant",
+        "status": 200
+      }
+    ]
+  },
+  "samples": [
+    {
+      "round": 1,
+      "session_id": "69211709-0ac5-496e-bde3-a5230591053a",
+      "task_id": "a3d80d75-4e4f-4787-adf4-c185edc04655",
+      "attempts": 12,
+      "control_owner_status": 200
+    }
+  ],
+  "asserts": [],
+  "status": "ok",
+  "error": null,
+  "duration_s": 2.064
+}

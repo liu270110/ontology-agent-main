@@ -1,0 +1,167 @@
+{
+  "suite": "agent-core",
+  "scenario": "memory_cross_contamination",
+  "benchmark_ref": "docs/Agent/16-基准对比体系设计 §2 + docs/评审/红队攻击性审查-2026-10-06",
+  "orsi_face_suggestion": "O6",
+  "smoke": true,
+  "started_at": "2026-10-07T00:55:17+00:00",
+  "params": {
+    "smoke": true
+  },
+  "metrics": {
+    "probes_total": 18,
+    "leak_count": 0,
+    "leak_probes": [],
+    "unauthorized_accepted": 0
+  },
+  "samples": [
+    {
+      "probe": "facts_list",
+      "reader": "owner",
+      "marker_owner": "attacker",
+      "seen": false,
+      "unauthorized": false,
+      "status": 200
+    },
+    {
+      "probe": "facts_list",
+      "reader": "owner",
+      "marker_owner": "outsider",
+      "seen": false,
+      "unauthorized": false,
+      "status": 200
+    },
+    {
+      "probe": "facts_by_user_id",
+      "reader": "owner",
+      "marker_owner": "attacker",
+      "seen": false,
+      "unauthorized": true,
+      "status": 403
+    },
+    {
+      "probe": "facts_by_user_id",
+      "reader": "owner",
+      "marker_owner": "outsider",
+      "seen": false,
+      "unauthorized": true,
+      "status": 403
+    },
+    {
+      "probe": "search_cross",
+      "reader": "owner",
+      "marker_owner": "attacker",
+      "seen": false,
+      "unauthorized": false,
+      "status": 200
+    },
+    {
+      "probe": "search_cross",
+      "reader": "owner",
+      "marker_owner": "outsider",
+      "seen": false,
+      "unauthorized": false,
+      "status": 200
+    },
+    {
+      "probe": "facts_list",
+      "reader": "attacker",
+      "marker_owner": "owner",
+      "seen": false,
+      "unauthorized": false,
+      "status": 200
+    },
+    {
+      "probe": "facts_list",
+      "reader": "attacker",
+      "marker_owner": "outsider",
+      "seen": false,
+      "unauthorized": false,
+      "status": 200
+    },
+    {
+      "probe": "facts_by_user_id",
+      "reader": "attacker",
+      "marker_owner": "owner",
+      "seen": false,
+      "unauthorized": true,
+      "status": 403
+    },
+    {
+      "probe": "facts_by_user_id",
+      "reader": "attacker",
+      "marker_owner": "outsider",
+      "seen": false,
+      "unauthorized": true,
+      "status": 403
+    },
+    {
+      "probe": "search_cross",
+      "reader": "attacker",
+      "marker_owner": "owner",
+      "seen": false,
+      "unauthorized": false,
+      "status": 200
+    },
+    {
+      "probe": "search_cross",
+      "reader": "attacker",
+      "marker_owner": "outsider",
+      "seen": false,
+      "unauthorized": false,
+      "status": 200
+    },
+    {
+      "probe": "facts_list",
+      "reader": "outsider",
+      "marker_owner": "owner",
+      "seen": false,
+      "unauthorized": false,
+      "status": 200
+    },
+    {
+      "probe": "facts_list",
+      "reader": "outsider",
+      "marker_owner": "attacker",
+      "seen": false,
+      "unauthorized": false,
+      "status": 200
+    },
+    {
+      "probe": "facts_by_user_id",
+      "reader": "outsider",
+      "marker_owner": "owner",
+      "seen": false,
+      "unauthorized": true,
+      "status": 403
+    },
+    {
+      "probe": "facts_by_user_id",
+      "reader": "outsider",
+      "marker_owner": "attacker",
+      "seen": false,
+      "unauthorized": true,
+      "status": 403
+    },
+    {
+      "probe": "search_cross",
+      "reader": "outsider",
+      "marker_owner": "owner",
+      "seen": false,
+      "unauthorized": false,
+      "status": 200
+    },
+    {
+      "probe": "search_cross",
+      "reader": "outsider",
+      "marker_owner": "attacker",
+      "seen": false,
+      "unauthorized": false,
+      "status": 200
+    }
+  ],
+  "asserts": [],
+  "status": "ok",
+  "error": null,
+  "duration_s": 0.532
+}

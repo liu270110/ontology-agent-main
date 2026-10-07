@@ -1,0 +1,66 @@
+{
+  "integration": {
+    "note": "确定性流程：绕过 placement 直塞满 edge-3 验证本地准入 409；全部 edge 容量=1 时第 4 个创建 503",
+    "edge_local_admission_409": true,
+    "exhaustion_503": true,
+    "sequential_created_before_503": 3
+  },
+  "simulation": [
+    {
+      "mode": "rand",
+      "rejected_total": 6,
+      "rejection_rate": 0.0005,
+      "node_utilization": [
+        0.796,
+        0.803,
+        0.799
+      ],
+      "util_imbalance_std": 0.0028
+    },
+    {
+      "mode": "powk(k=2)",
+      "rejected_total": 34,
+      "rejection_rate": 0.0028,
+      "node_utilization": [
+        0.781,
+        0.799,
+        0.813
+      ],
+      "util_imbalance_std": 0.0132
+    },
+    {
+      "mode": "powk(k=3)",
+      "rejected_total": 348,
+      "rejection_rate": 0.029,
+      "node_utilization": [
+        0.799,
+        0.771,
+        0.76
+      ],
+      "util_imbalance_std": 0.0166
+    },
+    {
+      "mode": "powk(k=5)",
+      "rejected_total": 348,
+      "rejection_rate": 0.029,
+      "node_utilization": [
+        0.799,
+        0.771,
+        0.76
+      ],
+      "util_imbalance_std": 0.0166
+    },
+    {
+      "mode": "all",
+      "rejected_total": 593,
+      "rejection_rate": 0.0494,
+      "node_utilization": [
+        0.751,
+        0.749,
+        0.781
+      ],
+      "util_imbalance_std": 0.0144
+    }
+  ],
+  "passed": true
+}

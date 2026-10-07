@@ -1,0 +1,532 @@
+# tests/gateway/test_memory_api.py
+"""记忆 API 用例：TestClient + 依赖覆盖（stub 服务；租户走真实 X-Tenant-Id 头依赖）。"""
+
+import uuid
+from datetime import UTC, datetime
+
+import pytest
+from fastapi.testclient import TestClient
+
+from services.gateway.app import create_app
+from services.memory.api.memory import get_memory_service, get_pipeline
+from services.memory.business.memory_service import ObservationOriginError, RecordUpsert, SearchQuery
+from services.memory.domain.model.memory import MemoryRecord, MemoryType
+
+NOW = datetime(2026, 9, 26, 12, 0, tzinfo=UTC)
+
+
+class StubService:
+    seen: list["RecordUpsert"] = []  # 跨实例捕获 upsert cmd（伪造 owner 用例断言用）
+
+    async def upsert_record(self, cmd: RecordUpsert, *, origin="api", now=None):
+        StubService.seen.append(cmd)
+        if cmd.record_type is MemoryType.OBSERVATION and origin == "api":
+            raise ObservationOriginError("mem:Observation 仅限后台管线写入")
+        now = now or datetime.now(UTC)
+        return MemoryRecord(id=uuid.uuid4(), **{**cmd.model_dump(), "created_at": now, "updated_at": now})
+
+    async def get_record(self, tenant_id, record_id):
+        return None
+
+    async def search(self, q: SearchQuery, *, now=None):
+        return []
+
+    async def get_l1(self, session_id):
+        return {"persona": "p"}
+
+    async def write_l1(self, session_id, block, content):
+        return None
+
+    async def profile(self, *, tenant_id, user_id, per_type_limit=5):
+        return {
+            "mem:Preference": [{"content": "偏好深色主题", "confidence": 0.9, "created_at": NOW}],
+            "mem:FactClaim": [{"content": "A 负责人是张三", "confidence": 0.8, "created_at": NOW}],
+        }
+
+
+class StubPipeline:
+    def __init__(self) -> None:
+        self.calls = 0
+        self.last_owner = None
+
+    async def settle_session(self, *, tenant_id, session_id, transcript, now, idempotency_key=None, owner_user_id=None):
+        from services.memory.business.consolidation_pipeline import SettleResult
+
+        self.calls += 1
+        self.last_owner = owner_user_id
+        return SettleResult(added=2, duplicates=1, to_review=0)
+
+
+class StubRepo:
+    def __init__(self) -> None:
+        self._keys: set[str] = set()
+        self.known_record_id = uuid.uuid4()  # 预置"存在"的记录（promotions 存在性校验用）
+        self.known_l3_record_id = uuid.uuid4()  # 预置"L3 记录"（非 L2 升级 422 用）
+        self.promotions: dict[uuid.UUID, dict] = {}  # M4P3-T5：promotion_id → 行（approval_id 回填断言用）
+
+    async def list_pending_reviews(self, tenant_id, *, limit):
+        return [
+            {
+                "id": uuid.uuid4(),
+                "record_id": uuid.uuid4(),
+                "reason": "low_confidence",
+                "state": "pending",
+                "detail": {},
+                "created_at": NOW,
+            }
+        ]
+
+    async def add_promotion(self, tenant_id, *, record_id, to_layer):
+        promo_id = uuid.uuid4()
+        self.promotions[promo_id] = {
+            "id": promo_id,
+            "record_id": record_id,
+            "to_layer": to_layer,
+            "state": "submitted",
+            "approval_id": None,
+        }
+        return promo_id
+
+    async def list_open_promotions(self, tenant_id, *, record_id):
+        return [
+            {"id": pid, "record_id": r["record_id"], "state": r["state"], "approval_id": r["approval_id"]}
+            for pid, r in self.promotions.items()
+            if r["record_id"] == record_id and r["state"] in ("submitted", "reviewing", "approved")
+        ]
+
+    async def set_promotion_approval(self, tenant_id, promotion_id, *, approval_id):
+        if promotion_id in self.promotions:
+            self.promotions[promotion_id]["approval_id"] = approval_id
+
+    async def register_task(self, tenant_id, idempotency_key, *, payload=None):
+        if idempotency_key in self._keys:
+            return False
+        self._keys.add(idempotency_key)
+        return True
+
+    async def get(self, tenant_id, record_id):
+        if record_id == self.known_record_id:
+            layer = 2
+        elif record_id == self.known_l3_record_id:
+            layer = 3  # 已在 L3（非 L2 升级 422 用）
+        else:
+            return None
+        return MemoryRecord(
+            id=record_id,
+            tenant_id=tenant_id,
+            layer=layer,
+            record_type=MemoryType.FACT_CLAIM,
+            content="stub",
+            created_at=NOW,
+            updated_at=NOW,
+        )
+
+
+class StubPromotionReviewPort:
+    """工单端口替身（M4P3-T5）：结构化满足 PromotionReviewPort；记录建单行为。"""
+
+    def __init__(self) -> None:
+        self.submitted: list[dict] = []
+
+    async def submit_candidate(
+        self,
+        *,
+        tenant_id,
+        target_type,
+        target_id,
+        payload,
+        status="pending_review",
+        submitter_id=None,
+        sla_deadline=None,
+    ):
+        ticket_id = uuid.uuid4()
+        self.submitted.append(
+            {
+                "id": ticket_id,
+                "tenant_id": tenant_id,
+                "target_type": target_type,
+                "target_id": target_id,
+                "payload": payload,
+                "status": status,
+                "submitter_id": submitter_id,
+            }
+        )
+        return ticket_id
+
+    async def get_ticket(self, *, tenant_id, ticket_id):
+        return next((t for t in self.submitted if t["id"] == ticket_id), None)
+
+    async def mark_published(self, *, tenant_id, ticket_id, note=""):
+        return None
+
+
+class StubPromotionDecisionPort:
+    """决策端口替身（M4P3-T5）：结构化满足 PromotionDecisionPort（API 提交面不触达 decide）。"""
+
+    async def decide(self, *, tenant_id, ticket_id, action, approver_id, note=""):
+        raise AssertionError("API 提交路径不应触达 decide")
+
+    async def tier(self, tenant_id):
+        return "solo"
+
+
+@pytest.fixture
+def wired():
+    """client + 同一实例的 stub（跨请求共享状态：幂等键集合、管线调用计数、审批工单记录）。"""
+    app = create_app()
+    pipeline, repo = StubPipeline(), StubRepo()
+    review_port = StubPromotionReviewPort()
+    # M4P3-T5：升级单审批端口挂 app.state（gateway lifespan 装配同名属性；鸭子类型同 plugin 先例）
+    app.state.promotion_review = review_port
+    app.state.review_approvals = StubPromotionDecisionPort()
+    # 依赖覆盖键=路由引用的可调用对象本身（get_memory_service / get_pipeline 函数）
+    app.dependency_overrides[get_memory_service] = lambda: StubService()
+    app.dependency_overrides[get_pipeline] = lambda: (pipeline, repo)
+    return TestClient(app), pipeline, repo, review_port
+
+
+@pytest.fixture
+def client(wired):
+    return wired[0]
+
+
+def _h() -> dict:
+    return {"X-Tenant-Id": str(uuid.uuid4())}
+
+
+def test_create_record(client):
+    resp = client.post(
+        "/api/v1/memory/records",
+        headers=_h(),
+        json={"layer": 2, "record_type": "mem:FactClaim", "content": "A 系统负责人是张三", "confidence": 0.8},
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    # 写入信封 {data}（M4.6-D3 联调收口：旧 {code,message,data} 信封废止，code 键不再出现）
+    assert set(body) == {"data"} and body["data"]["state"] == "active"
+
+
+def test_get_record_200_detail_envelope(client):
+    """详情 GET 信封 {data, meta:{}}（M4.6-D3 对齐 kb 详情模式；旧 {code:0} 信封废止）。"""
+    rid = uuid.uuid4()
+
+    class _OneRecordService(StubService):
+        async def get_record(self, tenant_id, record_id):
+            return MemoryRecord(
+                id=record_id,
+                tenant_id=tenant_id,
+                layer=2,
+                record_type=MemoryType.FACT_CLAIM,
+                content="张三",
+                created_at=NOW,
+                updated_at=NOW,
+            )
+
+    app = create_app()
+    app.dependency_overrides[get_memory_service] = lambda: _OneRecordService()
+    resp = TestClient(app).get(f"/api/v1/memory/records/{rid}", headers=_h())
+    assert resp.status_code == 200
+    body = resp.json()
+    # 详情信封 {data, meta}：meta=空对象（EmptyMeta 序列化恒 {}），data 面字段齐
+    assert set(body) == {"data", "meta"} and body["meta"] == {}
+    assert body["data"]["id"] == str(rid) and body["data"]["state"] == "active"
+
+
+def test_search_empty(client):
+    resp = client.post("/api/v1/memory/records/search", headers=_h(), json={"text_q": "张三"})
+    assert resp.status_code == 200
+    body = resp.json()
+    # 检索读面信封 {data, meta:{}}（M4.6-D3；v1 limit 截断无分页 meta）
+    assert body["data"] == [] and body["meta"] == {}
+
+
+def test_get_l1_blocks(client):
+    resp = client.get(f"/api/v1/memory/sessions/{uuid.uuid4()}/blocks", headers=_h())
+    assert resp.status_code == 200
+    body = resp.json()
+    # 详情读面信封 {data, meta:{}}（M4.6-D3）
+    assert body["data"]["persona"] == "p" and body["meta"] == {}
+
+
+def test_put_block_200_write_envelope(client):
+    """PUT 写块信封 {data:null}（M4.6-D3 写面 {data}；旧 {code:0,data:null} 信封废止）。"""
+    resp = client.put(
+        f"/api/v1/memory/sessions/{uuid.uuid4()}/blocks/task", headers=_h(), json={"content": "停电归因分析"}
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert set(body) == {"data"} and body["data"] is None
+
+
+def test_missing_tenant_header_rejected(client):
+    resp = client.post("/api/v1/memory/records", json={"layer": 2, "record_type": "mem:Goal", "content": "x"})
+    assert resp.status_code == 422
+
+
+def test_get_record_404(client):
+    resp = client.get(f"/api/v1/memory/records/{uuid.uuid4()}", headers=_h())
+    assert resp.status_code == 404
+
+
+def test_observation_from_api_422(client):
+    resp = client.post(
+        "/api/v1/memory/records",
+        headers=_h(),
+        json={"layer": 1, "record_type": "mem:Observation", "content": "观察只能来自管线"},
+    )
+    assert resp.status_code == 422
+    assert "mem:Observation" in resp.json()["detail"]
+
+
+def test_service_not_wired_503():
+    resp = TestClient(create_app()).get("/api/v1/memory/sessions/" + str(uuid.uuid4()) + "/blocks", headers=_h())
+    assert resp.status_code == 503
+
+
+def test_invalid_tenant_header_422(client):
+    resp = client.post(
+        "/api/v1/memory/records",
+        headers={"X-Tenant-Id": "not-a-uuid"},
+        json={"layer": 2, "record_type": "mem:Goal", "content": "x"},
+    )
+    assert resp.status_code == 422
+
+
+def test_settle_session_200(client):
+    resp = client.post(f"/api/v1/memory/sessions/{uuid.uuid4()}/settle", headers=_h(), json={"transcript": "t"})
+    assert resp.status_code == 200
+    body = resp.json()
+    # 受理信封写面 {data}（M4.6-D3）；成功面无 skipped 键（exclude_none 与旧 data 形状逐字节对齐）
+    assert set(body) == {"data"}
+    assert body["data"] == {"added": 2, "duplicates": 1, "to_review": 0}
+
+
+def test_list_reviews_200(client):
+    resp = client.get("/api/v1/memory/reviews", headers=_h())
+    assert resp.status_code == 200
+    data = resp.json()["data"]
+    assert isinstance(data, list) and data[0]["reason"] == "low_confidence"
+    # 仓储返回 UUID 对象，经 model_dump(mode="json") 序列化为字符串（接线期类型对齐）
+    assert isinstance(data[0]["id"], str) and isinstance(data[0]["record_id"], str)
+
+
+def test_create_promotion_200(wired):
+    """M4P3-T5：提交即两写——升级单行 + 审批中心工单（memory_l2_upgrade）+ approval_id 回填。"""
+    client, _pipeline, repo, review_port = wired
+    resp = client.post(
+        "/api/v1/memory/promotions",
+        headers={**_h(), "X-User-Id": str(uuid.uuid4())},  # dev 头 → 工单 submitter_id（禁自批输入）
+        json={"record_id": str(repo.known_record_id), "to_layer": 3},
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["code"] == 0 and body["data"]["id"] and body["data"]["state"] == "submitted"
+    assert body["data"]["duplicate"] is False  # 首次发起（幂等窗口外）
+    # 审批中心工单行存在（同请求两写）
+    assert len(review_port.submitted) == 1
+    ticket = review_port.submitted[0]
+    assert ticket["target_type"] == "memory_l2_upgrade"
+    assert ticket["target_id"] == uuid.UUID(body["data"]["id"])  # 工单多态引用 = 升级单 id
+    assert ticket["payload"]["candidate_type"] == "memory_l2_upgrade"
+    assert ticket["payload"]["record_id"] == str(repo.known_record_id)
+    assert ticket["status"] == "pending_review"
+    # promotion.approval_id 回填工单 id
+    promo_row = repo.promotions[uuid.UUID(body["data"]["id"])]
+    assert promo_row["approval_id"] == ticket["id"]
+    assert body["data"]["approval_id"] == str(ticket["id"])
+
+
+def test_create_promotion_duplicate_idempotent_200(wired):
+    """同记录已有 open 升级单 → 幂等返回既有（duplicate=true），不重复建单/建工单。"""
+    client, _pipeline, repo, review_port = wired
+    h = _h()
+    r1 = client.post(
+        "/api/v1/memory/promotions", headers=h, json={"record_id": str(repo.known_record_id), "to_layer": 3}
+    )
+    assert r1.status_code == 200 and r1.json()["data"]["duplicate"] is False
+    r2 = client.post(
+        "/api/v1/memory/promotions", headers=h, json={"record_id": str(repo.known_record_id), "to_layer": 3}
+    )
+    assert r2.status_code == 200
+    body = r2.json()["data"]
+    assert body["duplicate"] is True
+    assert body["id"] == r1.json()["data"]["id"]  # 既有 promo_id
+    assert body["approval_id"] == r1.json()["data"]["approval_id"]  # 既有 ticket_id
+    assert len(review_port.submitted) == 1  # 不重复建工单
+    assert len(repo.promotions) == 1  # 不重复建升级单
+
+
+def test_create_promotion_non_l2_record_422(wired):
+    """仅 L2 记录可发起升级（06 篇 §5.4）：L3 记录 → 422。"""
+    client, _pipeline, repo, review_port = wired
+    resp = client.post(
+        "/api/v1/memory/promotions", headers=_h(), json={"record_id": str(repo.known_l3_record_id), "to_layer": 3}
+    )
+    assert resp.status_code == 422
+    assert review_port.submitted == []  # 未建工单
+
+
+def test_create_promotion_ports_not_wired_503():
+    """端口未装配=503 fail-closed（候选非成品：无审批工单的升级单不放行；plugin 先例同款）。"""
+    app = create_app()
+    app.dependency_overrides[get_memory_service] = lambda: StubService()
+    app.dependency_overrides[get_pipeline] = lambda: (StubPipeline(), StubRepo())
+    client = TestClient(app)
+    resp = client.post("/api/v1/memory/promotions", headers=_h(), json={"record_id": str(uuid.uuid4()), "to_layer": 3})
+    assert resp.status_code == 503
+
+
+def test_promotion_missing_header_422(client):
+    resp = client.post("/api/v1/memory/promotions", json={"record_id": str(uuid.uuid4()), "to_layer": 3})
+    assert resp.status_code == 422
+
+
+def test_settle_idempotent_second_call_skipped(wired):
+    client, pipeline, _repo, _review = wired
+    h = _h()
+    sid = uuid.uuid4()
+    r1 = client.post(f"/api/v1/memory/sessions/{sid}/settle", headers=h, json={"transcript": "t"})
+    assert r1.status_code == 200
+    assert r1.json()["data"] == {"added": 2, "duplicates": 1, "to_review": 0}
+    r2 = client.post(f"/api/v1/memory/sessions/{sid}/settle", headers=h, json={"transcript": "t"})
+    assert r2.status_code == 200
+    assert r2.json()["data"]["skipped"] == "idempotent"
+    assert pipeline.calls == 1  # 二次提交短路，管线只真正执行一次
+
+
+def test_promotion_unknown_record_404(client):
+    resp = client.post("/api/v1/memory/promotions", headers=_h(), json={"record_id": str(uuid.uuid4()), "to_layer": 3})
+    assert resp.status_code == 404
+
+
+def test_profile_200(client):
+    """画像聚合视图（§5.2）：stub 数据两类分组返回。"""
+    resp = client.get(f"/api/v1/memory/profile/{uuid.uuid4()}", headers=_h())
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["code"] == 0
+    data = body["data"]
+    assert set(data) == {"mem:Preference", "mem:FactClaim"}
+    assert data["mem:Preference"][0]["content"] == "偏好深色主题"
+    assert data["mem:FactClaim"][0]["confidence"] == 0.8
+
+
+def test_profile_missing_tenant_422(client):
+    resp = client.get(f"/api/v1/memory/profile/{uuid.uuid4()}")
+    assert resp.status_code == 422
+
+
+def test_settle_passes_owner_header_to_pipeline(wired):
+    """settle 端点 X-User-Id 头（dev 模式）→ pipeline.settle_session(owner_user_id=...)。"""
+    client, pipeline, _repo, _review = wired
+    owner = uuid.uuid4()
+    resp = client.post(
+        f"/api/v1/memory/sessions/{uuid.uuid4()}/settle",
+        headers={**_h(), "X-User-Id": str(owner)},
+        json={"transcript": "t"},
+    )
+    assert resp.status_code == 200
+    assert pipeline.last_owner == owner
+
+
+def test_settle_invalid_user_header_422(wired):
+    """K2-c §11.3 身份不变量：X-User-Id 非法值 → 422 拒绝（不再静默置 None——
+    原「非法静默忽略」宽松语义 2026-10-05 收口废除；缺失头仍为合法无主语义）。"""
+    client, pipeline, _repo, _review = wired
+    resp = client.post(
+        f"/api/v1/memory/sessions/{uuid.uuid4()}/settle",
+        headers={**_h(), "X-User-Id": "not-a-uuid"},
+        json={"transcript": "t"},
+    )
+    assert resp.status_code == 422
+    assert pipeline.calls == 0  # 拒绝先于管线执行（无半写状态）
+
+
+def test_settle_missing_user_header_owner_none(wired):
+    """缺失头 → None（可选归因语义保留：租户级无主记录仍合法）。"""
+    client, pipeline, _repo, _review = wired
+    resp = client.post(f"/api/v1/memory/sessions/{uuid.uuid4()}/settle", headers=_h(), json={"transcript": "t"})
+    assert resp.status_code == 200 and pipeline.last_owner is None
+
+
+def test_promotion_submit_invalid_user_header_422(wired):
+    """K2-c §11.3：升级单提交 X-User-Id 非法值 → 422（可缺省但非法拒绝）。"""
+    client, _pipeline, repo, review_port = wired
+    resp = client.post(
+        "/api/v1/memory/promotions",
+        headers={**_h(), "X-User-Id": "not-a-uuid"},
+        json={"record_id": str(repo.known_record_id), "to_layer": 3},
+    )
+    assert resp.status_code == 422
+    assert review_port.submitted == []  # 拒绝先于建单
+
+
+def test_promotion_decision_invalid_user_header_422(wired):
+    """K2-c §11.3：终审决策 X-User-Id 非法值 → 422（与缺失同归 422，决策须可归因）。"""
+    client, _pipeline, _repo, _review = wired
+    resp = client.post(
+        f"/api/v1/memory/promotions/{uuid.uuid4()}/decision",
+        headers={**_h(), "X-User-Id": "bad-uuid"},
+        json={"action": "approve"},
+    )
+    assert resp.status_code == 422
+
+
+def test_create_record_forged_owner_not_trusted(wired):
+    """K2-c §11.3 伪造 owner 拒绝：请求体携带 owner_user_id 一律不采信（身份元数据归系统
+    所有，仅认证上下文/管线可填）——落库 cmd 不含客户端伪造值，owner 恒为 None。"""
+    client, _pipeline, _repo, _review = wired
+    forger = uuid.uuid4()
+    resp = client.post(
+        "/api/v1/memory/records",
+        headers=_h(),
+        json={
+            "layer": 2,
+            "record_type": "mem:FactClaim",
+            "content": "伪造归属攻击",
+            "owner_user_id": str(forger),  # 客户端伪造 owner
+        },
+    )
+    assert resp.status_code == 200
+    cmd = StubService.seen[-1]
+    assert cmd.owner_user_id is None and str(forger) not in str(cmd.model_dump())  # 伪造值未采信
+
+
+def test_promotion_to_layer_2_rejected_422(client):
+    resp = client.post("/api/v1/memory/promotions", headers=_h(), json={"record_id": str(uuid.uuid4()), "to_layer": 2})
+    assert resp.status_code == 422
+
+
+def test_b7_lifespan装配_state命中_未装配503统一错误体():
+    """B7（联调缺陷台账 2026-10-04）：memory records 族依赖改读 app.state——
+
+    - 装配态（lifespan 挂 memory_service/memory_repo/consolidation_pipeline，测试以 stub 模拟
+      同名属性）：svc/pipe 依赖命中装配实例，端点正常 200（无 dependency_overrides）；
+    - 未装配态（无 lifespan 的裸 app）：503+四字段错误体（code=5004，同审批/候选端口检查
+      先例），不再是裸 HTTPException {"detail": "... not wired"}。
+    """
+    app = create_app()
+    app.state.memory_service = StubService()
+    app.state.memory_repo = StubRepo()
+    app.state.consolidation_pipeline = StubPipeline()
+    client = TestClient(app)
+    resp = client.post(
+        "/api/v1/memory/records",
+        headers=_h(),
+        json={"layer": 2, "record_type": "mem:FactClaim", "content": "A 系统负责人是张三", "confidence": 0.8},
+    )
+    assert resp.status_code == 200 and resp.json()["data"]["state"] == "active"  # svc 命中 app.state
+    resp = client.get("/api/v1/memory/reviews", headers=_h())
+    assert resp.status_code == 200 and len(resp.json()["data"]) == 1  # pipe 依赖命中 (pipeline, repo)
+
+    bare = TestClient(create_app())
+    resp = bare.get("/api/v1/memory/reviews", headers=_h())
+    assert resp.status_code == 503
+    body = resp.json()
+    assert body["code"] == 5004 and "consolidation pipeline" in body["message"] and "trace_id" in body
+    resp = bare.post(
+        "/api/v1/memory/records",
+        headers=_h(),
+        json={"layer": 2, "record_type": "mem:FactClaim", "content": "x", "confidence": 0.8},
+    )
+    assert resp.status_code == 503 and resp.json()["code"] == 5004 and "memory service" in resp.json()["message"]

@@ -1,0 +1,1955 @@
+{
+  "meta": {
+    "generated_at": "2026-09-27T04:33:48.163747+00:00",
+    "poc": "PoC⑤ LLM 结构化输出兼容矩阵",
+    "modes": [
+      "json_object",
+      "json_schema",
+      "prompt"
+    ],
+    "schemas": {
+      "S1_extract_v1": "services/kb/business/kb_extraction.py _EXTRACT_SCHEMA_V1（逐字段复制）；提示词带谓词/类型白名单（对齐 poc2 词汇表）",
+      "S2_ticket_v1": "自造嵌套 schema（工单结构化：嵌套对象×2+对象数组×2+enum/数值）"
+    },
+    "n_samples_s1": 20,
+    "n_samples_s2": 20,
+    "f1_rule": "S1=候选级（谓词等+主/宾宽松匹配 soft_contains，贪心一对一）；S2=嵌套展平 path 严格对位+值等/中文包含（confidence 主观字段不计分）；均对自造真值；均值口径=解析成功样例",
+    "verdict_rule": "三态：first_pass=首次解析+校验双过（兜底救回未重试计首次）；retry_pass=重试一次后过；fail=重试后仍不过/调用失败（不可消费）；schema_pass_rate_after_retry=(first+retry)/n",
+    "latency_note": "本地格与云端格延迟不可直接互比（GPU 本地 vs 云网络+不同模型+max_tokens 不同）；同渠道内跨模式可比",
+    "max_tokens": {
+      "local": 900,
+      "cloud": 4000
+    }
+  },
+  "channels": {
+    "local": {
+      "base_url": "http://127.0.0.1:18001/v1",
+      "model": "local-main"
+    },
+    "cloud_fallback": {
+      "tested": true,
+      "models_offered": [
+        "deepseek-flash",
+        "deepseek-v4-pro"
+      ],
+      "model_used": "deepseek-flash",
+      "key_source": "env_commented_fallback",
+      "max_tokens": 4000
+    }
+  },
+  "mode_preflight": {
+    "local": {
+      "json_object": "ok",
+      "json_schema": "ok",
+      "prompt": "ok"
+    },
+    "deepseek": {
+      "json_object": "ok",
+      "json_schema": "unsupported(http_400: {\"error\":{\"message\":\"This response_format type is unavailable now (request_id: 06984880-d1d5-4e3c-86da-744e7d868563)\",\"type\":\"invalid_request_error\",\"param\":null,\"code\":\"invalid_request_error\"}})",
+      "prompt": "ok"
+    }
+  },
+  "token_usage": {
+    "local": {
+      "prompt_tokens": 44886,
+      "completion_tokens": 27908
+    },
+    "deepseek": {
+      "prompt_tokens": 38690,
+      "completion_tokens": 223931
+    }
+  },
+  "summary": [
+    {
+      "model": "local",
+      "mode": "json_object",
+      "schema": "S1_extract_v1",
+      "n_samples": 20,
+      "mode_unsupported": 0,
+      "schema_pass_rate": 0.7,
+      "schema_pass_rate_after_retry": 0.95,
+      "n_first_pass": 14,
+      "n_retry_pass": 5,
+      "fail": 1,
+      "parse_recovered": 0,
+      "field_f1_mean_over_parsed": 0.3151,
+      "latency_s_first_attempt": {
+        "mean": 3.528,
+        "p50": 3.402,
+        "p95": 5.888,
+        "max": 8.154
+      }
+    },
+    {
+      "model": "local",
+      "mode": "json_object",
+      "schema": "S2_ticket_v1",
+      "n_samples": 20,
+      "mode_unsupported": 0,
+      "schema_pass_rate": 1.0,
+      "schema_pass_rate_after_retry": 1.0,
+      "n_first_pass": 20,
+      "n_retry_pass": 0,
+      "fail": 0,
+      "parse_recovered": 0,
+      "field_f1_mean_over_parsed": 1.0,
+      "latency_s_first_attempt": {
+        "mean": 3.089,
+        "p50": 2.997,
+        "p95": 3.419,
+        "max": 3.59
+      }
+    },
+    {
+      "model": "local",
+      "mode": "json_schema",
+      "schema": "S1_extract_v1",
+      "n_samples": 20,
+      "mode_unsupported": 0,
+      "schema_pass_rate": 0.7,
+      "schema_pass_rate_after_retry": 0.7,
+      "n_first_pass": 14,
+      "n_retry_pass": 0,
+      "fail": 6,
+      "parse_recovered": 0,
+      "field_f1_mean_over_parsed": 0.2938,
+      "latency_s_first_attempt": {
+        "mean": 5.406,
+        "p50": 4.531,
+        "p95": 11.206,
+        "max": 12.411
+      }
+    },
+    {
+      "model": "local",
+      "mode": "json_schema",
+      "schema": "S2_ticket_v1",
+      "n_samples": 20,
+      "mode_unsupported": 0,
+      "schema_pass_rate": 1.0,
+      "schema_pass_rate_after_retry": 1.0,
+      "n_first_pass": 20,
+      "n_retry_pass": 0,
+      "fail": 0,
+      "parse_recovered": 0,
+      "field_f1_mean_over_parsed": 1.0,
+      "latency_s_first_attempt": {
+        "mean": 3.098,
+        "p50": 3.077,
+        "p95": 3.429,
+        "max": 3.465
+      }
+    },
+    {
+      "model": "local",
+      "mode": "prompt",
+      "schema": "S1_extract_v1",
+      "n_samples": 20,
+      "mode_unsupported": 0,
+      "schema_pass_rate": 0.7,
+      "schema_pass_rate_after_retry": 0.95,
+      "n_first_pass": 14,
+      "n_retry_pass": 5,
+      "fail": 1,
+      "parse_recovered": 0,
+      "field_f1_mean_over_parsed": 0.3146,
+      "latency_s_first_attempt": {
+        "mean": 3.788,
+        "p50": 3.531,
+        "p95": 5.792,
+        "max": 8.248
+      }
+    },
+    {
+      "model": "local",
+      "mode": "prompt",
+      "schema": "S2_ticket_v1",
+      "n_samples": 20,
+      "mode_unsupported": 0,
+      "schema_pass_rate": 1.0,
+      "schema_pass_rate_after_retry": 1.0,
+      "n_first_pass": 20,
+      "n_retry_pass": 0,
+      "fail": 0,
+      "parse_recovered": 0,
+      "field_f1_mean_over_parsed": 1.0,
+      "latency_s_first_attempt": {
+        "mean": 3.172,
+        "p50": 3.067,
+        "p95": 3.695,
+        "max": 4.189
+      }
+    },
+    {
+      "model": "deepseek",
+      "mode": "json_object",
+      "schema": "S1_extract_v1",
+      "n_samples": 20,
+      "mode_unsupported": 0,
+      "schema_pass_rate": 0.55,
+      "schema_pass_rate_after_retry": 0.85,
+      "n_first_pass": 11,
+      "n_retry_pass": 6,
+      "fail": 3,
+      "parse_recovered": 1,
+      "field_f1_mean_over_parsed": 0.315,
+      "latency_s_first_attempt": {
+        "mean": 13.145,
+        "p50": 16.383,
+        "p95": 17.364,
+        "max": 18.168
+      }
+    },
+    {
+      "model": "deepseek",
+      "mode": "json_object",
+      "schema": "S2_ticket_v1",
+      "n_samples": 20,
+      "mode_unsupported": 0,
+      "schema_pass_rate": 0.9,
+      "schema_pass_rate_after_retry": 1.0,
+      "n_first_pass": 18,
+      "n_retry_pass": 2,
+      "fail": 0,
+      "parse_recovered": 0,
+      "field_f1_mean_over_parsed": 1.0,
+      "latency_s_first_attempt": {
+        "mean": 1.625,
+        "p50": 1.625,
+        "p95": 2.392,
+        "max": 3.079
+      }
+    },
+    {
+      "model": "deepseek",
+      "mode": "json_schema",
+      "schema": "S1_extract_v1",
+      "n_samples": 20,
+      "mode_unsupported": 20,
+      "schema_pass_rate": 0.0,
+      "schema_pass_rate_after_retry": 0.0,
+      "n_first_pass": 0,
+      "n_retry_pass": 0,
+      "fail": 0,
+      "parse_recovered": 0,
+      "field_f1_mean_over_parsed": null,
+      "latency_s_first_attempt": null
+    },
+    {
+      "model": "deepseek",
+      "mode": "json_schema",
+      "schema": "S2_ticket_v1",
+      "n_samples": 20,
+      "mode_unsupported": 20,
+      "schema_pass_rate": 0.0,
+      "schema_pass_rate_after_retry": 0.0,
+      "n_first_pass": 0,
+      "n_retry_pass": 0,
+      "fail": 0,
+      "parse_recovered": 0,
+      "field_f1_mean_over_parsed": null,
+      "latency_s_first_attempt": null
+    },
+    {
+      "model": "deepseek",
+      "mode": "prompt",
+      "schema": "S1_extract_v1",
+      "n_samples": 20,
+      "mode_unsupported": 0,
+      "schema_pass_rate": 0.25,
+      "schema_pass_rate_after_retry": 0.65,
+      "n_first_pass": 5,
+      "n_retry_pass": 8,
+      "fail": 7,
+      "parse_recovered": 0,
+      "field_f1_mean_over_parsed": 0.3522,
+      "latency_s_first_attempt": {
+        "mean": 15.047,
+        "p50": 16.895,
+        "p95": 18.76,
+        "max": 19.461
+      }
+    },
+    {
+      "model": "deepseek",
+      "mode": "prompt",
+      "schema": "S2_ticket_v1",
+      "n_samples": 20,
+      "mode_unsupported": 0,
+      "schema_pass_rate": 1.0,
+      "schema_pass_rate_after_retry": 1.0,
+      "n_first_pass": 20,
+      "n_retry_pass": 0,
+      "fail": 0,
+      "parse_recovered": 0,
+      "field_f1_mean_over_parsed": 1.0,
+      "latency_s_first_attempt": {
+        "mean": 1.733,
+        "p50": 1.826,
+        "p95": 2.353,
+        "max": 2.516
+      }
+    }
+  ],
+  "cells_detail": [
+    {
+      "model": "local",
+      "mode": "json_object",
+      "schema": "S1_extract_v1",
+      "details": [
+        {
+          "doc_id": "fault-001",
+          "f1": {
+            "precision": 0.2,
+            "recall": 0.5,
+            "f1": 0.2857
+          }
+        },
+        {
+          "doc_id": "fault-002",
+          "f1": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0
+          }
+        },
+        {
+          "doc_id": "fault-003",
+          "retried": true,
+          "f1": {
+            "precision": 0.125,
+            "recall": 0.2,
+            "f1": 0.1538
+          }
+        },
+        {
+          "doc_id": "dispatch-001",
+          "f1": {
+            "precision": 0.3333,
+            "recall": 0.6667,
+            "f1": 0.4444
+          }
+        },
+        {
+          "doc_id": "dispatch-002",
+          "f1": {
+            "precision": 0.4,
+            "recall": 0.6667,
+            "f1": 0.5
+          }
+        },
+        {
+          "doc_id": "dispatch-003",
+          "f1": {
+            "precision": 0.4,
+            "recall": 0.6667,
+            "f1": 0.5
+          }
+        },
+        {
+          "doc_id": "ticket-001",
+          "f1": {
+            "precision": 0.6667,
+            "recall": 1.0,
+            "f1": 0.8
+          }
+        },
+        {
+          "doc_id": "ticket-002",
+          "f1": {
+            "precision": 0.2,
+            "recall": 0.3333,
+            "f1": 0.25
+          }
+        },
+        {
+          "doc_id": "ledger-001",
+          "retried": true,
+          "f1": {
+            "precision": 0.75,
+            "recall": 0.75,
+            "f1": 0.75
+          }
+        },
+        {
+          "doc_id": "ledger-002",
+          "schema_errors_first": [
+            "['candidates', 0]: 'confidence' is a required property",
+            "['candidates', 4]: 'confidence' is a required property"
+          ],
+          "f1": {
+            "precision": 0.6,
+            "recall": 0.6,
+            "f1": 0.6
+          }
+        },
+        {
+          "doc_id": "analysis-001",
+          "retried": true,
+          "f1": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0
+          }
+        },
+        {
+          "doc_id": "analysis-002",
+          "f1": {
+            "precision": 0.5,
+            "recall": 1.0,
+            "f1": 0.6667
+          }
+        },
+        {
+          "doc_id": "poc5-ex-01",
+          "f1": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0
+          }
+        },
+        {
+          "doc_id": "poc5-ex-02",
+          "f1": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0
+          }
+        },
+        {
+          "doc_id": "poc5-ex-03",
+          "retried": true,
+          "f1": {
+            "precision": 0.3333,
+            "recall": 0.5,
+            "f1": 0.4
+          }
+        },
+        {
+          "doc_id": "poc5-ex-04",
+          "f1": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0
+          }
+        },
+        {
+          "doc_id": "poc5-ex-05",
+          "retried": true,
+          "f1": {
+            "precision": 0.2,
+            "recall": 0.5,
+            "f1": 0.2857
+          }
+        },
+        {
+          "doc_id": "poc5-ex-06",
+          "f1": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0
+          }
+        },
+        {
+          "doc_id": "poc5-ex-07",
+          "f1": {
+            "precision": 0.5,
+            "recall": 1.0,
+            "f1": 0.6667
+          }
+        },
+        {
+          "doc_id": "poc5-ex-08",
+          "f1": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0
+          }
+        }
+      ]
+    },
+    {
+      "model": "local",
+      "mode": "json_object",
+      "schema": "S2_ticket_v1",
+      "details": [
+        {
+          "doc_id": "poc5-tk-00",
+          "f1": {
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          }
+        },
+        {
+          "doc_id": "poc5-tk-01",
+          "f1": {
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          }
+        },
+        {
+          "doc_id": "poc5-tk-02",
+          "f1": {
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          }
+        },
+        {
+          "doc_id": "poc5-tk-03",
+          "f1": {
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          }
+        },
+        {
+          "doc_id": "poc5-tk-04",
+          "f1": {
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          }
+        },
+        {
+          "doc_id": "poc5-tk-05",
+          "f1": {
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          }
+        },
+        {
+          "doc_id": "poc5-tk-06",
+          "f1": {
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          }
+        },
+        {
+          "doc_id": "poc5-tk-07",
+          "f1": {
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          }
+        },
+        {
+          "doc_id": "poc5-tk-08",
+          "f1": {
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          }
+        },
+        {
+          "doc_id": "poc5-tk-09",
+          "f1": {
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          }
+        },
+        {
+          "doc_id": "poc5-tk-10",
+          "f1": {
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          }
+        },
+        {
+          "doc_id": "poc5-tk-11",
+          "f1": {
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          }
+        },
+        {
+          "doc_id": "poc5-tk-12",
+          "f1": {
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          }
+        },
+        {
+          "doc_id": "poc5-tk-13",
+          "f1": {
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          }
+        },
+        {
+          "doc_id": "poc5-tk-14",
+          "f1": {
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          }
+        },
+        {
+          "doc_id": "poc5-tk-15",
+          "f1": {
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          }
+        },
+        {
+          "doc_id": "poc5-tk-16",
+          "f1": {
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          }
+        },
+        {
+          "doc_id": "poc5-tk-17",
+          "f1": {
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          }
+        },
+        {
+          "doc_id": "poc5-tk-18",
+          "f1": {
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          }
+        },
+        {
+          "doc_id": "poc5-tk-19",
+          "f1": {
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          }
+        }
+      ]
+    },
+    {
+      "model": "local",
+      "mode": "json_schema",
+      "schema": "S1_extract_v1",
+      "details": [
+        {
+          "doc_id": "fault-001",
+          "f1": {
+            "precision": 0.2,
+            "recall": 0.5,
+            "f1": 0.2857
+          }
+        },
+        {
+          "doc_id": "fault-002",
+          "f1": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0
+          }
+        },
+        {
+          "doc_id": "fault-003",
+          "error": "retry_"
+        },
+        {
+          "doc_id": "dispatch-001",
+          "f1": {
+            "precision": 0.3333,
+            "recall": 0.6667,
+            "f1": 0.4444
+          }
+        },
+        {
+          "doc_id": "dispatch-002",
+          "f1": {
+            "precision": 0.4,
+            "recall": 0.6667,
+            "f1": 0.5
+          }
+        },
+        {
+          "doc_id": "dispatch-003",
+          "f1": {
+            "precision": 0.4,
+            "recall": 0.6667,
+            "f1": 0.5
+          }
+        },
+        {
+          "doc_id": "ticket-001",
+          "f1": {
+            "precision": 0.6667,
+            "recall": 1.0,
+            "f1": 0.8
+          }
+        },
+        {
+          "doc_id": "ticket-002",
+          "f1": {
+            "precision": 0.2,
+            "recall": 0.3333,
+            "f1": 0.25
+          }
+        },
+        {
+          "doc_id": "ledger-001",
+          "error": "retry_"
+        },
+        {
+          "doc_id": "ledger-002",
+          "error": "retry_"
+        },
+        {
+          "doc_id": "analysis-001",
+          "error": "retry_"
+        },
+        {
+          "doc_id": "analysis-002",
+          "f1": {
+            "precision": 0.5,
+            "recall": 1.0,
+            "f1": 0.6667
+          }
+        },
+        {
+          "doc_id": "poc5-ex-01",
+          "f1": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0
+          }
+        },
+        {
+          "doc_id": "poc5-ex-02",
+          "f1": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0
+          }
+        },
+        {
+          "doc_id": "poc5-ex-03",
+          "error": "retry_"
+        },
+        {
+          "doc_id": "poc5-ex-04",
+          "f1": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0
+          }
+        },
+        {
+          "doc_id": "poc5-ex-05",
+          "error": "retry_"
+        },
+        {
+          "doc_id": "poc5-ex-06",
+          "f1": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0
+          }
+        },
+        {
+          "doc_id": "poc5-ex-07",
+          "f1": {
+            "precision": 0.5,
+            "recall": 1.0,
+            "f1": 0.6667
+          }
+        },
+        {
+          "doc_id": "poc5-ex-08",
+          "f1": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0
+          }
+        }
+      ]
+    },
+    {
+      "model": "local",
+      "mode": "json_schema",
+      "schema": "S2_ticket_v1",
+      "details": [
+        {
+          "doc_id": "poc5-tk-00",
+          "f1": {
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          }
+        },
+        {
+          "doc_id": "poc5-tk-01",
+          "f1": {
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          }
+        },
+        {
+          "doc_id": "poc5-tk-02",
+          "f1": {
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          }
+        },
+        {
+          "doc_id": "poc5-tk-03",
+          "f1": {
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          }
+        },
+        {
+          "doc_id": "poc5-tk-04",
+          "f1": {
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          }
+        },
+        {
+          "doc_id": "poc5-tk-05",
+          "f1": {
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          }
+        },
+        {
+          "doc_id": "poc5-tk-06",
+          "f1": {
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          }
+        },
+        {
+          "doc_id": "poc5-tk-07",
+          "f1": {
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          }
+        },
+        {
+          "doc_id": "poc5-tk-08",
+          "f1": {
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          }
+        },
+        {
+          "doc_id": "poc5-tk-09",
+          "f1": {
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          }
+        },
+        {
+          "doc_id": "poc5-tk-10",
+          "f1": {
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          }
+        },
+        {
+          "doc_id": "poc5-tk-11",
+          "f1": {
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          }
+        },
+        {
+          "doc_id": "poc5-tk-12",
+          "f1": {
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          }
+        },
+        {
+          "doc_id": "poc5-tk-13",
+          "f1": {
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          }
+        },
+        {
+          "doc_id": "poc5-tk-14",
+          "f1": {
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          }
+        },
+        {
+          "doc_id": "poc5-tk-15",
+          "f1": {
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          }
+        },
+        {
+          "doc_id": "poc5-tk-16",
+          "f1": {
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          }
+        },
+        {
+          "doc_id": "poc5-tk-17",
+          "f1": {
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          }
+        },
+        {
+          "doc_id": "poc5-tk-18",
+          "f1": {
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          }
+        },
+        {
+          "doc_id": "poc5-tk-19",
+          "f1": {
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          }
+        }
+      ]
+    },
+    {
+      "model": "local",
+      "mode": "prompt",
+      "schema": "S1_extract_v1",
+      "details": [
+        {
+          "doc_id": "fault-001",
+          "f1": {
+            "precision": 0.2,
+            "recall": 0.5,
+            "f1": 0.2857
+          }
+        },
+        {
+          "doc_id": "fault-002",
+          "f1": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0
+          }
+        },
+        {
+          "doc_id": "fault-003",
+          "retried": true,
+          "f1": {
+            "precision": 0.1111,
+            "recall": 0.2,
+            "f1": 0.1429
+          }
+        },
+        {
+          "doc_id": "dispatch-001",
+          "f1": {
+            "precision": 0.3333,
+            "recall": 0.6667,
+            "f1": 0.4444
+          }
+        },
+        {
+          "doc_id": "dispatch-002",
+          "f1": {
+            "precision": 0.4,
+            "recall": 0.6667,
+            "f1": 0.5
+          }
+        },
+        {
+          "doc_id": "dispatch-003",
+          "f1": {
+            "precision": 0.4,
+            "recall": 0.6667,
+            "f1": 0.5
+          }
+        },
+        {
+          "doc_id": "ticket-001",
+          "f1": {
+            "precision": 0.6667,
+            "recall": 1.0,
+            "f1": 0.8
+          }
+        },
+        {
+          "doc_id": "ticket-002",
+          "f1": {
+            "precision": 0.2,
+            "recall": 0.3333,
+            "f1": 0.25
+          }
+        },
+        {
+          "doc_id": "ledger-001",
+          "retried": true,
+          "f1": {
+            "precision": 0.75,
+            "recall": 0.75,
+            "f1": 0.75
+          }
+        },
+        {
+          "doc_id": "ledger-002",
+          "schema_errors_first": [
+            "['candidates', 0]: 'confidence' is a required property",
+            "['candidates', 4]: 'confidence' is a required property"
+          ],
+          "f1": {
+            "precision": 0.6,
+            "recall": 0.6,
+            "f1": 0.6
+          }
+        },
+        {
+          "doc_id": "analysis-001",
+          "retried": true,
+          "f1": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0
+          }
+        },
+        {
+          "doc_id": "analysis-002",
+          "f1": {
+            "precision": 0.5,
+            "recall": 1.0,
+            "f1": 0.6667
+          }
+        },
+        {
+          "doc_id": "poc5-ex-01",
+          "f1": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0
+          }
+        },
+        {
+          "doc_id": "poc5-ex-02",
+          "f1": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0
+          }
+        },
+        {
+          "doc_id": "poc5-ex-03",
+          "retried": true,
+          "f1": {
+            "precision": 0.3333,
+            "recall": 0.5,
+            "f1": 0.4
+          }
+        },
+        {
+          "doc_id": "poc5-ex-04",
+          "f1": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0
+          }
+        },
+        {
+          "doc_id": "poc5-ex-05",
+          "retried": true,
+          "f1": {
+            "precision": 0.2,
+            "recall": 0.5,
+            "f1": 0.2857
+          }
+        },
+        {
+          "doc_id": "poc5-ex-06",
+          "f1": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0
+          }
+        },
+        {
+          "doc_id": "poc5-ex-07",
+          "f1": {
+            "precision": 0.5,
+            "recall": 1.0,
+            "f1": 0.6667
+          }
+        },
+        {
+          "doc_id": "poc5-ex-08",
+          "f1": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0
+          }
+        }
+      ]
+    },
+    {
+      "model": "local",
+      "mode": "prompt",
+      "schema": "S2_ticket_v1",
+      "details": [
+        {
+          "doc_id": "poc5-tk-00",
+          "f1": {
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          }
+        },
+        {
+          "doc_id": "poc5-tk-01",
+          "f1": {
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          }
+        },
+        {
+          "doc_id": "poc5-tk-02",
+          "f1": {
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          }
+        },
+        {
+          "doc_id": "poc5-tk-03",
+          "f1": {
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          }
+        },
+        {
+          "doc_id": "poc5-tk-04",
+          "f1": {
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          }
+        },
+        {
+          "doc_id": "poc5-tk-05",
+          "f1": {
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          }
+        },
+        {
+          "doc_id": "poc5-tk-06",
+          "f1": {
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          }
+        },
+        {
+          "doc_id": "poc5-tk-07",
+          "f1": {
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          }
+        },
+        {
+          "doc_id": "poc5-tk-08",
+          "f1": {
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          }
+        },
+        {
+          "doc_id": "poc5-tk-09",
+          "f1": {
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          }
+        },
+        {
+          "doc_id": "poc5-tk-10",
+          "f1": {
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          }
+        },
+        {
+          "doc_id": "poc5-tk-11",
+          "f1": {
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          }
+        },
+        {
+          "doc_id": "poc5-tk-12",
+          "f1": {
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          }
+        },
+        {
+          "doc_id": "poc5-tk-13",
+          "f1": {
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          }
+        },
+        {
+          "doc_id": "poc5-tk-14",
+          "f1": {
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          }
+        },
+        {
+          "doc_id": "poc5-tk-15",
+          "f1": {
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          }
+        },
+        {
+          "doc_id": "poc5-tk-16",
+          "f1": {
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          }
+        },
+        {
+          "doc_id": "poc5-tk-17",
+          "f1": {
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          }
+        },
+        {
+          "doc_id": "poc5-tk-18",
+          "f1": {
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          }
+        },
+        {
+          "doc_id": "poc5-tk-19",
+          "f1": {
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          }
+        }
+      ]
+    },
+    {
+      "model": "deepseek",
+      "mode": "json_object",
+      "schema": "S1_extract_v1",
+      "details": [
+        {
+          "doc_id": "fault-001",
+          "error": "retry_"
+        },
+        {
+          "doc_id": "fault-002",
+          "f1": {
+            "precision": 0.25,
+            "recall": 0.5,
+            "f1": 0.3333
+          }
+        },
+        {
+          "doc_id": "fault-003",
+          "error": "retry_"
+        },
+        {
+          "doc_id": "dispatch-001",
+          "error": "retry_"
+        },
+        {
+          "doc_id": "dispatch-002",
+          "retried": true,
+          "f1": {
+            "precision": 0.1429,
+            "recall": 0.3333,
+            "f1": 0.2
+          }
+        },
+        {
+          "doc_id": "dispatch-003",
+          "f1": {
+            "precision": 0.1111,
+            "recall": 0.3333,
+            "f1": 0.1667
+          }
+        },
+        {
+          "doc_id": "ticket-001",
+          "retried": true,
+          "f1": {
+            "precision": 0.2,
+            "recall": 1.0,
+            "f1": 0.3333
+          }
+        },
+        {
+          "doc_id": "ticket-002",
+          "f1": {
+            "precision": 0.2,
+            "recall": 0.6667,
+            "f1": 0.3077
+          }
+        },
+        {
+          "doc_id": "ledger-001",
+          "f1": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0
+          }
+        },
+        {
+          "doc_id": "ledger-002",
+          "retried": true,
+          "f1": {
+            "precision": 0.5,
+            "recall": 0.8,
+            "f1": 0.6154
+          }
+        },
+        {
+          "doc_id": "analysis-001",
+          "f1": {
+            "precision": 0.4,
+            "recall": 0.6667,
+            "f1": 0.5
+          }
+        },
+        {
+          "doc_id": "analysis-002",
+          "f1": {
+            "precision": 0.375,
+            "recall": 1.0,
+            "f1": 0.5455
+          }
+        },
+        {
+          "doc_id": "poc5-ex-01",
+          "f1": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0
+          }
+        },
+        {
+          "doc_id": "poc5-ex-02",
+          "f1": {
+            "precision": 0.25,
+            "recall": 1.0,
+            "f1": 0.4
+          }
+        },
+        {
+          "doc_id": "poc5-ex-03",
+          "f1": {
+            "precision": 0.2,
+            "recall": 0.5,
+            "f1": 0.2857
+          }
+        },
+        {
+          "doc_id": "poc5-ex-04",
+          "retried": true,
+          "f1": {
+            "precision": 0.1,
+            "recall": 0.5,
+            "f1": 0.1667
+          }
+        },
+        {
+          "doc_id": "poc5-ex-05",
+          "retried": true,
+          "f1": {
+            "precision": 0.5,
+            "recall": 1.0,
+            "f1": 0.6667
+          }
+        },
+        {
+          "doc_id": "poc5-ex-06",
+          "f1": {
+            "precision": 0.25,
+            "recall": 0.5,
+            "f1": 0.3333
+          }
+        },
+        {
+          "doc_id": "poc5-ex-07",
+          "f1": {
+            "precision": 0.1667,
+            "recall": 0.5,
+            "f1": 0.25
+          }
+        },
+        {
+          "doc_id": "poc5-ex-08",
+          "retried": true,
+          "f1": {
+            "precision": 0.1667,
+            "recall": 0.5,
+            "f1": 0.25
+          }
+        }
+      ]
+    },
+    {
+      "model": "deepseek",
+      "mode": "json_object",
+      "schema": "S2_ticket_v1",
+      "details": [
+        {
+          "doc_id": "poc5-tk-00",
+          "f1": {
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          }
+        },
+        {
+          "doc_id": "poc5-tk-01",
+          "f1": {
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          }
+        },
+        {
+          "doc_id": "poc5-tk-02",
+          "f1": {
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          }
+        },
+        {
+          "doc_id": "poc5-tk-03",
+          "f1": {
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          }
+        },
+        {
+          "doc_id": "poc5-tk-04",
+          "retried": true,
+          "f1": {
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          }
+        },
+        {
+          "doc_id": "poc5-tk-05",
+          "f1": {
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          }
+        },
+        {
+          "doc_id": "poc5-tk-06",
+          "retried": true,
+          "f1": {
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          }
+        },
+        {
+          "doc_id": "poc5-tk-07",
+          "f1": {
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          }
+        },
+        {
+          "doc_id": "poc5-tk-08",
+          "f1": {
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          }
+        },
+        {
+          "doc_id": "poc5-tk-09",
+          "f1": {
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          }
+        },
+        {
+          "doc_id": "poc5-tk-10",
+          "f1": {
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          }
+        },
+        {
+          "doc_id": "poc5-tk-11",
+          "f1": {
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          }
+        },
+        {
+          "doc_id": "poc5-tk-12",
+          "f1": {
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          }
+        },
+        {
+          "doc_id": "poc5-tk-13",
+          "f1": {
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          }
+        },
+        {
+          "doc_id": "poc5-tk-14",
+          "f1": {
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          }
+        },
+        {
+          "doc_id": "poc5-tk-15",
+          "f1": {
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          }
+        },
+        {
+          "doc_id": "poc5-tk-16",
+          "f1": {
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          }
+        },
+        {
+          "doc_id": "poc5-tk-17",
+          "f1": {
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          }
+        },
+        {
+          "doc_id": "poc5-tk-18",
+          "f1": {
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          }
+        },
+        {
+          "doc_id": "poc5-tk-19",
+          "f1": {
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          }
+        }
+      ]
+    },
+    {
+      "model": "deepseek",
+      "mode": "json_schema",
+      "schema": "S1_extract_v1",
+      "details": []
+    },
+    {
+      "model": "deepseek",
+      "mode": "json_schema",
+      "schema": "S2_ticket_v1",
+      "details": []
+    },
+    {
+      "model": "deepseek",
+      "mode": "prompt",
+      "schema": "S1_extract_v1",
+      "details": [
+        {
+          "doc_id": "fault-001",
+          "error": "retry_"
+        },
+        {
+          "doc_id": "fault-002",
+          "retried": true,
+          "f1": {
+            "precision": 0.1818,
+            "recall": 0.5,
+            "f1": 0.2667
+          }
+        },
+        {
+          "doc_id": "fault-003",
+          "retried": true,
+          "f1": {
+            "precision": 0.3846,
+            "recall": 1.0,
+            "f1": 0.5556
+          }
+        },
+        {
+          "doc_id": "dispatch-001",
+          "f1": {
+            "precision": 0.25,
+            "recall": 0.6667,
+            "f1": 0.3636
+          }
+        },
+        {
+          "doc_id": "dispatch-002",
+          "error": "retry_"
+        },
+        {
+          "doc_id": "dispatch-003",
+          "f1": {
+            "precision": 0.1111,
+            "recall": 0.3333,
+            "f1": 0.1667
+          }
+        },
+        {
+          "doc_id": "ticket-001",
+          "error": "retry_"
+        },
+        {
+          "doc_id": "ticket-002",
+          "error": "retry_"
+        },
+        {
+          "doc_id": "ledger-001",
+          "retried": true,
+          "f1": {
+            "precision": 0.4286,
+            "recall": 0.75,
+            "f1": 0.5455
+          }
+        },
+        {
+          "doc_id": "ledger-002",
+          "f1": {
+            "precision": 0.4444,
+            "recall": 0.8,
+            "f1": 0.5714
+          }
+        },
+        {
+          "doc_id": "analysis-001",
+          "retried": true,
+          "f1": {
+            "precision": 0.5,
+            "recall": 1.0,
+            "f1": 0.6667
+          }
+        },
+        {
+          "doc_id": "analysis-002",
+          "schema_errors_first": [
+            "[]: [{'kind': 'entity', 'name': '朝阳线', 'ontology_class': '馈线', 'confidence': 0.98}, {'kind': 'entity', 'name': '抢修三班', 'ontology_class': '抢修队', 'confidence': 0.95}, {'kind': 'entity', 'name': 'GD-2026-0305', 'ontology_class': '工单', 'confidence': 0.95}, {'kind': 'relation', 'name': '朝阳线', 'ontology_class': '馈线', 'predicate': 'hasStatus', 'object': '故障停运55分钟', 'confidence': 0.9}, {'kind': 'relation', 'name': '朝阳线', 'ontology_class': '馈线', 'predicate': 'restoredAt', 'object': '12时30分', 'confidence': 0.9}, {'kind': 'relation', 'name': 'GD-2026-0305', 'ontology_class': '工单', 'predicate': 'dispatchedTo', 'object': '抢修三班', 'confidence': 0.95}] is not of type 'object'"
+          ],
+          "f1": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0
+          }
+        },
+        {
+          "doc_id": "poc5-ex-01",
+          "error": "retry_"
+        },
+        {
+          "doc_id": "poc5-ex-02",
+          "retried": true,
+          "f1": {
+            "precision": 0.1429,
+            "recall": 0.5,
+            "f1": 0.2222
+          }
+        },
+        {
+          "doc_id": "poc5-ex-03",
+          "f1": {
+            "precision": 0.25,
+            "recall": 0.5,
+            "f1": 0.3333
+          }
+        },
+        {
+          "doc_id": "poc5-ex-04",
+          "retried": true,
+          "f1": {
+            "precision": 0.1111,
+            "recall": 0.5,
+            "f1": 0.1818
+          }
+        },
+        {
+          "doc_id": "poc5-ex-05",
+          "f1": {
+            "precision": 0.4,
+            "recall": 1.0,
+            "f1": 0.5714
+          }
+        },
+        {
+          "doc_id": "poc5-ex-06",
+          "retried": true,
+          "f1": {
+            "precision": 0.2,
+            "recall": 0.5,
+            "f1": 0.2857
+          }
+        },
+        {
+          "doc_id": "poc5-ex-07",
+          "retried": true,
+          "f1": {
+            "precision": 0.125,
+            "recall": 0.5,
+            "f1": 0.2
+          }
+        },
+        {
+          "doc_id": "poc5-ex-08",
+          "error": "retry_"
+        }
+      ]
+    },
+    {
+      "model": "deepseek",
+      "mode": "prompt",
+      "schema": "S2_ticket_v1",
+      "details": [
+        {
+          "doc_id": "poc5-tk-00",
+          "f1": {
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          }
+        },
+        {
+          "doc_id": "poc5-tk-01",
+          "f1": {
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          }
+        },
+        {
+          "doc_id": "poc5-tk-02",
+          "f1": {
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          }
+        },
+        {
+          "doc_id": "poc5-tk-03",
+          "f1": {
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          }
+        },
+        {
+          "doc_id": "poc5-tk-04",
+          "f1": {
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          }
+        },
+        {
+          "doc_id": "poc5-tk-05",
+          "f1": {
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          }
+        },
+        {
+          "doc_id": "poc5-tk-06",
+          "f1": {
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          }
+        },
+        {
+          "doc_id": "poc5-tk-07",
+          "f1": {
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          }
+        },
+        {
+          "doc_id": "poc5-tk-08",
+          "f1": {
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          }
+        },
+        {
+          "doc_id": "poc5-tk-09",
+          "f1": {
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          }
+        },
+        {
+          "doc_id": "poc5-tk-10",
+          "f1": {
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          }
+        },
+        {
+          "doc_id": "poc5-tk-11",
+          "f1": {
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          }
+        },
+        {
+          "doc_id": "poc5-tk-12",
+          "f1": {
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          }
+        },
+        {
+          "doc_id": "poc5-tk-13",
+          "f1": {
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          }
+        },
+        {
+          "doc_id": "poc5-tk-14",
+          "f1": {
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          }
+        },
+        {
+          "doc_id": "poc5-tk-15",
+          "f1": {
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          }
+        },
+        {
+          "doc_id": "poc5-tk-16",
+          "f1": {
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          }
+        },
+        {
+          "doc_id": "poc5-tk-17",
+          "f1": {
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          }
+        },
+        {
+          "doc_id": "poc5-tk-18",
+          "f1": {
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          }
+        },
+        {
+          "doc_id": "poc5-tk-19",
+          "f1": {
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          }
+        }
+      ]
+    }
+  ]
+}

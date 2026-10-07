@@ -1,0 +1,10 @@
+node_modules/
+dist/
+coverage/
+src/api/generated/
+*.tsbuildinfo
+*.local
+dist-live
+dist-s2deep
+dist-dash/
+dist-upload/

@@ -1,0 +1,226 @@
+# seeds/power_seed.ttl —— 电力配电网停电分析种子本体（M2 出口条件，本体核心设计 §11）
+#
+# OB2 建模法（平台宪法）：对象（第一性）—行为（改变对象状态）—规则（不变式，独立定义），
+# 经事件串联逆向闭环：事件 → 规则(R3 ECA) → 行动类 → action.invoke → 回写 ABox → 新事件。
+# 权威依据：docs/ontology/本体核心设计.md（§2 OB2 落库、§2.3 三路由判定表、§4.1 命名空间规范、
+# §2 平台标准本体模块=任务本体九类 Turtle 底稿随种子交付）。
+#
+# 命名空间（§4.1）：pw: = 本体默认命名空间 http://ontology-agent.local/o/{tenant}/{slug}#
+#（t1/power 为种子租户占位）；ob2:/task: = 平台级命名空间（与顶类同级，国标第 9 章扩展原则）。
+# profile=rl（平台默认档）：公理全部落在 RL 封闭集，DL 公理被 lint 拒绝。
+
+@prefix ob2:  <https://ontology-agent.dev/ns/ob2#> .
+@prefix pw:   <http://ontology-agent.local/o/t1/power#> .
+@prefix task: <https://ontology-agent.dev/ns/task#> .
+@prefix gloss: <https://ontology-agent.dev/ns/gloss#> .
+@prefix sh:   <http://www.w3.org/ns/shacl#> .
+@prefix owl:  <http://www.w3.org/2002/07/owl#> .
+@prefix rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd:  <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+
+# ============================================================ 本体头（profile 声明）
+
+<http://ontology-agent.local/o/t1/power> a owl:Ontology ;
+    rdfs:label "电力配电网停电分析种子本体"@zh ;
+    skos:definition "电力停电分析 wedge 场景的 TBox 种子：对象/行为/规则 + 事件串联逆向闭环"@zh ;
+    ob2:profile "rl" ;
+    owl:versionInfo "v1" .
+
+# ============================================================ 平台顶类词汇（ob2:）
+
+ob2:Object a owl:Class ; rdfs:label "对象"@zh .
+ob2:Action a owl:Class ; rdfs:label "行为"@zh .
+ob2:Event a owl:Class ; rdfs:label "事件"@zh .
+ob2:Rule a owl:Class ; rdfs:label "规则"@zh .
+
+ob2:triggeredByEvent a owl:ObjectProperty ; rdfs:domain ob2:Action ; rdfs:range ob2:Event ;
+    rdfs:label "触发事件（行动类反向引用，§2.4 闭环）"@zh .
+ob2:guardedByRule a owl:ObjectProperty ; rdfs:domain ob2:Action ; rdfs:range ob2:Rule ;
+    rdfs:label "守卫规则（行动类反向引用，§2.4 闭环）"@zh .
+ob2:condition a owl:DatatypeProperty ; rdfs:domain ob2:Rule ; rdfs:label "规则条件（SPARQL ASK）"@zh .
+ob2:actionRef a owl:ObjectProperty ; rdfs:domain ob2:Rule ; rdfs:range ob2:Action ;
+    rdfs:label "行动类绑定（规则→行动）"@zh .
+ob2:eventClass a owl:ObjectProperty ; rdfs:domain ob2:Rule ; rdfs:range ob2:Event ;
+    rdfs:label "事件类绑定（ECA 形态，R3 判据②）"@zh .
+ob2:axiomKind a owl:DatatypeProperty ; rdfs:domain ob2:Rule ; rdfs:label "公理类型登记（R1 判据）"@zh .
+ob2:profile a owl:DatatypeProperty ; rdfs:label "推理 profile 声明（rl|el|dl）"@zh .
+ob2:route a owl:DatatypeProperty ; rdfs:domain ob2:Rule ;
+    rdfs:label "路由标注（初始值由 lint 写入：owl_axiom|shacl|engine）"@zh .
+ob2:sparqlAsk a rdfs:Datatype ; rdfs:label "SPARQL ASK 表达式字面量类型（R3 条件求值载体）"@zh .
+ob2:executionMode a owl:DatatypeProperty ; rdfs:domain ob2:Action ;
+    rdfs:label "执行模式标注（readOnly|stateful|externalWrite|code，§2.2 门禁强度判定）"@zh .
+ob2:deterministic a owl:DatatypeProperty ; rdfs:domain ob2:Action ;
+    rdfs:label "确定性标注（§2.2 步级推理分级路由判定）"@zh .
+ob2:versionReplacedBy a owl:ObjectProperty ; rdfs:label "版本替代（废止必须指向替代标准，R1 平台扩展）"@zh .
+
+# ============================================================ 对象（第一性；pw: 场景命名空间，14 类）
+# 层级只收相对稳定的对象与关系（§2.1），不建易变流程。
+
+pw:PowerDevice a owl:Class ; rdfs:subClassOf ob2:Object ; rdfs:label "电力设备"@zh ;
+    skos:definition "配电网一次设备的统称"@zh .
+pw:Feeder a owl:Class ; rdfs:subClassOf pw:PowerDevice ; rdfs:label "馈线"@zh .
+pw:Transformer a owl:Class ; rdfs:subClassOf pw:PowerDevice ; rdfs:label "变压器"@zh .
+pw:Substation a owl:Class ; rdfs:subClassOf pw:PowerDevice ; rdfs:label "变电站"@zh .
+pw:Switch a owl:Class ; rdfs:subClassOf pw:PowerDevice ; rdfs:label "开关"@zh .
+pw:ProtectionDevice a owl:Class ; rdfs:subClassOf pw:PowerDevice ; rdfs:label "保护装置"@zh .
+pw:Meter a owl:Class ; rdfs:subClassOf pw:PowerDevice ; rdfs:label "计量表"@zh .
+pw:DistributionLine a owl:Class ; rdfs:subClassOf pw:PowerDevice ; rdfs:label "配电线路"@zh .
+pw:LineSection a owl:Class ; rdfs:subClassOf ob2:Object ; rdfs:label "线路区段"@zh .
+pw:Customer a owl:Class ; rdfs:subClassOf ob2:Object ; rdfs:label "客户"@zh .
+pw:RepairCrew a owl:Class ; rdfs:subClassOf ob2:Object ; rdfs:label "抢修班组"@zh .
+pw:CrewMember a owl:Class ; rdfs:subClassOf ob2:Object ; rdfs:label "抢修人员"@zh .
+pw:OutageOrder a owl:Class ; rdfs:subClassOf ob2:Object ; rdfs:label "停电工单"@zh ;
+    skos:definition "停电处置工单：状态沿 created→dispatched→in_progress→resolved→closed 流转"@zh .
+pw:OutageReport a owl:Class ; rdfs:subClassOf ob2:Object ; rdfs:label "停电分析报告"@zh .
+
+# ============================================================ 事件（触发规则的条件部分；5 类）
+
+pw:OutageEvent a owl:Class ; rdfs:subClassOf ob2:Event ; rdfs:label "停电事件"@zh .
+pw:OutageConfirmed a owl:Class ; rdfs:subClassOf pw:OutageEvent ; rdfs:label "停电确认事件"@zh .
+pw:PowerRestored a owl:Class ; rdfs:subClassOf ob2:Event ; rdfs:label "复电事件"@zh .
+pw:StormAlert a owl:Class ; rdfs:subClassOf ob2:Event ; rdfs:label "风暴预警事件"@zh .
+pw:RepairCompleted a owl:Class ; rdfs:subClassOf ob2:Event ; rdfs:label "抢修完成事件"@zh .
+
+# ============================================================ 行为（行动类；3 类）
+# 行动类安全与路由标注（§2.2：executionMode + deterministic）；闭环反向引用缺失即 lint 报错（§2.4）。
+
+pw:DispatchRepair a owl:Class ; rdfs:subClassOf ob2:Action ; rdfs:label "派发抢修"@zh ;
+    ob2:triggeredByEvent pw:OutageConfirmed ; ob2:guardedByRule pw:R003 ;
+    ob2:executionMode "stateful" ; ob2:deterministic false .
+pw:IsolateFault a owl:Class ; rdfs:subClassOf ob2:Action ; rdfs:label "故障隔离"@zh ;
+    ob2:triggeredByEvent pw:StormAlert ; ob2:guardedByRule pw:R005 ;
+    ob2:executionMode "stateful" ; ob2:deterministic true .
+pw:RestorePower a owl:Class ; rdfs:subClassOf ob2:Action ; rdfs:label "恢复送电"@zh ;
+    ob2:triggeredByEvent pw:RepairCompleted ; ob2:guardedByRule pw:R006 ;
+    ob2:executionMode "externalWrite" ; ob2:deterministic true .
+
+# ============================================================ 属性（数据/对象；11 条）
+
+pw:orderNo a owl:DatatypeProperty ; rdfs:domain pw:OutageOrder ; rdfs:range xsd:string ;
+    rdfs:label "工单编号"@zh .
+pw:hasStatus a owl:DatatypeProperty ; rdfs:domain pw:OutageOrder ; rdfs:range xsd:string ;
+    rdfs:label "工单状态（状态流转属性，受控词表见 R002）"@zh .
+pw:affectsFeeder a owl:ObjectProperty ; rdfs:domain pw:OutageEvent ; rdfs:range pw:Feeder ;
+    rdfs:label "影响馈线"@zh .
+pw:repairCrewAvailable a owl:DatatypeProperty ; rdfs:domain pw:Feeder ; rdfs:range xsd:boolean ;
+    rdfs:label "抢修班组可用"@zh .
+pw:dispatchedTo a owl:ObjectProperty ; rdfs:domain pw:OutageOrder ; rdfs:range pw:RepairCrew ;
+    rdfs:label "派往班组"@zh .
+pw:crewLead a owl:ObjectProperty ; rdfs:domain pw:RepairCrew ; rdfs:range pw:CrewMember ;
+    rdfs:label "班组长"@zh .
+pw:confirmedAt a owl:DatatypeProperty ; rdfs:domain pw:OutageConfirmed ; rdfs:range xsd:dateTime ;
+    rdfs:label "停电确认时间"@zh .
+pw:restoredAt a owl:DatatypeProperty ; rdfs:domain pw:PowerRestored ; rdfs:range xsd:dateTime ;
+    rdfs:label "复电时间"@zh .
+pw:inSection a owl:ObjectProperty ; rdfs:domain pw:PowerDevice ; rdfs:range pw:LineSection ;
+    rdfs:label "位于区段"@zh .
+pw:servesCustomer a owl:ObjectProperty ; rdfs:domain pw:Feeder ; rdfs:range pw:Customer ;
+    rdfs:label "供电客户"@zh .
+pw:restoresOrder a owl:ObjectProperty ; rdfs:domain pw:RepairCompleted ; rdfs:range pw:OutageOrder ;
+    rdfs:label "对应工单（抢修完成→工单）"@zh .
+
+# ============================================================ 业务术语（Glossary 业务术语层，K4）
+# 术语表=TBox 的 SKOS 面（docs/Agent/13 §9 K4-a；三字段模型 term/aliases/target=tis@18 §10.1）：
+# rdfs:label=规范术语、skos:altLabel=别名/口语、gloss:target=定位本体类/属性 IRI。
+# 随本体版本化发布（复用 ontology_changeset 双签），不建 PG 表；消费面=实体链接对齐
+# （kb_extraction.match_seed_class 别名级）/检索改写（agentic.rewrite）/检索第 4 路（retrieve.glossary）。
+
+gloss:Term a owl:Class ; rdfs:label "业务术语"@zh ;
+    skos:definition "业务术语条目：label=规范术语，skos:altLabel=别名/口语，gloss:target=指向本体类或属性的定位"@zh .
+gloss:target a owl:ObjectProperty ; rdfs:domain gloss:Term ; rdfs:range rdfs:Resource ;
+    rdfs:label "术语定位（指向本体类/属性 IRI，类/属性皆可指故 range 取 rdfs:Resource，RL 档兼容）"@zh .
+
+gloss:TermOutageCustomers a gloss:Term ; rdfs:label "停电户数"@zh ;
+    skos:altLabel "停户数"@zh, "受影响用户数"@zh, "停运户数"@zh ;
+    gloss:target pw:Customer .
+gloss:TermFaultOrder a gloss:Term ; rdfs:label "故障工单"@zh ;
+    skos:altLabel "报修单"@zh, "故障报修单"@zh, "抢修单"@zh ;
+    gloss:target pw:OutageOrder .
+gloss:TermOutageScope a gloss:Term ; rdfs:label "停电范围"@zh ;
+    skos:altLabel "停电区域"@zh, "停电地段"@zh ;
+    gloss:target pw:Feeder .
+gloss:TermDistributionTransformer a gloss:Term ; rdfs:label "配电变压器"@zh ;
+    skos:altLabel "配变"@zh, "配变台"@zh ;
+    gloss:target pw:Transformer .
+
+# ============================================================ 规则（三路由，同一规则只允许一个路由，§2.3）
+
+# R1 owl_axiom：互斥类型（公理类型在 rl 封闭集内；物化公理三元组随制品，规则节点登记 axiomKind）
+pw:R001 a ob2:Rule ; rdfs:label "变压器与计量表互斥"@zh ; ob2:route "owl_axiom" ;
+    ob2:axiomKind "disjointWith" ; ob2:axiomSubject pw:Transformer ; ob2:axiomObject pw:Meter .
+pw:Transformer owl:disjointWith pw:Meter .
+
+# R2 shacl：工单状态枚举（状态流转属性受控词表，§2.2；发布时随版本制品存档，§5.2）
+pw:R002 a ob2:Rule, sh:NodeShape ; rdfs:label "工单状态枚举约束"@zh ; ob2:route "shacl" ;
+    sh:targetClass pw:OutageOrder ;
+    sh:property [
+        sh:path pw:hasStatus ;
+        sh:in ( "created" "dispatched" "in_progress" "resolved" "closed" ) ;
+        sh:minCount 1 ;
+    ] .
+
+# R3 engine：ECA 停电确认→派发抢修（ASK 条件打在会话任务投影上，§5.1；§2.3 ECA 完整示例）
+pw:R003 a ob2:Rule ; rdfs:label "停电确认→派发抢修工单"@zh ; ob2:route "engine" ;
+    ob2:eventClass pw:OutageConfirmed ;
+    ob2:condition "ASK WHERE { ?e a pw:OutageConfirmed ; pw:affectsFeeder ?f . ?f pw:repairCrewAvailable true }"^^ob2:sparqlAsk ;
+    ob2:actionRef pw:DispatchRepair .
+
+# R2 shacl：工单编号格式（国标第 8 章·格式校验）
+pw:R004 a ob2:Rule, sh:NodeShape ; rdfs:label "工单编号格式约束"@zh ; ob2:route "shacl" ;
+    sh:targetClass pw:OutageOrder ;
+    sh:property [
+        sh:path pw:orderNo ;
+        sh:datatype xsd:string ;
+        sh:pattern "^OO-[0-9]{6}$" ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+    ] .
+
+# R3 engine：风暴预警→故障隔离（事件-条件-动作）
+pw:R005 a ob2:Rule ; rdfs:label "风暴预警→故障隔离"@zh ; ob2:route "engine" ;
+    ob2:eventClass pw:StormAlert ;
+    ob2:condition "ASK WHERE { ?e a pw:StormAlert }"^^ob2:sparqlAsk ;
+    ob2:actionRef pw:IsolateFault .
+
+# R3 engine：抢修完成且工单 resolved→恢复送电（回写业务 API 经 MCP 网关，逆向闭环收口）
+pw:R006 a ob2:Rule ; rdfs:label "抢修完成→恢复送电"@zh ; ob2:route "engine" ;
+    ob2:eventClass pw:RepairCompleted ;
+    ob2:condition "ASK WHERE { ?e a pw:RepairCompleted ; pw:restoresOrder ?o . ?o pw:hasStatus 'resolved' }"^^ob2:sparqlAsk ;
+    ob2:actionRef pw:RestorePower .
+
+# ============================================================ 任务本体九类（平台标准本体模块，§2 底稿随种子交付）
+# 独立命名空间 task:（与 ob2: 同级平台级命名空间，§4.1）；对平台 MCP 出口只读，写路径仅任务循环。
+# 底稿只含类骨架与 domain 声明；状态枚举/基数/信任级强制（§1.1 shape）由完整 SHACL shapes 承载
+#（随种子本体交付登记 §11；本批先交付底稿 + R002/R004 两条 shape 示例）。
+
+task:Task a owl:Class ; rdfs:label "任务"@zh .
+task:hasGoal a owl:DatatypeProperty ; rdfs:domain task:Task .               # 目标（CQ 形式）
+task:hasStatus a owl:DatatypeProperty ; rdfs:domain task:Task .
+task:deadline a owl:DatatypeProperty ; rdfs:domain task:Task ; rdfs:range xsd:dateTime .
+task:Plan a owl:Class ; rdfs:label "计划"@zh .
+task:planVersion a owl:DatatypeProperty ; rdfs:domain task:Plan .
+task:supersedes a owl:ObjectProperty ; rdfs:domain task:Plan ; rdfs:range task:Plan .
+task:Step a owl:Class ; rdfs:label "步骤"@zh .
+task:dependsOn a owl:ObjectProperty ; rdfs:domain task:Step ; rdfs:range task:Step .   # DAG
+task:bindsAction a owl:ObjectProperty ; rdfs:domain task:Step ; rdfs:range ob2:Action .
+task:Precondition a owl:Class ; rdfs:label "前置条件"@zh .
+task:askExpression a owl:DatatypeProperty ; rdfs:domain task:Precondition . # SPARQL ASK，打在会话投影上
+task:Postcondition a owl:Class ; rdfs:label "后置条件"@zh .
+task:shapeRef a owl:DatatypeProperty ; rdfs:domain task:Postcondition .     # shape 引用带版本号
+task:SuccessCriterion a owl:Class ; rdfs:label "成功判据"@zh .
+task:judgedByFact a owl:ObjectProperty ; rdfs:domain task:SuccessCriterion . # 只认 externally_verified（§1.1）
+task:Artifact a owl:Class ; rdfs:label "产物"@zh .
+task:hasProvenance a owl:ObjectProperty ; rdfs:domain task:Artifact .       # 出处指针 doc_id+chunk_id+span
+task:FailureMode a owl:Class ; rdfs:label "失败模式"@zh .
+task:retryCount a owl:DatatypeProperty ; rdfs:domain task:FailureMode .
+task:compensationAction a owl:ObjectProperty ; rdfs:domain task:FailureMode ; rdfs:range ob2:Action .
+task:StateChange a owl:Class ; rdfs:label "状态变更"@zh .                    # 审计元类
+task:changeSubject a owl:DatatypeProperty ; rdfs:domain task:StateChange .  # 主体类型 + 主体 ID
+task:decisionId a owl:DatatypeProperty ; rdfs:domain task:StateChange .
+task:changedAt a owl:DatatypeProperty ; rdfs:domain task:StateChange ; rdfs:range xsd:dateTime .
+task:Executor a owl:Class ; rdfs:label "执行者"@zh .
+task:executorType a owl:DatatypeProperty ; rdfs:domain task:Executor .      # platform/subagent/rule/approver
+task:executorChannel a owl:ObjectProperty ; rdfs:domain task:Executor .
+task:trustLevel a owl:DatatypeProperty ; rdfs:label "信任级"@zh .           # 平台注解属性：事实节点与产物共用

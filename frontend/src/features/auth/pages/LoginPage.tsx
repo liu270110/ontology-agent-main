@@ -1,0 +1,174 @@
+import { FormEvent, useState } from 'react'
+import { Navigate, useNavigate, useSearchParams } from 'react-router-dom'
+import { useQuery } from '@tanstack/react-query'
+import { useAuthStore, isTokenPair } from '@/stores/auth-store'
+import { describeError } from '@/lib/errors'
+import { Logo } from '@/components/brand/Logo'
+import { ROLE_LABEL, joinInviteLink, previewInviteLink } from '@/lib/invite'
+import { MfaStepCard } from '../components/MfaStepCard'
+
+/** 登录页（16 篇 §5.1 + 28 篇 §2 v1.8）：玻璃卡 + 双色光晕；zod 级校验先以内联规则实现。
+ *  流程：zod 前置校验 → POST /auth/login → 成功写 auth-store → 按 ?next= 回跳（缺省 /）；
+ *  返回 200 {mfa_required:true, mfa_token}（X17 预登记，后端 M1 未实现，live 不触发）→ MfaStepCard 二步。
+ *  错误：1002 统一「邮箱或密码错误」防枚举；1005/429 限速提示含剩余时间（lib/errors 单点映射）。
+ *  链接邀请（2026-09-28 ★ invite-links 切片；2026-10-04 路径迁移 /invites，32 篇 §二）：
+ *  ?join=<token> 页顶提示条——GET /invites/preview?token=（retry:false）成功显绿条（租户/角色），
+ *  410/未命中显红条；登录成功后 fire-and-forget 调 POST /invites/join（token 入 body）自动加入。 */
+
+/** 版本脚注（画板 p-login 基线同款；版本单源=package.json 经 vite define 注入；日期取本地时区，ISO 直接截串会有 UTC 偏差） */
+const VERSION_FOOTER = `v${__APP_VERSION__} · build ${new Date(__BUILD_TIME__).toLocaleDateString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit' }).replaceAll('/', '')}`
+
+export function LoginPage() {
+  const status = useAuthStore(s => s.status)
+  const login = useAuthStore(s => s.login)
+  const [params] = useSearchParams()
+  const navigate = useNavigate()
+
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [error, setError] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+  /** X17 两段式：密码步通过后挂起的一次性 mfa_token（null=密码步） */
+  const [mfaToken, setMfaToken] = useState<string | null>(null)
+
+  const nextPath = params.get('next') ?? params.get('redirect') ?? '/'
+  /** 链接邀请 token（/login?join=<token>；匿名 preview 校验 → 页顶提示条） */
+  const joinToken = params.get('join')
+  const joinPreview = useQuery({
+    queryKey: ['invite-preview', joinToken],
+    queryFn: () => previewInviteLink(joinToken as string),
+    enabled: !!joinToken,
+    retry: false, // 410 失效是终态，不重试
+  })
+
+  if (status === 'authenticated' && !mfaToken) {
+    return <Navigate to={nextPath} replace />
+  }
+
+  // 内联 zod 级校验（16 篇 §5.1：校验错误就近回填字段；MFA 契约模拟按密码 ≥6 位成功）
+  const emailValid = /.+@.+\..+/.test(email)
+  const passwordValid = password.length >= 6
+  const valid = emailValid && passwordValid
+
+  async function onSubmit(e: FormEvent) {
+    e.preventDefault()
+    if (!valid || busy) return
+    setBusy(true)
+    setError(null)
+    try {
+      const result = await login(email, password)
+      if (isTokenPair(result)) {
+        // 链接邀请：登录/注册成功后 fire-and-forget 自动加入（失败不打断跳转）
+        if (joinToken) {
+          void joinInviteLink(joinToken, { email, display_name: email.split('@')[0] ?? email }).catch(() => {})
+        }
+        navigate(nextPath, { replace: true })
+      } else {
+        // 200 {mfa_required, mfa_token}：进入二步验证步（mfa_token 一次性）
+        setMfaToken(result.mfa_token)
+      }
+    } catch (err) {
+      setError(describeError(err))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  if (mfaToken) {
+    return (
+      <div className="login-stage app-stage relative flex min-h-screen items-center justify-center overflow-hidden bg-bg">
+        <div className="login-wash lw1 blob-drift" />
+        <div className="login-wash lw2 blob-drift" style={{ animationDelay: '-7s' }} />
+        <MfaStepCard
+          email={email}
+          onSuccess={() => navigate(nextPath, { replace: true })}
+          onBackToPassword={() => {
+            setMfaToken(null)
+            setError(null)
+          }}
+        />
+      </div>
+    )
+  }
+
+  return (
+    <div className="login-stage app-stage relative flex min-h-screen items-center justify-center overflow-hidden bg-bg">
+      <div className="login-wash lw1 blob-drift" />
+      <div className="login-wash lw2 blob-drift" style={{ animationDelay: '-7s' }} />
+      {/* 链接邀请提示条（页顶）：preview 成功显绿条（租户/角色），410/未命中显红条 */}
+      {joinToken && (
+        <div className="absolute inset-x-0 top-6 z-10 flex justify-center px-4">
+          {joinPreview.data && (
+            <div
+              role="status"
+              data-testid="join-banner"
+              className="max-w-[440px] rounded-xl border border-green/40 bg-green/10 px-4 py-2.5 text-center text-xs text-green [text-wrap:balance]"
+            >
+              你受邀加入〈{joinPreview.data.tenant_name}〉工作区 · 角色〈{ROLE_LABEL[joinPreview.data.role ?? ''] ?? joinPreview.data.role}〉，注册后将自动加入
+            </div>
+          )}
+          {joinPreview.isError && (
+            <div
+              role="alert"
+              data-testid="join-banner-error"
+              className="max-w-[440px] rounded-xl border border-red/40 bg-red/10 px-4 py-2.5 text-center text-xs text-red"
+            >
+              ⚠ 邀请链接已失效或已过期
+            </div>
+          )}
+        </div>
+      )}
+      <form onSubmit={onSubmit} className="login-card glass glass-sheen-loop w-[360px] max-w-[92vw] rounded-3xl p-8">
+        <div className="login-logo flex h-12 w-12 items-center justify-center">
+          <Logo variant="gradient" size={48} />
+        </div>
+        <h1 className="mt-4 text-lg font-bold">ontology-agent</h1>
+        <p className="lsub mb-5 text-xs text-label-3">以本体为语义基座的智能体平台</p>
+        {error && (
+          <div role="alert" className="err-banner mb-4 flex items-center gap-2 rounded-lg border border-red/40 bg-red/10 px-3 py-2 text-xs text-red">
+            ⚠ {error}
+          </div>
+        )}
+        <div className="field mb-3">
+          <label className="field-label mb-1 block text-xs text-label-2" htmlFor="email">邮箱</label>
+          <input
+            id="email"
+            type="email"
+            className="input w-full rounded-lg border border-separator bg-surface px-3 py-2 text-sm"
+            placeholder="name@company.com"
+            autoComplete="username"
+            value={email}
+            onChange={e => setEmail(e.target.value)}
+          />
+        </div>
+        <div className="field mb-4">
+          <label className="field-label mb-1 block text-xs text-label-2" htmlFor="password">密码</label>
+          <input
+            id="password"
+            type="password"
+            className="input w-full rounded-lg border border-separator bg-surface px-3 py-2 text-sm"
+            autoComplete="current-password"
+            value={password}
+            onChange={e => setPassword(e.target.value)}
+          />
+          {password.length > 0 && password.length < 6 && (
+            <p className="mt-1 text-[11px] text-orange">密码至少 6 位</p>
+          )}
+        </div>
+        <button
+          type="submit"
+          disabled={!valid || busy}
+          className="btn btn-p h-10 w-full rounded-lg bg-accent text-sm font-semibold text-white disabled:opacity-50"
+        >
+          {busy ? '登录中…' : '登 录'}
+        </button>
+        <p className="mt-4 text-center text-[11px] leading-5 text-label-3">
+          账号由管理员邀请创建 · <span className="cursor-pointer text-label-2 hover:text-accent">忘记密码？</span>
+          <br />
+          登录即代表同意平台使用条款与审计策略
+        </p>
+        <p className="mt-3 text-center font-mono text-2xs text-label-3">{VERSION_FOOTER}</p>
+      </form>
+    </div>
+  )
+}

@@ -1,0 +1,22 @@
+{
+  "experiment": "E0_smoke",
+  "steps": {
+    "create_ms": 461,
+    "shell_ok": true,
+    "sandbox_id": "sbx-edge-2-26ec8c1291dd",
+    "stateful": true,
+    "pause_reclaimed_bytes": 307200,
+    "transparent_resume": true,
+    "resume_count": 1,
+    "snapshot": {
+      "env_id": "pack-sbx-edge-2-26ec8c1291dd-1",
+      "incremental_bytes": 32,
+      "duration_ms": 113
+    },
+    "pack_diff_restore": true,
+    "fncall_start_ms": 83,
+    "fncall_shell_ok": true,
+    "ttl_reclaim": true
+  },
+  "passed": true
+}

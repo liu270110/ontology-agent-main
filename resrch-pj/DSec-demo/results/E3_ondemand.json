@@ -1,0 +1,35 @@
+{
+  "experiment": "E3_ondemand_loading",
+  "dataset": {
+    "files": 4000,
+    "total_gb": 1.57,
+    "chunk_kb": 256
+  },
+  "full_pull": {
+    "wall_s": 11.7,
+    "remote_bytes": 2097152000,
+    "remote_gb": 2.1,
+    "local_disk_write_bytes": 1573072896
+  },
+  "full_pull_workload_s": 0.078,
+  "lazy": {
+    "wall_s": 1.117,
+    "remote_bytes": 167772160,
+    "remote_mb": 167.8,
+    "local_disk_write_bytes": 167813120,
+    "chunks_fetched": 640,
+    "files_accessed": 320
+  },
+  "lazyfs_stats": {
+    "chunk_fetches": 640,
+    "chunk_bytes": 167772160,
+    "cache_hits": 0
+  },
+  "summary": {
+    "accessed_fraction": 0.08,
+    "remote_io_ratio": 0.08,
+    "remote_io_reduction_pct": 92.0,
+    "paper_reference": "论文：运行时数据访问占比 4.2%~13.3%；8192 容器突发按需加载盘写 −57%、完成时间 1.71× 提速"
+  },
+  "passed": true
+}

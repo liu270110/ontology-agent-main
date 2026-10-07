@@ -1,0 +1,70 @@
+/* =============================================================
+   工具类层 v1.4 —— 与 Tailwind 共存的少量语义工具类
+   ============================================================= */
+/* ---- 效果工具类 v1.4（Magic UI 模式令牌化：Dot/Grid Pattern / Shimmer Text /
+   Border Beam，2026-10-01 组件获取台账批次；全部只消费令牌，亮暗自适配） ---- */
+/* 点阵/网格底纹：装饰背景（radial/linear-gradient 实现，零 SVG 零依赖）；
+   配 .bg-fade-radial 径向渐隐融入玻璃卡（Magic UI mask-image 手法） */
+.bg-dots{background-image:radial-gradient(circle,var(--edge) 1px,transparent 1px);background-size:20px 20px}
+.bg-grid{background-image:linear-gradient(to right,var(--edge) 1px,transparent 1px),
+  linear-gradient(to bottom,var(--edge) 1px,transparent 1px);background-size:56px 56px}
+.bg-fade-radial{-webkit-mask-image:radial-gradient(75% 75% at 50% 42%,#000 30%,transparent 100%);
+  mask-image:radial-gradient(75% 75% at 50% 42%,#000 30%,transparent 100%)}
+/* 流光文字：background-clip:text 的高光扫过（标题/引导语用；信息文字禁用——对比度纪律） */
+.text-shimmer{background:linear-gradient(110deg,var(--label-2) 42%,var(--label) 50%,var(--label-2) 58%);
+  background-size:200% 100%;-webkit-background-clip:text;background-clip:text;color:transparent;
+  animation:oa-text-shimmer 3.2s linear infinite}
+@keyframes oa-text-shimmer{from{background-position:200% 0}to{background-position:-200% 0}}
+/* reduce-motion 定格在中点相位：全局 .01ms 开关会把它冻在任意相位（color:transparent
+   全靠背景显字），定格 50% 恰好露出 var(--label) 实色段，文字全对比可读 */
+@media (prefers-reduced-motion:reduce){.text-shimmer{animation:none;background-position:50% 0}}
+/* 边框光束：conic-gradient 旋转描边（重点卡/进行中容器用；@property 驱动角度，
+   不支持 @property 的浏览器静置为静态弧光，reduce-motion 全局开关冻结） */
+@property --beam-angle{syntax:'<angle>';inherits:false;initial-value:0deg}
+.beam-border{position:relative;isolation:isolate}
+.beam-border::after{content:"";position:absolute;inset:0;border-radius:inherit;padding:1px;
+  pointer-events:none;z-index:1;
+  background:conic-gradient(from var(--beam-angle),transparent 0 82%,var(--accent) 92%,var(--teal) 97%,transparent 100%);
+  -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);
+  -webkit-mask-composite:xor;mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);
+  mask-composite:exclude;animation:oa-beam 6s linear infinite}
+@keyframes oa-beam{to{--beam-angle:360deg}}
+/* ---- 既有工具类 ---- */
+.app-stage{background-image:
+  radial-gradient(50% 40% at 88% 0%,var(--accent-soft),transparent 60%),
+  radial-gradient(40% 35% at 0% 100%,var(--teal-soft),transparent 58%)}
+/* 顶栏材质条（board.css .bbar 权威配方）：material 半透明 + blur20 saturate180 */
+.material-bar{
+  background:var(--material);
+  -webkit-backdrop-filter:blur(20px) saturate(180%);
+  backdrop-filter:blur(20px) saturate(180%)}
+/* 降级：不支持 backdrop-filter / 用户偏好低透明时退实底（材质出处不变，可读性优先） */
+@supports not ((backdrop-filter:blur(1px)) or (-webkit-backdrop-filter:blur(1px))){
+  .material-bar{background:var(--surface)}
+}
+@media (prefers-reduced-transparency:reduce){
+  .material-bar{background:var(--surface)}
+}
+.mono{font-family:var(--mono);font-size:12px;color:var(--label)}
+.mono.dim{color:var(--label-2)}
+.text-dim{color:var(--label-2)}
+.text-faint{color:var(--label-3)}
+.hairline-t{border-top:1px solid var(--separator)}
+.hairline-b{border-bottom:1px solid var(--separator)}
+.scroll-thin{scrollbar-width:thin;scrollbar-color:var(--label-3) transparent}
+.scroll-thin::-webkit-scrollbar{width:6px;height:6px}
+.scroll-thin::-webkit-scrollbar-thumb{background:var(--label-3);border-radius:3px}
+.scroll-thin::-webkit-scrollbar-track{background:transparent}
+.skel{height:10px;border-radius:5px;background:rgba(0,0,0,.06)}
+.dark .skel{background:rgba(255,255,255,.08)}
+.visually-hidden{position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;
+  clip:rect(0 0 0 0);white-space:nowrap;border:0}
+/* 触屏双击缩放抑制（audit「touch-action:manipulation」）：交互基元统一声明，
+   快速连点不再触发浏览器双击缩放 */
+.btn,.btn-gl,.btn-gl-p,.seg-btn,.menu-i,.sel-opt,.rov-item,.acc-h,.sugg .sg,
+.ev-chip,.ctx-compact,.term-copy,.sel-toolbar .st-b,.upzone{touch-action:manipulation}
+@media (prefers-reduced-motion:reduce){
+  /* .01ms 为 reduce-motion 终止开关，刻意不用时长令牌 */
+  *,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;
+    transition-duration:.01ms!important;scroll-behavior:auto!important}
+}

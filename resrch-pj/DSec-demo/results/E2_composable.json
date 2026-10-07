@@ -1,0 +1,23 @@
+{
+  "experiment": "E2_composable_layers",
+  "approach_tar_at_boot": {
+    "setup_p50_ms": 61,
+    "disk_write_p50_kb": 82812
+  },
+  "approach_overlay_compose": {
+    "setup_p50_ms": 21,
+    "disk_write_p50_kb": 4
+  },
+  "speedup_setup": 2.9,
+  "write_reduction": 1.0,
+  "economics": {
+    "monolithic_rebuilds_m_n_k": 12,
+    "layered_rebuilds": 7,
+    "one_rebuild_ms": 93,
+    "monolithic_total_ms": 1116,
+    "all_layers_rebuild_ms": 79
+  },
+  "mechanism_note": "B \u65b9\u6848 lowerdir \u6808 = [toolkit_t2(EROFS), toolkit_t1(EROFS), workspace(EROFS), base]\uff0c\u6bcf\u6c99\u7bb1\u4ec5\u65b0\u5efa upper/work \u76ee\u5f55\uff1bEROFS \u7531\u5185\u6838\u539f\u751f\u6302\u8f7d\uff08\u538b\u7f29\u53ea\u8bfb\u5c42\uff09",
+  "paper_reference": "\u8bba\u6587\uff1atar \u65b9\u6848\u5b8c\u6210\u65f6\u95f4 1.76\u00d7 \u6162\u4e8e EROFS \u5c42\u3001\u76d8\u5199 5.5\u00d7\uff1b\u5c42\u5316\u628a\u5347\u7ea7\u4ee3\u4ef7 O(m\u00b7N)\u2192O(m)\u3001O(k\u00b7N)\u2192O(k)",
+  "passed": true
+}

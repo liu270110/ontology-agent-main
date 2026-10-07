@@ -1,0 +1,839 @@
+{
+  "meta": {
+    "generated_at": "2026-09-27T03:33:14.783034+00:00",
+    "poc": "PoC④ L2 记忆引擎选型（mem0 vs Graphiti）",
+    "python_version": "3.13.0",
+    "platform_stack": "lite 档（PG+Redis+MinIO，无 Neo4j/Milvus）；pgvector=PoC 专用临时容器 oa-poc-pgvector:5433（主栈镜像无 vector 扩展）",
+    "hit_rule": "主=payload.poc_fact_id∈gold；备=归一化文本包含某 gold 关键词组全部成员；stale=陈旧关键词命中（更新未收敛信号）",
+    "graphiti_runtime_measured": false
+  },
+  "mem0": {
+    "mode": "live",
+    "engine": "mem0",
+    "measured": true,
+    "package_version": "1.0.5",
+    "reset_action": "dropped",
+    "config": {
+      "llm_base_url": "http://127.0.0.1:18001/v1",
+      "llm_model": "local-main",
+      "embed_base_url": "http://127.0.0.1:18002/v1",
+      "embed_model": "bge-m3",
+      "embed_dims": 1024,
+      "pg_host": "127.0.0.1",
+      "pg_port": 5433,
+      "pg_db": "onto",
+      "pg_user": "onto",
+      "collection": "poc4_mem0",
+      "user_id": "poc4-user"
+    },
+    "n_writes": 26,
+    "writes": [
+      {
+        "fact_id": "f01",
+        "seconds": 2.274,
+        "events": {
+          "ADD": 1
+        },
+        "memories": [
+          "用户张伟负责10kV滨河线的运维巡视工作"
+        ]
+      },
+      {
+        "fact_id": "f02",
+        "seconds": 2.199,
+        "events": {
+          "ADD": 1
+        },
+        "memories": [
+          "滨河线153开关是滨河线东段的主开关"
+        ]
+      },
+      {
+        "fact_id": "f03",
+        "seconds": 2.937,
+        "events": {
+          "ADD": 1
+        },
+        "memories": [
+          "滨河线153开关过流保护定值为400A"
+        ]
+      },
+      {
+        "fact_id": "f04",
+        "seconds": 3.731,
+        "events": {
+          "ADD": 1
+        },
+        "memories": [
+          "城东1号配变容量400kVA，位于滨河线东段"
+        ]
+      },
+      {
+        "fact_id": "f05",
+        "seconds": 4.123,
+        "events": {
+          "ADD": 1
+        },
+        "memories": [
+          "城东1号配变向实验中学供电"
+        ]
+      },
+      {
+        "fact_id": "f06",
+        "seconds": 5.733,
+        "events": {
+          "ADD": 1
+        },
+        "memories": [
+          "张伟希望故障工单的派单通知走短信而不是电话"
+        ]
+      },
+      {
+        "fact_id": "f07",
+        "seconds": 4.864,
+        "events": {
+          "ADD": 1
+        },
+        "memories": [
+          "张伟习惯在日报里先看跳闸次数再看停电时户数"
+        ]
+      },
+      {
+        "fact_id": "f08",
+        "seconds": 4.577,
+        "events": {
+          "ADD": 1
+        },
+        "memories": [
+          "抢修一班负责人是李卫东"
+        ]
+      },
+      {
+        "fact_id": "f09",
+        "seconds": 4.59,
+        "events": {
+          "ADD": 1
+        },
+        "memories": [
+          "抢修二班负责人是张建国"
+        ]
+      },
+      {
+        "fact_id": "f10",
+        "seconds": 5.481,
+        "events": {
+          "ADD": 1
+        },
+        "memories": [
+          "2026年3月2日滨河线153开关过流保护动作跳闸，滨河线全线失压。"
+        ]
+      },
+      {
+        "fact_id": "f11",
+        "seconds": 5.837,
+        "events": {
+          "ADD": 2
+        },
+        "memories": [
+          "滨河线故障停运4.5小时",
+          "影响滨河线东段全部用户"
+        ]
+      },
+      {
+        "fact_id": "f12",
+        "seconds": 5.414,
+        "events": {
+          "ADD": 1
+        },
+        "memories": [
+          "人民医院由滨河线东段供电，是双电源重要用户"
+        ]
+      },
+      {
+        "fact_id": "f13",
+        "seconds": 0.15,
+        "events": {},
+        "memories": []
+      },
+      {
+        "fact_id": "f14",
+        "seconds": 5.508,
+        "events": {
+          "ADD": 1
+        },
+        "memories": [
+          "10kV朝阳线312开关是大风易跳闸点，每年大风季节需要特巡"
+        ]
+      },
+      {
+        "fact_id": "f15",
+        "seconds": 4.616,
+        "events": {
+          "ADD": 1
+        },
+        "memories": [
+          "张伟的值班班组是检修甲班，每两周轮换一次"
+        ]
+      },
+      {
+        "fact_id": "f16",
+        "seconds": 4.88,
+        "events": {
+          "ADD": 1
+        },
+        "memories": [
+          "滨河线东段在2025年完成了双回路改造"
+        ]
+      },
+      {
+        "fact_id": "f17",
+        "seconds": 5.321,
+        "events": {
+          "ADD": 1
+        },
+        "memories": [
+          "故障工单GD-2026-0301派给抢修一班处理滨河线东段故障"
+        ]
+      },
+      {
+        "fact_id": "f18",
+        "seconds": 7.01,
+        "events": {
+          "ADD": 1
+        },
+        "memories": [
+          "操作票P-2026-0042由李卫东执行"
+        ]
+      },
+      {
+        "fact_id": "f19",
+        "seconds": 6.21,
+        "events": {
+          "ADD": 1
+        },
+        "memories": [
+          "朝阳线北段雷雨季节故障率偏高，建议加装避雷器"
+        ]
+      },
+      {
+        "fact_id": "f20",
+        "seconds": 5.144,
+        "events": {
+          "ADD": 1
+        },
+        "memories": [
+          "南郊线目前状态正常，可以承接转供负荷"
+        ]
+      },
+      {
+        "fact_id": "f21",
+        "seconds": 4.935,
+        "events": {
+          "ADD": 1
+        },
+        "memories": [
+          "开发区2号配变容量630kVA，接于开发区线工业区段"
+        ]
+      },
+      {
+        "fact_id": "f22",
+        "seconds": 4.773,
+        "events": {
+          "ADD": 1
+        },
+        "memories": [
+          "张伟的手机尾号8842，紧急情况联系用"
+        ]
+      },
+      {
+        "fact_id": "u01",
+        "seconds": 4.5,
+        "events": {
+          "UPDATE": 1
+        },
+        "memories": [
+          "滨河线故障已全部处理完毕，现已全线恢复正常运行"
+        ]
+      },
+      {
+        "fact_id": "u02",
+        "seconds": 4.33,
+        "events": {
+          "UPDATE": 1
+        },
+        "memories": [
+          "抢修一班负责人已变更为王志强"
+        ]
+      },
+      {
+        "fact_id": "u03",
+        "seconds": 8.899,
+        "events": {
+          "UPDATE": 1,
+          "ADD": 2
+        },
+        "memories": [
+          "张伟希望故障工单的派单通知走短信而不是电话",
+          "张伟不再要求短信通知",
+          "故障工单派单改为电话通知"
+        ]
+      },
+      {
+        "fact_id": "u04",
+        "seconds": 5.865,
+        "events": {
+          "UPDATE": 1,
+          "ADD": 1
+        },
+        "memories": [
+          "滨河线东段在2025年完成了双回路改造",
+          "滨河线东段双回路改造已于2026年3月通过验收"
+        ]
+      }
+    ],
+    "write_latency_s": {
+      "mean": 4.765,
+      "p50": 4.872,
+      "p95": 7.01,
+      "max": 8.899
+    },
+    "search_latency_s": {
+      "mean": 0.126,
+      "p50": 0.125,
+      "p95": 0.142,
+      "max": 0.158
+    },
+    "event_totals": {
+      "ADD": 25,
+      "UPDATE": 4
+    },
+    "n_queries": 20,
+    "recalls": [
+      {
+        "query_id": "q01",
+        "query": "滨河线的运维巡视是谁负责",
+        "seconds": 0.1264,
+        "hit": true,
+        "hit_rank": 1,
+        "rule": "fact_id",
+        "stale_hit": false,
+        "top_texts": [
+          "用户张伟负责10kV滨河线的运维巡视工作",
+          "滨河线故障已全部处理完毕，现已全线恢复正常运行",
+          "滨河线东段双回路改造已于2026年3月通过验收",
+          "滨河线东段在2025年完成了双回路改造",
+          "影响滨河线东段全部用户"
+        ]
+      },
+      {
+        "query_id": "q02",
+        "query": "城东1号配变给哪些用户供电",
+        "seconds": 0.1265,
+        "hit": true,
+        "hit_rank": 1,
+        "rule": "fact_id",
+        "stale_hit": false,
+        "top_texts": [
+          "城东1号配变向实验中学供电",
+          "城东1号配变容量400kVA，位于滨河线东段",
+          "开发区2号配变容量630kVA，接于开发区线工业区段",
+          "人民医院由滨河线东段供电，是双电源重要用户",
+          "南郊线目前状态正常，可以承接转供负荷"
+        ]
+      },
+      {
+        "query_id": "q03",
+        "query": "3月2日滨河线发生了什么，现在状态如何",
+        "seconds": 0.1345,
+        "hit": true,
+        "hit_rank": 1,
+        "rule": "fact_id",
+        "stale_hit": false,
+        "top_texts": [
+          "滨河线故障已全部处理完毕，现已全线恢复正常运行",
+          "2026年3月2日滨河线153开关过流保护动作跳闸，滨河线全线失压。",
+          "影响滨河线东段全部用户",
+          "滨河线东段双回路改造已于2026年3月通过验收",
+          "滨河线东段在2025年完成了双回路改造"
+        ]
+      },
+      {
+        "query_id": "q04",
+        "query": "现在抢修一班的负责人是谁",
+        "seconds": 0.1288,
+        "hit": true,
+        "hit_rank": 1,
+        "rule": "fact_id",
+        "stale_hit": false,
+        "top_texts": [
+          "抢修一班负责人已变更为王志强",
+          "抢修二班负责人是张建国",
+          "张伟的值班班组是检修甲班，每两周轮换一次",
+          "故障工单GD-2026-0301派给抢修一班处理滨河线东段故障",
+          "故障工单派单改为电话通知"
+        ]
+      },
+      {
+        "query_id": "q05",
+        "query": "张伟要怎么接收故障工单派单通知",
+        "seconds": 0.1314,
+        "hit": true,
+        "hit_rank": 1,
+        "rule": "fact_id",
+        "stale_hit": false,
+        "top_texts": [
+          "张伟希望故障工单的派单通知走短信而不是电话",
+          "故障工单派单改为电话通知",
+          "张伟不再要求短信通知",
+          "张伟的手机尾号8842，紧急情况联系用",
+          "张伟的值班班组是检修甲班，每两周轮换一次"
+        ]
+      },
+      {
+        "query_id": "q06",
+        "query": "滨河线东段双回路改造进展如何",
+        "seconds": 0.1422,
+        "hit": true,
+        "hit_rank": 1,
+        "rule": "fact_id",
+        "stale_hit": false,
+        "top_texts": [
+          "滨河线东段双回路改造已于2026年3月通过验收",
+          "滨河线东段在2025年完成了双回路改造",
+          "滨河线故障已全部处理完毕，现已全线恢复正常运行",
+          "影响滨河线东段全部用户",
+          "人民医院由滨河线东段供电，是双电源重要用户"
+        ]
+      },
+      {
+        "query_id": "q07",
+        "query": "人民医院的供电电源来自哪里",
+        "seconds": 0.1209,
+        "hit": true,
+        "hit_rank": 1,
+        "rule": "fact_id",
+        "stale_hit": false,
+        "top_texts": [
+          "人民医院由滨河线东段供电，是双电源重要用户",
+          "城东1号配变向实验中学供电",
+          "南郊线目前状态正常，可以承接转供负荷",
+          "城东1号配变容量400kVA，位于滨河线东段",
+          "滨河线故障已全部处理完毕，现已全线恢复正常运行"
+        ]
+      },
+      {
+        "query_id": "q08",
+        "query": "纺织厂由哪条线路供电",
+        "seconds": 0.1215,
+        "hit": false,
+        "hit_rank": 0,
+        "rule": "none",
+        "stale_hit": false,
+        "top_texts": [
+          "人民医院由滨河线东段供电，是双电源重要用户",
+          "城东1号配变向实验中学供电",
+          "南郊线目前状态正常，可以承接转供负荷",
+          "开发区2号配变容量630kVA，接于开发区线工业区段",
+          "滨河线153开关过流保护定值为400A"
+        ]
+      },
+      {
+        "query_id": "q09",
+        "query": "朝阳线312开关大风天要注意什么",
+        "seconds": 0.1579,
+        "hit": true,
+        "hit_rank": 1,
+        "rule": "fact_id",
+        "stale_hit": false,
+        "top_texts": [
+          "10kV朝阳线312开关是大风易跳闸点，每年大风季节需要特巡",
+          "朝阳线北段雷雨季节故障率偏高，建议加装避雷器",
+          "2026年3月2日滨河线153开关过流保护动作跳闸，滨河线全线失压。",
+          "滨河线153开关过流保护定值为400A",
+          "滨河线153开关是滨河线东段的主开关"
+        ]
+      },
+      {
+        "query_id": "q10",
+        "query": "朝阳线北段防雷有什么建议",
+        "seconds": 0.1203,
+        "hit": true,
+        "hit_rank": 1,
+        "rule": "fact_id",
+        "stale_hit": false,
+        "top_texts": [
+          "朝阳线北段雷雨季节故障率偏高，建议加装避雷器",
+          "10kV朝阳线312开关是大风易跳闸点，每年大风季节需要特巡",
+          "南郊线目前状态正常，可以承接转供负荷",
+          "影响滨河线东段全部用户",
+          "用户张伟负责10kV滨河线的运维巡视工作"
+        ]
+      },
+      {
+        "query_id": "q11",
+        "query": "城东1号配变容量是多少",
+        "seconds": 0.1221,
+        "hit": true,
+        "hit_rank": 1,
+        "rule": "fact_id",
+        "stale_hit": false,
+        "top_texts": [
+          "城东1号配变容量400kVA，位于滨河线东段",
+          "城东1号配变向实验中学供电",
+          "开发区2号配变容量630kVA，接于开发区线工业区段",
+          "南郊线目前状态正常，可以承接转供负荷",
+          "滨河线153开关过流保护定值为400A"
+        ]
+      },
+      {
+        "query_id": "q12",
+        "query": "开发区2号配变的基本参数",
+        "seconds": 0.1168,
+        "hit": true,
+        "hit_rank": 1,
+        "rule": "fact_id",
+        "stale_hit": false,
+        "top_texts": [
+          "开发区2号配变容量630kVA，接于开发区线工业区段",
+          "城东1号配变容量400kVA，位于滨河线东段",
+          "城东1号配变向实验中学供电",
+          "南郊线目前状态正常，可以承接转供负荷",
+          "滨河线153开关过流保护定值为400A"
+        ]
+      },
+      {
+        "query_id": "q13",
+        "query": "抢修二班由谁负责",
+        "seconds": 0.1096,
+        "hit": true,
+        "hit_rank": 1,
+        "rule": "fact_id",
+        "stale_hit": false,
+        "top_texts": [
+          "抢修二班负责人是张建国",
+          "抢修一班负责人已变更为王志强",
+          "张伟的值班班组是检修甲班，每两周轮换一次",
+          "故障工单GD-2026-0301派给抢修一班处理滨河线东段故障",
+          "故障工单派单改为电话通知"
+        ]
+      },
+      {
+        "query_id": "q14",
+        "query": "工单GD-2026-0301的处理情况",
+        "seconds": 0.1338,
+        "hit": true,
+        "hit_rank": 1,
+        "rule": "fact_id",
+        "stale_hit": false,
+        "top_texts": [
+          "故障工单GD-2026-0301派给抢修一班处理滨河线东段故障",
+          "故障工单派单改为电话通知",
+          "操作票P-2026-0042由李卫东执行",
+          "滨河线东段双回路改造已于2026年3月通过验收",
+          "张伟希望故障工单的派单通知走短信而不是电话"
+        ]
+      },
+      {
+        "query_id": "q15",
+        "query": "操作票P-2026-0042是谁执行的",
+        "seconds": 0.1394,
+        "hit": true,
+        "hit_rank": 1,
+        "rule": "fact_id",
+        "stale_hit": false,
+        "top_texts": [
+          "操作票P-2026-0042由李卫东执行",
+          "故障工单GD-2026-0301派给抢修一班处理滨河线东段故障",
+          "滨河线东段双回路改造已于2026年3月通过验收",
+          "故障工单派单改为电话通知",
+          "用户张伟负责10kV滨河线的运维巡视工作"
+        ]
+      },
+      {
+        "query_id": "q16",
+        "query": "张伟在哪个班组值班",
+        "seconds": 0.1102,
+        "hit": true,
+        "hit_rank": 1,
+        "rule": "fact_id",
+        "stale_hit": false,
+        "top_texts": [
+          "张伟的值班班组是检修甲班，每两周轮换一次",
+          "用户张伟负责10kV滨河线的运维巡视工作",
+          "张伟不再要求短信通知",
+          "张伟习惯在日报里先看跳闸次数再看停电时户数",
+          "张伟的手机尾号8842，紧急情况联系用"
+        ]
+      },
+      {
+        "query_id": "q17",
+        "query": "滨河线东段有哪些重要用户",
+        "seconds": 0.1256,
+        "hit": true,
+        "hit_rank": 2,
+        "rule": "fact_id",
+        "stale_hit": false,
+        "top_texts": [
+          "影响滨河线东段全部用户",
+          "人民医院由滨河线东段供电，是双电源重要用户",
+          "滨河线东段在2025年完成了双回路改造",
+          "用户张伟负责10kV滨河线的运维巡视工作",
+          "滨河线东段双回路改造已于2026年3月通过验收"
+        ]
+      },
+      {
+        "query_id": "q18",
+        "query": "南郊线现在能转供负荷吗",
+        "seconds": 0.1242,
+        "hit": true,
+        "hit_rank": 1,
+        "rule": "fact_id",
+        "stale_hit": false,
+        "top_texts": [
+          "南郊线目前状态正常，可以承接转供负荷",
+          "2026年3月2日滨河线153开关过流保护动作跳闸，滨河线全线失压。",
+          "故障工单派单改为电话通知",
+          "滨河线故障已全部处理完毕，现已全线恢复正常运行",
+          "朝阳线北段雷雨季节故障率偏高，建议加装避雷器"
+        ]
+      },
+      {
+        "query_id": "q19",
+        "query": "153开关的保护定值是多少",
+        "seconds": 0.1224,
+        "hit": true,
+        "hit_rank": 1,
+        "rule": "fact_id",
+        "stale_hit": false,
+        "top_texts": [
+          "滨河线153开关过流保护定值为400A",
+          "滨河线153开关是滨河线东段的主开关",
+          "2026年3月2日滨河线153开关过流保护动作跳闸，滨河线全线失压。",
+          "10kV朝阳线312开关是大风易跳闸点，每年大风季节需要特巡",
+          "张伟的值班班组是检修甲班，每两周轮换一次"
+        ]
+      },
+      {
+        "query_id": "q20",
+        "query": "张伟看日报有什么习惯",
+        "seconds": 0.105,
+        "hit": true,
+        "hit_rank": 1,
+        "rule": "fact_id",
+        "stale_hit": false,
+        "top_texts": [
+          "张伟习惯在日报里先看跳闸次数再看停电时户数",
+          "张伟的值班班组是检修甲班，每两周轮换一次",
+          "张伟不再要求短信通知",
+          "张伟的手机尾号8842，紧急情况联系用",
+          "用户张伟负责10kV滨河线的运维巡视工作"
+        ]
+      }
+    ],
+    "hit_at_1": 0.9,
+    "hit_at_3": 0.95,
+    "hit_at_5": 0.95,
+    "mrr": 0.925,
+    "stale_hit_queries": [],
+    "stored_memory_count": 25,
+    "stored_memories": [
+      {
+        "poc_fact_id": "f01",
+        "memory": "用户张伟负责10kV滨河线的运维巡视工作"
+      },
+      {
+        "poc_fact_id": "f02",
+        "memory": "滨河线153开关是滨河线东段的主开关"
+      },
+      {
+        "poc_fact_id": "f03",
+        "memory": "滨河线153开关过流保护定值为400A"
+      },
+      {
+        "poc_fact_id": "f04",
+        "memory": "城东1号配变容量400kVA，位于滨河线东段"
+      },
+      {
+        "poc_fact_id": "f05",
+        "memory": "城东1号配变向实验中学供电"
+      },
+      {
+        "poc_fact_id": "f07",
+        "memory": "张伟习惯在日报里先看跳闸次数再看停电时户数"
+      },
+      {
+        "poc_fact_id": "f09",
+        "memory": "抢修二班负责人是张建国"
+      },
+      {
+        "poc_fact_id": "f10",
+        "memory": "2026年3月2日滨河线153开关过流保护动作跳闸，滨河线全线失压。"
+      },
+      {
+        "poc_fact_id": "f11",
+        "memory": "影响滨河线东段全部用户"
+      },
+      {
+        "poc_fact_id": "f12",
+        "memory": "人民医院由滨河线东段供电，是双电源重要用户"
+      },
+      {
+        "poc_fact_id": "f14",
+        "memory": "10kV朝阳线312开关是大风易跳闸点，每年大风季节需要特巡"
+      },
+      {
+        "poc_fact_id": "f15",
+        "memory": "张伟的值班班组是检修甲班，每两周轮换一次"
+      },
+      {
+        "poc_fact_id": "f17",
+        "memory": "故障工单GD-2026-0301派给抢修一班处理滨河线东段故障"
+      },
+      {
+        "poc_fact_id": "f18",
+        "memory": "操作票P-2026-0042由李卫东执行"
+      },
+      {
+        "poc_fact_id": "f19",
+        "memory": "朝阳线北段雷雨季节故障率偏高，建议加装避雷器"
+      },
+      {
+        "poc_fact_id": "f20",
+        "memory": "南郊线目前状态正常，可以承接转供负荷"
+      },
+      {
+        "poc_fact_id": "f21",
+        "memory": "开发区2号配变容量630kVA，接于开发区线工业区段"
+      },
+      {
+        "poc_fact_id": "f22",
+        "memory": "张伟的手机尾号8842，紧急情况联系用"
+      },
+      {
+        "poc_fact_id": "u01",
+        "memory": "滨河线故障已全部处理完毕，现已全线恢复正常运行"
+      },
+      {
+        "poc_fact_id": "u02",
+        "memory": "抢修一班负责人已变更为王志强"
+      },
+      {
+        "poc_fact_id": "u03",
+        "memory": "张伟希望故障工单的派单通知走短信而不是电话"
+      },
+      {
+        "poc_fact_id": "u03",
+        "memory": "张伟不再要求短信通知"
+      },
+      {
+        "poc_fact_id": "u03",
+        "memory": "故障工单派单改为电话通知"
+      },
+      {
+        "poc_fact_id": "u04",
+        "memory": "滨河线东段在2025年完成了双回路改造"
+      },
+      {
+        "poc_fact_id": "u04",
+        "memory": "滨河线东段双回路改造已于2026年3月通过验收"
+      }
+    ],
+    "storage": {
+      "pg_rows": 25,
+      "pg_total_bytes": 507904,
+      "pg_total_pretty": "0.48MB",
+      "history_db_bytes": 20480,
+      "history_db_path": "C:\\Users\\LYZ_HO~1\\AppData\\Local\\Temp\\poc4_mem0_history.db"
+    }
+  },
+  "graphiti": {
+    "engine": "graphiti",
+    "runtime_measured": false,
+    "wheel": "graphiti_core-0.30.2-py3-none-any.whl",
+    "requires_python": "<4,>=3.10",
+    "core_requires": [
+      "Requires-Dist: neo4j>=5.26.0",
+      "Requires-Dist: numpy>=1.0.0",
+      "Requires-Dist: openai>=1.91.0",
+      "Requires-Dist: posthog>=3.0.0",
+      "Requires-Dist: pydantic>=2.11.5",
+      "Requires-Dist: python-dotenv>=1.0.1",
+      "Requires-Dist: tenacity>=9.0.0"
+    ],
+    "requires_dist_with_extras": [
+      "Requires-Dist: anthropic>=0.49.0; extra == 'anthropic'",
+      "Requires-Dist: anthropic>=0.49.0; extra == 'dev'",
+      "Requires-Dist: boto3>=1.39.16; extra == 'dev'",
+      "Requires-Dist: boto3>=1.39.16; extra == 'neo4j-opensearch'",
+      "Requires-Dist: boto3>=1.39.16; extra == 'neptune'",
+      "Requires-Dist: falkordb<2.0.0,>=1.1.2; extra == 'dev'",
+      "Requires-Dist: falkordb<2.0.0,>=1.1.2; extra == 'falkordb'",
+      "Requires-Dist: falkordblite>=0.5.0; (python_version >= '3.12') and extra == 'falkordblite'",
+      "Requires-Dist: gliner2>=1.2.0; (python_version >= '3.11') and extra == 'gliner2'",
+      "Requires-Dist: google-genai>=1.62.0; extra == 'google-genai'",
+      "Requires-Dist: google-genai>=1.8.0; extra == 'dev'",
+      "Requires-Dist: groq>=0.2.0; extra == 'dev'",
+      "Requires-Dist: groq>=0.2.0; extra == 'groq'",
+      "Requires-Dist: ipykernel>=6.29.5; extra == 'dev'",
+      "Requires-Dist: jupyterlab>=4.2.4; extra == 'dev'",
+      "Requires-Dist: kuzu>=0.11.3; extra == 'dev'",
+      "Requires-Dist: kuzu>=0.11.3; extra == 'kuzu'",
+      "Requires-Dist: langchain-anthropic>=0.2.4; extra == 'dev'",
+      "Requires-Dist: langchain-aws>=0.2.29; extra == 'dev'",
+      "Requires-Dist: langchain-aws>=0.2.29; extra == 'neptune'",
+      "Requires-Dist: langchain-openai>=0.2.6; extra == 'dev'",
+      "Requires-Dist: langgraph>=1.0.10; extra == 'dev'",
+      "Requires-Dist: langsmith>=0.1.108; extra == 'dev'",
+      "Requires-Dist: neo4j>=5.26.0",
+      "Requires-Dist: numpy>=1.0.0",
+      "Requires-Dist: openai>=1.91.0",
+      "Requires-Dist: opensearch-py>=3.0.0; extra == 'dev'",
+      "Requires-Dist: opensearch-py>=3.0.0; extra == 'neo4j-opensearch'",
+      "Requires-Dist: opensearch-py>=3.0.0; extra == 'neptune'",
+      "Requires-Dist: opentelemetry-api>=1.20.0; extra == 'tracing'",
+      "Requires-Dist: opentelemetry-sdk>=1.20.0; extra == 'dev'",
+      "Requires-Dist: opentelemetry-sdk>=1.20.0; extra == 'tracing'",
+      "Requires-Dist: posthog>=3.0.0",
+      "Requires-Dist: pydantic>=2.11.5",
+      "Requires-Dist: pyright>=1.1.404; extra == 'dev'",
+      "Requires-Dist: pytest-asyncio>=0.24.0; extra == 'dev'",
+      "Requires-Dist: pytest-xdist>=3.6.1; extra == 'dev'",
+      "Requires-Dist: pytest>=8.3.3; extra == 'dev'",
+      "Requires-Dist: python-dotenv>=1.0.1",
+      "Requires-Dist: redis<9; (python_version >= '3.12') and extra == 'falkordblite'",
+      "Requires-Dist: ruff>=0.7.1; extra == 'dev'",
+      "Requires-Dist: sentence-transformers>=3.2.1; extra == 'dev'",
+      "Requires-Dist: sentence-transformers>=3.2.1; extra == 'sentence-transformers'",
+      "Requires-Dist: tenacity>=9.0.0",
+      "Requires-Dist: transformers>=4.45.2; extra == 'dev'",
+      "Requires-Dist: voyageai>=0.2.3; extra == 'dev'",
+      "Requires-Dist: voyageai>=0.2.3; extra == 'voyageai'"
+    ],
+    "pip_dry_run": {
+      "returncode": 0,
+      "would_install": [
+        "Would install graphiti-core-0.30.2"
+      ],
+      "conflict_lines": [],
+      "conclusion": "本机 Python 3.13 现场解析无冲突（would install 仅自身=依赖全部已满足）"
+    },
+    "assessment": {
+      "neo4j_ce_compatibility": {
+        "driver_requirement": "neo4j>=5.26.0（wheel METADATA）；服务端 CE 5.26+/2025.x 可承载",
+        "conclusion": "社区版兼容：可运行；但 CE 无多 database（单库+system）、无细粒度 RBAC、无热备——多租户只能靠 graphiti group_id 属性级隔离（设计 §1 裁决框预警成立）",
+        "measured": false
+      },
+      "resource_profile": {
+        "server": "Neo4j = JVM 常驻：CE 最小可行画像 heap ~512MB + page cache ~512MB，加开销实际 ~1.5-2GB RAM",
+        "conflict_with_lite": "lite 档五存储=PG+Redis+MinIO（无 Neo4j）；16G 档主机再驻一个 JVM 与 vLLM/嵌入争内存，且 PoC④ 当日实测主栈 postgres:16-alpine 连 vector 扩展都未带——lite 档存储面与 Graphiti 假设差距显著",
+        "measured": false
+      },
+      "alternative_backends": {
+        "extras": "falkordb / falkordblite（Redis 协议）/ kuzu（嵌入式零服务）extra 可选——kuzu 提供免服务图存储，是 lite 档规避 Neo4j 的候选路径，但偏离 Graphiti 主推后端，成熟度未实测",
+        "measured": false
+      },
+      "full_tier_fit": "full 档 M5 起本就规划 Neo4j（L4 属性图，锚点 §3.2）；Graphiti 届时可与其共库部署，CE 单库约束下两域同图、以 label/group_id 划界——L3 决策可推迟到 M5 前再裁",
+      "measured": false
+    }
+  }
+}

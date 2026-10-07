@@ -1,0 +1,52 @@
+{
+  "experiment": "E10_network_whitelist",
+  "probes": [
+    {
+      "host": "pypi.org",
+      "raw": "200rc=0",
+      "allowed": true,
+      "denied": false
+    },
+    {
+      "host": "files.pythonhosted.org",
+      "raw": "404rc=0",
+      "allowed": true,
+      "denied": false
+    },
+    {
+      "host": "registry.npmjs.org",
+      "raw": "curl: (28) Connection timed out after 8000 milliseconds\n000rc=28",
+      "allowed": false,
+      "denied": true
+    },
+    {
+      "host": "registry.npmjs.org",
+      "raw": "200rc=0",
+      "allowed": true,
+      "denied": false
+    }
+  ],
+  "checks": [
+    {
+      "name": "allow: pypi.org reachable",
+      "pass": true,
+      "detail": "200rc=0"
+    },
+    {
+      "name": "allow: files.pythonhosted.org reachable",
+      "pass": true,
+      "detail": "404rc=0"
+    },
+    {
+      "name": "deny: registry.npmjs.org blocked",
+      "pass": true,
+      "detail": "curl: (28) Connection timed out after 8000 milliseconds\n000rc=28"
+    },
+    {
+      "name": "no-policy sandbox unrestricted",
+      "pass": true,
+      "detail": "200rc=0"
+    }
+  ],
+  "passed": true
+}

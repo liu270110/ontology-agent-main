@@ -1,0 +1,313 @@
+{
+  "schema": "eval-release-dashboard/v1",
+  "tag": "v0.2.0-m4.7-first-curve",
+  "generated_at": "2026-10-07T08:17:59.800193+00:00",
+  "env_fingerprint": {
+    "suites": {
+      "agent-core": {
+        "commit": "28346012edeed859fe0fa6b97ecab9f915a18ab6",
+        "branch": "feature/redteam-fix",
+        "dirty": true,
+        "python": "3.13.0",
+        "platform": "Windows-11-10.0.26200-SP0",
+        "deploy_profile": "lite",
+        "model": "确定性桩（零真网）"
+      },
+      "rag": {
+        "commit": "eaea7ebbea23528595ffb5c4b49593d7770b37a3",
+        "python": "3.13.0",
+        "platform": "Windows-11-10.0.26200-SP0",
+        "token_counter": {
+          "kind": "vllm",
+          "vllm": "http://127.0.0.1:18001",
+          "model": "local-main"
+        },
+        "corpus_version": "v0",
+        "corpus_sha256": "50192502fde1bbdce47f16b0bacb5aef85b36ebf06286b18ab6ea56a567cf60b"
+      },
+      "intent": {
+        "commit": "c940b9943c044e2ca96267f5e81de254451edadc",
+        "python": "3.13.0",
+        "platform": "Windows-11-10.0.26200-SP0",
+        "model": {
+          "base_url": "http://127.0.0.1:18001",
+          "served_id": "local-main",
+          "model_root": "/models/qwen3-4b-awq",
+          "max_model_len": 16384
+        }
+      },
+      "ontology-scale": {
+        "commit": "c940b9943c044e2ca96267f5e81de254451edadc",
+        "branch": "feature/bench-ontoscale",
+        "dirty": true,
+        "python": "3.13.0",
+        "platform": "Windows-11-10.0.26200-SP0",
+        "pyshacl": "0.40.1",
+        "rdflib": "7.6.0",
+        "token_counter": "vllm",
+        "vllm_model": "local-main",
+        "seed": 20261007
+      }
+    },
+    "note": "各套件取其最近 run 落盘时的环境（可能不同 commit，如实分列）"
+  },
+  "suites": {
+    "agent-core": {
+      "health": "ok",
+      "health_reason": "all_scenarios_ok",
+      "run": {
+        "suite": "agent-core",
+        "tag": "redteam-fix-verified",
+        "finished_at": "2026-10-07T00:55:18+00:00",
+        "kind": "scenario",
+        "tag_source": "manifest",
+        "files": [
+          "results\\agent-core\\2026-10-07\\085511-cross_tenant_leak.json",
+          "results\\agent-core\\2026-10-07\\085511-invalid_retry_count.json",
+          "results\\agent-core\\2026-10-07\\085511-memory_cross_contamination.json",
+          "results\\agent-core\\2026-10-07\\085511-recovery_time_s.json",
+          "results\\agent-core\\2026-10-07\\085511-session_mutex_rate.json",
+          "results\\agent-core\\2026-10-07\\085511-side_effect_duplication.json"
+        ]
+      },
+      "metrics": {
+        "session_mutex_rate.session_mutex_rate": 1.0,
+        "cross_tenant_leak.reject_rate": 1.0,
+        "memory_cross_contamination.leak_count": 0,
+        "side_effect_duplication.extra_writes": 2,
+        "side_effect_duplication.idempotency_key_visible": true,
+        "invalid_retry_count.invalid_retry_count": 1,
+        "recovery_time_s.recovery_time_s_p50": 0.0011
+      }
+    },
+    "rag": {
+      "health": "ok",
+      "health_reason": "harness_metrics_present",
+      "run": {
+        "suite": "rag",
+        "tag": "v0",
+        "finished_at": "2026-10-07T07:50:06",
+        "kind": "single",
+        "tag_source": "payload",
+        "files": [
+          "results\\rag\\2026-10-07\\run-075006-v0.json"
+        ]
+      },
+      "metrics": {
+        "ours_kb.recall_at_k": 0.975,
+        "ours_kb.mrr": 0.975,
+        "ours_kb.faithfulness": 1.0,
+        "ours_kb.latency_p50_ms": 209.91630000025907,
+        "ours_kb.latency_p95_ms": 277.787700000772,
+        "ours_kb.cost_per_query_tokens": 578.05,
+        "naive_bm25.recall_at_k": 1.0,
+        "naive_bm25.mrr": 0.975,
+        "naive_bm25.faithfulness": 1.0,
+        "naive_bm25.latency_p50_ms": 0.33910000092873815,
+        "naive_bm25.latency_p95_ms": 0.42940000093949493,
+        "naive_bm25.cost_per_query_tokens": 1498.9,
+        "naive_vector.recall_at_k": 1.0,
+        "naive_vector.mrr": 0.9666666666666666,
+        "naive_vector.faithfulness": 1.0,
+        "naive_vector.latency_p50_ms": 489.0427999998792,
+        "naive_vector.latency_p95_ms": 595.1865999995789,
+        "naive_vector.cost_per_query_tokens": 1646.4
+      }
+    },
+    "intent": {
+      "health": "ok",
+      "health_reason": "tier_metrics_present",
+      "run": {
+        "suite": "intent",
+        "tag": "v0",
+        "finished_at": "2026-10-07T10:22:39",
+        "kind": "single",
+        "tag_source": "payload",
+        "files": [
+          "results\\intent\\2026-10-07\\run-102239-v0.json"
+        ]
+      },
+      "metrics": {
+        "a0.intent_accuracy": 0.9,
+        "a0.intent_accuracy_clear": 0.9,
+        "a0.intent_accuracy_ambiguous": 0.9,
+        "a0.clarification_trigger_rate": 0.05,
+        "a0.out_of_scope_reject_rate": 0.7,
+        "a0.parse_error_count": 1,
+        "a0.cost_per_item_tokens": 477.58,
+        "a1.intent_accuracy": 0.6714285714285714,
+        "a1.intent_accuracy_clear": 0.75,
+        "a1.intent_accuracy_ambiguous": 0.5666666666666667,
+        "a1.clarification_trigger_rate": 0.85,
+        "a1.out_of_scope_reject_rate": 0.0,
+        "a1.parse_error_count": 4,
+        "a1.cost_per_item_tokens": 4280.21,
+        "gain.intent_accuracy": -0.22857142857142865,
+        "gain.intent_accuracy_clear": -0.15000000000000002,
+        "gain.intent_accuracy_ambiguous": -0.33333333333333337,
+        "gain.clarification_trigger_rate": 0.7999999999999999,
+        "gain.out_of_scope_reject_rate": -0.7
+      }
+    },
+    "ontology-scale": {
+      "health": "ok",
+      "health_reason": "all_scenarios_ok",
+      "run": {
+        "suite": "ontology-scale",
+        "tag": "onto-scale-v0",
+        "finished_at": "2026-10-07T02:46:46+00:00",
+        "kind": "scenario",
+        "tag_source": "manifest",
+        "files": [
+          "results\\ontology-scale\\2026-10-07\\103846-scale_1e2.json",
+          "results\\ontology-scale\\2026-10-07\\103846-scale_1e3.json",
+          "results\\ontology-scale\\2026-10-07\\103846-scale_1e4.json"
+        ]
+      },
+      "metrics": {
+        "scale_1e2.validate_clean_p95_ms": 277.0,
+        "scale_1e2.compression_ratio": 3.8372,
+        "scale_1e2.detection_rate": 1.0,
+        "scale_1e2.violation_hit_exact": true,
+        "scale_1e3.validate_clean_p95_ms": 4176.0,
+        "scale_1e3.compression_ratio": 3.8934,
+        "scale_1e3.detection_rate": 1.0,
+        "scale_1e3.violation_hit_exact": true,
+        "scale_1e4.validate_clean_p95_ms": 38688.0,
+        "scale_1e4.compression_ratio": 3.8993,
+        "scale_1e4.detection_rate": 1.0,
+        "scale_1e4.violation_hit_exact": true
+      }
+    }
+  },
+  "market_reference": {
+    "nature": "citation_only",
+    "red_line": "红线：本仓 benchmarks/results/rag 的 v0 电力语料实测数字（recall@5/MRR 等）与下列榜单数字禁止直接并列比较——数据集不同（中文电力域 vs 英文开放域）、指标不同（recall@5 vs nDCG@10）、语料规模不同；引用表只进 README/SUMMARY 叙述，不进 metrics 流（orsi_link 不读，见本目录定位）。",
+    "tiers": {
+      "A": {
+        "definition": "同基准同指标（BEIR nDCG@10 族）——唯一直接可比档；但与我们的 v0 电力自有语料仍非同数据集，只作量级合理性参考（见红线）",
+        "pointers": [
+          {
+            "system": "BM25 (Okapi, BEIR 论文原测)",
+            "metric": "nDCG@10",
+            "dataset": "BEIR 18 zero-shot 数据集（TREC-COVID/BioASQ/NFCorpus/NQ/HotpotQA/FiQA-2018/Signal-1M(RT)/TREC-NEWS/Robust04/ArguAna/Touche-2020/CQADupStack/Quora/DBPedia/SCIDOCS/FEVER/Climate-FEVER/SciFact）",
+            "value": 0.4234,
+            "status": "cited",
+            "source_url": "https://ar5iv.labs.arxiv.org/html/2104.08663"
+          },
+          {
+            "system": "BM25+CE (BM25 + 交叉编码器重排, BEIR 论文原测)",
+            "metric": "nDCG@10",
+            "dataset": "BEIR 18 zero-shot 数据集（同 BM25 条目）",
+            "value": 0.4763,
+            "status": "cited",
+            "source_url": "https://ar5iv.labs.arxiv.org/html/2104.08663"
+          },
+          {
+            "system": "BEIR 现役榜单头部（EvalAI 在榜系统，LLM 重排类等）",
+            "metric": "nDCG@10",
+            "dataset": "BEIR 13-dataset subset（榜单标准口径）",
+            "value": null,
+            "status": "not_available",
+            "source_url": "https://github.com/beir-cellar/beir/wiki/Leaderboard"
+          }
+        ]
+      },
+      "B": {
+        "definition": "同指标族不同数据集（MTEB Retrieval/MIRACL 等检索基准）——方向性参照，不可并列",
+        "pointers": [
+          {
+            "system": "text-embedding-3-large",
+            "metric": "MIRACL average（多语检索 nDCG@10 跨语言均值）",
+            "dataset": "MIRACL（多语检索基准，官方博客报告口径）",
+            "value": 54.9,
+            "status": "cited",
+            "source_url": "https://openai.com/blog/new-embedding-models-and-api-updates"
+          },
+          {
+            "system": "text-embedding-3-small",
+            "metric": "MIRACL average（多语检索 nDCG@10 跨语言均值）",
+            "dataset": "MIRACL（同上条口径）",
+            "value": 44.0,
+            "status": "cited",
+            "source_url": "https://openai.com/blog/new-embedding-models-and-api-updates"
+          },
+          {
+            "system": "text-embedding-3-large",
+            "metric": "MTEB Retrieval 子任务平均 nDCG@10",
+            "dataset": "MTEB Retrieval（英文检索子任务族）",
+            "value": null,
+            "status": "not_available",
+            "source_url": "https://huggingface.co/spaces/mteb/leaderboard"
+          },
+          {
+            "system": "embed-english-v3.0",
+            "metric": "BEIR nDCG@10 / MTEB Retrieval（任一标准检索基准绝对值）",
+            "dataset": "BEIR 或 MTEB Retrieval",
+            "value": null,
+            "status": "not_available",
+            "source_url": "https://docs.cohere.com/docs/models"
+          },
+          {
+            "system": "embed-v4.0 (embed-v-4-0)",
+            "metric": "BEIR nDCG@10 / MTEB Retrieval（任一标准检索基准绝对值）",
+            "dataset": "BEIR 或 MTEB Retrieval",
+            "value": null,
+            "status": "not_available",
+            "source_url": "https://docs.cohere.com/docs/models"
+          }
+        ]
+      },
+      "C": {
+        "definition": "纯参考不可比（产品级评测 / 非检索单指标 / 厂商自评）——只给指针不给并列",
+        "pointers": [
+          {
+            "system": "voyage-3-large",
+            "metric": "相对 text-embedding-3-large 的平均 NDCG@10 优势（%）",
+            "dataset": "Voyage 自建 100 数据集评测（8 域，全集清单未完整公开）",
+            "value": 9.74,
+            "status": "cited",
+            "source_url": "https://blog.voyageai.com/2025/01/07/voyage-3-large/"
+          },
+          {
+            "system": "text-embedding-3-large",
+            "metric": "MTEB (English) 全任务平均分（10 任务类含分类/聚类/检索等，非检索单指标）",
+            "dataset": "MTEB English 全集（官方博客报告口径）",
+            "value": 64.6,
+            "status": "cited",
+            "source_url": "https://openai.com/blog/new-embedding-models-and-api-updates"
+          },
+          {
+            "system": "Perplexity.ai（闭源问答产品，2023-04 评测快照）",
+            "metric": "FreshQA STRICT accuracy（无幻觉判定口径）",
+            "dataset": "FreshQA all（500 题，学术评测 FreshLLMs，评测快照 2023-04-26）",
+            "value": 52.2,
+            "status": "cited",
+            "source_url": "https://arxiv.org/html/2310.03214v2"
+          },
+          {
+            "system": "Perplexity.ai（闭源问答产品，2023-04 评测快照）",
+            "metric": "FreshQA RELAXED accuracy（宽松判定口径）",
+            "dataset": "FreshQA all（同上条）",
+            "value": 66.2,
+            "status": "cited",
+            "source_url": "https://arxiv.org/html/2310.03214v2"
+          },
+          {
+            "system": "Gemini grounding（Grounding with Google Search）",
+            "metric": "SimpleQA / grounding 检索类公开基准值",
+            "dataset": "SimpleQA Verified 或同类",
+            "value": null,
+            "status": "not_available",
+            "source_url": "https://deepmind.google/models/gemini/pro/"
+          }
+        ]
+      }
+    },
+    "qualitative_position": {
+      "A": "（非并列结论）\n\n我们 naive_bm25 在自有电力语料 recall@5=1.0，BEIR 论文 BM25 十八集零样本平均 nDCG@10≈0.42——仅量级合理性参考：两者均在词法基线正常量级，且 recall@5 vs nDCG@10、中文电力域 vs 英文开放域不可换算，不构成任何名次结论。",
+      "B": "（非并列结论）\n\n我们 naive_bm25 在自有电力语料 recall@5=1.0，BEIR 论文 BM25 十八集零样本平均 nDCG@10≈0.42——仅量级合理性参考：两者均在词法基线正常量级，且 recall@5 vs nDCG@10、中文电力域 vs 英文开放域不可换算，不构成任何名次结论。",
+      "source": "benchmarks\\results\\rag\\SUMMARY.md"
+    }
+  }
+}

@@ -1,0 +1,143 @@
+"""仓储接口（04 篇 §4 纪律：租户作用域构造期绑定，方法级不传 tenant_id）。
+
+实现在 services/memory/data/repo_impl（PG）与 services/memory/data/l1.py（Redis L1）；
+本文件只定 Protocol（L4 零框架依赖），业务层经此消费，禁直连 data 层。
+`get` 未命中返回 None；add/save_state 不提交事务——提交归调用方会话管理
+（SessionDep 自动提交 / 后台任务显式 commit）。
+"""
+
+from __future__ import annotations
+
+from collections.abc import Sequence
+from datetime import datetime
+from typing import Protocol, runtime_checkable
+from uuid import UUID
+
+from services.memory.domain.model.l1 import L1SessionSummary, L1Snapshot, MemoryBlock, WindowMessage
+from services.memory.domain.model.l2_fact import FactCategory, FactInvalidation, FactStatus, L2Fact
+
+
+@runtime_checkable
+class FactEmbedderPort(Protocol):
+    """嵌入端口（memory §7 嵌入列；lite=pgvector 直写直查）。
+
+    实现在 services.memory.data.vector.FactEmbedder（Ollama /api/embed）；business 层
+    （沉淀管线）仅消费本端口，禁触 data/infra——与 L1MemoryStore 同款端口纪律。
+    任何不可用（模型离线/列缺失）由实现抛 data 层 EmbeddingUnavailableError，调用方降级。
+    """
+
+    async def embed(self, texts: Sequence[str]) -> list[list[float]]:
+        """批量嵌入；输入顺序即输出顺序；失败抛实现侧降级异常。"""
+        ...
+
+
+@runtime_checkable
+class L2FactRepository(Protocol):
+    """L2 结构化事实仓储（memory §7 PG memory_l2_facts）。"""
+
+    async def get(self, fact_id: UUID) -> L2Fact | None:
+        """按主键取（租户过滤；未命中或跨租户一律 None）。"""
+        ...
+
+    async def find_by_fingerprint(self, user_id: UUID, fingerprint: str) -> L2Fact | None:
+        """幂等判重（memory §5.4：按指纹查既有事实，重复提交返回原 id）。"""
+        ...
+
+    async def add(self, fact: L2Fact) -> None:
+        """新增事实（唯一索引 uk_memory_l2_facts_tenant_user_fingerprint 兜底并发判重）。"""
+        ...
+
+    async def save_state(self, fact: L2Fact) -> None:
+        """仅标量状态（status/supersedes_id/valid_to/updated_at；内容不可变不落列）。"""
+        ...
+
+    async def archive_invalidated(self, fact: L2Fact, *, reason: str, invalidated_at: datetime) -> None:
+        """失效即归档（K2-a §11.1）：写失效影子行（fact_id/tenant/user/content 快照/reason/
+        invalidated_at），与 save_state 同事务（本仓储不提交——提交归调用方会话管理），杜绝
+        「主表已失效、影子缺失」断链。影子行是归档追溯面非复活通道。"""
+        ...
+
+    async def list_invalidated(
+        self,
+        user_id: UUID,
+        *,
+        active_only: bool = True,
+        offset: int = 0,
+        limit: int = 50,
+    ) -> list[FactInvalidation]:
+        """用户失效归档分页（invalidated_at 倒序；active_only=True 仅 restored_at 为空的生效行）。"""
+        ...
+
+    async def restore(self, fact_id: UUID, *, now: datetime) -> FactInvalidation | None:
+        """影子层可见性恢复（K2-a §11.1）：该事实**最新生效中**影子行 restored_at 回填后返回；
+        非复活——主表 fact 保持 INVALIDATED 终态不动（P3-3 防复活红线）。无生效影子行
+        （未失效过/已恢复）返回 None，调用方据语义映射 4xx。"""
+        ...
+
+    async def list_for_user(
+        self,
+        user_id: UUID,
+        *,
+        status: FactStatus | None = None,
+        category: FactCategory | None = None,
+        offset: int = 0,
+        limit: int = 20,
+    ) -> list[L2Fact]:
+        """分页查询（api/01 §5.5 GET /memory：status/category 过滤）。"""
+        ...
+
+    async def search_candidates(self, user_id: UUID, query: str, *, limit: int) -> list[L2Fact]:
+        """关键词通道候选（活跃事实按命中排序）；排序融合由业务层 RRF+衰减负责（memory §3）。"""
+        ...
+
+    async def recent_candidates(self, user_id: UUID, *, limit: int) -> list[L2Fact]:
+        """新近通道候选（活跃事实按 created_at 倒序）；向量通道见 data/vector.py（M3 接入）。"""
+        ...
+
+    async def save_embedding(self, fact_id: UUID, vector: Sequence[float], *, model: str | None = None) -> bool:
+        """向量回写（pgvector 列 raw SQL，data/vector.py 执行；列缺失抛降级异常）。
+
+        model=None → 实现侧缺省模型标注（embedding_ref）；返回是否写入（fact 未命中=False）；
+        向量是召回加速面非正确性依赖，调用方可降级。
+        """
+        ...
+
+    async def chain_for_user(self, user_id: UUID, fact_id: UUID, *, limit: int = 50) -> list[L2Fact]:
+        """版本链回放（api/01 §5.5 GET /memory/facts/{id}/timeline 数据面）。
+
+        从 fact_id 起双向行走 supersedes 链（旧事实.supersedes_id=新事实 id）：先沿
+        supersedes_id 回溯旧版，再逐级取 successor（WHERE supersedes_id=:current），
+        返回按代际从旧到新排序的链上事实（含 fact_id 本身；未命中/跨租户=空列表）。
+        limit 截断防环/超长链。
+        """
+        ...
+
+
+@runtime_checkable
+class L1MemoryStore(Protocol):
+    """L1 会话工作记忆存储（memory §7 Redis key 规范；实现须内置降级语义）。"""
+
+    async def read(self, tenant_id: UUID, session_id: UUID) -> L1Snapshot:
+        """全量读取；Redis 不可达时返回 degraded=True 空快照（不阻塞会话）。"""
+        ...
+
+    async def list_sessions(self, tenant_id: UUID, *, limit: int = 50) -> list[L1SessionSummary]:
+        """列出租户内仍有 L1 键的活跃会话（GET /memory/l1 数据面；TTL 剩余降序，
+        Redis 不可达返回空列表——read 同款降级契约，不阻塞容量卡）。"""
+        ...
+
+    async def write_blocks(self, tenant_id: UUID, session_id: UUID, blocks: list[MemoryBlock]) -> int:
+        """upsert 自编辑记忆块（按 key 覆盖），返回实际写入数。"""
+        ...
+
+    async def append_window(self, tenant_id: UUID, session_id: UUID, messages: list[WindowMessage]) -> int:
+        """滑动窗口追加（LPUSH + LTRIM，新→旧），返回窗口当前长度。"""
+        ...
+
+    async def write_state(self, tenant_id: UUID, session_id: UUID, state: dict[str, object]) -> None:
+        """任务草稿/检查点写入（整体覆盖）。"""
+        ...
+
+    async def delete_all(self, tenant_id: UUID, session_id: UUID) -> None:
+        """会话归档后清理三键（memory §4：归档任务消费后删除；失败语义见设计 §4）。"""
+        ...

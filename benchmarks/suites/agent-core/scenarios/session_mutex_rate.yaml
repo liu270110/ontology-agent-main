@@ -1,0 +1,18 @@
+# 场景数据文件示例 ①（docs/Agent/16 §1：场景=数据文件，可被 agent 经集市审核链扩充）
+# schema 校验=runner.load_scenario_specs（断言键白名单=metrics.py 指标键，防作弊断言）
+version: 1
+scenario: session_mutex_rate
+description: |
+  红队 A1：同会话并发消息互斥率。双客户端并发 POST 同 session 消息，断言互斥率=100%
+  （单进程）；跨副本双跑形态=预期失败（D4 跨进程 turn 租约未实装，登记项）。
+params:
+  iterations: 20   # 并发攻击轮数（--smoke 时缩至 smoke_iterations）
+  concurrency: 2   # 每轮并发消息数
+  smoke_iterations: 3
+asserts:
+  - metric: session_mutex_rate
+    op: ">="
+    value: 1.0
+  - metric: mutex_broken_iterations
+    op: "=="
+    value: 0

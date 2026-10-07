@@ -1,0 +1,1 @@
+function o(e){const i=new Date(e).getTime();if(!Number.isFinite(i))return e;const u=Date.now()-i,t=Math.round(u/6e4);if(t<1)return"刚刚";if(t<60)return`${t} 分钟前`;const n=Math.round(t/60);if(n<24)return`${n} 小时前`;const r=Math.round(n/24);return r===1?"昨天":r<7?`${r} 天前`:new Date(e).toLocaleDateString()}export{o as r};

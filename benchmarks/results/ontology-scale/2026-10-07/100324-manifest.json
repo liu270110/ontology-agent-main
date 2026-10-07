@@ -1,0 +1,36 @@
+{
+  "suite": "ontology-scale",
+  "smoke": true,
+  "env": {
+    "commit": "c940b9943c044e2ca96267f5e81de254451edadc",
+    "branch": "feature/bench-ontoscale",
+    "dirty": true,
+    "python": "3.13.0",
+    "platform": "Windows-11-10.0.26200-SP0",
+    "pyshacl": "0.40.1",
+    "rdflib": "7.6.0",
+    "validate_path": "services.ontology.core.shacl.validate(advanced=True, inference='none')",
+    "token_counter": "vllm",
+    "vllm_model": "local-main",
+    "seed": 20261007
+  },
+  "total_duration_s": 549.324,
+  "scenarios_run": [
+    "scale_1e2",
+    "scale_1e3",
+    "scale_1e4"
+  ],
+  "status_counts": {
+    "ok": 3,
+    "partial": 0,
+    "assert_failed": 0,
+    "error": 0
+  },
+  "finished_at": "2026-10-07T02:12:33+00:00",
+  "tag": "onto-scale-v0",
+  "results_files": [
+    "100324-scale_1e2.json",
+    "100324-scale_1e3.json",
+    "100324-scale_1e4.json"
+  ]
+}

@@ -1,0 +1,241 @@
+{
+  "meta": {
+    "generated_at": "2026-09-26T20:58:28.658039+00:00",
+    "platform": "Windows-11-10.0.26200-SP0",
+    "machine": "AMD64",
+    "processor": "Intel64 Family 6 Model 170 Stepping 4, GenuineIntel",
+    "cpu_physical": 16,
+    "cpu_logical": 22,
+    "ram_total_gb": 31.5,
+    "versions": {
+      "python": "3.13.0",
+      "rdflib": "7.6.0",
+      "owlrl": "7.6.2",
+      "pyshacl": "0.40.1",
+      "psutil": "7.1.3"
+    },
+    "scale_budget_s": {
+      "1k": 120.0,
+      "5k": 300.0,
+      "10k": 600.0,
+      "100k": 1800.0
+    },
+    "sla_targets": {
+      "shacl_10k_p99_ms": 100,
+      "owl_reasoning_async_p95_s": 5
+    },
+    "measurement_notes": [
+      "数据形态=电力模板（设备-故障-工单）：TBox 与 seeds/power_seed.ttl 同构（含 Transformer×Meter 互斥、inSection/hasDevice inverseOf 对）；ABox 单元=设备+工单+停电确认事件各 1 实例共 11 三元组，每 100 工单 1 个 orderNo 违规、每 97 工单 1 个状态违规（确定性注入）",
+      "三阶段均在独立子进程中执行：进程级硬超时可终止；tracemalloc 仅第一轮且仅 ≤10k 档开启（追踪开销实测约 6.6x，见初版 poc1_owl_benchmark.py）",
+      "RSS 峰值=父进程对子进程 0.2s 间隔采样的最大值（含解释器基线）",
+      "pySHACL 对未物化原始图校验（与推理分离口径）；inference=none",
+      "SLA 对照目标：{'shacl_10k_p99_ms': 100, 'owl_reasoning_async_p95_s': 5}"
+    ]
+  },
+  "scales": [
+    {
+      "scale": "1k",
+      "target_triples": 1000,
+      "actual_triples": 1000,
+      "build_seconds": 0.9223690999933751,
+      "parse": {
+        "rounds": 3,
+        "seconds_median": 0.04281500000797678,
+        "seconds_all": [
+          0.04281500000797678,
+          0.03416090000246186,
+          0.050095900005544536
+        ],
+        "tracemalloc_peak_bytes": null,
+        "rss_peak_bytes": 47624192,
+        "timeouts": 0,
+        "tbox_triples": 80
+      },
+      "materialize": {
+        "rounds": 3,
+        "seconds_median": 0.7270565999933751,
+        "seconds_all": [
+          6.013631899986649,
+          0.6364819000009447,
+          0.7270565999933751
+        ],
+        "tracemalloc_peak_bytes": [
+          1912983
+        ],
+        "rss_peak_bytes": 53460992,
+        "timeouts": 0
+      },
+      "shacl": {
+        "rounds": 10,
+        "seconds_median": 0.019078799996350426,
+        "seconds_all": [
+          0.018855099988286383,
+          0.018795199997839518,
+          0.017796600004658103,
+          0.017573100005392917,
+          0.021650100010447204,
+          0.015394400004879571,
+          0.029136900004232302,
+          0.030004700005520135,
+          0.01930250000441447,
+          0.025908700001309626
+        ],
+        "tracemalloc_peak_bytes": null,
+        "rss_peak_bytes": 49754112,
+        "timeouts": 0,
+        "conforms": false,
+        "violations": 2
+      },
+      "materialized_triples": 2962,
+      "rounds_completed": 3,
+      "timeout_phase": null
+    },
+    {
+      "scale": "5k",
+      "target_triples": 5000,
+      "actual_triples": 5000,
+      "build_seconds": 1.230490899994038,
+      "parse": {
+        "rounds": 3,
+        "seconds_median": 0.22135779999371152,
+        "seconds_all": [
+          0.22939960000803694,
+          0.22135779999371152,
+          0.19931419999920763
+        ],
+        "tracemalloc_peak_bytes": null,
+        "rss_peak_bytes": 55009280,
+        "timeouts": 0,
+        "tbox_triples": 80
+      },
+      "materialize": {
+        "rounds": 3,
+        "seconds_median": 3.813714300005813,
+        "seconds_all": [
+          39.231606200002716,
+          3.7793754000012996,
+          3.813714300005813
+        ],
+        "tracemalloc_peak_bytes": [
+          7071891
+        ],
+        "rss_peak_bytes": 68947968,
+        "timeouts": 0
+      },
+      "shacl": {
+        "rounds": 10,
+        "seconds_median": 0.15462629999092314,
+        "seconds_all": [
+          0.1662951000034809,
+          0.11866170000575949,
+          0.13896529999328777,
+          0.14041249999718275,
+          0.1602833999932045,
+          0.17058970000653062,
+          0.22878720000153407,
+          0.2977582000021357,
+          0.12832000000344124,
+          0.14896919998864178
+        ],
+        "tracemalloc_peak_bytes": null,
+        "rss_peak_bytes": 57622528,
+        "timeouts": 0,
+        "conforms": false,
+        "violations": 10
+      },
+      "materialized_triples": 13856,
+      "rounds_completed": 3,
+      "timeout_phase": null
+    },
+    {
+      "scale": "10k",
+      "target_triples": 10000,
+      "actual_triples": 10000,
+      "build_seconds": 1.4414258999895537,
+      "parse": {
+        "rounds": 2,
+        "seconds_median": 0.40925240000069607,
+        "seconds_all": [
+          0.39618630000040866,
+          0.4223185000009835
+        ],
+        "tracemalloc_peak_bytes": null,
+        "rss_peak_bytes": 61644800,
+        "timeouts": 0,
+        "tbox_triples": 80
+      },
+      "materialize": {
+        "rounds": 2,
+        "seconds_median": 47.52117929999804,
+        "seconds_all": [
+          84.29037190000236,
+          10.751986699993722
+        ],
+        "tracemalloc_peak_bytes": [
+          17267121
+        ],
+        "rss_peak_bytes": 89223168,
+        "timeouts": 0
+      },
+      "shacl": {
+        "rounds": 3,
+        "seconds_median": 0.22904590000689495,
+        "seconds_all": [
+          0.2481973999965703,
+          0.22274849998939317,
+          0.22904590000689495
+        ],
+        "tracemalloc_peak_bytes": null,
+        "rss_peak_bytes": 63422464,
+        "timeouts": 0,
+        "conforms": false,
+        "violations": 18
+      },
+      "materialized_triples": 26586,
+      "rounds_completed": 2,
+      "timeout_phase": null
+    },
+    {
+      "scale": "100k",
+      "target_triples": 100000,
+      "actual_triples": 100000,
+      "build_seconds": 1.0824488999933237,
+      "parse": {
+        "rounds": 1,
+        "seconds_median": 5.358841700013727,
+        "seconds_all": [
+          5.358841700013727
+        ],
+        "tracemalloc_peak_bytes": null,
+        "rss_peak_bytes": 196485120,
+        "timeouts": 0,
+        "tbox_triples": 80
+      },
+      "materialize": {
+        "rounds": 1,
+        "seconds_median": 90.32928179998999,
+        "seconds_all": [
+          90.32928179998999
+        ],
+        "tracemalloc_peak_bytes": null,
+        "rss_peak_bytes": 307212288,
+        "timeouts": 0
+      },
+      "shacl": {
+        "rounds": 1,
+        "seconds_median": 3.272386800003005,
+        "seconds_all": [
+          3.272386800003005
+        ],
+        "tracemalloc_peak_bytes": null,
+        "rss_peak_bytes": 197885952,
+        "timeouts": 0,
+        "conforms": false,
+        "violations": 185
+      },
+      "materialized_triples": 255678,
+      "rounds_completed": 1,
+      "timeout_phase": null
+    }
+  ]
+}

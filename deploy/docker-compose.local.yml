@@ -1,0 +1,29 @@
+# deploy/docker-compose.local.yml — 本机适配 overlay（与 deploy/docker-compose.yml 叠加使用）
+# 背景（2026-09-27）：本机 Docker daemon 镜像加速器全废、Docker Hub 直连被墙，
+# 镜像改由 deploy/up.sh 经华为 SWR 转存拉取后打回标准名；本 overlay 负责：
+#   1) postgres 换 pgvector/pgvector:pg16（lite 档向量路，M2 前置补齐；数据卷向前兼容直接换）
+#   2) minio 镜像锁版本（禁 latest 纪律；与现网卷内数据同代）
+#   3) minio-init 一次性服务：四个 bucket 幂等创建（raw-docs/extracts/ontology-artifacts/plugin-packages）
+# 用法：docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.local.yml --env-file .env up -d
+#       或直接 sh deploy/up.sh [--gpu]
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+
+  minio:
+    image: minio/minio:RELEASE.2024-10-13T13-34-11Z
+
+  minio-init:
+    image: minio/mc:latest
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: ["/bin/sh", "-c"]
+    command: >
+      "mc alias set local http://minio:9000 $${OA_MINIO_USER:-onto} $${OA_MINIO_PASSWORD:-onto_dev} &&
+       mc mb --ignore-existing local/raw-docs local/extracts local/ontology-artifacts local/plugin-packages"
+    environment:
+      OA_MINIO_USER: ${OA_MINIO_USER:-onto}
+      OA_MINIO_PASSWORD: ${OA_MINIO_PASSWORD:-onto_dev}
+    restart: "no"

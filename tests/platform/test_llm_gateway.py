@@ -41,6 +41,36 @@ def _client(captured: list[dict], *, usage: dict | None = None) -> httpx.AsyncCl
     return httpx.AsyncClient(transport=httpx.MockTransport(handler))
 
 
+async def test_complete_structured_缺省超时用构造期默认_显式传参优先():
+    """组合实验批收口（docling 两级流水线 E2E 发现）：complete_structured 对齐
+    complete/streaming 的 None=构造期默认约定（model_port 协议 docstring 既有语义）——
+    此前形参硬默认 60s，OA_LLM_TIMEOUT_S 到不了请求面；显式传参仍优先。"""
+    seen: list[dict | None] = []
+
+    def _handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request.extensions.get("timeout"))  # per-request 超时随 extensions 可观测
+        return httpx.Response(200, json={"choices": [{"message": {"content": '{"ok": true}'}}]})
+
+    port = OpenAICompatibleModelPort(
+        base_url="http://llm",
+        api_key="k",
+        model="m",
+        timeout_s=123.0,
+        client=httpx.AsyncClient(transport=httpx.MockTransport(_handler)),
+    )
+    try:
+        # Act：缺省（None）→ 构造期默认
+        await port.complete_structured(system="s", user="u", json_schema=_SCHEMA)
+        # Assert：请求面超时=构造期 123s（非硬编码 60）
+        assert seen[-1] is not None and seen[-1]["read"] == 123.0
+        # Act：显式传参优先
+        await port.complete_structured(system="s", user="u", json_schema=_SCHEMA, timeout_s=7.0)
+        # Assert
+        assert seen[-1] is not None and seen[-1]["read"] == 7.0
+    finally:
+        await port.aclose()
+
+
 async def test_num_ctx传入时注入请求体_缺省时不注入():
     captured: list[dict] = []
     port = OpenAICompatibleModelPort(base_url="http://llm", api_key="k", model="m", client=_client(captured))

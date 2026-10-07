@@ -52,7 +52,7 @@ class ModelPort(Protocol):
         system: str,
         user: str,
         json_schema: dict[str, Any],
-        timeout_s: float = 60.0,
+        timeout_s: float | None = None,
         trace_id: str | None = None,
         num_ctx: int | None = None,
     ) -> dict[str, Any]:
@@ -61,6 +61,9 @@ class ModelPort(Protocol):
         trace_id 贯穿调用链（08 篇 §1 可追溯底线），实现方须透传至日志/审计；
         num_ctx：上下文窗口注入参数（计划 3.3 增参，可选/向后兼容）——Ollama/vLLM 语义
         的上下文窗口大小，实现方透传给模型端点，端点不支持时忽略；None=用实现默认。
+        timeout_s：缺省 None=用实现默认（构造期，2026-10-08 组合实验批对齐本文档第 45 行
+        既有语义——形参硬默认 60s 会令 Settings.llm_timeout_s/OA_LLM_TIMEOUT_S 到不了
+        请求面，显式传参仍优先）。
         """
         ...  # pragma: no cover — Protocol 方法无实现
 

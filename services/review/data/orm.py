@@ -37,9 +37,11 @@ class ReviewTicket(Base, PkMixin, TenantMixin, TimestampMixin):
             # conflict = KB-G1a 冲突分诊 T2 工单（OntRAG §8.1「对齐现行 review_workflow 状态机」：
             # conflict 标记即工单入口；枚举扩展随 20260929 迁移，database/01 §3.5 同步）；
             # permission_request = 第六类对象（api/01 §5.10 注记：权限申请提交即生成待办工单，
-            # 2026-10-05 admin 域批迁移 20261005_c5e9a1d3b7f5 同步）
+            # 2026-10-05 admin 域批迁移 20261005_c5e9a1d3b7f5 同步）；
+            # workflow_publish = 第七类对象候选（工作流发布审批，27 篇 §3/§5、X16 挂账 11 篇
+            # 裁决；2026-10-07 F1 批迁移 20261007_f1a9c3e5b7d2 同步，批准回迁 head=后续批）
             "target_type IN ('ontology_candidate','knowledge_instance','memory_l2_upgrade',"
-            "'plugin_listing','writeback_incident','conflict','permission_request')",
+            "'plugin_listing','writeback_incident','conflict','permission_request','workflow_publish')",
             name="target_type",
         ),
         CheckConstraint(

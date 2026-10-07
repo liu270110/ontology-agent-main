@@ -445,6 +445,8 @@ def _map_class_indices(candidates: list[Any], class_index: dict[int, str]) -> li
     - 失序（非整数——含 bool/浮点/任意文本，或越界整数）改写为自描述哨兵串「形态:原值」
       （如「序号越界:99」「非整数:Feeder」）——候选照常进 K21 剪枝管线，按 OUT_OF_TAXONOMY /
       INVALID_RELATION_ENDPOINT 剪除留痕，detail 自然注明失效形态：不加新枚举、不 hard-raise
+      # 口径（专家审核 2026-10-07）：生产端口 schema=第一道门拒收非整数（反馈重试后上抛）；
+      # 本哨兵分支=非校验端口（测试桩）兜底走留痕——两道门互补而非矛盾。
       （保 chunk 级断点续跑语义）；模型违反序号口径直出 IRI 文本同落此分支（硬幻觉门禁：
       目录未展示 IRI，任何非序号回包皆视为 schema 外候选交终审）。
     纯函数：返回新列表，不感知落库；非 dict 条目透传（调用方既有过滤口径）。
@@ -460,7 +462,12 @@ def _map_class_indices(candidates: list[Any], class_index: dict[int, str]) -> li
             if raw is None or (isinstance(raw, str) and not raw.strip()):
                 continue  # 未自报类：空 hint 原样透传（剪枝侧同口径）
             if isinstance(raw, bool) or not isinstance(raw, int):
-                cand[field_name] = f"非整数:{raw}"
+                # jsonschema 视 2.0 为合法 integer——整值浮点容错为 int（专家 P2：模型本意
+                # 2 号类不应因 2.0 形态被过严剪除；非整值浮点仍走哨兵留痕）。
+                if isinstance(raw, float) and raw.is_integer():
+                    raw = int(raw)
+                else:
+                    cand[field_name] = f"非整数:{raw}"
                 continue
             iri = class_index.get(raw)
             if iri is None:

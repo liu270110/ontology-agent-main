@@ -611,7 +611,7 @@ class FakeModelPort:
     def __init__(
         self,
         *,
-        keyword_classes: Mapping[str, str] | None = None,
+        keyword_classes: Mapping[str, str | int] | None = None,
         keyword_properties: Mapping[str, Mapping[str, str]] | None = None,
         delay_s: float = 0.0,
         fail_always_message: str | None = None,

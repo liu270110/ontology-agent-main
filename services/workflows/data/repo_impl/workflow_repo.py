@@ -29,6 +29,7 @@ def _to_domain(row: WorkflowORM) -> Workflow:
         status=WorkflowStatus(row.status),
         draft=WorkflowGraph.from_storage(row.draft),
         head_version=row.head_version,
+        source_run_id=row.source_run_id,
         created_by=row.created_by,
         updated_at=row.updated_at,
     )
@@ -72,6 +73,8 @@ class PgWorkflowRepository:
         row.status = workflow.status.value
         row.draft = workflow.draft.to_storage()
         row.head_version = workflow.head_version
+        # source_run_id 不在写回面：血统列只在建行（含 promote 提升）路径写入，行存续期不变
+        # （40 篇 §6 血统恒定；save 供草稿保存/发布/回滚三条写路径，均不改血统）
         await self._db.flush()
 
     async def delete(self, workflow_id: uuid.UUID) -> None:
@@ -134,6 +137,45 @@ class PgWorkflowRepository:
             )
             for r in rows
         ]
+
+    async def get_version(self, workflow_id: uuid.UUID, version: int) -> WorkflowVersion | None:
+        """单版本读取（租户作用域；不可变行只读——回滚用例数据源）。"""
+        row = (
+            await self._db.execute(
+                select(WorkflowVersionORM).where(
+                    WorkflowVersionORM.tenant_id == self._tenant_id,
+                    WorkflowVersionORM.workflow_id == workflow_id,
+                    WorkflowVersionORM.version == version,
+                )
+            )
+        ).scalar_one_or_none()
+        if row is None:
+            return None
+        return WorkflowVersion(
+            id=row.id,
+            tenant_id=row.tenant_id,
+            workflow_id=row.workflow_id,
+            version=row.version,
+            snapshot=dict(row.snapshot or {}),
+            note=row.note,
+            published_by=row.published_by,
+            published_at=row.published_at,
+        )
+
+    async def find_by_source_run(self, source_run_id: uuid.UUID) -> Workflow | None:
+        """血统查重（40 篇 §6 promote 幂等键=run_id）；多行取最近更新（理论不发生——幂等单草稿）。"""
+        row = (
+            await self._db.execute(
+                select(WorkflowORM)
+                .where(
+                    WorkflowORM.tenant_id == self._tenant_id,
+                    WorkflowORM.source_run_id == source_run_id,
+                )
+                .order_by(WorkflowORM.updated_at.desc(), WorkflowORM.id.desc())
+                .limit(1)
+            )
+        ).scalar_one_or_none()
+        return None if row is None else _to_domain(row)
 
     async def add_version(self, version: WorkflowVersion) -> None:
         self._db.add(
@@ -201,5 +243,6 @@ def _to_orm(workflow: Workflow) -> WorkflowORM:
         status=workflow.status.value,
         draft=workflow.draft.to_storage(),
         head_version=workflow.head_version,
+        source_run_id=workflow.source_run_id,
         created_by=workflow.created_by,
     )

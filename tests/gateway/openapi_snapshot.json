@@ -12440,6 +12440,55 @@
         "title": "WorkflowPublishOut",
         "type": "object"
       },
+      "WorkflowRollbackIn": {
+        "additionalProperties": false,
+        "description": "回滚（POST /workflows/{id}/rollback；前端 rollbackWorkflow body={to_version: \"vN\"}）。\n\nto_version 版本**标签**字符串（WfVersion.version 形——画框 25 基线单选值），服务端\n解析为版本号（:attr:`version_number`）；\"v12\"/\"12\" 均收，其余 ValueError→FastAPI\n原生 422（3xxx DTO 校验段）。",
+        "properties": {
+          "to_version": {
+            "description": "目标版本标签 vN（WfVersion.version 同形）",
+            "maxLength": 16,
+            "minLength": 1,
+            "title": "To Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "to_version"
+        ],
+        "title": "WorkflowRollbackIn",
+        "type": "object"
+      },
+      "WorkflowRollbackOut": {
+        "additionalProperties": false,
+        "description": "回滚响应（202；形状=前端 rollbackWorkflow 消费面 + mock ok() 逐字段对齐：\n以目标版本内容新建草稿——27 篇 §3「回滚=以旧版本新建草稿」）。",
+        "properties": {
+          "copied_from": {
+            "title": "Copied From",
+            "type": "string"
+          },
+          "draft_version": {
+            "title": "Draft Version",
+            "type": "string"
+          },
+          "note": {
+            "default": "",
+            "title": "Note",
+            "type": "string"
+          },
+          "status": {
+            "const": "draft_created",
+            "default": "draft_created",
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "draft_version",
+          "copied_from"
+        ],
+        "title": "WorkflowRollbackOut",
+        "type": "object"
+      },
       "WorkflowSaveIn": {
         "additionalProperties": false,
         "description": "草稿保存（PUT /workflows/{id}；前端 saveWorkflow body=nodes/edges，name/描述 mock 兼容可选）。",
@@ -23797,6 +23846,59 @@
           }
         },
         "summary": "草稿保存（仅草稿可改 4803；存前过校验三件 4801/4802）",
+        "tags": [
+          "workflows"
+        ]
+      }
+    },
+    "/api/v1/workflows/{workflow_id}/rollback": {
+      "post": {
+        "operationId": "rollback_workflow_api_v1_workflows__workflow_id__rollback_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workflow_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workflow Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WorkflowRollbackIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkflowRollbackOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "回滚（以目标版本内容新建草稿——27 篇 §3；版本行零触碰，head 历史保留）",
         "tags": [
           "workflows"
         ]

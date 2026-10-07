@@ -4,7 +4,9 @@
 
     draft ──publish（solo 直发 / team·enterprise 出 workflow_publish 工单，批准回迁=
     后续批）──▶ published（head_version 固化；已发布版本不可变）
-    published ──deprecated（废弃语义 v1 不做，预留枚举位）
+    published ──rollback_to（以目标版本内容新建草稿，27 篇 §3「回滚=以旧版本新建草稿」）
+    ──▶ draft（head_version 与版本行均不动——版本历史只增）
+    archived（归档：v1 无写入口，预留枚举位——e6c8a2d4f0b2 词汇定稿）
 
 迁移纪律：状态只经聚合方法推进（plugin/tools 同款——非法路径无入口）；draft 图内容
 修改走 :attr:`draft` 整体重赋值（JSONB 不可原地变更纪律，review candidates 同款）。
@@ -24,11 +26,11 @@ from services.workflows.domain.model.graph import WorkflowGraph
 
 
 class WorkflowStatus(StrEnum):
-    """工作流主状态三态（15 §1.2 workflows.status，与存储列逐字一致）。"""
+    """工作流主状态三态（15 §1.2 workflows.status，与存储列逐字一致；archived=e6c8a2d4f0b2）。"""
 
     DRAFT = "draft"
     PUBLISHED = "published"
-    DEPRECATED = "deprecated"
+    ARCHIVED = "archived"
 
 
 class Workflow(BaseModel):
@@ -44,6 +46,7 @@ class Workflow(BaseModel):
     status: WorkflowStatus = WorkflowStatus.DRAFT
     draft: WorkflowGraph = Field(default_factory=WorkflowGraph)
     head_version: int | None = None  # None=从未发布（draft_version 派生 v1）
+    source_run_id: uuid.UUID | None = None  # 血统列（40 篇 §6）：run→template 提升来源；建行后不变
     created_by: uuid.UUID | None = None
     updated_at: datetime | None = None  # 审计列投影（ORM TimestampMixin；内存构造态 None）
 
@@ -93,6 +96,18 @@ class Workflow(BaseModel):
             raise DomainError(f"3001 PARAM_INVALID: 版本号非法: {version}")  # 防御分支（版本号由仓储分配恒 ≥1）
         self.status = WorkflowStatus.PUBLISHED
         self.head_version = version
+
+    def rollback_to(self, graph: WorkflowGraph) -> None:
+        """回滚推进：以目标版本快照内容新建草稿（27 篇 §3「回滚=以旧版本新建草稿」；
+        api/01 §5.11 POST /workflows/{id}/rollback 202）。
+
+        不变量（版本不可变——27 篇 §3/宪法 5）：目标版本行与全部版本历史零触碰；
+        head_version 保留（版本历史不丢，再发布版本号仍顺延 max+1）；状态回 draft
+        （仅草稿可改/可再发布——非草稿改动拒绝的门槛不变）。图内容校验三件归 business
+        用例前置（快照发布时已过校验，重验为幂等防御），本方法只管状态推进。
+        """
+        self.draft = graph
+        self.status = WorkflowStatus.DRAFT
 
 
 class WorkflowVersion(BaseModel):

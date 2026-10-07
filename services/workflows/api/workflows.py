@@ -1,4 +1,4 @@
-"""workflows 工作流编排路由（api/01 §5.11 预登记八端点实现；15 §1.3 行为面；scope deny-by-default）。
+"""workflows 工作流编排路由（api/01 §5.11 预登记端点实现；15 §1.3 行为面；scope deny-by-default）。
 
     GET    /workflow-templates          三静态模板目录            workflow:read    200
     GET    /workflows                   列表（query 模糊 name）   workflow:read    200
@@ -8,10 +8,11 @@
     DELETE /workflows/{id}              删除（仅草稿）            workflow:edit    204 / 404*、4803
     POST   /workflows/{id}/versions     提交发布（治理分流）      workflow:publish 200/202 / 404*、4801/4802
     GET    /workflows/{id}/versions     版本历史                  workflow:read    200 / 404*
+    POST   /workflows/{id}/rollback     回滚（以目标版本新建草稿） workflow:edit   202 / 404*
 
 router 不设统一 prefix：/workflow-templates 为顶层命名空间（api/01 §5.11 预登记逐字路径，
-与 /workflows 段并列——40 篇 R3 /runs 顶层命名空间同款显式约定）。rollback/test/runs/resume
-四族=后续批（15 §1 边界裁决：执行引擎/回滚不含于 F1）。
+与 /workflows 段并列——40 篇 R3 /runs 顶层命名空间同款显式约定）。promote/test/runs/resume
+四族=后续批（执行引擎/run→template 提升不含于本批；15 §1 边界裁决延续）。
 分层：L2 router → workflows.business（用例）→ {L4 Protocol, L6 仓储}；路由层零校验/状态
 逻辑。审批端口绑定发生在网关组合根（app.state.candidate_review / review_approvals，
 review.business.candidates 单例；本模块经 workflows.domain.repo.review_port Protocol 鸭子
@@ -40,6 +41,8 @@ from services.workflows.api.schemas.workflow import (
     WorkflowListEnvelope,
     WorkflowPublishIn,
     WorkflowPublishOut,
+    WorkflowRollbackIn,
+    WorkflowRollbackOut,
     WorkflowSavedOut,
     WorkflowSaveIn,
     WorkflowTemplatesOut,
@@ -76,23 +79,22 @@ def _publish_service(request: Request, db: SessionDep, principal: Principal) -> 
     approvals = getattr(request.app.state, "review_approvals", None)
     if not isinstance(review, WorkflowReviewPort) or not isinstance(approvals, GovernanceTierPort):
         raise GatewayError(5004, "审核工单/治理档位端口未装配", status_code=503)
-    return WorkflowService(
-        repo=PgWorkflowRepository(db, principal.tenant_id), review=review, approvals=approvals
-    )
+    return WorkflowService(repo=PgWorkflowRepository(db, principal.tenant_id), review=review, approvals=approvals)
 
 
 def _domain_error(exc: DomainError, *, graph: WorkflowGraph | None = None) -> GatewayError:
     """DomainError → 统一错误体：码取消息前缀（48xx workflows 段），HTTP 按语义映射。
 
-    4801/4802 路径且调用方持有请求图时，detail 结构化重列全量违规项（校验三件纯函数
-    同输入同输出——15 §1.1「4801 detail 结构化列违规项」）。
+    4801/4802 → HTTP 409：api/01 §5.11 PUT/POST versions 主要错误码登记为 409*（图违规=
+    与 DAG 不变量/资源现态冲突，4xxx 业务规则段 404/409/422 语义表——X16 存储批对齐契约
+    登记，原 422 映射系 F1 偏差）。4801/4802 路径且调用方持有请求图时，detail 结构化重列
+    全量违规项（校验三件纯函数同输入同输出——15 §1.1「4801 detail 结构化列违规项」）。
     """
     message = str(exc)
     head = message[:4]
     code = int(head) if head.isdigit() else 4801
     detail = validate_graph(graph) if (code in (4801, 4802) and graph is not None) else None
-    status_code = {4801: 422, 4802: 422, 4803: 409}.get(code, 409)
-    return GatewayError(code, message, status_code=status_code, detail=detail)
+    return GatewayError(code, message, status_code=409, detail=detail)  # 48xx 全段=业务规则冲突（api/01 §4 语义表）
 
 
 def _not_found(exc: LookupError) -> GatewayError:
@@ -241,6 +243,37 @@ async def publish_workflow(
             next_version=outcome.next_version,
         )
     return WorkflowPublishOut(status="published", governance=outcome.governance, next_version=outcome.next_version)
+
+
+@router.post(
+    "/workflows/{workflow_id}/rollback",
+    status_code=202,
+    summary="回滚（以目标版本内容新建草稿——27 篇 §3；版本行零触碰，head 历史保留）",
+)
+async def rollback_workflow(
+    workflow_id: uuid.UUID,
+    body: WorkflowRollbackIn,
+    principal: WorkflowEditDep,
+    db: SessionDep,
+    request: Request,
+) -> WorkflowRollbackOut:
+    service = _service(db, principal)
+    try:
+        workflow = await service.rollback(
+            workflow_id=workflow_id,
+            to_version=body.version_number,
+            actor_id=principal.user_id,
+            trace_id=getattr(request.state, "trace_id", "") or "",
+        )
+    except LookupError as exc:
+        raise _not_found(exc) from exc
+    except DomainError as exc:
+        raise _domain_error(exc) from exc
+    return WorkflowRollbackOut(
+        draft_version=workflow.draft_version_label,
+        copied_from=body.to_version.strip(),
+        note="复制旧版全部节点与参数为新草稿，不影响已发布版本与运行历史",
+    )
 
 
 @router.get("/workflows/{workflow_id}/versions", summary="版本历史（不可变版本升序；含草稿标签与 diff 空对象）")

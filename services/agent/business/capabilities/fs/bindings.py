@@ -40,6 +40,8 @@ FS_ACTION_IRIS: dict[str, str] = {
 _READ_DESCRIPTION = (
     "读取工作区内文本文件；支持行窗口（offset 0 基起始行 / limit 最多行数）与行号前缀"
     "（with_line_numbers）；单文件上限 2MB，超限拒绝并提示分片。工作区外路径一律拒绝。"
+    "结果截断时若 spill 存储可用将附 spill_locator（截断快照可回放，非文件完整原文；"
+    "完整续读请用 offset 分窗）。"
 )
 _WRITE_DESCRIPTION = (
     "向工作区内目标路径整文件写入（UTF-8）；目标已存在时必须显式 overwrite=true 才允许覆盖，"
@@ -52,11 +54,15 @@ _EDIT_DESCRIPTION = (
 _GLOB_DESCRIPTION = (
     "按 glob 模式匹配工作区内文件（模式相对工作区根，如 **/*.py 或 notes/*.md）；"
     "仅返回常规文件的相对路径（排序、上限 1000 条，超出置 truncated）。"
+    "结果截断时若 spill 存储可用将附 spill_locator（截断快照可回放，非完整清单；"
+    "继续列举请缩小模式范围）。"
 )
 _GREP_DESCRIPTION = (
     "在工作区内按正则逐行搜索文本文件（大小写敏感）；path 可指定子目录或单文件（默认根），"
     "context 可返回每处命中的上下文行（0~10，默认 0）；二进制与超 2MB 文件跳过，"
     "命中上限 200 条，超出置 truncated。"
+    "结果截断时若 spill 存储可用将附 spill_locator（截断快照可回放，非完整命中集；"
+    "继续检索请缩小搜索范围）。"
 )
 
 _READ_SCHEMA: dict[str, Any] = {

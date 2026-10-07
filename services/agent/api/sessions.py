@@ -356,6 +356,9 @@ def build_capability_tool_bindings(settings: Any) -> tuple:
     保留同名委托入口）：
 
     - ``workspace_root`` 未配置 → fs 不注册（只读也缺工作区边界，宁缺毋滥）；
+    - ``task_spill_dir`` 已配置 → fs 绑定注入同源 spill 存储（K17-a，docs/Agent/13 §23：
+      read/glob/grep 截断产物附 spill_locator，K14 兑换链生产可达）；未配置=仅 truncated
+      布尔（build_fs_bindings(spill_store=None) 向后兼容形态，K14-c 契约）；
     - ``web_egress_allowlist`` 空 → web 全拒 fail-closed（注册但不可出网）；
     - 分级开关（platform/config.py 能力绑定块，默认档=只读）：
       * ``kernel_capability_read=True`` → fs 只读三件（read/glob/grep，executionMode=READ，
@@ -371,7 +374,8 @@ def build_capability_tool_bindings(settings: Any) -> tuple:
         from services.agent.business.capabilities.fs import build_fs_bindings
         from services.agent.domain.model.kernel_actions import ExecutionMode
 
-        for binding in build_fs_bindings(settings.workspace_root):
+        fs_spill_store = _build_spill_store(settings)  # K17-a（docs/Agent/13 §23）：locator 兑换链同源注入
+        for binding in build_fs_bindings(settings.workspace_root, spill_store=fs_spill_store):
             if binding.execution_mode == ExecutionMode.WRITE:
                 if write_enabled:  # 写操作类默认关闭（W2-4 裁决：默认档=只读）
                     bindings.append(binding)

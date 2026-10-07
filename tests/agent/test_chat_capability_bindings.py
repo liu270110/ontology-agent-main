@@ -234,3 +234,49 @@ def test_gateway委托_与组装面同源输出() -> None:
     assert [b.meta.name for b in _build_capability_bindings(s)] == [
         b.meta.name for b in build_capability_tool_bindings(s)
     ]
+
+
+# ── K17-a：fs 截断产物 spill 注入（docs/Agent/13 §23：K14 locator 兑换链组合根装配）──
+
+
+def _fs_bindings(s: Settings) -> list:
+    return [b for b in build_capability_tool_bindings(s) if b.meta.name.startswith("fs.")]
+
+
+def test_组装_spill目录已配置_fs绑定携带spill_store_locator链生产可达(tmp_path: Any) -> None:
+    """workspace_root+task_spill_dir 双配置：fs 绑定注入同源 spill 存储（K14-c 挂接点激活）。"""
+    fs_bindings = _fs_bindings(_settings(task_spill_dir=str(tmp_path / "spill")))
+    assert len(fs_bindings) == 3  # 默认档只读三件（read/glob/grep）
+    assert all(b._spill_store is not None for b in fs_bindings)  # noqa: SLF001 ——注入面断言口
+
+
+def test_组装_spill目录未配置_fs绑定无spill_store_向后兼容() -> None:
+    """task_spill_dir 缺省 None：仅 truncated 布尔（build_fs_bindings(spill_store=None) 契约）。"""
+    fs_bindings = _fs_bindings(_settings())  # task_spill_dir 未配置（缺省 None）
+    assert len(fs_bindings) == 3
+    assert all(b._spill_store is None for b in fs_bindings)  # noqa: SLF001 ——向后兼容形态
+
+
+async def test_装配_组合根spill注入_fs截断产物附locator_同源兑换可回放(tmp_path: Any) -> None:
+    """装配链端到端：build_capability_tool_bindings 产出的 fs.read 截断产物附 spill_locator，
+    且同一 spill 目录可兑换——K17-a 生产装配复活的面级证明（快照可回放，K17-c 口径）。"""
+    from services.agent.data.spill_store import LocalDirSpillStore
+
+    ws = tmp_path / "ws"
+    ws.mkdir()
+    (ws / "big.txt").write_text("\n".join(f"line-{i}" for i in range(50)), encoding="utf-8")
+    spill_dir = str(tmp_path / "spill")
+    s = Settings(jwt_secret="x" * 32, workspace_root=str(ws), task_spill_dir=spill_dir)
+    fs_read = next(b for b in build_capability_tool_bindings(s) if b.meta.name == "fs.read")
+    result = await fs_read.invoke(
+        ToolCall(
+            action_iri="http://ontology.example/action/file_read",
+            parameters={"path": "big.txt", "limit": 10},
+            param_hash="k17-a",
+        ),
+        _ctx(),
+    )
+    assert result.ok is True and result.output["truncated"] is True
+    assert "spill_locator" in result.output  # 组合根注入到位（未注入时仅 truncated 布尔）
+    redeemed = await LocalDirSpillStore(spill_dir).get(result.output["spill_locator"], tenant_id=str(_TENANT))
+    assert redeemed is not None and "line-0" in redeemed  # 截断快照可回放

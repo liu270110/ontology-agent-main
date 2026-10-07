@@ -361,11 +361,20 @@ def _build_skills_catalog_segment(settings: Any) -> str:
     include = tuple(s.strip() for s in getattr(settings, "skills_catalog_include", "").split(",") if s.strip())
     exclude = tuple(s.strip() for s in getattr(settings, "skills_catalog_exclude", "").split(",") if s.strip())
     try:
-        from services.agent.business.prompts.skills_catalog import load_skill_catalog, render_skill_catalog_segment
+        from services.agent.business.prompts.skills_catalog import (
+            filter_threat_entries,
+            load_skill_catalog,
+            render_skill_catalog_segment,
+        )
 
         entries = load_skill_catalog(root, include=include, exclude=exclude)
         if not entries:
             return ""
+        if getattr(settings, "context_threat_scan_enabled", True):  # F2 注入防御链（15 §2.2；getattr 兜底旧测试桩，
+            # 同 mcp_bridge_enabled 先例）；命中条目剔除+日志（启动期无 task 锚点，事件面仅 memory/evidence）
+            entries = filter_threat_entries(entries)
+            if not entries:
+                return ""
         return render_skill_catalog_segment(entries)
     except Exception:  # noqa: BLE001 ——装载/渲染任一失败均不阻塞会话启动（fail-soft，留痕）
         logger.exception("skills catalog 装配失败（以无技能目录继续）: root=%s", root)

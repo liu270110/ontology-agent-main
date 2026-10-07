@@ -158,3 +158,7 @@ class ChatPolicy:
     # 完成路径按采样率抽中后记录 faithfulness 检查占位（LLM-as-judge 随评估批次接入）
     faithfulness_sampling_enabled: bool = True  # 开关默认开（10 篇 1% 口径）
     faithfulness_sample_rate: float = 0.01  # 采样率（run_id 确定性哈希桶；OA_ 环境变量覆盖）
+    # 注入防御链（docs/Agent/15 §2 F2）：上下文威胁扫描剥离开关——组合根缺省读统一配置层
+    # （Settings.context_threat_scan_enabled，OA_ 环境变量覆盖）；显式传入 policy 时以
+    # policy 值为准（faithfulness 同款纪律）。False=不扫描不剥离零事件（零行为变化）。
+    context_threat_scan_enabled: bool = True

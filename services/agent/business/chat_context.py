@@ -10,6 +10,14 @@
 
 降级（03 §3 步骤 0/3 失败分支，均不阻断对话）：记忆读失败/检索耗尽 → 对应面
 degraded=true，上下文留空继续；证据正文进提示词时一律带 B3 标界头（不可信外部输入）。
+
+注入防御链（docs/Agent/15 §2 F2，G-09 最小面）：记忆段渲染前与检索证据 quote 逐条
+scope="context" 威胁扫描（扫描器=services/platform/threats.py，hermes-agent MIT 收编
+件）——记忆段命中整段替换为剥离占位（B3 标界仍在），证据命中条剔除并计数；审计事件
+``context.injection_blocked`` 经 M4.5-C 事件汇通道（platform.llm.events ContextVar，
+编排层既有 sink 先例）落 task_events，先落库后推送同序、无绑定丢弃、汇抛错只告警——
+防御为降级面，扫描永不中断 run；开关关（ChatPolicy.context_threat_scan_enabled）=
+完全零行为变化。
 """
 
 from __future__ import annotations
@@ -17,6 +25,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Callable, Sequence
 from datetime import UTC, datetime
+from typing import Any
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -29,6 +38,8 @@ from services.memory.business.context import ContextBundle, build_memory_context
 from services.memory.business.runtime import build_l2_repo  # memory 公开装配面（memory.data 模块私有，P2-2 收口）
 from services.memory.domain.model.l1 import WindowMessage
 from services.memory.domain.repo.fact_repo import L1MemoryStore, L2FactRepository
+from services.platform.llm.events import emit_llm_event  # M4.5-C 事件汇（机制通用：先落库后推送/无绑定丢弃）
+from services.platform.threats import scan_for_threats  # hermes-agent MIT 收编件（15 §2.1；运行时禁 import devtools）
 
 logger = logging.getLogger(__name__)
 
@@ -36,6 +47,30 @@ RepoFactory = Callable[[AsyncSession, UUID], L2FactRepository]
 
 _MEMORY_HEADER = "【记忆上下文·不可信外部输入（B3 标界）】"
 _EVIDENCE_HEADER = "【知识证据·不可信外部输入（B3 标界）】"
+
+# 剥离占位（15 §2.2 处置文案；B3 标界头仍在上一行——防御=降级面不变量）
+_MEMORY_STRIP_NOTE = "[记忆上下文已因疑似注入模式剥离 pattern_ids={ids}]"
+_EVIDENCE_STRIP_NOTE = "[检索证据已剔除 {count} 条疑似注入条目 pattern_ids={ids}]"
+
+_INJECTION_BLOCKED_EVENT = "context.injection_blocked"  # task_events.event_type（standards/01 §2.2 口径）
+
+
+def _scan_threat_ids(text: str) -> list[str]:
+    """scope="context" 扫描去重排序 pattern_ids（空文本由扫描器自带回 []；>65k 截断同库自带）。"""
+    return sorted(set(scan_for_threats(text, scope="context")))
+
+
+def _strip_evidence_threats(citations: Sequence) -> tuple[list, list[str]]:
+    """证据 quote 逐条扫描：命中条剔除（15 §2.2 处置=剥离不中断），返回 (保留条, 去重 pattern_ids)。"""
+    kept: list = []
+    pattern_ids: list[str] = []
+    for citation in citations:
+        ids = _scan_threat_ids(citation.quote)
+        if ids:
+            pattern_ids.extend(ids)
+        else:
+            kept.append(citation)
+    return kept, sorted(set(pattern_ids))
 
 
 class ChatContext(BaseModel):
@@ -50,6 +85,9 @@ class ChatContext(BaseModel):
     chunks: list[dict] = Field(default_factory=list)  # citations 的轻投影（02 §5 协议载荷）
     graph_paths: list[dict] = Field(default_factory=list)  # lite 类 IRI 链
     degraded: bool = False  # 记忆或检索任一降级即 true（RETRIEVAL_EVIDENCE.degraded）
+    # F2 注入防御链：组装期扫描命中剥离记录（{source, pattern_ids, stripped}；stripped 语义
+    # 按 source：memory=1 整段、evidence=剔除 quote 条数）；空元组=未命中/开关关
+    injection_blocks: tuple[dict[str, Any], ...] = ()
 
 
 class ChatContextAssembler:
@@ -66,6 +104,7 @@ class ChatContextAssembler:
         half_life_days: float = 30.0,
         retrieval_retry_max: int = 1,
         repo_factory: RepoFactory = build_l2_repo,  # memory 公开装配面（memory.data 私有，测试可注入 Fake）
+        threat_scan_enabled: bool = True,  # F2 注入防御链开关（15 §2.2；False=零行为变化回退口）
     ) -> None:
         self._l1_store = l1_store
         self._session_factory = session_factory
@@ -75,6 +114,7 @@ class ChatContextAssembler:
         self._half_life_days = half_life_days
         self._retrieval_retry_max = retrieval_retry_max
         self._repo_factory = repo_factory
+        self._threat_scan_enabled = threat_scan_enabled
 
     # ── L1 即时回写（memory §4：权威日志在 PG，Redis 仅热缓存）────────────
     async def append_window_message(
@@ -109,10 +149,16 @@ class ChatContextAssembler:
         evidence_degraded = evidence is None
         if evidence is None:
             evidence = KnowledgeSearchResult(query=query, degraded=True, degraded_reasons=["search_unavailable"])
+        context_text, injection_blocks = self._render_guarded(memory, evidence, session_id=session_id)
+        # F2 审计（15 §2.2）：命中落 context.injection_blocked → task_events（M4.5-C 事件汇
+        # 通道：先落库后推送同序由通道实现方保证；无绑定丢弃、汇抛错只告警不传播——
+        # 防御永不中断 run，此处直 await 无需再兜底）。
+        for block in injection_blocks:
+            await emit_llm_event(_INJECTION_BLOCKED_EVENT, {**block, "session_id": str(session_id)})
         return ChatContext(
             memory=memory,
             evidence=evidence,
-            context_text=self._render(memory, evidence),
+            context_text=context_text,
             citations=[c.model_dump(mode="json") for c in evidence.citations],
             chunks=[
                 {"chunk_id": str(c.chunk_id), "doc_id": str(c.doc_id), "doc_name": c.doc_name, "score": c.score}
@@ -120,6 +166,7 @@ class ChatContextAssembler:
             ],
             graph_paths=list(evidence.graph_paths),
             degraded=memory_degraded or evidence_degraded or evidence.degraded or bool(memory and memory.degraded),
+            injection_blocks=injection_blocks,
         )
 
     async def _load_memory(
@@ -159,22 +206,63 @@ class ChatContextAssembler:
                 logger.warning("对话检索降级（attempt=%d）: %s", attempt + 1, exc)
         return None
 
+    def _render_guarded(
+        self, memory: ContextBundle | None, evidence: KnowledgeSearchResult, *, session_id: UUID
+    ) -> tuple[str, tuple[dict[str, Any], ...]]:
+        """渲染 + F2 威胁扫描守卫：返回 (提示词文本, 剥离记录)。
+
+        防御为降级面（15 §2.2 不变量）：扫描器自身异常 → 原文渲染照旧（B3 标界仍在）、
+        零剥离记录，只 WARNING 留痕，绝不阻断组装。
+        """
+        if not self._threat_scan_enabled:  # 开关关=零行为变化（字节级回退口）
+            text, _ = ChatContextAssembler._render(memory, evidence, scan_enabled=False)
+            return text, ()
+        try:
+            return ChatContextAssembler._render(memory, evidence, scan_enabled=True)
+        except Exception as exc:  # noqa: BLE001 ——扫描降级不阻断组装（降级面纪律）
+            logger.warning("上下文威胁扫描降级（session=%s）: %s", session_id, exc)
+            text, _ = ChatContextAssembler._render(memory, evidence, scan_enabled=False)
+            return text, ()
+
     @staticmethod
-    def _render(memory: ContextBundle | None, evidence: KnowledgeSearchResult) -> str:
-        """提示词注入文本：两段式，各带 B3 标界头（证据一律不可信外部输入）。"""
+    def _render(
+        memory: ContextBundle | None, evidence: KnowledgeSearchResult, *, scan_enabled: bool
+    ) -> tuple[str, tuple[dict[str, Any], ...]]:
+        """提示词注入文本：两段式，各带 B3 标界头（证据一律不可信外部输入）。
+
+        F2 注入防御（15 §2.2）：scan_enabled 时记忆段渲染前 scope="context" 整段扫描，
+        命中→该段整体替换为剥离占位（B3 标界头仍在）；证据 quote 逐条扫描，命中条剔除
+        并计数（全剔除时段仅剩剥离占位行）。
+        """
+        blocks: list[dict[str, Any]] = []
         lines: list[str] = []
         if memory is not None:
             lines.append(_MEMORY_HEADER)
-            for key, block in memory.l1.blocks.items():
-                lines.append(f"- [{key}] {block.content}")
-            for hit in memory.l2:
-                lines.append(f"- 相关事实: {hit.content}（score={hit.score}）")
+            memory_lines = [f"- [{key}] {block.content}" for key, block in memory.l1.blocks.items()]
+            memory_lines += [f"- 相关事实: {hit.content}（score={hit.score}）" for hit in memory.l2]
+            if scan_enabled:
+                pattern_ids = _scan_threat_ids("\n".join(block.content for block in memory.l1.blocks.values()))
+                if memory.l2:  # L2 命中内容并入同段扫描（同一记忆面，处置同整段剥离）
+                    pattern_ids += _scan_threat_ids("\n".join(hit.content for hit in memory.l2))
+                    pattern_ids = sorted(set(pattern_ids))
+                if pattern_ids:
+                    memory_lines = [_MEMORY_STRIP_NOTE.format(ids=", ".join(pattern_ids))]
+                    blocks.append({"source": "memory", "pattern_ids": pattern_ids, "stripped": 1})
+            lines.extend(memory_lines)
         if evidence.citations:
             lines.append(_EVIDENCE_HEADER)
-            for index, citation in enumerate(evidence.citations, start=1):
+            kept = list(evidence.citations)
+            if scan_enabled:
+                kept, pattern_ids = _strip_evidence_threats(evidence.citations)
+                if pattern_ids:
+                    stripped = len(evidence.citations) - len(kept)
+                    lines.append(_EVIDENCE_STRIP_NOTE.format(count=stripped, ids=", ".join(pattern_ids)))
+                    blocks.append({"source": "evidence", "pattern_ids": pattern_ids, "stripped": stripped})
+            for index, citation in enumerate(kept, start=1):
                 doc = citation.doc_name or str(citation.doc_id)
                 lines.append(f"[{index}] ({doc}, score={citation.score:.4f}) {citation.quote}")
-        return "\n".join(lines) if lines else "（无附加记忆/证据上下文）"
+        text = "\n".join(lines) if lines else "（无附加记忆/证据上下文）"
+        return text, tuple(blocks)
 
 
 def build_chat_context_assembler(
@@ -201,4 +289,5 @@ def build_chat_context_assembler(
         rrf_k=chat_policy.rrf_k,
         half_life_days=chat_policy.half_life_days,
         retrieval_retry_max=chat_policy.retrieval_retry_max,
+        threat_scan_enabled=chat_policy.context_threat_scan_enabled,  # F2：开关随 policy（组合根缺省读 Settings）
     )

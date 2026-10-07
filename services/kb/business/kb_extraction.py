@@ -996,9 +996,7 @@ def _embed_cluster(names: list[str], vectors: list[list[float]], threshold: floa
     return [group for group in _connected_components(names, edges) if len(group) >= 2]
 
 
-def _mark_group(
-    marks: dict[str, list[dict[str, str]]], members: Iterable[str], detail: str
-) -> None:
+def _mark_group(marks: dict[str, list[dict[str, str]]], members: Iterable[str], detail: str) -> None:
     """组内逐名挂 merge_candidate 留痕（K27-b 未采纳/异常路径共用；每名独立 dict 防共享引用）。"""
     for name in members:
         marks[name] = [{"rule": _MERGE_MARK_RULE, "detail": detail}]

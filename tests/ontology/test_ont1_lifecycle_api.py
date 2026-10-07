@@ -141,9 +141,7 @@ async def _audit_actions(env: Ont1ApiEnv) -> list[str]:
 
     async with env.factory() as db:
         return list(
-            (await db.execute(select(AuditLogORM.action).where(AuditLogORM.tenant_id == env.tenant_id)))
-            .scalars()
-            .all()
+            (await db.execute(select(AuditLogORM.action).where(AuditLogORM.tenant_id == env.tenant_id))).scalars().all()
         )
 
 
@@ -186,8 +184,12 @@ async def test_同目标并发竞态_存储兜底IntegrityError翻译409(
     async with ont1_api.factory() as db, db.begin():  # 对手方活跃单直插（模拟已胜出的并发请求）
         db.add(
             OntologyChangesetORM(
-                id=uuid.uuid4(), tenant_id=ont1_api.tenant_id, ontology_id=uuid.UUID(ontology_id),
-                title="对手单", status="draft", target_key=key,
+                id=uuid.uuid4(),
+                tenant_id=ont1_api.tenant_id,
+                ontology_id=uuid.UUID(ontology_id),
+                title="对手单",
+                status="draft",
+                target_key=key,
             )
         )
 
@@ -202,9 +204,8 @@ async def test_同目标并发竞态_存储兜底IntegrityError翻译409(
     )
     assert resp.status_code == 409, resp.text
     assert (
-    "uk_changesets_one_target" in resp.json()["message"]
-    or "uk_changesets_one_active" in resp.json()["message"]
-), resp.text  # 场景同时触两条唯一约束，报哪条取决于索引检查顺序（舰队 uow 批次后顺序已变）
+        "uk_changesets_one_target" in resp.json()["message"] or "uk_changesets_one_active" in resp.json()["message"]
+    ), resp.text  # 场景同时触两条唯一约束，报哪条取决于索引检查顺序（舰队 uow 批次后顺序已变）
 
 
 # ---- 撤除=标记（ONT-1.3/1.4） ----
@@ -286,17 +287,9 @@ async def test_withdraw_class_放行_202行仍在并留withdrawn审计(ont1_api:
     assert resp.status_code == 202, resp.text
     assert resp.json()["withdrawn"] is True and resp.json()["marked_rows"] == 1
     async with ont1_api.factory() as db:
-        row = (
-            await db.execute(
-                select_class(ont1_api.tenant_id, free_iri)
-            )
-        ).scalar_one()
+        row = (await db.execute(select_class(ont1_api.tenant_id, free_iri))).scalar_one()
         assert row is not None and row.withdrawn_at is not None and row.withdrawn_reason == "流程重构"
-        untouched = (
-            await db.execute(
-                select_class(ont1_api.tenant_id, guarded_iri)
-            )
-        ).scalar_one()
+        untouched = (await db.execute(select_class(ont1_api.tenant_id, guarded_iri))).scalar_one()
         assert untouched is not None and untouched.withdrawn_at is None
     actions = await _audit_actions(ont1_api)
     assert actions.count(OntologyAuditAction.ELEMENT_WITHDRAWN.value) == 1
@@ -314,16 +307,28 @@ async def test_decline_candidate_declined落列并审计_manual行404(ont1_api: 
         version_id = onto_row.current_version_id
         db.add(
             AxiomORM(
-                id=candidate_id, tenant_id=ont1_api.tenant_id, ontology_id=onto_row.id, version_id=version_id,
-                kind="subClassOf", subject_iri=f"{PWR}CandA", object_iri=f"{PWR}Feeder",
-                expression="CandA ⊑ Feeder", source="llm_candidate",
+                id=candidate_id,
+                tenant_id=ont1_api.tenant_id,
+                ontology_id=onto_row.id,
+                version_id=version_id,
+                kind="subClassOf",
+                subject_iri=f"{PWR}CandA",
+                object_iri=f"{PWR}Feeder",
+                expression="CandA ⊑ Feeder",
+                source="llm_candidate",
             )
         )
         db.add(
             AxiomORM(
-                id=manual_id, tenant_id=ont1_api.tenant_id, ontology_id=onto_row.id, version_id=version_id,
-                kind="subClassOf", subject_iri=f"{PWR}ManB", object_iri=f"{PWR}Feeder",
-                expression="ManB ⊑ Feeder", source="manual",
+                id=manual_id,
+                tenant_id=ont1_api.tenant_id,
+                ontology_id=onto_row.id,
+                version_id=version_id,
+                kind="subClassOf",
+                subject_iri=f"{PWR}ManB",
+                object_iri=f"{PWR}Feeder",
+                expression="ManB ⊑ Feeder",
+                source="manual",
             )
         )
     ok = await ont1_api.client.post(
@@ -370,9 +375,7 @@ async def test_changeset状态迁移审计族_全链落库(ont1_api: Ont1ApiEnv)
     )
     assert resp.status_code == 201, resp.text
     cid = resp.json()["id"]
-    r_submit = await ont1_api.client.post(
-        f"/ontologies/{ontology_id}/changesets/{cid}/submit", json={"turtle": seed}
-    )
+    r_submit = await ont1_api.client.post(f"/ontologies/{ontology_id}/changesets/{cid}/submit", json={"turtle": seed})
     r_approve = await ont1_api.client.post(
         f"/ontologies/{ontology_id}/changesets/{cid}/approve", json={"note": "solo 自审"}
     )
@@ -386,9 +389,7 @@ async def test_changeset状态迁移审计族_全链落库(ont1_api: Ont1ApiEnv)
     resp2 = await ont1_api.client.post(f"/ontologies/{ontology_id}/changesets", json={"title": "驳回链"})
     assert resp2.status_code == 201, resp2.text
     cid2 = resp2.json()["id"]
-    r2_submit = await ont1_api.client.post(
-        f"/ontologies/{ontology_id}/changesets/{cid2}/submit", json={"turtle": seed}
-    )
+    r2_submit = await ont1_api.client.post(f"/ontologies/{ontology_id}/changesets/{cid2}/submit", json={"turtle": seed})
     r2_reject = await ont1_api.client.post(
         f"/ontologies/{ontology_id}/changesets/{cid2}/reject", json={"reason": "证据不足驳回"}
     )

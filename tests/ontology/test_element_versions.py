@@ -90,9 +90,9 @@ async def snapshot_env(
 async def _row_count(db: AsyncSession, tenant_id: uuid.UUID) -> int:
     total = (
         await db.execute(
-            select(func.count()).select_from(OntologyElementVersionORM).where(
-                OntologyElementVersionORM.tenant_id == tenant_id
-            )
+            select(func.count())
+            .select_from(OntologyElementVersionORM)
+            .where(OntologyElementVersionORM.tenant_id == tenant_id)
         )
     ).scalar_one()
     return int(total)
@@ -204,7 +204,6 @@ async def test_snapshot_同事务语义_业务回滚审计随灭(
     async with factory() as db:
         assert await _row_count(db, tenant_id) == 0
         audits = (
-            (await db.execute(select(func.count()).select_from(AuditLogORM).where(AuditLogORM.tenant_id == tenant_id)))
-            .scalar_one()
-        )
+            await db.execute(select(func.count()).select_from(AuditLogORM).where(AuditLogORM.tenant_id == tenant_id))
+        ).scalar_one()
         assert int(audits) == 0

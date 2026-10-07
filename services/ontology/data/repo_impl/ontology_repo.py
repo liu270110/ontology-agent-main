@@ -296,19 +296,21 @@ class PgOntologyRepository:
         rule_marks = await self._withdrawn_marks(RuleORM.name, ontology_id, version_id)
         axiom_marks: dict[tuple[str, str, str], tuple[datetime | None, str | None]] = {}
         for a_iri, a_kind, a_expr, a_at, a_reason in (
-            (
-                await self._db.execute(
-                    select(AxiomORM.subject_iri, AxiomORM.kind, AxiomORM.expression,
-                           AxiomORM.withdrawn_at, AxiomORM.withdrawn_reason).where(
-                        AxiomORM.tenant_id == self._tenant_id,
-                        AxiomORM.ontology_id == ontology_id,
-                        AxiomORM.version_id == version_id,
-                        AxiomORM.withdrawn_at.is_not(None),
-                    )
+            await self._db.execute(
+                select(
+                    AxiomORM.subject_iri,
+                    AxiomORM.kind,
+                    AxiomORM.expression,
+                    AxiomORM.withdrawn_at,
+                    AxiomORM.withdrawn_reason,
+                ).where(
+                    AxiomORM.tenant_id == self._tenant_id,
+                    AxiomORM.ontology_id == ontology_id,
+                    AxiomORM.version_id == version_id,
+                    AxiomORM.withdrawn_at.is_not(None),
                 )
             )
-            .all()
-        ):
+        ).all():
             axiom_marks[(a_kind, a_iri, a_expr)] = (a_at, a_reason)
         # 先删（替换式投影；uk_*_version_id_iri 唯一约束由先删后插保证）
         for orm in (OntoClassORM, OntoPropertyORM, AxiomORM, RuleORM):
@@ -468,17 +470,14 @@ class PgOntologyRepository:
             )
             rules = await self._db.execute(
                 text(
-                    "SELECT count(*) FROM kb_rule_candidates WHERE tenant_id = CAST(:t AS uuid) "
-                    "AND target_class = :iri"
+                    "SELECT count(*) FROM kb_rule_candidates WHERE tenant_id = CAST(:t AS uuid) AND target_class = :iri"
                 ),
                 {"t": str(self._tenant_id), "iri": iri},
             )
             return int(facts.scalar_one()) + int(rules.scalar_one())
         if element_type == "property":
             facts = await self._db.execute(
-                text(
-                    "SELECT count(*) FROM kb_facts WHERE tenant_id = CAST(:t AS uuid) AND predicate = :iri"
-                ),
+                text("SELECT count(*) FROM kb_facts WHERE tenant_id = CAST(:t AS uuid) AND predicate = :iri"),
                 {"t": str(self._tenant_id), "iri": iri},
             )
             return int(facts.scalar_one())
@@ -577,9 +576,7 @@ class PgOntologyRepository:
         ).scalar_one()
         return None if current_max is None else 2 * int(current_max)
 
-    async def _withdrawn_marks(
-        self, key_col, ontology_id: uuid.UUID, version_id: uuid.UUID
-    ) -> dict:
+    async def _withdrawn_marks(self, key_col, ontology_id: uuid.UUID, version_id: uuid.UUID) -> dict:
         """撤除标记快照（重投影携带用）：key → (withdrawn_at, withdrawn_reason)，仅已撤除行。"""
         orm = key_col.class_
         rows = (

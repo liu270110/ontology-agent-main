@@ -76,9 +76,7 @@ class WithdrawEnv:
     async def audit_actions(self) -> list[str]:
         async with self.factory() as db:
             return list(
-                (
-                    await db.execute(select(AuditLogORM.action).where(AuditLogORM.tenant_id == self.tenant_id))
-                )
+                (await db.execute(select(AuditLogORM.action).where(AuditLogORM.tenant_id == self.tenant_id)))
                 .scalars()
                 .all()
             )
@@ -91,16 +89,30 @@ _PROJECTION = ReadModelProjection.model_validate(
             {"iri": f"{PWR}DispatchRepair", "name": "DispatchRepair", "is_behavior": True},
         ],
         "properties": [
-            {"iri": f"{PWR}affectsFeeder", "kind": "object", "name": "affectsFeeder",
-             "domain_iri": f"{PWR}OutageEvent", "range_iri": f"{PWR}Feeder"},
+            {
+                "iri": f"{PWR}affectsFeeder",
+                "kind": "object",
+                "name": "affectsFeeder",
+                "domain_iri": f"{PWR}OutageEvent",
+                "range_iri": f"{PWR}Feeder",
+            },
         ],
         "axioms": [
-            {"kind": "disjointWith", "subject_iri": f"{PWR}Transformer", "object_iri": f"{PWR}Meter",
-             "expression": "Disjoint(Transformer Meter)"},
+            {
+                "kind": "disjointWith",
+                "subject_iri": f"{PWR}Transformer",
+                "object_iri": f"{PWR}Meter",
+                "expression": "Disjoint(Transformer Meter)",
+            },
         ],
         "rules": [
-            {"route": "engine", "name": "R901", "event_class_iri": f"{PWR}OutageConfirmed",
-             "condition": "ASK {...}", "action_ref": f"{PWR}DispatchRepair"},
+            {
+                "route": "engine",
+                "name": "R901",
+                "event_class_iri": f"{PWR}OutageConfirmed",
+                "condition": "ASK {...}",
+                "action_ref": f"{PWR}DispatchRepair",
+            },
         ],
     }
 )
@@ -127,9 +139,7 @@ async def withdraw_env(ont1_pg: async_sessionmaker[AsyncSession]) -> AsyncIterat
         db.add(version_row)
         await db.flush()
         repo = PgOntologyRepository(db, tenant_id)
-        await repo.replace_read_model(
-            onto_row.id, version="v1", changeset_id=None, projection=_PROJECTION
-        )
+        await repo.replace_read_model(onto_row.id, version="v1", changeset_id=None, projection=_PROJECTION)
         collection = KbCollectionORM(
             tenant_id=tenant_id, name="撤除用例集合", embedding_model="bge-m3", ontology_id=onto_row.id
         )
@@ -152,14 +162,18 @@ async def withdraw_env(ont1_pg: async_sessionmaker[AsyncSession]) -> AsyncIterat
 async def _class_row(env: WithdrawEnv, db: AsyncSession, iri: str) -> OntoClassORM | None:
     """按 IRI 取类行（断言辅助）。"""
     return (
-        await db.execute(
-            select(OntoClassORM).where(OntoClassORM.tenant_id == env.tenant_id, OntoClassORM.iri == iri)
-        )
+        await db.execute(select(OntoClassORM).where(OntoClassORM.tenant_id == env.tenant_id, OntoClassORM.iri == iri))
     ).scalar_one()
 
 
-async def _kb_fact(env: WithdrawEnv, *, subject_type: str | None = None, predicate: str | None = None,
-                   object_type: str | None = None, status: str = "authoritative") -> None:
+async def _kb_fact(
+    env: WithdrawEnv,
+    *,
+    subject_type: str | None = None,
+    predicate: str | None = None,
+    object_type: str | None = None,
+    status: str = "authoritative",
+) -> None:
     """插一条 kb 事实（真表；status 三值=全历史口径的成员）。"""
     async with env.factory() as db, db.begin():
         db.add(
@@ -213,8 +227,12 @@ async def test_类撤除_守卫命中_kb事实subject_type引用_拒绝并审计
         async with withdraw_env.factory() as db, db.begin():
             try:
                 await withdraw_read_model_element(
-                    withdraw_env.repo(db), withdraw_env.aggregate(), element_type="class",
-                    key=f"{PWR}Feeder", reason="弃用", actor_id=withdraw_env.user_id,
+                    withdraw_env.repo(db),
+                    withdraw_env.aggregate(),
+                    element_type="class",
+                    key=f"{PWR}Feeder",
+                    reason="弃用",
+                    actor_id=withdraw_env.user_id,
                 )
             except UsageGuardTriggered:
                 await db.commit()  # 路由侧语义：拒绝路径显式提交守卫审计
@@ -235,8 +253,12 @@ async def test_类撤除_守卫计数_全历史含rejected与rule候选target_cl
     with pytest.raises(DomainError, match="存在 2 条"):
         async with withdraw_env.factory() as db, db.begin():
             await withdraw_read_model_element(
-                withdraw_env.repo(db), withdraw_env.aggregate(), element_type="class",
-                key=f"{PWR}Feeder", reason="弃用", actor_id=withdraw_env.user_id,
+                withdraw_env.repo(db),
+                withdraw_env.aggregate(),
+                element_type="class",
+                key=f"{PWR}Feeder",
+                reason="弃用",
+                actor_id=withdraw_env.user_id,
             )
 
 
@@ -248,15 +270,23 @@ async def test_类撤除_守卫计数_object_type面与属性predicate面(
     with pytest.raises(DomainError, match="4207"):
         async with withdraw_env.factory() as db, db.begin():
             await withdraw_read_model_element(
-                withdraw_env.repo(db), withdraw_env.aggregate(), element_type="class",
-                key=f"{PWR}DispatchRepair", reason="弃用", actor_id=withdraw_env.user_id,
+                withdraw_env.repo(db),
+                withdraw_env.aggregate(),
+                element_type="class",
+                key=f"{PWR}DispatchRepair",
+                reason="弃用",
+                actor_id=withdraw_env.user_id,
             )
     await _kb_fact(withdraw_env, predicate=f"{PWR}affectsFeeder")
     with pytest.raises(DomainError, match="4207"):
         async with withdraw_env.factory() as db, db.begin():
             await withdraw_read_model_element(
-                withdraw_env.repo(db), withdraw_env.aggregate(), element_type="property",
-                key=f"{PWR}affectsFeeder", reason="弃用", actor_id=withdraw_env.user_id,
+                withdraw_env.repo(db),
+                withdraw_env.aggregate(),
+                element_type="property",
+                key=f"{PWR}affectsFeeder",
+                reason="弃用",
+                actor_id=withdraw_env.user_id,
             )
 
 
@@ -269,8 +299,12 @@ async def test_类撤除_守卫放行_打标记不删行并审计withdrawn(
     """零引用放行：withdrawn 双标记落列、行数不变（永不物理删）、element.withdrawn 审计恰一条。"""
     async with withdraw_env.factory() as db, db.begin():
         marked = await withdraw_read_model_element(
-            withdraw_env.repo(db), withdraw_env.aggregate(), element_type="class",
-            key=f"{PWR}Feeder", reason="电网模型重构弃用", actor_id=withdraw_env.user_id,
+            withdraw_env.repo(db),
+            withdraw_env.aggregate(),
+            element_type="class",
+            key=f"{PWR}Feeder",
+            reason="电网模型重构弃用",
+            actor_id=withdraw_env.user_id,
         )
         assert marked == 1
     async with withdraw_env.factory() as db:
@@ -293,15 +327,23 @@ async def test_规则公理撤除_同事务criterion_changed对账审计(
     """第 3 档：rule/axiom 撤除 → element.withdrawn + criterion.changed 各一条（class 无 criterion）。"""
     async with withdraw_env.factory() as db, db.begin():
         await withdraw_read_model_element(
-            withdraw_env.repo(db), withdraw_env.aggregate(), element_type="rule",
-            key="R901", reason="规则退役", actor_id=withdraw_env.user_id,
+            withdraw_env.repo(db),
+            withdraw_env.aggregate(),
+            element_type="rule",
+            key="R901",
+            reason="规则退役",
+            actor_id=withdraw_env.user_id,
         )
         axiom_id = (
             await db.execute(select(AxiomORM.id).where(AxiomORM.tenant_id == withdraw_env.tenant_id))
         ).scalar_one()
         await withdraw_read_model_element(
-            withdraw_env.repo(db), withdraw_env.aggregate(), element_type="axiom",
-            key=str(axiom_id), reason="公理退役", actor_id=withdraw_env.user_id,
+            withdraw_env.repo(db),
+            withdraw_env.aggregate(),
+            element_type="axiom",
+            key=str(axiom_id),
+            reason="公理退役",
+            actor_id=withdraw_env.user_id,
         )
     actions = await withdraw_env.audit_actions()
     assert actions.count(OntologyAuditAction.CRITERION_CHANGED.value) == 2

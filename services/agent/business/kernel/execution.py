@@ -405,5 +405,13 @@ class ExecutionStage:
         raw_env = step.parameters.get("env")
         if raw_env is not None and not isinstance(raw_env, dict):
             raise KernelContractError("env 通道契约违规：parameters.env 必须是字符串映射（K18-a 门 3）")
+        if raw_env is not None:
+            # 嵌套值经 str() 会把 Python repr 垃圾静默送进容器 env——标量白名单外
+            # fail-closed（与上方非 dict 检查同款契约；ocr 2026-10-07 评审发现）。
+            bad = [str(k) for k, v in raw_env.items() if not isinstance(v, (str, int, float, bool))]
+            if bad:
+                raise KernelContractError(
+                    f"env 通道契约违规：env 值必须为标量（K18-a 门 3）：{','.join(bad)}"
+                )
         env = {str(k): str(v) for k, v in raw_env.items()} if raw_env is not None else None
         return SandboxSpec(image=str(step.parameters.get("image", "platform/sandbox:default")), env=env)

@@ -242,3 +242,17 @@ async def test_code行动带env参数_通道值随规格透传至执行后端():
     assert outcome.status == str(RunStatus.COMPLETED)
     assert backend.acquired_specs[0].env == {"SKILL_TOKEN": "tok-k18"}  # 通道值受控透传
     assert backend.active_leases == []
+
+
+def test_env通道_嵌套值fail_closed_标量白名单外拒():
+    """ocr 2026-10-07：dict/list 值经 str() 会把 Python repr 垃圾静默送进容器——标量外 fail-closed。"""
+    step = PlanStep(
+        seq=1,
+        action_iri=CODE_ACTION_IRI,
+        execution_mode=ExecutionMode.CODE,
+        parameters={"code": "x", "env": {"CFG": {"retries": 3}}},
+        parameter_schema={},
+        required_scopes=(),
+    )
+    with pytest.raises(KernelContractError, match="env 值必须为标量"):
+        ExecutionStage.sandbox_spec(step)

@@ -154,7 +154,7 @@ function InnerCanvas({ nodes, edges, selectedId, runStates, onSelect, onConnect,
         // initialWidth/Height 提供 RF 官方占位口径（画布渲染仍以实测为准），迷你图恒有节点块。
         initialWidth: 140,
         initialHeight: 52,
-        data: { label: n.label, kind: n.kind, sub: n.sub, breakpoint: n.breakpoint, runState: runStates?.[n.id] },
+        data: { label: n.label, kind: n.kind, sub: n.sub ?? undefined, breakpoint: n.breakpoint ?? undefined, runState: runStates?.[n.id] },
       })),
     [nodes, selectedId, runStates],
   )

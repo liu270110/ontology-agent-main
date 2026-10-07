@@ -1,21 +1,20 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
-import { AlertTriangle, ArrowRight, Check, GitBranch, History, Minus, Play, Plus, Search, Shield } from 'lucide-react'
+import { AlertTriangle, ArrowRight, Check, History, Plus, Search, Shield } from 'lucide-react'
 import { Modal } from '@/components/modal'
 import { ApiError } from '@/api/client'
 import {
   createWorkflow,
   listTemplates,
   publishWorkflow,
-  resumeRun,
   rollbackWorkflow,
   type WfDetail,
-  type WfRun,
 } from '../api'
 
-/** 工作流四弹窗（26 篇 §15 矩阵）：GRP-06 新建/从模板 · GRP-09 断点续跑 time-travel ·
- *  GRP-10 提交发布确认（治理分流）· GRP-11 版本对比/回滚（以旧版新建草稿）。 */
+/** 工作流三弹窗（26 篇 §15 矩阵）：GRP-06 新建/从模板 · GRP-10 提交发布确认（治理分流）·
+ *  GRP-11 版本对比/回滚（以旧版新建草稿）。（GRP-09 断点恢复=X16 真事件版收进 TestRunPanel
+ *  一键继续——审批类暂停凭审批中心回执续跑，mock 快照弹窗退役。） */
 
 // ============================================================
 // IX-GRP-06 新建 / 从模板（Modal 560px）
@@ -98,125 +97,6 @@ export function NewWorkflowDialog({ open, onClose }: { open: boolean; onClose: (
         <button type="button" className="btn btn-p" data-testid="wf-new-create" disabled={!name.trim() || busy} onClick={() => void submit()}>
           <ArrowRight size={13} aria-hidden />
           创建并进入编辑器
-        </button>
-      </div>
-    </Modal>
-  )
-}
-
-// ============================================================
-// IX-GRP-09 断点续跑 time-travel（Modal 480px）
-// ============================================================
-
-export function ResumeDialog({
-  open,
-  onClose,
-  workflowId,
-  run,
-  onResumed,
-}: {
-  open: boolean
-  onClose: () => void
-  workflowId: string
-  run: WfRun | null
-  onResumed: (newRunId: string) => void
-}) {
-  const [threshold, setThreshold] = useState(5)
-  const [retry, setRetry] = useState(2)
-  const [busy, setBusy] = useState(false)
-  const [errMsg, setErrMsg] = useState<string | null>(null)
-  const pausedStep = run?.steps.find(s => s.state === 'paused')
-
-  useEffect(() => {
-    if (open) { setThreshold(5); setRetry(2); setErrMsg(null) }
-  }, [open])
-
-  async function resume() {
-    if (!run) return
-    setBusy(true)
-    setErrMsg(null)
-    try {
-      const r = await resumeRun(workflowId, run.id, {
-        edits: [
-          { node_id: 'cond-fault-branch', field: 'threshold', value: threshold },
-          { node_id: 'tool-scada', field: 'retry', value: retry },
-        ],
-        mode: 'branch',
-      })
-      toast.success(`已从断点以新分支恢复 · ${r.run_id}（原轨迹保留可回放）`)
-      onClose()
-      onResumed(r.run_id)
-    } catch (e) {
-      setErrMsg(e instanceof ApiError ? e.message : '恢复失败')
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  return (
-    <Modal open={open} onClose={onClose} title="从断点继续 · time-travel" width={480}>
-      <div className="mb-2.5 text-xs text-label-2">
-        断点 {pausedStep?.breakpoint ? 'BP-1' : '—'} 命中于 {pausedStep?.label ?? '—'}（并行分支 B）· {run?.id ?? '—'} 已暂停。
-      </div>
-      <div className="overflow-hidden rounded-xl border border-separator">
-        <div className="flex items-center gap-2 border-b border-separator px-3 py-1.5 text-[11px] font-bold text-label-2" style={{ background: 'var(--surface-2)' }}>
-          断点节点上下文快照
-          <span className="mono ml-auto font-normal text-label-3">time-travel · 只读</span>
-        </div>
-        <div className="px-3" data-testid="wf-resume-snapshot">
-          {[
-            ['run_id', run?.id ?? '—'],
-            ['暂停节点', `${pausedStep?.label ?? '—'}（分支 B · 第 2 轮）`],
-            ['命中断点', 'BP-1（入参校验前）'],
-            ['上游输入', 'nodes.fault.count=5 · feeder=FL-10kV-CX-07'],
-            ['已耗预算', 'Token 2.1k · 耗时 12.4s · 失败重试 1 次'],
-          ].map(([k, v]) => (
-            <div key={k} className="flex items-center gap-2 border-b border-separator py-1.5 text-[11px] last:border-b-0">
-              <span className="w-[118px] flex-none text-label-3">{k}</span>
-              <span className="mono truncate text-label">{v}</span>
-            </div>
-          ))}
-        </div>
-      </div>
-      <div className="mt-3">
-        <div className="field-label">修参（仅作用于本 Run，不回写草稿）</div>
-        <div className="grid grid-cols-2 gap-2.5">
-          <div className="field mb-0">
-            <label className="field-label" style={{ fontSize: 11 }}>表达式阈值（条件 · fault_branch）</label>
-            <div className="igroup">
-              <span className="input mono flex items-center border-r-0" style={{ height: 34 }}>nodes.fault.count &gt;</span>
-              <input
-                className="input mono w-[56px] border-l-0 text-center"
-                style={{ height: 34, padding: 0 }}
-                type="number"
-                data-testid="wf-resume-threshold"
-                aria-label="表达式阈值"
-                value={threshold}
-                onChange={e => setThreshold(Number(e.target.value))}
-              />
-            </div>
-          </div>
-          <div className="field mb-0">
-            <label className="field-label" style={{ fontSize: 11 }}>重试次数（工具 · scada.query）</label>
-            <div className="inum" style={{ height: 34 }}>
-              <b onClick={() => setRetry(v => Math.max(0, v - 1))} aria-hidden><Minus size={11} /></b>
-              <span data-testid="wf-resume-retry">{retry}</span>
-              <b onClick={() => setRetry(v => v + 1)} aria-hidden><Plus size={11} /></b>
-            </div>
-          </div>
-        </div>
-      </div>
-      <div className="alert al-info mt-3">
-        <GitBranch size={15} aria-hidden />
-        <div><b>以新分支恢复</b>复用画框 21 分叉恢复机制：原轨迹事件全部保留可回放；持久化修改请到节点检查器（GRP-07）保存草稿。</div>
-      </div>
-      {errMsg && <div className="field-err mt-2">{errMsg}</div>}
-      <div className="hairline-t mt-3.5 flex items-center gap-2 pt-3">
-        <span className="mr-auto text-[11px] text-label-3">断点恢复写审计（宪法 5）</span>
-        <button type="button" className="btn btn-g" onClick={onClose}>放弃本次 Run</button>
-        <button type="button" className="btn btn-p" data-testid="wf-resume-go" disabled={busy} onClick={() => void resume()}>
-          <Play size={13} aria-hidden />
-          从断点继续
         </button>
       </div>
     </Modal>

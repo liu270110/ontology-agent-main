@@ -80,6 +80,7 @@ from services.mcp.api.management import (
 )
 from services.memory.api.memory import router as memory_router  # 装配接缝（契约③正道，B7 接线）
 from services.memory.api.memory import wire_memory
+from services.ontology.api.capabilities import router as capability_router  # ONT-2：能力读模型只读面
 from services.ontology.api.ontology import router as ontology_router
 from services.platform.db.uow import AsyncUnitOfWork
 from services.platform.deps import dispose_gateways, get_engine, get_redis
@@ -528,6 +529,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(prompts_router, prefix=settings.api_prefix)  # H-1：提示词模板库（api/01 §5.10）
     app.include_router(kb_router, prefix=settings.api_prefix)  # M2：知识库基线（上传/流水线/混合检索）
     app.include_router(ontology_router, prefix=settings.api_prefix)  # M2：本体域（CRUD+changeset 五动词+validate）
+    app.include_router(capability_router, prefix=settings.api_prefix)  # ONT-2：能力清单/详情（只读；api/01 §5.3 扩展）
     app.include_router(memory_router, prefix=settings.api_prefix)  # 计划 3.3：记忆域（L1/L2 六端点）
     app.include_router(plugin_router, prefix=settings.api_prefix)  # M5-1：插件市场（api/01 §5.6 八端点）
     app.include_router(skills_router, prefix=settings.api_prefix)  # S2 技能集市四端点（docs/Agent/14 §3）

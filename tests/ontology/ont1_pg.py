@@ -28,6 +28,8 @@ from services.kb.data.orm import KbCollection as KbCollectionORM
 from services.kb.data.orm import KbFact as KbFactORM
 from services.kb.data.rule_orm import KbRuleCandidate as KbRuleCandidateORM
 from services.ontology.data.orm import Axiom as AxiomORM
+from services.ontology.data.orm import Capability as CapabilityORM
+from services.ontology.data.orm import CapabilityRun as CapabilityRunORM
 from services.ontology.data.orm import OntoClass as OntoClassORM
 from services.ontology.data.orm import Ontology as OntologyORM
 from services.ontology.data.orm import OntologyChangeset as OntologyChangesetORM
@@ -44,8 +46,10 @@ if sys.platform == "win32":  # psycopg 异步要求 Selector 循环（tests/onto
     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
 # FK 逆序清理清单（kb 链：facts/rule_candidates→documents→collections→ontologies；
-# audit_logs 无 FK，位置不敏感）
+# audit_logs 无 FK，位置不敏感；ONT-2 链：capability_runs→capabilities→element_versions）
 ONT1_CLEANUP_ORDER = (
+    CapabilityRunORM,
+    CapabilityORM,
     OntologyElementVersionORM,
     RuleORM,
     AxiomORM,

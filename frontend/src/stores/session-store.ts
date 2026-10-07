@@ -13,6 +13,10 @@ export interface ChatMessage {
   finishReason?: string
   /** 历史消息的 seq（实时消息无）；用于订阅建立时对齐 lastSeq（§3.2） */
   seq?: number
+  /** 乐观条标记（18 §2 修复 A，docs/Agent/18）：POST 202 受理后本地先行的用户消息；
+   *  seed/backfill 合并时与服务端 items 按 role+content 精确匹配去重（匹配上=服务端已
+   *  持久化同文 → 丢弃本条保恰一次；匹配不上=保留防丢话轮）。服务端消息永不带此标记。 */
+  pending?: boolean
   /** 历史消息附着的证据（S2 深化：历史不对称修复——历史回复同样渲染证据 chip，IX-CHT-03） */
   evidence?: Evidence
   /** 系统行专用（31 篇）：workspace.file.* 动作与目标 */
@@ -489,13 +493,22 @@ export const useSessionStore = create<SessionState>((set, get) => ({
 
   // F1（联调 2026-10-06）：GET messages 返回 seq 降序，历史直塞致「用户问在助手答下方」时序
   // 倒置——seed 内按 seq 升序排序（带 seq 升序在前，无 seq=实时残缺消息垫后，对齐 backfill
-  // 「历史升序在前、实时在后」既有口径，见 backfill mergedHist 排序）
+  // 「历史升序在前、实时在后」既有口径，见 backfill mergedHist 排序）。
+  // 18 §2 修复 A（2026-10-07）：seed 改合并式——历史基线 effect（StrictMode 双挂载/断线
+  // 重连/重载）触发时不再裸整表替换，保留本地无 seq 且 pending 的乐观尾部：与服务端 items
+  // 按 role+content 精确匹配去重，匹配上=受理事务已持久化同文 → 丢弃乐观条（恰一次）；
+  // 匹配不上（历史拉取早于落库可见/服务端缺行）→ 保留（不丢用户话轮）。非 pending 的
+  // 实时消息（流式中 assistant 半条/system 行）维持旧口径整表替换。
   seed: (messages, lastSeq = 0) =>
-    set({
-      messages: [...messages].sort(
+    set(s => {
+      const sorted = [...messages].sort(
         (a, b) => (a.seq ?? Number.POSITIVE_INFINITY) - (b.seq ?? Number.POSITIVE_INFINITY),
-      ),
-      lastSeq,
+      )
+      const serverKeys = new Set(sorted.map(m => `${m.role}\u0000${m.content}`))
+      const keptPending = s.messages.filter(
+        m => m.pending && m.seq === undefined && !serverKeys.has(`${m.role}\u0000${m.content}`),
+      )
+      return { messages: keptPending.length > 0 ? [...sorted, ...keptPending] : sorted, lastSeq }
     }),
 
   backfill(history, pending) {
@@ -510,14 +523,20 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     })
     const known = new Set(upserted.map(m => m.id).filter(Boolean))
     const fresh = history.filter(m => m.id && !known.has(m.id))
+    // 18 §2 修复 A（backfill 同款口径）：pending 乐观条与补齐历史按 role+content 精确匹配
+    // 去重——历史已含同文 → 丢弃乐观条（恰一次）；未匹配 → 保留在实时尾部（不丢话轮）
+    const histKeys = new Set(history.map(m => `${m.role}\u0000${m.content}`))
+    const deduped = upserted.filter(
+      m => !(m.pending && m.seq === undefined && histKeys.has(`${m.role}\u0000${m.content}`)),
+    )
     // 历史（带 seq）升序在前、实时（无 seq）在后——补齐消息与既有历史合并排序
     if (fresh.length > 0) {
-      const histOld = upserted.filter(m => m.seq !== undefined)
-      const live = upserted.filter(m => m.seq === undefined)
+      const histOld = deduped.filter(m => m.seq !== undefined)
+      const live = deduped.filter(m => m.seq === undefined)
       const mergedHist = [...histOld, ...fresh].sort((a, b) => (a.seq ?? 0) - (b.seq ?? 0))
       set({ messages: [...mergedHist, ...live] })
     } else {
-      set({ messages: upserted })
+      set({ messages: deduped })
     }
     // 基线推进到 max(合并历史最大 seq, pending.seq-1)（「补齐到该 seq」语义）：
     // 历史已含 pending 载荷时 apply 判 dup（文本恰 1 次）；未含时判 applied（由帧归约上屏）

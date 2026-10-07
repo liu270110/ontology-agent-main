@@ -31,6 +31,10 @@ class WindowMessage(BaseModel):
     role: str  # user/assistant/tool/system（对齐 messages.role）
     content: str
     message_id: UUID | None = None
+    # 幂等/溯源标记（chat 回显修复批，docs/Agent/18 §2）：编排器 submit 入窗携带
+    # seed_task_id+seed_agent_id，重试/重放重入按键查重跳过（恰一次入窗）；旧数据
+    # 无此键 → None，读取向后兼容。纯字符串键值（Redis JSON 序列化形状稳定）。
+    metadata: dict[str, str] | None = None
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
 

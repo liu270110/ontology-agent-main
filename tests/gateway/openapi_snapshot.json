@@ -12471,6 +12471,20 @@
             ],
             "title": "Message Id"
           },
+          "metadata": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Metadata"
+          },
           "role": {
             "title": "Role",
             "type": "string"

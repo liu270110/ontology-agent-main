@@ -121,10 +121,51 @@ class ChatContextAssembler:
 
     # ── L1 即时回写（memory §4：权威日志在 PG，Redis 仅热缓存）────────────
     async def append_window_message(
-        self, tenant_id: UUID, session_id: UUID, *, role: str, content: str, message_id: UUID | None = None
+        self,
+        tenant_id: UUID,
+        session_id: UUID,
+        *,
+        role: str,
+        content: str,
+        message_id: UUID | None = None,
+        seed_task_id: UUID | None = None,
+        seed_agent_id: UUID | None = None,
     ) -> None:
+        """user/assistant 消息入 L1 滑动窗。
+
+        幂等守卫（docs/Agent/18 §2 裁决·守卫法）：``seed_task_id`` 非空时（编排器
+        submit 路径）先查窗内是否已有同 (seed_task_id, seed_agent_id) 标记的 user 条——
+        同 task 重试/重放重入（task_worker attempt 2+ 重建命令再进编排器）跳过重复入窗，
+        恰一次落窗。键含 agent_id：群聊一轮=1 Task 逐成员复用（27 篇 X15），成员间
+        agent_id 不同 → 各成员首轮照常入窗（window[0]=本条 契约不破坏），仅同成员
+        重放去重。降级读返回空快照（不抛错）→ 视为未入窗照常尝试追加（append 自带
+        降级静默语义，行为与修复前一致）。"""
+        metadata: dict[str, str] | None = None
+        if seed_task_id is not None:
+            metadata = {
+                "seed_task_id": str(seed_task_id),
+                "seed_agent_id": str(seed_agent_id) if seed_agent_id else "",
+            }
+            try:
+                snapshot = await self._l1_store.read(tenant_id, session_id)
+            except Exception as exc:  # noqa: BLE001 ——查重读失败不阻断入窗（memory §4 降级契约：
+                # 生产 RedisL1Store.read 降级不抛；测试桩/旁路实现抛错时同口径放行，追加面
+                # 自带降级静默）。漏查重的代价=一次重复入窗，阻断会话的代价不成比例。
+                logger.warning("L1 窗幂等查重读失败（放行追加，session=%s）: %s", session_id, exc)
+            else:
+                for existing in snapshot.window:
+                    mark = existing.metadata
+                    if (
+                        existing.role == "user"
+                        and mark is not None
+                        and mark.get("seed_task_id") == metadata["seed_task_id"]
+                        and mark.get("seed_agent_id", "") == metadata["seed_agent_id"]
+                    ):
+                        return  # 已入窗：同 task 重试/重放幂等跳过（18 §2 回归锁口径）
         await self._l1_store.append_window(
-            tenant_id, session_id, [WindowMessage(role=role, content=content, message_id=message_id)]
+            tenant_id,
+            session_id,
+            [WindowMessage(role=role, content=content, message_id=message_id, metadata=metadata)],
         )
 
     # ── 组装（事务外）────────────────────────────────────────────────────

@@ -53,17 +53,29 @@ export function MessageInput({
     }
   }, [draftInserts, sessionId])
 
+  /** 18 §2 修复 A（2026-10-07）：双击/双 Enter 守卫改 useRef 同步标志——React state（busy）
+   *  批更新是异步的，快速双击可双双穿过旧守卫造成双 POST 双 run；busyRef 在函数首行同步
+   *  置位、finally 复位，同一次提交窗口内第二次调用直接返回。 */
+  const busyRef = useRef(false)
+
   async function send() {
+    if (busyRef.current) return
+    busyRef.current = true
     const content = text.trim()
-    if (!content || busy || running || pendingReply) return
+    if (!content || running || pendingReply) {
+      busyRef.current = false
+      return
+    }
     setBusy(true)
     try {
       // 契约：api/01 §5.2 —— 不带 Accept: text/event-stream → 202 {run_id, task_id}，事件走 /events 订阅
       await api.post(`/sessions/${sessionId}/messages`, { content })
       // W-02（41 号验收）：202 成功即置乐观运行态——消息流「正在思考…」占位 + 停止钮可用，
-      // 首帧（RUN_STARTED/TEXT_MESSAGE_START）到达后由归约清零替换为真实流
+      // 首帧（RUN_STARTED/TEXT_MESSAGE_START）到达后由归约清零替换为真实流。
+      // 18 §2 修复 A：乐观条带 pending 标记——seed/backfill 合并时与服务端历史按
+      // role+content 去重，防止历史基线 effect 重放后乐观条与持久化条同屏双现。
       useSessionStore.setState(s => ({
-        messages: [...s.messages, { id: `local-${Date.now()}`, role: 'user', content }],
+        messages: [...s.messages, { id: `local-${Date.now()}`, role: 'user', content, pending: true }],
         pendingReply: true,
       }))
       setText('')
@@ -76,6 +88,7 @@ export function MessageInput({
       })
     } finally {
       setBusy(false)
+      busyRef.current = false
     }
   }
 

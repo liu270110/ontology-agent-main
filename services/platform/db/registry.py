@@ -65,6 +65,7 @@ from services.ontology.data.orm import (  # noqa: F401
     OntoClass,
     Ontology,
     OntologyChangeset,
+    OntologyElementVersion,
     OntologyVersion,
     OntoProperty,
     Rule,

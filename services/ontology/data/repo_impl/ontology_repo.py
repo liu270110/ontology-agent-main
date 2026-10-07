@@ -19,10 +19,11 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from pydantic import BaseModel
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, func, select, text, update
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from services.ontology.data.audit_actions import OntologyAuditAction, record_ontology_audit
 from services.ontology.data.orm import Axiom as AxiomORM
 from services.ontology.data.orm import OntoClass as OntoClassORM
 from services.ontology.data.orm import Ontology as OntologyORM
@@ -42,6 +43,25 @@ from services.ontology.domain.model.ontology_read_model import (
 )
 
 _DEFAULT_ARTIFACT_ROOT = Path("deploy/artifacts")
+
+# 撤除=标记（ONT-1.3）：元素类型 → (读模型 ORM, 元素键列)。element_key 口径（DDL §ONT-1.1）：
+# class/property=iri；rule=name；axiom 以行 id 定位（表无自身 IRI 列，row UUID 即撤除定位键）。
+_ELEMENT_TABLES: dict[str, tuple[type, object]] = {
+    "class": (OntoClassORM, OntoClassORM.iri),
+    "property": (OntoPropertyORM, OntoPropertyORM.iri),
+    "axiom": (AxiomORM, AxiomORM.id),
+    "rule": (RuleORM, RuleORM.name),
+}
+_CANDIDATE_TABLES: dict[str, tuple[type, object]] = {
+    "axiom": (AxiomORM, AxiomORM.subject_iri),  # 元素键口径（DDL）：axiom=iri（取 subject_iri）
+    "rule": (RuleORM, RuleORM.name),
+}
+
+
+def _mark_fields(marks: dict, key) -> dict:
+    """撤除标记 → ORM 构造 kwargs（未命中=在役 None/None，重投影携带 ONT-1.3 标记）。"""
+    w_at, w_reason = marks.get(key, (None, None))
+    return {"withdrawn_at": w_at, "withdrawn_reason": w_reason}
 
 
 class VersionSummary(BaseModel):
@@ -99,6 +119,7 @@ def _changeset_to_domain(row: OntologyChangesetORM) -> OntologyChangeset:
         id=row.id,
         title=row.title or "",
         status=ChangesetStatus(row.status),
+        target_key=row.target_key,
         gate_ok=bool(impact.get("gate_ok", False)),
         gate_report=impact.get("gate_report") or {},
         approvals=impact.get("approvals") or {},
@@ -268,6 +289,27 @@ class PgOntologyRepository:
         if version_id is None:
             raise ValueError(f"版本行不存在: {ontology_id}/{version}（投影必须在 append_version 同事务之后调用，§9）")
         common = {"tenant_id": self._tenant_id, "ontology_id": ontology_id, "version_id": version_id}
+        # ONT-1.3 撤除标记携带：同版本幂等重放（先删后插）永不洗掉 withdrawn 标记——删除前
+        # 先读标记，重插时回填（类/属性按 iri、规则按 name、公理按 kind+subject+expression 定位）。
+        class_marks = await self._withdrawn_marks(OntoClassORM.iri, ontology_id, version_id)
+        property_marks = await self._withdrawn_marks(OntoPropertyORM.iri, ontology_id, version_id)
+        rule_marks = await self._withdrawn_marks(RuleORM.name, ontology_id, version_id)
+        axiom_marks: dict[tuple[str, str, str], tuple[datetime | None, str | None]] = {}
+        for a_iri, a_kind, a_expr, a_at, a_reason in (
+            (
+                await self._db.execute(
+                    select(AxiomORM.subject_iri, AxiomORM.kind, AxiomORM.expression,
+                           AxiomORM.withdrawn_at, AxiomORM.withdrawn_reason).where(
+                        AxiomORM.tenant_id == self._tenant_id,
+                        AxiomORM.ontology_id == ontology_id,
+                        AxiomORM.version_id == version_id,
+                        AxiomORM.withdrawn_at.is_not(None),
+                    )
+                )
+            )
+            .all()
+        ):
+            axiom_marks[(a_kind, a_iri, a_expr)] = (a_at, a_reason)
         # 先删（替换式投影；uk_*_version_id_iri 唯一约束由先删后插保证）
         for orm in (OntoClassORM, OntoPropertyORM, AxiomORM, RuleORM):
             await self._db.execute(
@@ -289,6 +331,7 @@ class PgOntologyRepository:
                     is_behavior=c.is_behavior,
                     state_attribute=c.state_attribute,
                     metadata_=c.metadata,
+                    **_mark_fields(class_marks, c.iri),
                 )
                 for c in projection.classes
             ]
@@ -309,6 +352,7 @@ class PgOntologyRepository:
                     functional=p.functional,
                     constraints=p.constraints,
                     metadata_=p.metadata,
+                    **_mark_fields(property_marks, p.iri),
                 )
                 for p in projection.properties
             ]
@@ -324,6 +368,7 @@ class PgOntologyRepository:
                     expression=a.expression,
                     source=a.source,
                     review_state=a.review_state,
+                    **_mark_fields(axiom_marks, (a.kind, a.subject_iri, a.expression)),
                 )
                 for a in projection.axioms
             ]
@@ -343,6 +388,7 @@ class PgOntologyRepository:
                     enabled=r.enabled,
                     source=r.source,
                     review_state=r.review_state,
+                    **_mark_fields(rule_marks, r.name),
                 )
                 for r in projection.rules
             ]
@@ -377,6 +423,176 @@ class PgOntologyRepository:
             )
             for r in rows
         ]
+
+    # ---- ONT-1：审计通道 / usage 守卫 / 撤除=标记 / 候选拒绝（06 篇 §ONT-1.3~1.6） ----
+
+    async def record_audit(
+        self,
+        *,
+        actor_id: uuid.UUID | None,
+        action: OntologyAuditAction | str,
+        ontology_id: uuid.UUID,
+        digest: dict,
+        trace_id: str | None = None,
+        subject: str = "ontology",
+        subject_id: uuid.UUID | None = None,
+    ) -> None:
+        """ontology.* 审计行（audit_logs；同事务，tools record_audit 先例）。"""
+        await record_ontology_audit(
+            self._db,
+            tenant_id=self._tenant_id,
+            action=action,
+            actor_id=actor_id,
+            ontology_id=ontology_id,
+            digest=digest,
+            trace_id=trace_id,
+            subject=subject,
+            subject_id=subject_id,
+        )
+
+    async def kb_usage_count(self, element_type: str, iri: str) -> int:
+        """kb 域对该 IRI 的**全历史**引用计数（ONT-1.4 第 1 档 usage 守卫计数面）。
+
+        不筛 status（candidate+rejected+authoritative=全历史，含历史版本行）；计数面：
+        类 IRI=kb_facts.subject_type/object_type + kb_rule_candidates.target_class；
+        属性 IRI=kb_facts.predicate（subject/object 为 ABox 实体 IRI，不入类/属性计数）。
+        裸 SQL 跨模块查询（免 kb ORM import 边，tools→audit_logs 同款）。
+        """
+        if element_type == "class":
+            facts = await self._db.execute(
+                text(
+                    "SELECT count(*) FROM kb_facts WHERE tenant_id = CAST(:t AS uuid) "
+                    "AND (subject_type = :iri OR object_type = :iri)"
+                ),
+                {"t": str(self._tenant_id), "iri": iri},
+            )
+            rules = await self._db.execute(
+                text(
+                    "SELECT count(*) FROM kb_rule_candidates WHERE tenant_id = CAST(:t AS uuid) "
+                    "AND target_class = :iri"
+                ),
+                {"t": str(self._tenant_id), "iri": iri},
+            )
+            return int(facts.scalar_one()) + int(rules.scalar_one())
+        if element_type == "property":
+            facts = await self._db.execute(
+                text(
+                    "SELECT count(*) FROM kb_facts WHERE tenant_id = CAST(:t AS uuid) AND predicate = :iri"
+                ),
+                {"t": str(self._tenant_id), "iri": iri},
+            )
+            return int(facts.scalar_one())
+        raise ValueError(f"usage 守卫仅适用 class/property（收到 {element_type}；rule/axiom 撤除无守卫）")
+
+    async def withdraw_head_element(
+        self, ontology_id: uuid.UUID, *, version: str, element_type: str, key: str, reason: str
+    ) -> int:
+        """撤除=标记（ONT-1.3）：head 版本行打 withdrawn_at/withdrawn_reason，永不物理删。
+
+        返回标记行数（0=元素不存在）；已撤除行不重复打戳（幂等重放 rowcount=0）。
+        axiom 以行 id 定位（_ELEMENT_TABLES 口径），非法 UUID ValueError 由调用方转 4xx。
+        """
+        try:
+            orm, key_col = _ELEMENT_TABLES[element_type]
+        except KeyError as exc:
+            raise ValueError(f"未知元素类型: {element_type}（白名单 {'|'.join(_ELEMENT_TABLES)}）") from exc
+        version_id = await self._version_id_by_name(ontology_id, version)
+        if version_id is None:
+            raise ValueError(f"版本行不存在: {ontology_id}/{version}")
+        key_val: object = uuid.UUID(key) if element_type == "axiom" else key
+        result = await self._db.execute(
+            update(orm)
+            .where(
+                orm.tenant_id == self._tenant_id,
+                orm.ontology_id == ontology_id,
+                orm.version_id == version_id,
+                key_col == key_val,
+                orm.withdrawn_at.is_(None),
+            )
+            .values(withdrawn_at=_now(), withdrawn_reason=reason)
+        )
+        return int(result.rowcount or 0)
+
+    async def decline_candidate(
+        self,
+        ontology_id: uuid.UUID,
+        *,
+        element_type: str,
+        row_id: uuid.UUID,
+        reason: str,
+        actor_id: uuid.UUID | None,
+        trace_id: str | None = None,
+    ) -> bool:
+        """候选拒绝（防重提层三，ONT-1.3/1.6）：仅 source='llm_candidate' 行可打 declined_reason。
+
+        同事务审计 ontology.proposal.declined；非候选行/不存在 → False（调用方转 409，4202 码）。
+        """
+        try:
+            orm, _key_col = _CANDIDATE_TABLES[element_type]
+        except KeyError as exc:
+            raise ValueError(f"候选仅存在 axiom/rule（收到 {element_type}）") from exc
+        result = await self._db.execute(
+            update(orm)
+            .where(
+                orm.tenant_id == self._tenant_id,
+                orm.ontology_id == ontology_id,
+                orm.id == row_id,
+                orm.source == "llm_candidate",
+                orm.declined_reason.is_(None),
+            )
+            .values(declined_reason=reason)
+        )
+        declined = int(result.rowcount or 0) > 0
+        if declined:
+            await self.record_audit(
+                actor_id=actor_id,
+                action=OntologyAuditAction.PROPOSAL_DECLINED,
+                ontology_id=ontology_id,
+                digest={"element_type": element_type, "row_id": str(row_id), "reason": reason},
+                trace_id=trace_id,
+            )
+        return declined
+
+    async def declined_evidence_floor(
+        self, ontology_id: uuid.UUID, *, element_type: str, element_key: str
+    ) -> int | None:
+        """同形候选再提的证据量下限（ONT-1.3 翻倍判据）：declined 历史 max(evidence_count)×2。
+
+        element_key 口径：axiom=subject_iri；rule=name。无 declined 历史 → None（首提不受限）。
+        """
+        try:
+            orm, key_col = _CANDIDATE_TABLES[element_type]
+        except KeyError as exc:
+            raise ValueError(f"候选仅存在 axiom/rule（收到 {element_type}）") from exc
+        current_max = (
+            await self._db.execute(
+                select(func.max(orm.evidence_count)).where(
+                    orm.tenant_id == self._tenant_id,
+                    orm.ontology_id == ontology_id,
+                    key_col == element_key,
+                    orm.source == "llm_candidate",
+                    orm.declined_reason.is_not(None),
+                )
+            )
+        ).scalar_one()
+        return None if current_max is None else 2 * int(current_max)
+
+    async def _withdrawn_marks(
+        self, key_col, ontology_id: uuid.UUID, version_id: uuid.UUID
+    ) -> dict:
+        """撤除标记快照（重投影携带用）：key → (withdrawn_at, withdrawn_reason)，仅已撤除行。"""
+        orm = key_col.class_
+        rows = (
+            await self._db.execute(
+                select(key_col, orm.withdrawn_at, orm.withdrawn_reason).where(
+                    orm.tenant_id == self._tenant_id,
+                    orm.ontology_id == ontology_id,
+                    orm.version_id == version_id,
+                    orm.withdrawn_at.is_not(None),
+                )
+            )
+        ).all()
+        return {key: (w_at, w_reason) for key, w_at, w_reason in rows}
 
     # ---- 内部装配 ----
 
@@ -469,14 +685,17 @@ class PgOntologyRepository:
                 ontology_id=ontology_id,
                 title=changeset.title,
                 status=changeset.status.value,
+                target_key=changeset.target_key,
             )
             self._db.add(row)
         if row.tenant_id != self._tenant_id:
             raise ValueError("租户不匹配：拒绝写入他租户变更单行")
         # 终态行照常 upsert（历史归档只读）；同本体至多一个活跃行由 uk_changesets_one_active
-        # 部分唯一索引兜底（并发型不变式归存储，04 篇 §2.1），内存单活跃裁决在聚合方法内。
+        # 部分唯一索引兜底（并发型不变式归存储，04 篇 §2.1），内存单活跃裁决在聚合方法内；
+        # 同目标活跃单不双开由 uk_changesets_one_target 兜底（ONT-1.5，冲突→IntegrityError→409）。
         row.title = changeset.title
         row.status = changeset.status.value
+        row.target_key = changeset.target_key
         row.applicant_id = changeset.applicant_id
         row.reviewer_id = changeset.reviewer_id
         row.review_comment = changeset.review_comment

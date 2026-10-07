@@ -10,7 +10,9 @@
 
 状态机（04 篇 §10 全平台状态机索引 · changeset 行）：draft/in_review/published/rejected/rolled_back；
 同本体单活跃 changeset（draft/in_review）——内存断言在此，并发硬保证=PG 部分唯一索引
-uk_changesets_one_active（database/01 §3.4，04 篇 §2.1 并发型不变式归存储）。
+uk_changesets_one_active（database/01 §3.4，04 篇 §2.1 并发型不变式归存储）；目标级防重提
+（ONT-1.5 层一）：target_key=sha256(canonical_json(sorted 目标 IRI))，同目标活跃单不双开，
+并发硬保证=PG 部分唯一索引 uk_changesets_one_target（仅 draft/in_review 生效，纯新增类为 NULL）。
 """
 
 from __future__ import annotations
@@ -22,6 +24,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from services.ontology.domain.model.ontology_read_model import sha256_canonical
 from services.platform.kernel import DomainError
 from services.review.domain.approval_chain import (
     GovernanceTier,
@@ -51,6 +54,17 @@ class ChangesetStatus(StrEnum):
 
 # 活跃 changeset 状态集：与 PG 部分唯一索引 uk_changesets_one_active WHERE 子句同口径（database/01 §3.4）
 ACTIVE_CHANGESET_STATES = (ChangesetStatus.DRAFT, ChangesetStatus.IN_REVIEW)
+
+
+def compute_target_key(target_iris: list[str] | None) -> str | None:
+    """changeset 目标键（ONT-1.5 防重提层一）：sha256(canonical_json(sorted 目标 IRI 列表))。
+
+    空/None（纯新增类 changeset）→ None（部分唯一索引对 NULL 不生效，契约口径）；重复 IRI
+    先集合化再排序——同一目标集不同提交顺序得同键（canonical_json 判等，sha256_canonical 同源）。
+    """
+    if not target_iris:
+        return None
+    return sha256_canonical(sorted(set(target_iris)))
 
 # 治理档位（ontology §6.3 档位钩子；档位权威=08 §2.4 全平台定义）：判定单一收敛点=
 # services/review/domain/approval_chain（parse/required_signatures/resolve_decision）——本聚合
@@ -106,6 +120,7 @@ class OntologyChangeset(BaseModel):
     id: uuid.UUID = Field(default_factory=uuid.uuid4)
     title: str = Field(min_length=1, max_length=256)
     status: ChangesetStatus = ChangesetStatus.DRAFT
+    target_key: str | None = None  # ONT-1.5 防重提层一：目标 IRI 集合指纹（纯新增类 NULL，open_changeset 定格）
     gate_ok: bool = False  # 预检门禁（lint+SHACL+一致性）结论；submit 前必须为 True（§6.1 进入条件）
     gate_report: dict[str, Any] = Field(default_factory=dict)  # 门禁报告留痕（结果可追溯，04 §5）
     approvals: dict[str, Any] = Field(default_factory=dict)  # 审批留痕：signatures 签名序列 + 最新一签摘要（08 §2.4）
@@ -286,7 +301,19 @@ class Ontology(BaseModel):
 
     # ---- 开变更单：同本体单活跃裁决（ontology §6.1，2026-09-26 痛点优化） ----
 
-    def open_changeset(self, title: str, *, applicant_id: uuid.UUID | None = None) -> OntologyChangeset:
+    def open_changeset(
+        self,
+        title: str,
+        *,
+        applicant_id: uuid.UUID | None = None,
+        target_iris: list[str] | None = None,
+    ) -> OntologyChangeset:
+        """开变更单（单活跃裁决 + 目标键定格，ontology §6.1/ONT-1.5）。
+
+        `target_iris`=本单拟变更的目标 IRI 清单（类/属性/公理/规则标识），创建期定格为
+        target_key 指纹；纯新增类（无目标）传 None/空 → target_key=None。同目标活跃单冲突
+        的并发兜底=PG uk_changesets_one_target 部分唯一索引（repo save 触发）。
+        """
         if self.status is OntologyStatus.DEPRECATED:
             raise DomainError("4206 ONTOLOGY_DEPRECATED: 已弃用本体不可新建变更单")
         current = self.active_changeset
@@ -295,7 +322,9 @@ class Ontology(BaseModel):
                 f"4202 CHANGESET_ACTIVE_EXISTS: 同一本体至多一个活跃变更单（当前 {current.status.value}）——"
                 "先发布或废弃当前变更单（ontology §6.1 单活跃裁决）"
             )
-        changeset = OntologyChangeset(title=title, applicant_id=applicant_id)
+        changeset = OntologyChangeset(
+            title=title, applicant_id=applicant_id, target_key=compute_target_key(target_iris)
+        )
         self.active_changeset = changeset
         return changeset
 

@@ -36,8 +36,8 @@ from dataclasses import dataclass
 import httpx
 import pytest
 from sqlalchemy import delete, select, text
-from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.pool import NullPool
 
 from services.iam.data.orm import Tenant as TenantORM
 from services.kb.data.orm import Document as DocumentORM
@@ -321,21 +321,58 @@ async def vector_arm() -> AsyncIterator[tuple[str, OllamaEmbedder | TeiEmbedder 
 # ---------------------------------------------------------------- 夹具（样例库 + 本体读模型 + ACL 标注）
 
 
-@pytest.fixture
-async def kb_pg() -> AsyncIterator[async_sessionmaker[AsyncSession]]:
-    """本地 PG 会话工厂；不可达即跳过整用例（同 tests/kb/test_kb.py 夹具纪律）。"""
+@pytest.fixture(scope="module")
+def kb_pg() -> AsyncIterator[async_sessionmaker[AsyncSession]]:
+    """一次性测试库会话工厂（ONT-1 批转换：模块级一库，create_all 建全量表含跨模块 FK）。
+
+    变更动因：本文件消费 ontology 读模型 ORM（OntoClassORM/OntologyVersionORM），ONT-1 批
+    ORM 增列先行于共享开发库 schema（其 alembic 版本戳失效无法 upgrade）——全列 SELECT 即
+    UndefinedColumn；一次性库建表即含新列（tests/agent/pg_testdb.py 同款机制）。同步夹具
+    （asyncio.run 驱动建/删库）规避 pytest-asyncio loop 作用域错配；NullPool 每 checkout
+    新建连接，各用例独立事件循环安全共享引擎。"""
+    from services.platform.db import registry as _orm_registry  # noqa: F401  全表聚合注册（跨模块 FK 解析）
+    from services.platform.db.base import Base
+    from tests.agent.pg_testdb import create_test_database, drop_test_database, probe_pg
+
     settings = Settings()
-    probe = create_async_engine(settings.pg_dsn, pool_pre_ping=True)
-    try:
-        async with probe.connect():
-            pass
-    except (OSError, SQLAlchemyError):
-        await probe.dispose()
+    if not asyncio.run(probe_pg(settings.pg_dsn)):
         pytest.skip("本地 PG 不可达，跳过引用率基线评估")
-    await probe.dispose()
-    engine = create_async_engine(settings.pg_dsn)
+    test_dsn = asyncio.run(create_test_database(settings.pg_dsn))
+    engine = create_async_engine(test_dsn, poolclass=NullPool)
+
+    async def _create_all() -> None:
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+            # 复刻迁移 0386f2520028 的 pgvector 条件 DDL（embedding 列迁移条件管理、不在 ORM；
+            # 扩展不可用时容错跳过——检索侧 vector_ready 自动降级，迁移语义逐字对齐）
+            await conn.execute(
+                text(
+                    "DO $$ BEGIN CREATE EXTENSION IF NOT EXISTS vector; "
+                    "EXCEPTION WHEN OTHERS THEN NULL; END $$;"
+                )
+            )
+            if (await conn.execute(text("SELECT to_regtype('vector') IS NOT NULL"))).scalar():
+                await conn.execute(
+                    text("ALTER TABLE document_chunks ADD COLUMN embedding vector(1024)")
+                )
+                await conn.execute(
+                    text(
+                        "CREATE INDEX ix_document_chunks_embedding ON document_chunks "
+                        "USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100)"
+                    )
+                )
+
+    try:
+        asyncio.run(_create_all())
+    except BaseException:
+        # 建表失败（含 pgvector 条件 DDL）也要 drop 一次性库并还引擎——setup 抛出不走
+        # yield 后的清理路径，不兜底即泄漏一次性库（ocr 评审 #1 同款，2026-10-07）
+        asyncio.run(drop_test_database(test_dsn))
+        asyncio.run(engine.dispose())
+        raise
     yield async_sessionmaker(engine, expire_on_commit=False)
-    await engine.dispose()
+    asyncio.run(drop_test_database(test_dsn))
+    asyncio.run(engine.dispose())
 
 
 _COLUMN_EXISTS_SQL = text(

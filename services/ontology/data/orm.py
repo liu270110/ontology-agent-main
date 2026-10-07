@@ -1,6 +1,6 @@
-"""ontology 模块 ORM：ontologies/ontology_versions + changesets + 读模型四表（7 表）。
+"""ontology 模块 ORM：ontologies/ontology_versions + changesets + 读模型四表 + 元素定义快照（8 表）。
 
-DDL 权威：database/01 §3.3~§3.4；2026-09-27 模块轴重构自 kb_ontology_audit/m2_semantic_review 拆分。
+DDL 权威：database/01 §3.3~§3.4 + §ONT-1；2026-09-27 模块轴重构自 kb_ontology_audit/m2_semantic_review 拆分。
 """
 
 from __future__ import annotations
@@ -78,6 +78,8 @@ class OntologyChangeset(Base, PkMixin, TenantMixin, TimestampMixin):
     diff: Mapped[dict | None] = mapped_column(JSONB)  # 三元组摘要
     impact_report: Mapped[dict | None] = mapped_column(JSONB)  # 核心变动影响（ontology §6.3）
     status: Mapped[str] = mapped_column(String(16), default="draft", nullable=False)
+    # ONT-1.5 防重提层一：sha256(canonical_json(sorted 目标 IRI))；纯新增类为 NULL
+    target_key: Mapped[str | None] = mapped_column(CHAR(64))
     applicant_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"))
     reviewer_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"))
     reviewer_business: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"))  # 双签
@@ -97,6 +99,14 @@ class OntologyChangeset(Base, PkMixin, TenantMixin, TimestampMixin):
             unique=True,
             postgresql_where=text("status IN ('draft','in_review')"),
         ),  # 同本体单活跃
+        Index(
+            "uk_changesets_one_target",
+            "tenant_id",
+            "ontology_id",
+            "target_key",
+            unique=True,
+            postgresql_where=text("status IN ('draft','in_review') AND target_key IS NOT NULL"),
+        ),  # ONT-1.5 防重提层一：同目标活跃变更单不双开（终态行不限，uk_changesets_one_active 保持不动）
     )
 
 
@@ -109,7 +119,21 @@ class _ReadModelMixin(TenantMixin):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
 
-class OntoClass(_ReadModelMixin, Base, PkMixin):
+class _WithdrawMixin:
+    """撤除=标记（ONT-1.3 状态机外化）：撤除永不物理删行，只打双标记；NULL=在役。"""
+
+    withdrawn_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    withdrawn_reason: Mapped[str | None] = mapped_column(String(256))
+
+
+class _CandidateMixin:
+    """LLM 候选防重提层三（ONT-1.3）：declined 裁决留痕 + 证据量（再提同形候选需翻倍）。"""
+
+    declined_reason: Mapped[str | None] = mapped_column(String(256))
+    evidence_count: Mapped[int] = mapped_column(Integer, default=1, nullable=False)  # DDL DEFAULT 1
+
+
+class OntoClass(_ReadModelMixin, _WithdrawMixin, Base, PkMixin):
     __tablename__ = "classes"
     iri: Mapped[str] = mapped_column(String(256), nullable=False)
     name: Mapped[str] = mapped_column(String(128), nullable=False)
@@ -126,7 +150,7 @@ class OntoClass(_ReadModelMixin, Base, PkMixin):
     )
 
 
-class OntoProperty(_ReadModelMixin, Base, PkMixin):
+class OntoProperty(_ReadModelMixin, _WithdrawMixin, Base, PkMixin):
     __tablename__ = "properties"
     iri: Mapped[str] = mapped_column(String(256), nullable=False)
     kind: Mapped[str] = mapped_column(String(16), nullable=False)  # datatype|object
@@ -145,7 +169,7 @@ class OntoProperty(_ReadModelMixin, Base, PkMixin):
     )
 
 
-class Axiom(_ReadModelMixin, Base, PkMixin):
+class Axiom(_ReadModelMixin, _WithdrawMixin, _CandidateMixin, Base, PkMixin):
     __tablename__ = "axioms"
     kind: Mapped[str] = mapped_column(String(32), nullable=False)  # subClassOf/disjointWith/…
     subject_iri: Mapped[str] = mapped_column(String(256), nullable=False)
@@ -159,7 +183,7 @@ class Axiom(_ReadModelMixin, Base, PkMixin):
     )
 
 
-class Rule(_ReadModelMixin, Base, PkMixin):
+class Rule(_ReadModelMixin, _WithdrawMixin, _CandidateMixin, Base, PkMixin):
     """三路由（owl_axiom|shacl|engine），同一规则只允许一个路由（ontology §2.3）。"""
 
     __tablename__ = "rules"
@@ -177,4 +201,41 @@ class Rule(_ReadModelMixin, Base, PkMixin):
         CheckConstraint("route IN ('owl_axiom','shacl','engine')", name="ck_rules_route"),
         CheckConstraint("severity IN ('error','warn')", name="ck_rules_severity"),
         UniqueConstraint("version_id", "name", name="uk_rules_version_id_name"),
+    )
+
+
+class OntologyElementVersion(Base, PkMixin):
+    """元素定义快照（ONT-1.1，append-only：只 INSERT + 定向作废 UPDATE，永不 DELETE）。
+
+    - 每元素至多一个活跃快照：部分唯一 uk_ont_elem_versions_active（WHERE superseded_at IS NULL）；
+    - 作废=UPDATE superseded_at/superseded_by 指向新快照（append-only 指行不删，允许这一次定向 UPDATE）；
+    - element_key 口径（DDL）：class/property/axiom=iri；rule=name；
+    - 判等：definition_hash = sha256(canonical_json(definition))——同 hash 跳过不产生新快照。
+    """
+
+    __tablename__ = "ontology_element_versions"
+    # 索引面=组合 ix（DDL 不设单列索引），故不走 TenantMixin（其 tenant_id 自带单列索引）
+    tenant_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    ontology_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("ontologies.id"), nullable=False)
+    element_type: Mapped[str] = mapped_column(String(16), nullable=False)
+    element_key: Mapped[str] = mapped_column(String(256), nullable=False)
+    definition: Mapped[dict] = mapped_column(JSONB, nullable=False)  # 定义字段白名单投影（ONT-1.2）
+    definition_hash: Mapped[str] = mapped_column(CHAR(64), nullable=False)
+    superseded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))  # NULL=活跃
+    superseded_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("ontology_element_versions.id"))
+    created_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    __table_args__ = (
+        CheckConstraint(
+            "element_type IN ('class','property','axiom','rule')", name="ck_ont_elem_versions_element_type"
+        ),
+        Index(
+            "uk_ont_elem_versions_active",
+            "ontology_id",
+            "element_type",
+            "element_key",
+            unique=True,
+            postgresql_where=text("superseded_at IS NULL"),
+        ),
+        Index("ix_ont_elem_versions_tenant", "tenant_id", "ontology_id"),
     )

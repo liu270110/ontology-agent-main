@@ -103,15 +103,20 @@ export function TaskDetailDrawer({ task, onClose, onChanged }: {
               ))}
               {/* F4（B:A-10）：订阅失败显错误行（不再静默吞错伪装「等待事件推送…」）
                   ocr 整改（fe2 发现4）：<ol> 直接子元素只允许 li——错误行包一层 <li class=list-none> */}
+              {/* F7（联调 2026-10-06）：li 兄弟节点补 key（error 行/空态行同列 ol 直接子级） */}
               {error && (
-                <li className="list-none">
+                <li key="tsk-timeline-error" className="list-none">
                   <div className="flex items-center gap-1.5 rounded-lg border border-red/40 bg-red/10 px-3 py-2 text-[11px] text-red" data-testid="tsk-timeline-error">
                     <AlertTriangle size={12} className="flex-none" aria-hidden />
                     事件流连接失败 · {error.message}
                   </div>
                 </li>
               )}
-              {!error && timeline.length === 0 && <div className="px-2 py-3 text-[11px] text-label-3">等待事件推送…</div>}
+              {!error && timeline.length === 0 && (
+                <li key="tsk-timeline-empty" className="list-none">
+                  <div className="px-2 py-3 text-[11px] text-label-3">等待事件推送…</div>
+                </li>
+              )}
             </ol>
           </div>
 

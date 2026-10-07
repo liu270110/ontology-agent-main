@@ -17,7 +17,7 @@ import uuid
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import delete, func, or_, select, update
+from sqlalchemy import and_, delete, func, or_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -89,6 +89,7 @@ def _session_to_domain(row: SessionORM, *, next_seq: int, members: list[GroupMem
         routing=RoutingMode(row.routing),
         members=members or [],
         next_seq=next_seq,
+        created_at=row.created_at,  # B3 缺陷修复 2026-10-07：行创建时刻随映射透出（读面不再恒 null）
     )
 
 
@@ -812,9 +813,9 @@ class PgTaskRepository:
     ) -> list[Task]:
         """任务列表（api/01 §3.1 信封）。
 
-        ``user_id``（红队审查 A2 修复批 2026-10-07）：可选归属过滤——经任务会话
-        EXISTS 子查询断言 ``sessions.user_id == user_id``（任务行不冗余 user 列，归属
-        以会话为锚）；None 不滤（系统侧调用方显式不传）。
+        ``user_id``（红队审查 A2 修复批 2026-10-07）：归属过滤——会话锚任务经归属会话
+        子查询；session-less 任务（工作流族，B1 缺陷修复 2026-10-07）经触发者留痕谓词
+        （``_owned_task_predicate`` 双路）；None 不滤（系统侧调用方显式不传）。
         """
         stmt = select(TaskORM).where(TaskORM.tenant_id == self._tenant_id)
         if session_id is not None:
@@ -824,7 +825,7 @@ class PgTaskRepository:
         if task_type is not None:
             stmt = stmt.where(TaskORM.type == task_type)
         if user_id is not None:
-            stmt = stmt.where(TaskORM.session_id.in_(self._owned_session_ids(user_id)))
+            stmt = stmt.where(self._owned_task_predicate(user_id))
         stmt = stmt.order_by(TaskORM.created_at.desc(), TaskORM.id.desc()).offset(offset).limit(limit)
         rows = (await self._db.execute(stmt)).scalars().all()
         return [_task_to_domain(r, runs=[]) for r in rows]
@@ -845,8 +846,25 @@ class PgTaskRepository:
         if task_type is not None:
             stmt = stmt.where(TaskORM.type == task_type)
         if user_id is not None:
-            stmt = stmt.where(TaskORM.session_id.in_(self._owned_session_ids(user_id)))
+            stmt = stmt.where(self._owned_task_predicate(user_id))
         return int((await self._db.execute(stmt)).scalar_one())
+
+    def _owned_task_predicate(self, user_id: uuid.UUID) -> Any:
+        """任务归属谓词（A2 user_id 过滤 + B1 session-less 双路扩展，list/count 共用）：
+
+        - 会话锚（session_id 非空）：经归属会话子查询（``_owned_session_ids`` 同源面）；
+        - 触发者锚（session_id 为空，工作流任务恒无会话——X16 executor 契约）：既有触发者
+          留痕 ``payload->>'triggered_by'`` == 本主体（workflow 受理端点落行，零迁移）；
+          jsonb 守卫同 ``_workflow_tasks_stmt``（非对象 payload →> 返回 NULL，不匹配）。
+        无会话且无触发者留痕（如 a2a 任务）两路皆不中 → 不可见（反探测同形）。
+        """
+        return or_(
+            TaskORM.session_id.in_(self._owned_session_ids(user_id)),
+            and_(
+                TaskORM.session_id.is_(None),
+                TaskORM.payload.op("->>")("triggered_by") == str(user_id),
+            ),
+        )
 
     def _owned_session_ids(self, user_id: uuid.UUID) -> Any:
         """归属会话 id 子查询（A2 user_id 归属过滤的同源面，list/count 共用）。"""

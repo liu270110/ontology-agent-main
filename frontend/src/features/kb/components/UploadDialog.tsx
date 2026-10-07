@@ -1,10 +1,11 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useDropzone } from 'react-dropzone'
+import { useQuery } from '@tanstack/react-query'
 import { Check, ChevronDown, FileUp, Loader2, RotateCcw, Trash2, Upload } from 'lucide-react'
 import { toast } from 'sonner'
 import { Modal } from '@/components/modal'
 import { describeError } from '@/lib/errors'
-import { startPipeline, uploadDocumentText } from '../api'
+import { listCollections, startPipeline, uploadDocumentText } from '../api'
 import { formatSize } from './shared'
 import { Select } from '@/components/select'
 
@@ -12,8 +13,8 @@ import { Select } from '@/components/select'
  *  拖拽区（react-dropzone，拖入高亮 + 点击选择）→ 多文件队列（名/大小/格式徽标/移除/逐行状态）
  *  → 解析选项折叠区（切片策略/抽取开关/目标知识库）→「上传并抽取」（汇总大小校验）。
  *  提交=循环单文件调用（每文件一行进度：排队→上传中→已登记/失败）：
- *  ① 目标知识库 → collection_id（S8 live 实测：后端无 GET /collections 列表，
- *    POST /kb/collections 创建 + 本地缓存复用，404 失效自动重建，见 api.ensureCollectionId）
+ *  ① 目标知识库 → collection_id（F4 live 化：下拉=GET /kb/collections 真列表（列表空/失败
+ *    回落 KB_TARGETS 缺省），提交仍经 api.ensureCollectionId 按名查重+按需建库兜底）
  *  ② POST /kb/documents 登记（live 实测=M2 JSON 内容直传 {collection_id,title,content,mime_type}，
  *    checksum 幂等；二进制类文件文本语义降级直传，MinIO 预签名直传随 M3——R18）
  *  ③（抽取开关开启时）POST pipeline/start 建任务（live 202 {document_id,accepted}）。
@@ -21,7 +22,9 @@ import { Select } from '@/components/select'
  *  失败→错误横幅（lib/errors 映射文案）+ 该文件行标失败可单行重试。 */
 
 const MAX_TOTAL = 100 * 1024 * 1024 // 汇总大小校验上限（100MB）
-/** 目标知识库选项（导出单源：CollectionSettingsSheet 挂 KB_TARGETS[0] 同一默认库——设置随库走） */
+/** F4（联调 2026-10-06）：目标知识库下拉主源=GET /kb/collections 真列表（listCollections），
+ *  本常量退役为「列表空/失败」回落缺省（提交仍经 ensureCollectionId 按名查重兜底建库，
+ *  行为同前）。导出单源仅保留回落用途——设置入口已改集合选择器，不再挂 KB_TARGETS[0]。 */
 export const KB_TARGETS = ['配网运检知识库', '停电分析知识库', '抢修工单知识库']
 const SLICE_STRATEGIES = ['段落', '语义', '固定长度'] as const
 
@@ -54,6 +57,23 @@ export function UploadDialog({ open, onClose, onUploaded }: { open: boolean; onC
   const [optionsOpen, setOptionsOpen] = useState(false)
   const [busy, setBusy] = useState(false)
   const [banner, setBanner] = useState<string | null>(null)
+
+  // F4：目标知识库下拉 live 化——GET /kb/collections 真列表为主源；列表空/失败回落
+  // KB_TARGETS（提交路径 ensureCollectionId 按名查重+按需建库兜底不变）
+  const colsQuery = useQuery({
+    queryKey: ['kb', 'collections'],
+    queryFn: listCollections,
+    enabled: open,
+    staleTime: 30_000,
+  })
+  const kbOptions = useMemo(() => {
+    const names = (colsQuery.data?.data ?? []).map(c => c.name)
+    return names.length > 0 ? names : KB_TARGETS
+  }, [colsQuery.data])
+  // 列表加载后所选目标不在选项内（初值回落名已被真库取代等）→ 自愈到首个可选
+  useEffect(() => {
+    if (!kbOptions.includes(kbTarget)) setKbTarget(kbOptions[0])
+  }, [kbOptions, kbTarget])
 
   const totalSize = useMemo(() => queue.reduce((s, q) => s + q.file.size, 0), [queue])
   const overSize = totalSize > MAX_TOTAL
@@ -268,8 +288,14 @@ export function UploadDialog({ open, onClose, onUploaded }: { open: boolean; onC
             </label>
             <label className="flex items-center gap-2">
               <span className="text-label-2">目标知识库</span>
-              <Select className="input h-8 w-52 text-xs" value={kbTarget} onChange={e => setKbTarget(e.target.value)}>
-                {KB_TARGETS.map(k => (
+              <Select
+                className="input h-8 w-52 text-xs"
+                aria-label="目标知识库"
+                data-testid="upload-kb-target"
+                value={kbTarget}
+                onChange={e => setKbTarget(e.target.value)}
+              >
+                {kbOptions.map(k => (
                   <option key={k} value={k}>
                     {k}
                   </option>

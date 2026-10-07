@@ -2,6 +2,7 @@ import '@testing-library/jest-dom/vitest'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it } from 'vitest'
 import { App } from '@/app/App'
+import { useGroupStreamStore } from '@/features/group/group-store'
 import { useAuthStore } from '@/stores/auth-store'
 
 // S-EF 设计稿对齐切片（p-group）：MSW 生命周期由全局 setupFile（src/mocks/node-setup.ts）启停，
@@ -10,6 +11,8 @@ afterEach(() => {
   cleanup()
   localStorage.clear()
   useAuthStore.getState().clearSession()
+  // F1 后用例残留的群聊 store 状态与后续用例互扰（间歇性超时）——用例间整店复位
+  useGroupStreamStore.getState().reset()
 })
 
 /** S-EF · 群聊五项小改（设计稿 ui-pages p-group 行号证据）：

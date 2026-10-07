@@ -17,7 +17,8 @@ afterEach(() => {
  *  ① ?tab=analytics 挂载渲染：Tab 选中 + 四统计卡 + 预算水位 + 归因 barlist + 降级开关，
  *     ConsoleShell 观测组出现「数据分析」入口（深链 /console/admin?tab=analytics）；
  *  ② 接口失败 → ErrorState → 恢复 mock 后重试恢复。
- *  数据源 GET /admin/analytics/overview 为预登记契约（api/01 未登记，后端实装待办）。 */
+ *  F6（联调 2026-10-06）：GET /admin/analytics/overview 后端已实装
+ *  （services/iam/api/admin.py）——「示例数据/未实装」过期徽标摘除，改为断言其不存在。 */
 async function loginAndGo(path: string) {
   window.history.pushState({}, '', path)
   render(<App />)
@@ -38,7 +39,8 @@ describe('S9 数据分析 Tab（p-analytics 轻量版）', () => {
     expect(screen.getAllByTestId('analytics-stat-card')).toHaveLength(4)
     expect(screen.getByTestId('analytics-attribution')).toHaveTextContent('原生 Agent')
     expect(screen.getByTestId('analytics-policy-auto_fallback_local-switch')).toHaveAttribute('aria-checked', 'true')
-    expect(screen.getByText(/示例数据/)).toBeInTheDocument()
+    // F6：端点已实装，「示例数据」过期徽标摘除
+    expect(screen.queryByText(/示例数据/)).not.toBeInTheDocument()
 
     // ConsoleShell 观测组入口（39 G-D3）
     const nav = await screen.findByRole('navigation', { name: '控制台导航' }, { timeout: 10_000 })

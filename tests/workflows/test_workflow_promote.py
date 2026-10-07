@@ -140,10 +140,12 @@ async def test_promote_运行卡提升_执行图与血统落稿_幂等返回既�
 
     # 幂等：重复调用返回既有草稿 id（40 篇 §6.2；api 层 200 语义）
     request = _promote_request(rs)
+    idem_response = Response()
     api_out = await promote_workflow_run(
-        accepted.run_id, WorkflowPromoteIn(), rs.principal(), rs.uow, request, Response()
+        accepted.run_id, WorkflowPromoteIn(), rs.principal(), rs.uow, request, idem_response
     )
     assert api_out.workflow_id == outcome.workflow_id and api_out.status == "exists" and api_out.origin == "user"
+    assert idem_response.status_code == 200  # B2（2026-10-07）：幂等命中经 Response 显式覆盖 200
 
     # 变更确认清单入参：variable_hints 与抽取合并去重（提升新 run 验证 hints 路径）
     accepted2 = await submit_workflow_test(
@@ -239,6 +241,24 @@ def test_计划投影_纯函数_start_end补结构两端():
     assert [n.id for n in graph.nodes] == ["start", "step-1", "step-2", "end"]
     assert graph.nodes[0].params["template_variables"] == ["kw"]
     assert graph.nodes[1].label == "一步" and graph.nodes[1].params["prompt"] == "一步"
+
+
+# ---------------------------------------------------------------- 场景 4：状态码契约（B2，2026-10-07）
+
+
+def test_promote_路由注册201_首调新建码():
+    """B2 缺陷修复（2026-10-07）：api/01 §5.11 约定「201 新建 / 200 幂等命中」——路由默认码
+    须显式注册 201（修复前装饰器缺省 200，正文约定双码只落在 200）；幂等命中 200 覆盖
+    由 promote_workflow_run 直调断言（场景 1 内 idem_response）。"""
+    from services.workflows.api.runs import router as runs_router
+
+    route = next(
+        r
+        for r in runs_router.routes
+        if getattr(r, "path", "") == "/workflows/runs/{run_id}/promote"
+        and "POST" in getattr(r, "methods", set())
+    )
+    assert route.status_code == 201
 
 
 async def test_promote_环图409_与运行404(run_seed: RunSeed):

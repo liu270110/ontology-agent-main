@@ -69,6 +69,8 @@ def _origin_trace(request: Request | None) -> str:
 
 @router.post(
     "/workflows/runs/{run_id}/promote",
+    status_code=201,  # 新建 201（api/01 §5.11）；幂等命中经 Response(200) 显式覆盖——
+    # B2 缺陷修复 2026-10-07：原装饰器缺省 200，正文约定的 201/200 双码只落在 200
     summary="存为工作流草稿（40 篇 §6：端点新建草稿并带 source_run_id 血统；幂等键=run_id）",
 )
 async def promote_workflow_run(

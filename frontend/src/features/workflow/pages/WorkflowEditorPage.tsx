@@ -95,11 +95,14 @@ export function WorkflowEditorPage() {
   const [publishOpen, setPublishOpen] = useState(false)
   const [versionOpen, setVersionOpen] = useState(false)
 
-  // 深链 ?run={run_id}（运行卡「在画布中打开」）：仅着色不挂面板——run/task 对经详情聚合视图反查
-  const deepRunId = searchParams.get('run')
-  const [deepTaskId, setDeepTaskId] = useState<string | null>(null)
-  const activeRunId = run ? run.runId : deepRunId ?? null
-  const activeTaskId = run ? run.taskId : deepRunId ? deepTaskId : null
+  // 深链 ?run={run_id}（运行卡「在画布中打开」）：仅着色不挂面板——run/task 对经详情聚合视图反查。
+  // F2（联调 2026-10-06）：run_id 先落 deepRun state 再清参——activeRunId/activeTaskId 回落
+  // state 而非 URL，清参后着色保持（原实现 activeRunId 取 URL → 消费 effect 清参即 null →
+  // useWfRunEvents 重置 EMPTY 自毁着色）
+  const deepRunParam = searchParams.get('run')
+  const [deepRun, setDeepRun] = useState<{ runId: string; taskId: string | null } | null>(null)
+  const activeRunId = run ? run.runId : deepRun?.runId ?? null
+  const activeTaskId = run ? run.taskId : deepRun?.taskId ?? null
   const wfState = useWfRunEvents(id ?? null, activeRunId, activeTaskId)
 
   // 聚焦模式（B5-C）：挂载收起主侧边栏（只调 ui-store 既有 toggleSidebar action），
@@ -123,16 +126,17 @@ export function WorkflowEditorPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [detail?.id, detailQ.dataUpdatedAt])
 
-  // 深链 run：详情聚合视图反查 task_id（GET /workflows/{id}/runs/{rid} → task_id），消费即清参
+  // 深链 run：详情聚合视图反查 task_id（GET /workflows/{id}/runs/{rid} → task_id）；
+  // run_id 落 deepRun state 后清参（F2：state 为着色事实源，URL 仅入口通道）
   useEffect(() => {
-    if (!id || !deepRunId || deepTaskId) return
+    if (!id || !deepRunParam) return
     let cancelled = false
     void (async () => {
       try {
         const { getRun: fetchRun } = await import('../api')
-        const d = await fetchRun(id, deepRunId)
+        const d = await fetchRun(id, deepRunParam)
         if (!cancelled) {
-          setDeepTaskId(d.task_id)
+          setDeepRun({ runId: deepRunParam, taskId: d.task_id })
           setSearchParams({}, { replace: true })
         }
       } catch {
@@ -142,7 +146,7 @@ export function WorkflowEditorPage() {
     return () => {
       cancelled = true
     }
-  }, [id, deepRunId, deepTaskId, setSearchParams])
+  }, [id, deepRunParam, setSearchParams])
 
   const mutate = useCallback((fn: () => void) => {
     fn()
@@ -202,7 +206,7 @@ export function WorkflowEditorPage() {
     if (!id) return
     try {
       const r = await testWorkflow(id)
-      setDeepTaskId(null)
+      setDeepRun(null) // 新试运行接管着色：退出深链着色态
       setRun({ runId: r.run_id, taskId: r.task_id, kind: r.kind })
       toast.success(`试运行已受理（202 → 任务中心 type=${r.kind}）· ${r.run_id}`)
     } catch (e) {

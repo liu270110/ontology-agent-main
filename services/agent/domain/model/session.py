@@ -94,6 +94,7 @@ class Session(BaseModel):
     routing: RoutingMode = RoutingMode.ROUND_ROBIN
     members: list[GroupMember] = Field(default_factory=list)
     next_seq: int = 0  # 消息序号分配器（messages 只追加，seq 严格递增）
+    created_at: datetime | None = None  # 创建时刻（B3 缺陷修复 2026-10-07：仓储映射随行透出，新建聚合未落库前为 None）
 
     def append_message(self, role: str, content: str) -> int:
         """唯一合法的消息追加入口：closed 后拒绝（04 §2 不变式），返回递增 seq。"""

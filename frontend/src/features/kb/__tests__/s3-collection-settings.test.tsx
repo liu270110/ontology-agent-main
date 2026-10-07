@@ -15,7 +15,23 @@ afterEach(() => {
 
 /** B3-Q · 知识库库设置（占位转实切片 Q）：GET 载入 → 脏态解锁保存 → PUT 全量载荷 → toast + 关抽屉。
  *  与 s3-kb / s3-recycle 拆文件：App 的 QueryClient 是模块级单例，防查询缓存串扰
- *  （先例=s8-states-kb 骨架场景单列文件）。 */
+ *  （先例=s8-states-kb 骨架场景单列文件）。
+ *  F4（联调 2026-10-06）同步：设置入口改集合选择器（GET /kb/collections 真列表直读 id，
+ *  不再 ensureCollectionId 挂默认名）——本文件各用例种入真列表 col-test。 */
+const SETTINGS = { chunk_size: 500, chunk_overlap: 50, extract_prompt_level: 'standard', auto_extract: true }
+
+function seedCollectionList() {
+  server.use(
+    http.get('*/api/v1/kb/collections', () =>
+      HttpResponse.json({
+        data: [{ id: 'col-test', name: '停电分析库', description: null, embedding_model: 'bge-m3', status: 'active', created_at: '2026-10-01T00:00:00Z' }],
+        meta: { page: 1, page_size: 200, total: 1 },
+      }),
+    ),
+    http.get('*/api/v1/kb/collections/col-test/settings', () => HttpResponse.json({ data: SETTINGS, meta: {} })),
+  )
+}
+
 async function loginAndGo(path: string) {
   window.history.pushState({}, '', path)
   render(<App />)
@@ -27,6 +43,7 @@ async function loginAndGo(path: string) {
 describe('B3-Q 知识库库设置', () => {
   it('① GET 载入默认值 → 改四字段（脏态解锁保存）→ PUT 载荷断言 → toast + 关抽屉', async () => {
     const puts: { chunk_size: number; chunk_overlap: number; extract_prompt_level: string; auto_extract: boolean }[] = []
+    seedCollectionList()
     server.use(
       http.put('*/api/v1/kb/collections/:id/settings', async ({ request }) => {
         const body = (await request.json()) as (typeof puts)[number]
@@ -69,6 +86,7 @@ describe('B3-Q 知识库库设置', () => {
   }, 30_000)
 
   it('② 越界输入（分片大小 250 < 300）→ 保存禁用', async () => {
+    seedCollectionList()
     await loginAndGo('/kb')
     expect(await screen.findByRole('heading', { name: '知识库文档' }, { timeout: 10_000 })).toBeInTheDocument()
 
@@ -84,6 +102,7 @@ describe('B3-Q 知识库库设置', () => {
   }, 30_000)
 
   it('③ GET 失败 → 表单骨架位错误态（ErrorState）→ 恢复后重试出表单', async () => {
+    seedCollectionList()
     server.use(
       http.get('*/api/v1/kb/collections/:id/settings', () =>
         HttpResponse.json({ code: 500, message: '设置服务不可用', data: null }, { status: 500 }),
@@ -98,6 +117,7 @@ describe('B3-Q 知识库库设置', () => {
     expect(err).toHaveTextContent('设置服务不可用')
 
     server.resetHandlers()
+    seedCollectionList()
     fireEvent.click(within(sheet).getByTestId('error-retry'))
     expect(await within(sheet).findByLabelText('分片大小（tokens）', undefined, { timeout: 10_000 })).toHaveValue(500)
   }, 30_000)

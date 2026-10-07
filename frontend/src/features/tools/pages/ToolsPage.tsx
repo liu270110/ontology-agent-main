@@ -64,11 +64,13 @@ export function ToolsPage() {
       </div>
 
       <div className="seg mt-3" role="tablist" aria-label="工具与技能视图">
+        {/* F8（联调 2026-10-06）：两 tab 计数口径统一为 writeback 台账同款——数据在册即显
+            （0 也显 0），加载中不显（旧口径工具 0 隐藏、技能加载中隐藏，互不一致） */}
         <button type="button" role="tab" aria-selected={view === 'tools'} className={`seg-btn ${view === 'tools' ? 'on' : ''}`} data-testid="tls-view-tools" onClick={() => setView('tools')}>
-          工具注册表 {rows.length ? rows.length : ''}
+          工具注册表 {tools.data ? ` ${rows.length}` : ''}
         </button>
         <button type="button" role="tab" aria-selected={view === 'skills'} className={`seg-btn ${view === 'skills' ? 'on' : ''}`} data-testid="tls-view-skills" onClick={() => setView('skills')}>
-          技能库 {skills.data?.data.length ?? ''}
+          技能库 {skills.data ? ` ${skills.data.data.length}` : ''}
         </button>
       </div>
 
@@ -130,6 +132,14 @@ export function ToolsPage() {
                   </tr>
                 )
               })}
+              {/* F8：空表「暂无数据」行（查询成功且零行时不再留白 tbody） */}
+              {!tools.isPending && !tools.isError && rows.length === 0 && (
+                <tr>
+                  <td colSpan={6} className="px-4 py-6 text-center text-xs text-label-3">
+                    暂无数据
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
           {/* S8 状态切片：加载骨架行（行数≈mock 工具量）/ 错误态（重试=refetch） */}

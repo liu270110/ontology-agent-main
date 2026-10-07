@@ -93,14 +93,17 @@ export interface KbGraphEdge {
 // ---------------------------------------------------------------- AgenticRAG 检索（§8.1 契约类型见 @/api/contracts）
 
 export interface KbSearchResult {
-  /** 答案摘要 markdown；[^n] 脚注 = 引用角标（react-markdown + remark-gfm 渲染 sup） */
-  answers: string
-  hits: KbSearchHit[]
-  citations: KbCitation[]
-  graph_paths: { nodes: string[]; edges: string[] }[]
-  graph: { nodes: KbGraphNode[]; edges: KbGraphEdge[] }
-  confidence: number
-  degraded: boolean
+  /** 答案摘要 markdown；[^n] 脚注 = 引用角标（react-markdown + remark-gfm 渲染 sup）。
+   *  F3（联调 2026-10-06）：live 降级响应 answers 可为空数组——渲染侧归一 join，不再按
+   *  mock 契约假定恒字符串。 */
+  answers: string | string[]
+  /** 以下字段 live 降级响应可缺省（无 confidence/graph/meta）——消费方全部可选防御 */
+  hits?: KbSearchHit[]
+  citations?: KbCitation[]
+  graph_paths?: { nodes: string[]; edges: string[] }[]
+  graph?: { nodes: KbGraphNode[]; edges: KbGraphEdge[] } | null
+  confidence?: number
+  degraded?: boolean
   /** §8.1 冻结契约：仅请求 agentic=true 时返回；旧响应无此键/为 null 均合法（前端可选消费） */
   agentic?: AgenticBlock | null
 }
@@ -175,6 +178,13 @@ export function createCollection(body: { name: string; description?: string; emb
 
 const COLLECTION_CACHE_KEY = 'oa-kb-collections'
 
+/** GET /kb/collections —— 集合列表（R53 live 已实装，{data,meta} 强信封 → api.list 归一）。
+ *  F4（联调 2026-10-06）：上传目标下拉与库设置入口改消费真列表（KB_TARGETS 硬编码退役为
+ *  空/失败回落），库设置不再经 ensureCollectionId 硬挂默认名（打开设置不自动建库）。 */
+export function listCollections() {
+  return api.list<KbCollectionOut>('/kb/collections?page_size=200')
+}
+
 function cachedCollectionId(name: string): string | null {
   try {
     return (JSON.parse(localStorage.getItem(COLLECTION_CACHE_KEY) ?? '{}') as Record<string, string>)[name] ?? null
@@ -210,7 +220,7 @@ function clearCollectionId(name: string) {
  *  ③ 仍未命中 → POST /kb/collections 创建并回填缓存（同名 409 交调用方行内错误提示）。 */
 export async function ensureCollectionId(name: string): Promise<string> {
   try {
-    const list = await api.list<KbCollectionOut>('/kb/collections?page_size=200')
+    const list = await listCollections()
     const hit = list.data.find(c => c.name === name)
     if (hit) {
       cacheCollectionId(name, hit.id)
@@ -310,7 +320,8 @@ export function search(body: {
   agentic?: boolean
   max_rounds?: 1 | 2
 }) {
-  return api.postEnvelope<{ data: KbSearchResult; meta: KbSearchMeta }>('/kb/search', body)
+  // F3：live 降级响应可无 meta——信封 meta 可选，消费方 res.meta?.elapsed_ms 兜底
+  return api.postEnvelope<{ data: KbSearchResult; meta?: KbSearchMeta }>('/kb/search', body)
 }
 
 /** GET /kb/documents/{id}/review/candidates —— 审核候选（跨文档队列由页面聚合，见 R16）。

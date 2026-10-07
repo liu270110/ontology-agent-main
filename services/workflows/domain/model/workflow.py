@@ -33,6 +33,15 @@ class WorkflowStatus(StrEnum):
     ARCHIVED = "archived"
 
 
+class WorkflowOrigin(StrEnum):
+    """草稿来源词汇（40 篇 §6 提升语义 + 宪法 3）：user=用户画布/运行卡提升（40 篇 §6 入口①）；
+    llm_candidate=LLM 产物候选（40 篇 §6 入口②计划卡推导——发布必过审批队列，任何治理档位
+    不可直发，人工终审生效）。列值与存储 CHECK ck_workflows_origin 逐字一致，建行后不变。"""
+
+    USER = "user"
+    LLM_CANDIDATE = "llm_candidate"
+
+
 class Workflow(BaseModel):
     """工作流聚合根（15 §1.2 workflows 行；draft=未发布图内容，head_version=已发布头版本）。"""
 
@@ -44,6 +53,7 @@ class Workflow(BaseModel):
     description: str = Field(default="", max_length=512)
     template: str = Field(default="blank", max_length=64)
     status: WorkflowStatus = WorkflowStatus.DRAFT
+    origin: WorkflowOrigin = WorkflowOrigin.USER  # 草稿来源（40 篇 §6/宪法 3；建行后不变）
     draft: WorkflowGraph = Field(default_factory=WorkflowGraph)
     head_version: int | None = None  # None=从未发布（draft_version 派生 v1）
     source_run_id: uuid.UUID | None = None  # 血统列（40 篇 §6）：run→template 提升来源；建行后不变

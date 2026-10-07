@@ -30,7 +30,7 @@ from services.workflows.domain.model.graph import (
     validate_nodes,
     validate_structure,
 )
-from services.workflows.domain.model.workflow import Workflow, WorkflowVersion
+from services.workflows.domain.model.workflow import Workflow, WorkflowOrigin, WorkflowVersion
 from services.workflows.domain.repo.review_port import GovernanceTierPort, WorkflowReviewPort, tier_label
 from services.workflows.domain.repo.workflow_repo import WorkflowRepository
 from services.workflows.domain.templates import DEFAULT_TEMPLATE_ID, get_template
@@ -173,7 +173,9 @@ class WorkflowService:
 
         - solo：直发——版本号顺延，快照落 workflow_versions，head_version 固化（200）；
         - team/enterprise：202 pending——workflow_publish 审批工单落库（批准后回迁 head=
-          后续批；v1 工单仅承载审批记录），head/状态不动。
+          后续批；v1 工单仅承载审批记录），head/状态不动；
+        - origin=llm_candidate（40 篇 §6 入口② LLM 候选）：任何档位强制 202 pending
+          （宪法 3 硬门禁——候选非成品，人工终审生效）。
 
         幂等：同工作流已有 open 工单时 submit_candidate 返回既有 id（uk_review_one_open），
         重放安全。行锁读取（FOR UPDATE）串行化版本分配——并发发布不再同抢 max(version)+1
@@ -184,7 +186,10 @@ class WorkflowService:
         next_version = await self._repo.next_version(workflow_id)
         tier = await self._resolve_tier(workflow.tenant_id)
 
-        if tier == "solo":
+        # 宪法 3 硬门禁（40 篇 §6 入口②）：LLM 产物草稿（origin=llm_candidate）任何治理
+        # 档位（含 solo）不得直发——必过审批队列，人工终审生效。档位只调节 team/enterprise
+        # 的常规分流；候选豁免面为零。
+        if tier == "solo" and workflow.origin is not WorkflowOrigin.LLM_CANDIDATE:
             version = WorkflowVersion(
                 tenant_id=workflow.tenant_id,
                 workflow_id=workflow.id,
@@ -206,7 +211,8 @@ class WorkflowService:
             )
             return PublishOutcome(status="published", governance="solo", next_version=f"v{next_version}")
 
-        # team / enterprise：审批工单（硬门禁任何档不可跳过——设计宪法 3）
+        # team / enterprise：审批工单（硬门禁任何档不可跳过——设计宪法 3）；
+        # origin=llm_candidate 的 solo 档同落本分支（候选非成品，任何档不可直发）
         if self._review is None:
             raise DomainError("5004 STORAGE_UNAVAILABLE: 审核工单端口未装配")
         ticket_id = await self._review.submit_candidate(

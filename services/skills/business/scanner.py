@@ -16,6 +16,12 @@ required-secrets（K5 门 1 声明，方案依据=docs/Agent/13 §10；上游=de
 声明门缩减版）：单行逗号分隔标量同名键（``required-secrets: GITHUB_TOKEN, DEEPSEEK_API_KEY``），
 parse_required_secrets 逐项剥空格、去重保序、非法 env 名丢弃并 warning（deer-flow parser
 同款宽容口径：声明面坏项不挡批），空/缺省=空集；产出投影 ScannedAsset.required_secrets。
+
+SkillScan findings（K30-a/b，方案依据=docs/Agent/13 §36）：每资产正文 + scripts/*.py 源码
+过 skillscan 规则库（投毒指令/frontmatter 完备性/脚本危险模式+AST 精查），结论挂
+ScannedAsset.findings 并 logger 留痕。**扫描器在此只留痕不拒收**——存量口径（13 §36 裁决：
+存量命中 CRITICAL 仅 WARN 级留痕，ingest 种子路径不拒收）；拒收 teeth 在 register 新资产
+（service.SkillScanRejectedError 4603）。
 """
 
 from __future__ import annotations
@@ -26,12 +32,14 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from services.platform.config import Settings
+from services.skills.business.skillscan import Finding, scan_skill_full
 from services.skills.domain.model.skill import SECRET_NAME_RE
 
 logger = logging.getLogger(__name__)
 
 DEFAULT_VERSION = "1.0.0"
 _ASSET_FILE = "SKILL.md"
+_SCRIPTS_DIR = "scripts"
 # 顶层键：行首即键名（无缩进）+ 冒号 + 单行标量；嵌套子行带缩进不匹配
 _TOP_KEY_RE = re.compile(r"^([A-Za-z][A-Za-z0-9_-]*):\s*(.*)$")
 
@@ -46,6 +54,8 @@ class ScannedAsset:
     source_uri: str
     body_bytes: int
     required_secrets: tuple[str, ...] = ()  # K5 门 1：frontmatter 声明的凭证名（缺省空集）
+    # K30-a：SkillScan 规则库结论（真实 severity；消费面裁决——ingest 留痕放行/register 拒收）
+    findings: tuple[Finding, ...] = ()
 
 
 def default_assets_root() -> Path:
@@ -126,6 +136,7 @@ def scan_repo_assets(root: Path | str | None = None) -> list[ScannedAsset]:
         if not name:
             logger.warning("skills 扫描跳过无 name 资产: %s", skill_md)
             continue
+        findings, scripts = _scan_asset_scripts(skill_md, raw)
         assets.append(
             ScannedAsset(
                 name=name,
@@ -135,6 +146,36 @@ def scan_repo_assets(root: Path | str | None = None) -> list[ScannedAsset]:
                 source_uri=skill_md.resolve().relative_to(root.resolve()).as_posix(),
                 body_bytes=skill_md.stat().st_size,
                 required_secrets=parse_required_secrets(fields.get("required-secrets")),
+                findings=tuple(findings),
             )
         )
     return assets
+
+
+def _scan_asset_scripts(skill_md: Path, md_text: str) -> tuple[list[Finding], dict[str, str]]:
+    """读同目录 scripts/*.py 源码并跑 SkillScan 规则库（K30-a/b）；结论 logger 留痕。
+
+    脚本读盘失败（IO/解码）按 SS-AST-001 CRITICAL 留痕——读不了的脚本与语法错脚本同属
+    「内容不可验证」，fail-closed 口径。
+    """
+    scripts: dict[str, str] = {}
+    extra: list[Finding] = []
+    scripts_dir = skill_md.parent / _SCRIPTS_DIR
+    if scripts_dir.is_dir():
+        for py in sorted(scripts_dir.glob("*.py")):
+            try:
+                scripts[py.name] = py.read_text(encoding="utf-8")
+            except (OSError, UnicodeDecodeError) as exc:
+                extra.append(Finding("SS-AST-001", "CRITICAL", py.name, str(exc)[:80]))
+    findings = [*scan_skill_full(md_text, scripts), *extra]
+    if findings:
+        n_crit = sum(1 for f in findings if f.severity == "CRITICAL")
+        logger.warning(
+            "skills 扫描资产 %s 命中 findings %d 条（CRITICAL %d / WARN %d）: %s",
+            skill_md.parent.name,
+            len(findings),
+            n_crit,
+            len(findings) - n_crit,
+            "; ".join(str(f) for f in findings if f.severity == "CRITICAL") or "（仅 WARN）",
+        )
+    return findings, scripts

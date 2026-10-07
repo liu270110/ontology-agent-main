@@ -1,7 +1,8 @@
 /** Agent 工作区数据层（31 篇 API 需求 → 画框23）。
- *  文件树=沙箱 /workspace daemon 代理只读物；终端=受限 exec.run 回放；
- *  资源=会话四分组（30 篇对象模型）。M1 走 MSW mock，M4 换真端点 +
- *  WS workspace.file.* / terminal.output 增量事件。 */
+ *  C3 live 对接（2026-10-07）：四端点后端已实装（services/agent/api/workspace.py）——
+ *  信封=裸 DTO/{items}（apiFetch 无 code 字段视为裸数据放行，双形态兼容），字段与
+ *  WsNode/WsTree/WsFile/WsExecResult/WsResource 名级一致；WS workspace.file.* /
+ *  terminal.output 实时增量事件随沙箱批（现以 store 事件缓冲 + 300ms 防抖重拉兜底）。 */
 
 import { api } from '@/api/client'
 
@@ -11,8 +12,9 @@ export interface WsNode {
   path: string
   type: 'dir' | 'file'
   size?: number
+  /** ISO8601（live 真端点；mock 相对时间文案已随 live 投影退役） */
   updated_at?: string
-  /** Agent 修改未入库 → 树上标脏点 */
+  /** Agent 修改未入库 → 树上标脏点（live v1 无改动追踪恒缺省，WS 批接入） */
   dirty?: boolean
   children?: WsNode[]
 }
@@ -31,6 +33,8 @@ export interface WsFile {
 
 export interface WsExecResult {
   command: string
+  /** 0=成功；非零=命令自身退出码；124=超时终止（5s 上限）；126=执行失败；127=可执行缺失。
+   *  白名单/参数越界不走本 DTO——4001 结构化拒绝（TERMINAL_CMD_NOT_ALLOWED）走 ApiError。 */
   exit_code: number
   lines: string[]
 }
@@ -38,15 +42,16 @@ export interface WsExecResult {
 export type ResourceStatus = 'ready' | 'processing' | 'error'
 
 export interface WsResource {
+  /** live M1 顶层产出=ws-<sha256(name)[:12]>（名称派生稳定 id）；表行 id 随 artifacts 建表批 */
   id: string
+  /** live M1 顶层扫描恒 'artifact'；attachment/ontology_snapshot/export 随 artifacts 表批扩展 */
   type: 'attachment' | 'artifact' | 'ontology_snapshot' | 'export'
   name: string
   size: number
   status: ResourceStatus
+  /** live M1 恒 'sandbox'（宿主工作目录直读）；user/agent:<name> 随上传通道批 */
   uploaded_by: string
   created_at: string
-  ocr_status?: string
-  extract_status?: string
 }
 
 export const workspaceApi = {

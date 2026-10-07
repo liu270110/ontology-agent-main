@@ -2454,6 +2454,23 @@
         "title": "CollectionOut",
         "type": "object"
       },
+      "CollectionSettingsEnvelope": {
+        "additionalProperties": false,
+        "description": "库设置读写信封（资源面 {data, meta}，DocumentDetailEnvelope 同构；GET 空设置回落\n默认 500/50/standard/true，PUT 回全量对象=mock「PUT 回全量」口径）。",
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/KbCollectionSettings"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/EmptyMeta"
+          }
+        },
+        "required": [
+          "data"
+        ],
+        "title": "CollectionSettingsEnvelope",
+        "type": "object"
+      },
       "Conclusion": {
         "description": "单条推理结论（N-Triples 风格原文三元组，结果可追溯，宪法 5）。",
         "properties": {
@@ -3763,6 +3780,61 @@
         "title": "DocumentPipelineProgress",
         "type": "object"
       },
+      "DocumentPurgeData": {
+        "additionalProperties": false,
+        "description": "彻底删除 data 面（api/01 §5.4 purge 行「回 200 信封 {id}，勿回 204 空体」）。",
+        "properties": {
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "title": "DocumentPurgeData",
+        "type": "object"
+      },
+      "DocumentPurgeEnvelope": {
+        "additionalProperties": false,
+        "description": "彻底删除信封（DocumentDeleteEnvelope 同构 {data, meta}；200 非 204——前端不解析空体）。",
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/DocumentPurgeData"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/EmptyMeta"
+          }
+        },
+        "required": [
+          "data"
+        ],
+        "title": "DocumentPurgeEnvelope",
+        "type": "object"
+      },
+      "DocumentRestoreOut": {
+        "additionalProperties": false,
+        "description": "恢复回执（mock/前端契约：{id, status:'ready'}——'ready' 为固定字面量，非后端八态）。",
+        "properties": {
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "status": {
+            "const": "ready",
+            "default": "ready",
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "title": "DocumentRestoreOut",
+        "type": "object"
+      },
       "EStopActivateIn": {
         "additionalProperties": false,
         "description": "紧急停止激活入参（§1.2：reason 必填，审计留痕）。",
@@ -4959,6 +5031,44 @@
           "score"
         ],
         "title": "KbCitationOut",
+        "type": "object"
+      },
+      "KbCollectionSettings": {
+        "additionalProperties": false,
+        "description": "库设置整包（mock KbSettings 四键；chunk_size 300-2000 / chunk_overlap 0-500 越界\n422→3001 PARAM_INVALID 与 mock 3001 同码；PUT 全量写，缺省值与 mock settingsFor 同源）。",
+        "properties": {
+          "auto_extract": {
+            "default": false,
+            "title": "Auto Extract",
+            "type": "boolean"
+          },
+          "chunk_overlap": {
+            "maximum": 500.0,
+            "minimum": 0.0,
+            "title": "Chunk Overlap",
+            "type": "integer"
+          },
+          "chunk_size": {
+            "maximum": 2000.0,
+            "minimum": 300.0,
+            "title": "Chunk Size",
+            "type": "integer"
+          },
+          "extract_prompt_level": {
+            "default": "standard",
+            "enum": [
+              "standard",
+              "deep"
+            ],
+            "title": "Extract Prompt Level",
+            "type": "string"
+          }
+        },
+        "required": [
+          "chunk_size",
+          "chunk_overlap"
+        ],
+        "title": "KbCollectionSettings",
         "type": "object"
       },
       "KbEvidenceOut": {
@@ -8618,6 +8728,100 @@
         "title": "RecordWriteEnvelope",
         "type": "object"
       },
+      "RecycleBinData": {
+        "additionalProperties": false,
+        "description": "回收站 data 面（mock 内层形态：items + next_cursor；游标分页 v1 未启用恒 None）。",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/RecycleItemOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          }
+        },
+        "title": "RecycleBinData",
+        "type": "object"
+      },
+      "RecycleBinListOut": {
+        "additionalProperties": false,
+        "description": "回收站列表（{data, meta} 强信封，api/01 §3.1；软删 7 天保留期 B3-Q 转实）。",
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/RecycleBinData"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/PageMeta"
+          }
+        },
+        "required": [
+          "data",
+          "meta"
+        ],
+        "title": "RecycleBinListOut",
+        "type": "object"
+      },
+      "RecycleItemOut": {
+        "additionalProperties": false,
+        "description": "回收站条目（mock kb-handlers GET /kb/recycle-bin 逐字段：status 恒 'deleted'）。",
+        "properties": {
+          "collection_id": {
+            "format": "uuid",
+            "title": "Collection Id",
+            "type": "string"
+          },
+          "deleted_at": {
+            "format": "date-time",
+            "title": "Deleted At",
+            "type": "string"
+          },
+          "expires_at": {
+            "format": "date-time",
+            "title": "Expires At",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "size": {
+            "default": 0,
+            "title": "Size",
+            "type": "integer"
+          },
+          "status": {
+            "const": "deleted",
+            "default": "deleted",
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "collection_id",
+          "deleted_at",
+          "expires_at"
+        ],
+        "title": "RecycleItemOut",
+        "type": "object"
+      },
       "RefreshOut": {
         "additionalProperties": false,
         "description": "POST /mcp/servers/{id}/refresh 响应（mock 逐字段：latency_ms/tools/discovered_count）。",
@@ -10934,6 +11138,23 @@
         "title": "TenantCreatedOut",
         "type": "object"
       },
+      "TerminalExecIn": {
+        "additionalProperties": false,
+        "description": "POST /sessions/{id}/terminal/exec 请求体（mock 契约 {command}）。",
+        "properties": {
+          "command": {
+            "maxLength": 2000,
+            "minLength": 1,
+            "title": "Command",
+            "type": "string"
+          }
+        },
+        "required": [
+          "command"
+        ],
+        "title": "TerminalExecIn",
+        "type": "object"
+      },
       "ToggleOut": {
         "properties": {
           "tools": {
@@ -12498,6 +12719,235 @@
           "limit"
         ],
         "title": "WritebackLedgerPageOut",
+        "type": "object"
+      },
+      "WsExecOut": {
+        "additionalProperties": false,
+        "description": "POST /sessions/{id}/terminal/exec 响应（裸 DTO）。\n\nexit_code 语义：0=成功；非零=命令自身退出码；124=超时终止（5s 上限）；\n126=执行失败（OSError）；127=可执行文件缺失。白名单/参数越界不走本 DTO——\n4001 结构化拒绝（platform/errors TERMINAL_CMD_NOT_ALLOWED）。",
+        "properties": {
+          "command": {
+            "title": "Command",
+            "type": "string"
+          },
+          "exit_code": {
+            "title": "Exit Code",
+            "type": "integer"
+          },
+          "lines": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Lines",
+            "type": "array"
+          }
+        },
+        "required": [
+          "command",
+          "exit_code",
+          "lines"
+        ],
+        "title": "WsExecOut",
+        "type": "object"
+      },
+      "WsFileOut": {
+        "additionalProperties": false,
+        "description": "GET /sessions/{id}/workspace/file 响应（裸 DTO；≤1MB 内联，二进制 415/3004）。",
+        "properties": {
+          "content": {
+            "title": "Content",
+            "type": "string"
+          },
+          "language": {
+            "maxLength": 32,
+            "minLength": 1,
+            "title": "Language",
+            "type": "string"
+          },
+          "path": {
+            "title": "Path",
+            "type": "string"
+          }
+        },
+        "required": [
+          "path",
+          "language",
+          "content"
+        ],
+        "title": "WsFileOut",
+        "type": "object"
+      },
+      "WsNodeOut": {
+        "additionalProperties": false,
+        "description": "文件树节点（目录递归 children；文件带 size/updated_at）。",
+        "properties": {
+          "children": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/WsNodeOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Children"
+          },
+          "name": {
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "path": {
+            "maxLength": 2048,
+            "minLength": 1,
+            "title": "Path",
+            "type": "string"
+          },
+          "size": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Size"
+          },
+          "type": {
+            "enum": [
+              "dir",
+              "file"
+            ],
+            "title": "Type",
+            "type": "string"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          }
+        },
+        "required": [
+          "name",
+          "path",
+          "type"
+        ],
+        "title": "WsNodeOut",
+        "type": "object"
+      },
+      "WsResourceListOut": {
+        "additionalProperties": false,
+        "description": "GET /sessions/{id}/resources 响应（裸 {items} 列表——apiFetch 双形态归一同款）。",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/WsResourceOut"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "WsResourceListOut",
+        "type": "object"
+      },
+      "WsResourceOut": {
+        "additionalProperties": false,
+        "description": "会话资源条目（30 篇对象模型；type 四分组，M1 顶层产出=artifact）。",
+        "properties": {
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "size": {
+            "title": "Size",
+            "type": "integer"
+          },
+          "status": {
+            "enum": [
+              "ready",
+              "processing",
+              "error"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "type": {
+            "enum": [
+              "attachment",
+              "artifact",
+              "ontology_snapshot",
+              "export"
+            ],
+            "title": "Type",
+            "type": "string"
+          },
+          "uploaded_by": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Uploaded By",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "type",
+          "name",
+          "size",
+          "status",
+          "uploaded_by",
+          "created_at"
+        ],
+        "title": "WsResourceOut",
+        "type": "object"
+      },
+      "WsTreeOut": {
+        "additionalProperties": false,
+        "description": "GET /sessions/{id}/workspace/tree 响应（裸 DTO）。\n\nrecycle_in_minutes v1 恒 None（休眠回收随沙箱生命周期批，20 篇：会话关闭 30 分钟\n后回收）——前端 recycle != null 判空，None 即不渲染倒计时徽标。",
+        "properties": {
+          "recycle_in_minutes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recycle In Minutes"
+          },
+          "root": {
+            "$ref": "#/components/schemas/WsNodeOut"
+          }
+        },
+        "required": [
+          "root"
+        ],
+        "title": "WsTreeOut",
         "type": "object"
       },
       "services__iam__api__schemas__admin__AuditPageOut": {
@@ -15464,6 +15914,102 @@
         ]
       }
     },
+    "/api/v1/kb/collections/{collection_id}/settings": {
+      "get": {
+        "description": "api/01 §5.4 settings 读行（{data, meta} 资源面信封；mock 旧信封 data 同形镜像）。\n\nsettings 列空/缺键逐键回落 DTO 默认（mock settingsFor 同源）；未知列键（未来前向兼容\n写入）不透出。未知 collection id → 404（mock 对未知 id 发默认值是 mock 无持久化的\n工程妥协，live 以 api/01 登记的 404* 为准）。",
+        "operationId": "get_collection_settings_api_v1_kb_collections__collection_id__settings_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "collection_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Collection Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CollectionSettingsEnvelope"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "库设置读取（空设置回落默认值 500/50/standard/true）",
+        "tags": [
+          "knowledge-base"
+        ]
+      },
+      "put": {
+        "description": "api/01 §5.4 settings 写行：全量覆盖写（PUT 语义，非 patch），回全量对象=mock「PUT 回全量」。\n\n数值越界由 DTO Field 边界先行 422（网关归一 3001 PARAM_INVALID，mock 3001 同码）；\n未知 collection id → 404。settings 列整包覆盖——历史未知键随全量写自然收敛（以最近一次\nPUT 为唯一事实源）。",
+        "operationId": "update_collection_settings_api_v1_kb_collections__collection_id__settings_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "collection_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Collection Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/KbCollectionSettings"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CollectionSettingsEnvelope"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "库设置保存（PUT 全量对象回显；越界 422→3001）",
+        "tags": [
+          "knowledge-base"
+        ]
+      }
+    },
     "/api/v1/kb/conflicts": {
       "get": {
         "description": "冲突工单分页列表（api/01 §3.1 信封；新单优先）。\n\nresolution=pending → 工单 open 态（draft/pending_review，未裁决）；winner_a/winner_b/\nt3_coexist → 终审分流已回填 conflict_decision 的单（SQL status 预过滤 + 信封精过滤）；\n缺省=全部。工单量级=人工裁决面（lite 档内存分页，total 全量精确）。",
@@ -15796,7 +16342,7 @@
     },
     "/api/v1/kb/documents/{document_id}": {
       "delete": {
-        "description": "墓碑式软删（api/01 §5.15 DELETE 行「不物理删除」=平台底线；database/01 §3.3 documents\n双时间线「失效=封口不删除」）。\n\n口径（B6 实装裁决）：\n- 墓碑 = documents.valid_to = now()（status 八态 CHECK 无 deleted 态可置；bm25/vector/graph\n  三路检索 SQL 均内建 d.valid_to IS NULL 谓词——封口即全线下线检索，契约「已索引内容下线」）；\n- chunks/kb_facts/kb_pipeline_step 物理保留（kb_facts 与审计不删——复核与追溯依据）；\n  删除后详情/分片/候选/流水线/重试经 _load_document（valid_to 过滤）一律 404 不可见；\n- 同内容可重传：checksum 唯一性=部分唯一索引（uk_documents_tenant_id_kb_collection_id_\n  checksum_sha256，WHERE valid_to IS NULL，迁移 partial-unique 改建）——墓碑行不占唯一性，\n  重传=全新插入（database/01 documents 段契约同批登记）；\n- 幂等：重复删除与不存在对调用方等价 → 200 deleted=false（不 404；他人租户同口径 deny-by-default）；\n- 契约行成功码 204 与 live 对账（R17-b）200 强信封解包并存：按 live 口径保留 200+envelope，\n  deleted 标志区分命中/幂等未命中（偏离已在报告登记）。",
+        "description": "墓碑式软删（api/01 §5.15 DELETE 行「不物理删除」=平台底线；database/01 §3.3 documents\n双时间线「失效=封口不删除」）。\n\n口径（B6 实装裁决）：\n- 墓碑 = documents.valid_to = now()（status 八态 CHECK 无 deleted 态可置；bm25/vector/graph\n  三路检索 SQL 均内建 d.valid_to IS NULL 谓词——封口即全线下线检索，契约「已索引内容下线」）；\n- chunks/kb_facts/kb_pipeline_step 物理保留（kb_facts 与审计不删——复核与追溯依据）；\n  删除后详情/分片/候选/流水线/重试经 _load_document（valid_to 过滤）一律 404 不可见；\n- 同内容可重传：checksum 唯一性=部分唯一索引（uk_documents_tenant_id_kb_collection_id_\n  checksum_sha256，WHERE valid_to IS NULL，迁移 partial-unique 改建）——墓碑行不占唯一性，\n  重传=全新插入（database/01 documents 段契约同批登记）；\n- 幂等：重复删除与不存在对调用方等价 → 200 deleted=false（不 404；他人租户同口径 deny-by-default）；\n- 回收站（B3-Q 转实 2026-10-07）：封口同时落 deleted_at 戳=移入回收站（GET /kb/recycle-bin\n  可见；恢复/彻底删除走 /restore、/:id/purge，api/01 §5.4 追加行）；幂等未命中分支不补戳。\n- 契约行成功码 204 与 live 对账（R17-b）200 强信封解包并存：按 live 口径保留 200+envelope，\n  deleted 标志区分命中/幂等未命中（偏离已在报告登记）。",
         "operationId": "delete_document_api_v1_kb_documents__document_id__delete",
         "parameters": [
           {
@@ -16073,6 +16619,94 @@
           }
         },
         "summary": "启动/续跑流水线（后台执行，202 受理）",
+        "tags": [
+          "knowledge-base"
+        ]
+      }
+    },
+    "/api/v1/kb/documents/{document_id}/purge": {
+      "delete": {
+        "description": "api/01 §5.4 purge 行「物理删除，连分片/向量/图谱引用一并清；回 200 信封 {id} 勿回 204」。\n\nFK 逆序物理删除（一次性语义：衍生物随原文消亡，区别于软删的「封口保留审计」）：\nkb_conflicts → kb_fact_relations → kb_facts → kb_rule_candidates → kb_pipeline_step →\ndocument_chunks（含 pgvector 向量列）→ documents 行。review_tickets/审计中间件台账无\ndocuments FK，动作留痕天然保全（宪法 5：动作带审计）；usage 计数器无 FK（孤儿行随\nnightly lint 收敛，usage_orm 既有口径）。\nMinIO 原件删除尽力而为：DB 提交后再删对象，失败仅 warning 留痕不阻断（孤儿对象按 doc_id\n寻址且 id 不复用，无害）；不可恢复动作无幂等回旋——不在册（未删/不存在/他人租户）404。",
+        "operationId": "purge_document_api_v1_kb_documents__document_id__purge_delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "document_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Document Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentPurgeEnvelope"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "彻底删除（物理删除全文衍发行 + MinIO 原件尽力而为；200 信封 {id} 非 204）",
+        "tags": [
+          "knowledge-base"
+        ]
+      }
+    },
+    "/api/v1/kb/documents/{document_id}/restore": {
+      "post": {
+        "description": "api/01 §5.4 restore 行（200 {id, status:'ready'}；'ready' 为契约字面量非后端八态）。\n\n恢复=deleted_at/deleted_reason/valid_to 三清：主列表（GET /kb/documents valid_to IS NULL）\n与三路检索即时重现，流水线 status 列软删期间未动、恢复即原态续用（mock prev_status 回填\n同语义）。不在册（未删/不存在/他人租户）→ 404「文档不在回收站」（mock 4041 同 HTTP 态，\n幂等防呆：重复恢复 404 而非静默 200）。",
+        "operationId": "restore_document_api_v1_kb_documents__document_id__restore_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "document_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Document Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentRestoreOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "回收站恢复（清 deleted_at/valid_to 重入主列表；200 裸回执）",
         "tags": [
           "knowledge-base"
         ]
@@ -16570,6 +17204,63 @@
           }
         },
         "summary": "图谱实体搜索（q/class_name 匹配类 + 层次 depth 跳 + 权威关系扩展）",
+        "tags": [
+          "knowledge-base"
+        ]
+      }
+    },
+    "/api/v1/kb/recycle-bin": {
+      "get": {
+        "description": "软删文档分页（api/01 §5.4 追加行）：{data:{items,next_cursor}, meta:{page,page_size,total}}。\n\n信封外层=kb 域列表先例 {data, meta}（B1 批统一），内层保 mock 形态 {items, next_cursor}\n（前端 api.get 直取 .data 消费 RecycleItem 接口，api/01 §3.1 同报备）。deleted_at 降序\n（新删在前，mock KB_RECYCLE.unshift 同序）；游标分页 v1 未启用恒 next_cursor=null。",
+        "operationId": "list_recycle_bin_api_v1_kb_recycle_bin_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Page",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page_size",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Page Size",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecycleBinListOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "回收站列表（软删文档 deleted_at 非空；expires_at=deleted_at+7d 投影）",
         "tags": [
           "knowledge-base"
         ]
@@ -21559,6 +22250,49 @@
         ]
       }
     },
+    "/api/v1/sessions/{session_id}/resources": {
+      "get": {
+        "operationId": "get_session_resources_api_v1_sessions__session_id__resources_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WsResourceListOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "会话资源列表（31 篇 #7，M1 顶层产出扫描）",
+        "tags": [
+          "workspace"
+        ]
+      }
+    },
     "/api/v1/sessions/{session_id}/rewind": {
       "post": {
         "description": "会话回退（docs/Agent/13 §2.3，G-07；api/01 登记随文档批）：\n\n- 锚点：仅用户消息 seq 可作锚——get_message_by_seq 不过滤软删行，重复同锚幂等\n  202/零新增软删；不存在或非用户轮 → 4106 SESSION_REWIND_INVALID（HTTP 409）；\n- 软删：seq>=before_seq 置 deleted_at（仓储 soft_delete_from，幂等），last_message_at\n  回退到边界前最后一条未删消息，检索面同点重算（被删正文退出检索面）；\n- L1 失效：事务提交后 RedisL1Store.delete_all 三键（就近取 app.state 单例注入；\n  无实例跳过并日志；失败仅告警——TTL 兜底过期，memory §4 底线）；\n- 审计：session.rewound → task_events（复用既有 append_event 路径，payload\n  before_seq/deleted_count/session_id；会话无任务载体时告警跳过，审计不阻断主流程）；\n- closed/archived 会话 4101 拒（状态机口径同 send_message）。",
@@ -21678,6 +22412,156 @@
         "summary": "运行中输入提交（followup/steer/inject 三通道；M4.5-A，§1.4）",
         "tags": [
           "control"
+        ]
+      }
+    },
+    "/api/v1/sessions/{session_id}/terminal/exec": {
+      "post": {
+        "operationId": "post_terminal_exec_api_v1_sessions__session_id__terminal_exec_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TerminalExecIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WsExecOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "会话受限终端执行（31 篇 #5，只读白名单）",
+        "tags": [
+          "workspace"
+        ]
+      }
+    },
+    "/api/v1/sessions/{session_id}/workspace/file": {
+      "get": {
+        "operationId": "get_workspace_file_api_v1_sessions__session_id__workspace_file_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Session Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "path",
+            "required": true,
+            "schema": {
+              "maxLength": 2048,
+              "minLength": 1,
+              "title": "Path",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WsFileOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "会话工作区文件读取（31 篇 #2，只读）",
+        "tags": [
+          "workspace"
+        ]
+      }
+    },
+    "/api/v1/sessions/{session_id}/workspace/tree": {
+      "get": {
+        "operationId": "get_workspace_tree_api_v1_sessions__session_id__workspace_tree_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WsTreeOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "会话工作区文件树（31 篇 #1）",
+        "tags": [
+          "workspace"
         ]
       }
     },

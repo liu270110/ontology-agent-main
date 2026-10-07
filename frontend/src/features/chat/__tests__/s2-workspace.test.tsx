@@ -45,12 +45,13 @@ async function loginAndGo(path: string) {
 }
 
 /** S2·工作区面板（画框23 / 31 篇 / 30 篇资源对象模型）：
- *  ① 右栏「上下文/工作区」页签切换 → 文件树渲染 + 休眠回收提示
+ *  C3 live 投影契约（mock=services/agent/api/workspace.py 真端点形态，裸 DTO/{items}）：
+ *  ① 右栏「上下文/工作区」页签切换 → 文件树渲染 + recycle_in_minutes=null 不渲染回收徽标
  *  ② 文件点击 → 预览抽屉（mono 原文）
- *  ③ 终端：白名单命令回放输出；非白名单拒绝提示
- *  ④ 资源四分组（--src-* 着色分组 + 状态徽标） */
+ *  ③ 终端：白名单命令回放输出；白名单外 4001 结构化拒绝（网关文案透出）
+ *  ④ 资源 M1 顶层产出扫描（artifact 分组 sandbox 条目；其余分组空态「（无）」） */
 describe('S2 Agent 工作区面板', () => {
-  it('① 页签切换 → 文件树 + 回收提示 + dirty 标记', async () => {
+  it('① 页签切换 → 文件树 + 回收徽标缺省（live recycle_in_minutes=null）', async () => {
     await loginAndGo('/chat')
     fireEvent.click(await screen.findByText('动力电池标准对比', {}, { timeout: 10_000 }))
 
@@ -62,12 +63,13 @@ describe('S2 Agent 工作区面板', () => {
     expect(screen.getByTestId('right-tab-workspace')).toHaveAttribute('aria-selected', 'true')
     expect(within(panel).getByText('Agent 工作区')).toBeInTheDocument()
 
-    // 文件树：目录 + 文件（含 Agent 新建 dirty 文件）+ 回收倒计时
+    // 文件树：目录 + 文件（live WsNode：size 字节 + ISO updated_at；无 dirty 无相对时间文案）
     expect(await screen.findByTestId('ws-node-artifacts')).toBeInTheDocument()
     expect(screen.getByTestId('ws-node-排查报告草稿 v0.1.md')).toBeInTheDocument()
     expect(screen.getByTestId('ws-node-台账导出.xlsx')).toBeInTheDocument()
-    expect(within(panel).getByText('刚刚创建')).toBeInTheDocument()
-    expect(screen.getByTestId('ws-recycle').textContent).toMatch(/26 分钟后回收/)
+    expect(within(panel).getByText('1.2KB')).toBeInTheDocument()
+    // C3 live 契约：recycle_in_minutes v1 恒 null → 回收倒计时徽标不渲染（不放假倒计时）
+    expect(screen.queryByTestId('ws-recycle')).not.toBeInTheDocument()
 
     // 折叠/展开对工作区同样生效
     fireEvent.click(screen.getByTestId('ctx-panel-toggle'))
@@ -105,24 +107,29 @@ describe('S2 Agent 工作区面板', () => {
     await waitFor(() => expect(term.textContent).toContain('/workspace'))
     expect(term.textContent).toContain('$ pwd')
 
-    // rm → 受限 shell 拒绝
+    // rm → 4001 结构化拒绝（live TERMINAL_CMD_NOT_ALLOWED 网关文案透出终端面板）
     fireEvent.change(input, { target: { value: 'rm -rf /' } })
     fireEvent.keyDown(input, { key: 'Enter' })
-    await waitFor(() => expect(term.textContent).toContain('受限 shell 未放行'))
+    await waitFor(() => expect(term.textContent).toContain("命令 'rm' 不在只读白名单"))
   }, 25_000)
 
-  it('④ 资源页签：四分组齐全 + 状态徽标语义', async () => {
+  it('④ 资源页签：M1 顶层产出扫描（artifact/sandbox）+ 其余分组空态', async () => {
     await loginAndGo('/chat')
     fireEvent.click(await screen.findByText('动力电池标准对比', {}, { timeout: 10_000 }))
     fireEvent.click(await screen.findByTestId('right-tab-workspace'))
     fireEvent.click(await screen.findByTestId('ws-tab-res'))
 
+    // 四分组表头恒渲染（30 篇对象模型分组）
     for (const g of ['附件', 'Agent 产物', '本体快照', '导出']) {
       expect(screen.getByText(g)).toBeInTheDocument()
     }
-    expect(await screen.findByTestId('ws-res-res-2481-a1')).toBeInTheDocument()
-    expect(screen.getByTestId('ws-res-res-2481-d5').textContent).toContain('处理中')
-    expect(screen.getByTestId('ws-res-res-2481-b2').textContent).toContain('就绪')
-    expect(screen.getByText('power-ont v1.4.ttl')).toBeInTheDocument()
+    // C3 live 契约：M1 资源=顶层白名单产物扫描（id=ws-<sha12>、uploaded_by=sandbox、恒就绪），
+    // 子目录文件/二进制不进资源面；attachment/本体快照/导出分组 v1 恒空
+    expect(await screen.findByTestId('ws-res-ws-58b878dacb37')).toBeInTheDocument()
+    expect(screen.getByTestId('ws-res-ws-58b878dacb37').textContent).toContain('就绪')
+    expect(screen.getByTestId('ws-res-ws-58b878dacb37').textContent).toContain('故障研判简报.md')
+    expect(screen.getByTestId('ws-res-ws-a274a1f33753').textContent).toContain('停电事件时序表.csv')
+    // attachment/本体快照/导出三组恒空 → 「（无）」兜底（getAllByText：多组并存）
+    expect(screen.getAllByText('（无）').length).toBeGreaterThanOrEqual(3)
   }, 25_000)
 })

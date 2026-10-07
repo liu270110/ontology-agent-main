@@ -247,8 +247,10 @@ export function WorkspacePanel({ sessionId }: { sessionId: string }) {
     try {
       const r = await workspaceApi.exec(sessionId, c)
       setTermLines(v => [...v, ...r.lines.map(l => ({ kind: 'out' as const, text: l }))])
-    } catch {
-      setTermLines(v => [...v, { kind: 'out', text: 'exec: 沙箱通道不可用' }])
+    } catch (e) {
+      // C3 live 对接：业务拒绝（4001 白名单/参数锁定、3001 空命令等）透出网关文案；
+      // 仅通道级失败（网络/超时）保底提示
+      setTermLines(v => [...v, { kind: 'out', text: e instanceof ApiError ? e.message : 'exec: 沙箱通道不可用' }])
     } finally {
       setExecBusy(false)
     }
@@ -360,14 +362,14 @@ export function WorkspacePanel({ sessionId }: { sessionId: string }) {
                 }}
                 disabled={execBusy}
                 aria-label="终端命令"
-                title="受限 shell：白名单 ls / pwd / cat / head / tail"
+                title="受限 shell：白名单 ls/pwd/cat/head/tail/echo/grep/find/wc"
                 className="w-full min-w-0 flex-1 border-none bg-transparent font-mono text-[11px] text-label outline-none"
                 placeholder={execBusy ? '执行中…' : '输入命令…'}
               />
             </div>
             <div ref={termEndRef} />
           </div>
-          <div className="pt-1 text-2xs text-label-2">白名单：ls · pwd · cat · head · tail，其余拒绝</div>
+          <div className="pt-1 text-2xs text-label-2">白名单：ls · pwd · cat · head · tail · echo · grep · find · wc，其余拒绝</div>
         </div>
       )}
 

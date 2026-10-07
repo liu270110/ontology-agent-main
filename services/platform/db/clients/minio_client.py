@@ -86,3 +86,13 @@ class MinioObjectStore:
                 response.release_conn()
 
         return await asyncio.to_thread(_get)
+
+    async def delete_object(self, key: str) -> None:
+        """删除对象（S3 语义幂等：对象不存在不报错）；存储异常原样上抛——尽力而为语义
+        （失败留痕不阻断）由调用方兜（kb purge 同 put/get 的错误语义归调用方映射口径）。"""
+        bucket, object_path = parse_minio_key(key)
+
+        def _delete() -> None:
+            self._client.remove_object(bucket, object_path)
+
+        await asyncio.to_thread(_delete)

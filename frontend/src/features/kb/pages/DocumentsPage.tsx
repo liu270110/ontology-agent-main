@@ -303,7 +303,15 @@ export function DocumentsPage() {
       {/* IX-KB-01~04 态宿主 */}
       <UploadDialog open={uploadOpen} onClose={() => setUploadOpen(false)} onUploaded={() => void qc.invalidateQueries({ queryKey: ['kb', 'documents'] })} />
       <ChunkPreviewSheet doc={previewDoc} onClose={() => setPreviewDoc(null)} />
-      <DeleteDocDialog doc={deleteDoc} onClose={() => setDeleteDoc(null)} onDeleted={() => void qc.invalidateQueries({ queryKey: ['kb', 'documents'] })} />
+      {/* B3-Q 软删=移入回收站：删除后文档/回收站双失效（回收站抽屉即时可见新墓碑） */}
+      <DeleteDocDialog
+        doc={deleteDoc}
+        onClose={() => setDeleteDoc(null)}
+        onDeleted={() => {
+          void qc.invalidateQueries({ queryKey: ['kb', 'documents'] })
+          void qc.invalidateQueries({ queryKey: ['kb', 'recycle-bin'] })
+        }}
+      />
       <RetryDialog doc={retryDoc} onClose={() => setRetryDoc(null)} onQueued={() => void qc.invalidateQueries({ queryKey: ['kb', 'documents'] })} />
       <RecycleBinSheet
         open={recycleOpen}

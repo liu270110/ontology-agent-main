@@ -12,7 +12,16 @@
                                               + chunk 计数/error；404=文档域 404* 同款错误体）
     DELETE /kb/documents/{id}                 删除文档（B6 墓碑式软删：documents.valid_to 封口
                                               下线检索，chunks/kb_facts/审计物理保留；幂等
-                                              恒 200，已删态与不存在对调用方等价不 404）
+                                              恒 200，已删态与不存在对调用方等价不 404；
+                                              B3-Q 转实追加 deleted_at 戳=移入回收站）
+    GET  /kb/recycle-bin                      回收站列表（api/01 §5.4 追加行，B3-Q 转实：
+                                              deleted_at 非空条目，expires_at=deleted_at+7d
+                                              投影；{data:{items,next_cursor}, meta} 信封）
+    POST /kb/documents/{id}/restore           回收站恢复（清 deleted_at/valid_to 重入主列表；
+                                              200 裸回执 {id, status:'ready'}；非回收站态 404）
+    DELETE /kb/documents/{id}/purge           彻底删除（物理删除全文衍发行：conflicts/relations/
+                                              facts/rule_candidates/pipeline_step/chunks→documents，
+                                              MinIO 原件尽力而为失败留痕不阻断；200 信封 {id}）
     POST /kb/documents                        JSON 内容直传（checksum 幂等；
                                               文本类 mime 白名单 + NUL 拒收 → 415 业务错误）
     POST /kb/documents/file                   文件直传通道（v1.5 wedge：multipart 仅收
@@ -41,6 +50,10 @@
     GET  /kb/conflicts                        冲突工单列表（§8.1 T2；resolution 过滤 + 分页，
                                               A1 接线 2026-10-04）
     GET  /kb/conflicts/{id}                   冲突工单详情（并排双方事实与出处 + 裁决留痕）
+    GET/PUT /kb/collections/{id}/settings     库设置读/写（api/01 §5.4 追加行，B3-Q 转实：
+                                              chunk_size 300-2000/chunk_overlap 0-500/
+                                              extract_prompt_level/auto_extract；PUT 全量；
+                                              越界 422→3001；未知库 404）
 
 scope：kb:write（写路径）/ kb:read（检索与进度），deny-by-default（08 §2.5）；
 终审工作台三端点持 review:read / review:approve（契约 §5.4 行；候选非成品门禁的裁决面）。
@@ -62,7 +75,7 @@ import logging
 import time
 import uuid
 from collections.abc import Mapping, Sequence
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Annotated, Any
 
 from fastapi import (
@@ -76,13 +89,14 @@ from fastapi import (
     UploadFile,
     status,
 )
-from sqlalchemy import bindparam, func, or_, select, text
+from sqlalchemy import bindparam, delete, func, or_, select, text
 from sqlalchemy.dialects.postgresql import UUID as PgUuid
 from sqlalchemy.exc import IntegrityError
 
 from services.kb.api.schemas.kb import (
     DOCUMENT_TYPE_FILTER,
     DOCUMENT_UI_STATUS_FILTER,
+    KB_SETTINGS_DEFAULTS,
     BatchCandidateDecisionItemOut,
     BatchCandidateDecisionMetaOut,
     BatchCandidateDecisionOut,
@@ -92,6 +106,7 @@ from services.kb.api.schemas.kb import (
     CollectionCreateIn,
     CollectionListOut,
     CollectionOut,
+    CollectionSettingsEnvelope,
     ConflictDetailOut,
     ConflictFactSideOut,
     ConflictPageOut,
@@ -107,6 +122,9 @@ from services.kb.api.schemas.kb import (
     DocumentListOut,
     DocumentOut,
     DocumentPipelineProgress,
+    DocumentPurgeData,
+    DocumentPurgeEnvelope,
+    DocumentRestoreOut,
     DocumentStatusQuery,
     FactTypeFilter,
     KbAgenticTraceOut,
@@ -115,6 +133,7 @@ from services.kb.api.schemas.kb import (
     KbChunkOut,
     KbChunkPageOut,
     KbCitationOut,
+    KbCollectionSettings,
     KbDocType,
     KbEvidenceOut,
     KbGraphNodeOut,
@@ -128,6 +147,9 @@ from services.kb.api.schemas.kb import (
     PipelineProgressOut,
     PipelineStartOut,
     PipelineStepOut,
+    RecycleBinData,
+    RecycleBinListOut,
+    RecycleItemOut,
     ReviewCandidateEvidenceOut,
     ReviewCandidateOut,
     ReviewCandidatePageOut,
@@ -156,7 +178,9 @@ from services.kb.business.kb_pipeline import (
 from services.kb.business.review_queue import ReviewQueueService
 from services.kb.business.search_service import build_glossary_recall_fn, rerank_hits_by_source_context
 from services.kb.business.usage_service import UsageStore
+from services.kb.data.governance_orm import KbConflict, KbFactRelation
 from services.kb.data.orm import Document, DocumentChunk, KbCollection, KbFact, KbPipelineStep
+from services.kb.data.rule_orm import KbRuleCandidate
 from services.kb.retrieval.embed import AclPushdown, OllamaEmbedder, bm25_search, vector_ready, vector_search
 from services.kb.retrieval.graph import (
     ClassHierarchy,
@@ -701,6 +725,8 @@ async def delete_document(document_id: uuid.UUID, principal: KbWriteDep, session
       checksum_sha256，WHERE valid_to IS NULL，迁移 partial-unique 改建）——墓碑行不占唯一性，
       重传=全新插入（database/01 documents 段契约同批登记）；
     - 幂等：重复删除与不存在对调用方等价 → 200 deleted=false（不 404；他人租户同口径 deny-by-default）；
+    - 回收站（B3-Q 转实 2026-10-07）：封口同时落 deleted_at 戳=移入回收站（GET /kb/recycle-bin
+      可见；恢复/彻底删除走 /restore、/:id/purge，api/01 §5.4 追加行）；幂等未命中分支不补戳。
     - 契约行成功码 204 与 live 对账（R17-b）200 强信封解包并存：按 live 口径保留 200+envelope，
       deleted 标志区分命中/幂等未命中（偏离已在报告登记）。
     """
@@ -722,11 +748,208 @@ async def delete_document(document_id: uuid.UUID, principal: KbWriteDep, session
         )
     ).scalar_one()
     doc.valid_to = datetime.now(UTC)  # 封口即下线（检索三路 d.valid_to IS NULL 谓词即时生效）
+    doc.deleted_at = datetime.now(UTC)  # 移入回收站（B3-Q：恢复/彻底删除的可见性维度，api/01 §5.4）
     await session.commit()
     return DocumentDeleteEnvelope(
         data=DocumentDeleteData(deleted=True, cascade=DocumentDeleteCascade(chunks=int(chunk_count))),
         meta=EmptyMeta(),
     )
+
+
+# ---------------------------------------------------------------- 回收站（api/01 §5.4 追加行，B3-Q 转实）
+#
+# 软删模型：DELETE /kb/documents/{id} 双戳（valid_to=检索下线闸不变 + deleted_at=回收站可见性）；
+# 保留期 7 天（expires_at 由投影层按 deleted_at+7d 计算，不落列——到期物理清理随 nightly 批，
+# 本切片不做定时清扫）。历史墓碑行（valid_to 非空而 deleted_at 空）不回填、不进回收站
+# （升级前删除语义保持不可见）。契约源=frontend/src/mocks/kb-handlers.ts 回收站段
+# （字段名级：id/name/collection_id/deleted_at/expires_at/size/status='deleted'）。
+
+_RECYCLE_RETENTION = timedelta(days=7)  # 保留期（mock expires_at=deleted_at+7d 契约口径）
+
+
+async def _load_recycled_document(session: AsyncSession, tenant_id: uuid.UUID, document_id: uuid.UUID) -> Document:
+    """回收站在册文档载入（行锁防并发恢复/彻底删除双写；不在册=404，mock 4041 同 HTTP 态）。
+
+    在册判据=deleted_at 非空（tenant 过滤 deny-by-default；仅 valid_to 封口的存量墓碑不可见）。
+    """
+    doc = (
+        await session.execute(
+            select(Document)
+            .where(
+                Document.id == document_id,
+                Document.tenant_id == tenant_id,
+                Document.deleted_at.is_not(None),
+            )
+            .with_for_update()
+        )
+    ).scalar_one_or_none()
+    if doc is None:
+        raise GatewayError(404, "文档不在回收站", status_code=404)
+    return doc
+
+
+@router.get("/recycle-bin", summary="回收站列表（软删文档 deleted_at 非空；expires_at=deleted_at+7d 投影）")
+async def list_recycle_bin(
+    principal: KbReadDep,
+    session: SessionDep,
+    page: Annotated[int, Query(ge=1)] = 1,
+    page_size: Annotated[int, Query(ge=1, le=200)] = 50,
+) -> RecycleBinListOut:
+    """软删文档分页（api/01 §5.4 追加行）：{data:{items,next_cursor}, meta:{page,page_size,total}}。
+
+    信封外层=kb 域列表先例 {data, meta}（B1 批统一），内层保 mock 形态 {items, next_cursor}
+    （前端 api.get 直取 .data 消费 RecycleItem 接口，api/01 §3.1 同报备）。deleted_at 降序
+    （新删在前，mock KB_RECYCLE.unshift 同序）；游标分页 v1 未启用恒 next_cursor=null。
+    """
+    offset = (page - 1) * page_size
+    conds = [Document.tenant_id == principal.tenant_id, Document.deleted_at.is_not(None)]
+    total = (await session.execute(select(func.count()).select_from(Document).where(*conds))).scalar_one()
+    docs = (
+        (
+            await session.execute(
+                select(Document)
+                .where(*conds)
+                .order_by(Document.deleted_at.desc(), Document.id)
+                .offset(offset)
+                .limit(page_size)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    items = [
+        RecycleItemOut(
+            id=doc.id,
+            name=doc.title,
+            collection_id=doc.kb_collection_id,
+            deleted_at=doc.deleted_at,  # type: ignore[arg-type]  # 在册判据即非空（_load 同谓词）
+            expires_at=doc.deleted_at + _RECYCLE_RETENTION,  # type: ignore[operator]
+            size=doc.size_bytes or 0,
+        )
+        for doc in docs
+    ]
+    return RecycleBinListOut(
+        data=RecycleBinData(items=items), meta=PageMeta(page=page, page_size=page_size, total=int(total))
+    )
+
+
+@router.post("/documents/{document_id}/restore", summary="回收站恢复（清 deleted_at/valid_to 重入主列表；200 裸回执）")
+async def restore_document(document_id: uuid.UUID, principal: KbWriteDep, session: SessionDep) -> DocumentRestoreOut:
+    """api/01 §5.4 restore 行（200 {id, status:'ready'}；'ready' 为契约字面量非后端八态）。
+
+    恢复=deleted_at/deleted_reason/valid_to 三清：主列表（GET /kb/documents valid_to IS NULL）
+    与三路检索即时重现，流水线 status 列软删期间未动、恢复即原态续用（mock prev_status 回填
+    同语义）。不在册（未删/不存在/他人租户）→ 404「文档不在回收站」（mock 4041 同 HTTP 态，
+    幂等防呆：重复恢复 404 而非静默 200）。
+    """
+    doc = await _load_recycled_document(session, principal.tenant_id, document_id)
+    doc.deleted_at = None
+    doc.deleted_reason = None
+    doc.valid_to = None
+    await session.commit()
+    return DocumentRestoreOut(id=doc.id, status="ready")
+
+
+@router.delete(
+    "/documents/{document_id}/purge",
+    summary="彻底删除（物理删除全文衍发行 + MinIO 原件尽力而为；200 信封 {id} 非 204）",
+)
+async def purge_document(
+    document_id: uuid.UUID,
+    principal: KbWriteDep,
+    request: Request,
+    session: SessionDep,
+) -> DocumentPurgeEnvelope:
+    """api/01 §5.4 purge 行「物理删除，连分片/向量/图谱引用一并清；回 200 信封 {id} 勿回 204」。
+
+    FK 逆序物理删除（一次性语义：衍生物随原文消亡，区别于软删的「封口保留审计」）：
+    kb_conflicts → kb_fact_relations → kb_facts → kb_rule_candidates → kb_pipeline_step →
+    document_chunks（含 pgvector 向量列）→ documents 行。review_tickets/审计中间件台账无
+    documents FK，动作留痕天然保全（宪法 5：动作带审计）；usage 计数器无 FK（孤儿行随
+    nightly lint 收敛，usage_orm 既有口径）。
+    MinIO 原件删除尽力而为：DB 提交后再删对象，失败仅 warning 留痕不阻断（孤儿对象按 doc_id
+    寻址且 id 不复用，无害）；不可恢复动作无幂等回旋——不在册（未删/不存在/他人租户）404。
+    """
+    doc = await _load_recycled_document(session, principal.tenant_id, document_id)
+    fact_ids = (await session.execute(select(KbFact.id).where(KbFact.document_id == document_id))).scalars().all()
+    if fact_ids:  # 冲突工单/失效边挂 facts（fact_a/fact_b、from/to 均 NOT NULL FK），须先于 facts 清
+        await session.execute(
+            delete(KbConflict).where(or_(KbConflict.fact_a_id.in_(fact_ids), KbConflict.fact_b_id.in_(fact_ids)))
+        )
+        await session.execute(
+            delete(KbFactRelation).where(
+                or_(KbFactRelation.from_fact_id.in_(fact_ids), KbFactRelation.to_fact_id.in_(fact_ids))
+            )
+        )
+    await session.execute(delete(KbFact).where(KbFact.document_id == document_id))
+    await session.execute(delete(KbRuleCandidate).where(KbRuleCandidate.document_id == document_id))
+    await session.execute(delete(KbPipelineStep).where(KbPipelineStep.document_id == document_id))
+    await session.execute(delete(DocumentChunk).where(DocumentChunk.document_id == document_id))
+    minio_key = doc.minio_key  # 行删前取key（对象寻址在 DB 提交后进行）
+    await session.delete(doc)
+    await session.commit()
+    try:  # 尽力而为（失败留痕不阻断——存储异常形态发散，统一吞掉走日志告警）
+        await _object_store(request).delete_object(minio_key)
+    except Exception:  # noqa: BLE001
+        logger.warning(
+            "kb purge minio delete failed（留痕不阻断）: document_id=%s key=%s", document_id, minio_key, exc_info=True
+        )
+    return DocumentPurgeEnvelope(data=DocumentPurgeData(id=document_id), meta=EmptyMeta())
+
+
+# ---------------------------------------------------------------- 库设置（api/01 §5.4 追加行，B3-Q 转实）
+#
+# kb_collections.settings JSONB（本批迁移加列，ORM 齐写）；形状=KbCollectionSettings 四键，
+# 空 {} 回落默认值（mock settingsFor：500/50/standard/true）。JSONB 整体重赋值（不可原地变更，
+# merge_payload 同款纪律）。与 chunk_defaults（chunking 参数既有留位列）分列不混用。
+
+
+async def _load_collection(session: AsyncSession, tenant_id: uuid.UUID, collection_id: uuid.UUID) -> KbCollection:
+    """当前租户集合载入（deny-by-default；未知 id 404「知识库不存在」，与上传通道同文案）。"""
+    collection = (
+        await session.execute(
+            select(KbCollection).where(KbCollection.id == collection_id, KbCollection.tenant_id == tenant_id)
+        )
+    ).scalar_one_or_none()
+    if collection is None:
+        raise GatewayError(404, "知识库不存在", status_code=404)
+    return collection
+
+
+@router.get("/collections/{collection_id}/settings", summary="库设置读取（空设置回落默认值 500/50/standard/true）")
+async def get_collection_settings(
+    collection_id: uuid.UUID, principal: KbReadDep, session: SessionDep
+) -> CollectionSettingsEnvelope:
+    """api/01 §5.4 settings 读行（{data, meta} 资源面信封；mock 旧信封 data 同形镜像）。
+
+    settings 列空/缺键逐键回落 DTO 默认（mock settingsFor 同源）；未知列键（未来前向兼容
+    写入）不透出。未知 collection id → 404（mock 对未知 id 发默认值是 mock 无持久化的
+    工程妥协，live 以 api/01 登记的 404* 为准）。
+    """
+    collection = await _load_collection(session, principal.tenant_id, collection_id)
+    stored = collection.settings if isinstance(collection.settings, dict) else {}
+    known = {key: value for key, value in stored.items() if key in KbCollectionSettings.model_fields}
+    merged = {**KB_SETTINGS_DEFAULTS, **known}  # 缺键逐键回落（mock settingsFor：500/50/standard/true）
+    return CollectionSettingsEnvelope(data=KbCollectionSettings(**merged), meta=EmptyMeta())
+
+
+@router.put("/collections/{collection_id}/settings", summary="库设置保存（PUT 全量对象回显；越界 422→3001）")
+async def update_collection_settings(
+    collection_id: uuid.UUID,
+    body: KbCollectionSettings,
+    principal: KbWriteDep,
+    session: SessionDep,
+) -> CollectionSettingsEnvelope:
+    """api/01 §5.4 settings 写行：全量覆盖写（PUT 语义，非 patch），回全量对象=mock「PUT 回全量」。
+
+    数值越界由 DTO Field 边界先行 422（网关归一 3001 PARAM_INVALID，mock 3001 同码）；
+    未知 collection id → 404。settings 列整包覆盖——历史未知键随全量写自然收敛（以最近一次
+    PUT 为唯一事实源）。
+    """
+    collection = await _load_collection(session, principal.tenant_id, collection_id)
+    collection.settings = body.model_dump()  # JSONB 整体重赋值（不可原地变更纪律）
+    await session.commit()
+    return CollectionSettingsEnvelope(data=body, meta=EmptyMeta())
 
 
 @router.get("/documents/{document_id}/chunks", summary="分片列表（seq 升序；page/page_size 分页 + meta.total）")

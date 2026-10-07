@@ -50,7 +50,7 @@ _DELTA_CHARS = 24  # 回退路径透传切片步长（示例值；SSE 投影粒�
 # builtin 现无逐轮工具集变化（chat 单步形态），机制以下列纯函数落成可复用件，
 # 消费接线随逐轮 tool-calling（ReAct）批（02 §11.3 开放问题）。
 
-_TOOL_SCHEMA_SECTION_HEADER = "【工具 Schema·全量定义（常驻；当轮启用以清单为准）】"
+_TOOL_SCHEMA_SECTION_HEADER = "【工具名录·全量定义（常驻；当轮启用以清单为准；参数 schema 随 H-2 tool-calling 批）】"
 _TOOL_MASK_HEADER = "本轮可用工具："
 
 

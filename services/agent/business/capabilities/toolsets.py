@@ -27,52 +27,57 @@ services/cron/scheduler.py:487-510 per-job∩denylist+fail-closed）。
 from __future__ import annotations
 
 from collections.abc import Iterable
+from types import MappingProxyType
 from typing import Any
 
-# 声明式注册表（名→工具 meta.name 平铺集；唯一事实源，K28-b）
-TOOLSETS: dict[str, frozenset[str]] = {
-    # 静态能力全集的具名视图（与 _build_chat_capability_bindings/_build_mcp_tool_bindings
-    # 的装配面对齐；条件绑定未装配时交集自然为空，不入集无副作用）
-    "default": frozenset(
-        {
-            "fs.read",
-            "fs.write",
-            "fs.edit",
-            "fs.glob",
-            "fs.grep",
-            "web.fetch",
-            "web.search",
-            "spill.get",
-            "subagent.spawn",
-            "subagent.wait",
-            "subagent.interrupt",
-            "ask_user.tool",
-            "jev.detect",
-        }
-    ),
-    # 只读子集：全部 executionMode=READ 的绑定（fs 只读三件 + web 双件 + spill 兑换）；
-    # ask_user/subagent 族（EXTERNAL_WRITE/派生面）与 fs 写类不入
-    "readonly": frozenset(
-        {
-            "fs.read",
-            "fs.glob",
-            "fs.grep",
-            "web.fetch",
-            "web.search",
-            "spill.get",
-        }
-    ),
-    # 文件系子集：fs 五件（写类是否真注册仍归 kernel_capability_write 开关——交集语义）
-    "fs": frozenset(
-        {
-            "fs.read",
-            "fs.write",
-            "fs.edit",
-            "fs.glob",
-            "fs.grep",
-        }
-    ),
-}
+# 声明式注册表（名→工具 meta.name 平铺集）：会话表面门唯一事实源，冻结防运行时改门
+# （K28 复核 P3-1：MappingProxyType 只读视图，外部读接口不变——.get/迭代/len 同 dict，
+# 写操作 TypeError 响亮失败；值 frozenset 直存，名与成员两轴皆不可变）。
+TOOLSETS: MappingProxyType[str, frozenset[str]] = MappingProxyType(
+    {
+        # 静态能力全集的具名视图（与 _build_chat_capability_bindings/_build_mcp_tool_bindings
+        # 的装配面对齐；条件绑定未装配时交集自然为空，不入集无副作用）
+        "default": frozenset(
+            {
+                "fs.read",
+                "fs.write",
+                "fs.edit",
+                "fs.glob",
+                "fs.grep",
+                "web.fetch",
+                "web.search",
+                "spill.get",
+                "subagent.spawn",
+                "subagent.wait",
+                "subagent.interrupt",
+                "ask_user.tool",
+                "jev.detect",
+            }
+        ),
+        # 只读子集：全部 executionMode=READ 的绑定（fs 只读三件 + web 双件 + spill 兑换）；
+        # ask_user/subagent 族（EXTERNAL_WRITE/派生面）与 fs 写类不入
+        "readonly": frozenset(
+            {
+                "fs.read",
+                "fs.glob",
+                "fs.grep",
+                "web.fetch",
+                "web.search",
+                "spill.get",
+            }
+        ),
+        # 文件系子集：fs 五件（写类是否真注册仍归 kernel_capability_write 开关——交集语义）
+        "fs": frozenset(
+            {
+                "fs.read",
+                "fs.write",
+                "fs.edit",
+                "fs.glob",
+                "fs.grep",
+            }
+        ),
+    }
+)
 
 
 def resolve_toolset(name: str) -> frozenset[str]:

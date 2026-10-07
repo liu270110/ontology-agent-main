@@ -412,7 +412,8 @@ async def test_会话工具集_遮蔽段进系统提示且只列启用面() -> N
     assert events[-1].name is ChatEventName.RUN_FINISHED  # 过滤不阻断对话
 
     system = model.last_kwargs["system"]
-    assert "【工具 Schema·全量定义（常驻；当轮启用以清单为准）】" in system  # 常驻段就位
+    # 常驻段就位（P3-3 名录命名：字面钉住段头字节——防提示词前缀静默漂移）
+    assert "【工具名录·全量定义（常驻；当轮启用以清单为准；参数 schema 随 H-2 tool-calling 批）】" in system
     assert "- fs.write:" in system  # 定义本体=组合根全量（遮蔽不删定义，KV-cache 前缀稳定）
     mask_line = next(line for line in system.splitlines() if line.startswith("本轮可用工具："))
     assert mask_line == "本轮可用工具：fs.read"  # 启用面=解析集∩装配面（fs.write 出局）
@@ -428,4 +429,4 @@ async def test_会话工具集None_无遮蔽段_现行行为零变化() -> None:
     )
     await _collect(orchestrator, _command())
     system = model.last_kwargs["system"]
-    assert "【工具 Schema" not in system and "本轮可用工具" not in system  # 无遮蔽段
+    assert "【工具名录" not in system and "本轮可用工具" not in system  # 无遮蔽段

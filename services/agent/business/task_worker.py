@@ -492,7 +492,7 @@ class TaskRunWorker:
             original_trace_id=origin_trace or None,
             idempotency_key=idempotency_key,
             adapter="builtin",
-            toolset=getattr(session, "toolset", None),  # K28-c：重放同透传（旧桩 session 无字段时 None=现行行为）
+            toolset=session.toolset,  # K28-c：重放同透传（复核 P3-2 直读——AttributeError 响亮失败，fail-closed 对齐）
             resumed_validated=resumed,
             task_type=task.type,  # 40 篇 §4.2：RUN_STARTED.task_type 透传
         )
@@ -656,7 +656,7 @@ class TaskRunWorker:
             idempotency_key=idempotency_key,
             adapter="builtin",
             approvals=tickets,
-            toolset=getattr(session, "toolset", None),  # K28-c：重放同透传（旧桩 session 无字段时 None=现行行为）
+            toolset=session.toolset,  # K28-c：resume 重放同透传（P3-2 直读，AttributeError 响亮失败）
             resumed_validated=resumed,
             task_type=task.type,  # 40 篇 §4.2：RUN_STARTED.task_type 透传
         )

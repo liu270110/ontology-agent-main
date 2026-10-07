@@ -95,6 +95,7 @@ class AgentKernel:
         watermark_recheck_max: int | None = None,
         stuck_threshold: int | None = None,
         stuck_step_timeout_s: float | None = None,
+        approval_suspend: bool | None = None,
     ) -> None:
         self._dispatcher = dispatcher
         self._baseline = BaselineGate()
@@ -130,7 +131,11 @@ class AgentKernel:
         # （测试与组合根直传通道，D2/F-4 同款纪律），缺省 None 由 ExecutionStage
         # 运行期读 Settings（配置层唯一事实源）。
         self._execution_stage = ExecutionStage(
-            dispatcher, self._emit, tool_timeout_s=tool_timeout_s, spill_store=spill_store
+            dispatcher,
+            self._emit,
+            tool_timeout_s=tool_timeout_s,
+            spill_store=spill_store,
+            approval_suspend=approval_suspend,  # W2-2b 审批挂起开关（缺省读 Settings）
         )
         self._tool_dispatch = ToolGroupDispatcher(
             self._execution_stage,
@@ -295,6 +300,13 @@ class AgentKernel:
                             if rc.plan is not None and rc.plan.begin(step.seq):
                                 self._emit_plan_snapshot(rc)  # R4：步开跑 → in_progress
                             await self._execution_stage.run(rc, step)
+                        if state.status is StepStatus.WAITING_APPROVAL:
+                            # W2-2b 审批挂起（缺回执+开关开）：中止后续步调度——步保持
+                            # waiting_approval（04 §3 合法在途态）、计划项保持 in_progress
+                            # （诚实呈现：未跑完不标 completed），交挂起结算落 waiting_tool。
+                            # 审批面步（externalWrite/code）恒单步段（segment_steps 蕴含：
+                            # 非 READ 不并段），故只发生在本串行路径；此处防御兜底并行段同态。
+                            break
                         if state.status is StepStatus.EXECUTING:
                             await self._stage_observation(rc, step)
                         if rc.plan is not None and rc.plan.finish(step.seq):
@@ -318,6 +330,10 @@ class AgentKernel:
                         )
                         if len(group) < planned:  # 尾部步被截断=计划仍有未执行步：补段边界检查点（步数已耗尽必抛）
                             rc.tracker.check()
+                        # W2-2b 防御兜底：并行段收口后出现 waiting_approval 步（READ 段不触
+                        # 审批面，正常不可达）→ 同串行路径中止后续调度交挂起结算
+                        if any(rc.states[s.seq].status is StepStatus.WAITING_APPROVAL for s in group):
+                            break
                 return await self._stage_settlement(rc, candidate)
         except BudgetExhaustedError as exc:  # 须先于 KernelError（子类）
             return await self._finalize_interrupted(
@@ -778,6 +794,10 @@ class AgentKernel:
         criteria = await self._evaluator.evaluate_with_projection(candidate.success_criteria, ledger, ctx)
         states_in_run = list(rc.states.values())
         any_failed = any(s.status is StepStatus.FAILED or s.status is StepStatus.CANCELLED for s in states_in_run)
+        # W2-2b 审批挂起结算：存在 waiting_approval 在途步（缺回执+开关开）→ run 落
+        # waiting_tool（H-0b 核验链要求态；SLA 超时默认拒绝归 task worker，11 篇 §6.2）。
+        # 开关关时该步已立即 FAILED，本分支不可达（零行为变化面）。
+        any_waiting_approval = any(s.status is StepStatus.WAITING_APPROVAL for s in states_in_run)
         blocked_by_trust = any(c.blocked_by_trust for c in criteria)
         # E-4 K1-c：投影可求值且未满足（satisfied=False 且非 blocked）=确定性负结论——
         # 不可判完成（终止只认判据求值，A4）；纯回执口径下该形态不存在（零行为变化面）
@@ -789,6 +809,9 @@ class AgentKernel:
                 if any_failed
                 else "存在可求值判据未满足（B2 投影求值不通过，agent 自述不采信）"
             )
+        elif any_waiting_approval:
+            status, reason_code = RunStatus.WAITING_TOOL, None
+            reason = "存在审批挂起步（W2-2b）：等待人工裁决，SLA 超时默认拒绝（11 篇 §6.2 fail-closed）"
         elif blocked_by_trust:
             status, reason_code = RunStatus.WAITING_TOOL, None
             reason = "判据暂不可求值：等待外部回执（B2，agent 自述不采信；重连续跑锚点）"

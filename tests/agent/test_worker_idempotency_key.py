@@ -18,6 +18,8 @@ import uuid
 from collections.abc import AsyncIterator
 from typing import Any
 
+import pytest
+
 from services.agent.business.chat_events import ChatCommand, ChatEvent
 from services.agent.business.kernel.budget import Budget
 from services.agent.business.kernel.gate_baseline import canonical_param_hash
@@ -226,9 +228,18 @@ async def test_内核写动作注入幂等键_工单与工具调用同键():
     assert tool.calls[0].param_hash == ticket.param_hash
 
 
-async def test_工单按未注入参数签发_内核注入键后哈希失配_B5默认拒绝():
+async def test_工单按未注入参数签发_内核注入键后哈希失配_B5默认拒绝(monkeypatch: pytest.MonkeyPatch) -> None:
     """负向：键进参数即进 param_hash——拿「未含键」的旧工单重放被拒（键受工单约束，
-    防「工单批的是 A 参数、工具实际执行带键的 B 参数」的绑定旁路）。"""
+    防「工单批的是 A 参数、工具实际执行带键的 B 参数」的绑定旁路）。
+
+    W2-2b：kernel_approval_suspend 显式钉 False——本例断言的「立即 FAILED 默认拒绝」
+    是开关关回退面语义（开关开=挂起等待裁决，见 test_approval_suspend.py）。
+    """
+    from services.platform.config import Settings
+
+    fake = Settings(kernel_approval_suspend=False)
+    monkeypatch.setattr("services.agent.business.kernel.loop.get_settings", lambda: fake)
+    monkeypatch.setattr("services.agent.business.kernel.execution.get_settings", lambda: fake)
     # Arrange：工单按原始参数签发（不含键）
     params = {"q": "付款指令"}
     tool = FakeTool(action_iri=WRITE_ACTION_IRI)

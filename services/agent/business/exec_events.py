@@ -9,9 +9,11 @@
    异常不外泄、hook 禁再调内核），把子 run / 计划类内核锚点事件转译为执行结构 ChatEvent，
    经编排器 on_event 回调入队——复用既有会话 SSE 发布路径（sessions._chat_stream_response /
    task_worker._drain_orchestrator），不新建通道；
-3. **回放根集合**：EXEC_PERSISTED_EVENTS（落 task_events，回放根语义 40 篇 §3.1）——
-   SUBRUN_UPDATED 设计为不落库（纯实时心跳，40 篇 §4.1，控回放窗口挤占），其余执行结构
-   事件落库（event_type=事件名，≤32 字符已核）。
+3. **回放根集合**：EXEC_EVENT_PERSIST_RULES 统一规则表（两执行路径单源，W2 复核残留③
+   2026-10-07 收编 APPROVAL_REQUIRED 与 THINKING_START/END；键=回放关键事件，值=replay_root）
+   ——SUBRUN_UPDATED 设计为不落库（纯实时心跳，40 篇 §4.1，控回放窗口挤占），主干波事件
+   不在表（worker 路径既有时间线纪律落库但恒非回放根）；表内事件落 task_events
+   （event_type=事件名，≤32 字符已核）。
 
 内核发射点契约（发射侧按此 data 键产出；本转译器逐一映射，非法载荷丢弃留痕不阻断内核）：
 
@@ -23,8 +25,8 @@
 - ``kernel.plan_updated``    data={plan_id（=run_id，kernel/plan.py 发射面）, revision,
   items[{id, content, status}]}（发射点=规划 R4：kernel/plan.py PlanProjection）
 - ``kernel.approval_pending`` data={step_seq, param_hash, action_iri, execution_mode}
-  （发射点=kernel/execution.py B5 缺回执缺省拒绝路径；内核 waiting 挂起语义=W2-2b 另案，
-  本转译只把锚点呈上 wire，不改内核发射逻辑一字）
+  （发射点=kernel/execution.py B5 缺回执路径；W2-2b 已落地：缺回执挂起等待裁决——
+  步停 waiting_approval、run 落 waiting_tool，本转译把锚点呈上 wire，载荷逐字段不变）
 
 session_id/trace_id 不来自内核 data：session_id 由转译器上下文补齐（内核无会话概念），
 trace_id 取 KernelEvent.trace_id（C2 强制既有，内核账本拒收空 trace）。
@@ -33,9 +35,10 @@ trace_id 取 KernelEvent.trace_id（C2 强制既有，内核账本拒收空 trac
 from __future__ import annotations
 
 import logging
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from datetime import UTC, datetime
 from enum import StrEnum
+from types import MappingProxyType
 from typing import Any
 from uuid import UUID
 
@@ -49,6 +52,7 @@ from services.agent.domain.model.kernel_context import KernelEvent
 logger = logging.getLogger(__name__)
 
 __all__ = [
+    "EXEC_EVENT_PERSIST_RULES",
     "EXEC_PERSISTED_EVENTS",
     "EXEC_REALTIME_ONLY_EVENTS",
     "EXEC_STRUCTURE_EVENTS",
@@ -69,6 +73,7 @@ __all__ = [
     "SubRunUpdatedPayload",
     "THINKING_PERSISTED_EVENTS",
     "THINKING_REALTIME_ONLY_EVENTS",
+    "is_replay_root_event",
     "WorkflowNodeFinishedPayload",
     "WorkflowNodeStartedPayload",
     "WorkflowNodeStatus",
@@ -80,7 +85,7 @@ __all__ = [
 # 触 business 层），本模块顶部反向 import 再导出=转译侧唯一对照（漂移即 ImportError fail-fast）。
 KERNEL_SUBRUN_UPDATED = "kernel.subrun_updated"  # 心跳事件 v1 无发射点（R5 可缓发），仅登记
 KERNEL_APPROVAL_PENDING = "kernel.approval_pending"  # 审批锚点（发射侧=kernel/execution.py 内联字面量；
-# 提常量入内核发射侧随 W2-2b 挂起语义另案——红线：内核发射逻辑本批一字不动，此处登记对照）
+# W2-2b 挂起语义已落地——发射载荷逐字段不变，挂起/回退两态共发本锚点；此处登记对照）
 
 
 # ── 枚举（40 篇 §3.2/§4.2）────────────────────────────────────────────────
@@ -327,6 +332,30 @@ THINKING_PERSISTED_EVENTS: frozenset[ChatEventName] = frozenset(
     {ChatEventName.THINKING_START, ChatEventName.THINKING_END}
 )
 THINKING_REALTIME_ONLY_EVENTS: frozenset[ChatEventName] = frozenset({ChatEventName.THINKING_CONTENT})
+
+# ── 统一落库/回放根规则表（W2 复核残留③，2026-10-07 两执行路径单源收口）──────────────
+# 两执行路径（SSE 内联双写钩子 sessions.build_exec_event_dual_write / task_worker
+# _drain_orchestrator·_drain_workflow）的「落库与否 + replay_root」一律从本表推导，
+# 任一路径禁自持口径（同一事件两路径落库结果必须同形，测试按表对账）：
+# - 键=回放关键事件全集（缺席即豁免：纯实时不落库——SUBRUN_UPDATED 心跳/THINKING_CONTENT
+#   增量；主干波事件亦不在表——主干落库归 worker 路径既有时间线纪律，回放根恒 False）；
+# - 值=是否回放根（R11 SAVEPOINT 重试追加，True=回放根不可吞）：表内事件都是断线重连
+#   重建时间线的必需帧（执行结构 40 篇 §3.1 + 审批挂起卡 + 思考块边界）。
+# 收编裁决（相对既有波次集合的增量）：
+# - APPROVAL_REQUIRED（02 协议审批波行 67）：W2-2b 后=run 挂起事实（run 落 waiting_tool、
+#   无终态事件收尾，APPROVAL_REQUIRED 即状态），必须落库可回放——断线重连经 task_events
+#   回放还原挂起审批卡；
+# - THINKING_START/END：落账本口径本就有（api/02 思考波登记「START/END 落账本」），
+#   本表收编的是回放根资格（worker 路径此前 replay_root=False 与 SSE 路径不一致）；
+# - THINKING_CONTENT 维持豁免（增量体量大、回放非必需——SUBRUN_UPDATED 同款）。
+EXEC_EVENT_PERSIST_RULES: Mapping[ChatEventName, bool] = MappingProxyType(
+    {name: True for name in (*EXEC_PERSISTED_EVENTS, ChatEventName.APPROVAL_REQUIRED, *THINKING_PERSISTED_EVENTS)}
+)
+
+
+def is_replay_root_event(name: ChatEventName) -> bool:
+    """规则表单源取 replay_root（表外事件恒 False：两路径豁免事件与 worker 主干波）。"""
+    return EXEC_EVENT_PERSIST_RULES.get(name, False)
 
 
 # ── 转译 observer（H-0a on_kernel_event）──────────────────────────────────

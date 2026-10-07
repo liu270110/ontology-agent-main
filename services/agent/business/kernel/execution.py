@@ -1,7 +1,9 @@
 """⑤ 执行断点（tools.bindings / execution.backends；B5 审批路由、B3 标界、B4 出口、C3 租户核验）。
 
-- 审批路由（B5）：externalWrite/code 必须携参数哈希绑定的有效回执；缺回执走
-  executing→waiting_approval→failed「超时默认拒绝」（04 §3 状态机）；
+- 审批路由（B5）：externalWrite/code 必须携参数哈希绑定的有效回执；缺回执两态——
+  **挂起等待裁决**（W2-2b，kernel_approval_suspend 默认开：步停 waiting_approval，
+  run 落 waiting_tool，SLA 超时由 worker 默认拒绝 fail-closed，11 篇 §6.2）或
+  **立即 FAILED 默认拒绝**（开关关=2026-10-07 前现状，04 §3 状态机 waiting_approval→failed）；
 - 工具分发：在途任务可取消追踪（§2.4 清单步骤 2）+ 单调用超时/裸异常一律结构化失败；
 - 沙箱分发（execution.backends）：出口默认拒绝（B4 硬编码）、租约登记可强制释放（§2.4 步骤 3）。
 """
@@ -59,6 +61,7 @@ class ExecutionStage:
         tool_timeout_s: float | None = None,
         spill_store: SpillStore | None = None,
         usage_floor_ratio: float | None = None,
+        approval_suspend: bool | None = None,
     ) -> None:
         self._dispatcher = dispatcher
         self._emit = emit
@@ -67,6 +70,8 @@ class ExecutionStage:
         self._tool_timeout_s = tool_timeout_s
         self._spill_store = spill_store  # C1 spill（02 §11.2-11）：超大结果→有界预览+locator
         self._usage_floor_ratio = usage_floor_ratio  # H5：缺省 None=运行期读 Settings.kernel_usage_floor_ratio
+        # W2-2b 审批挂起开关：缺省 None=运行期读 Settings.kernel_approval_suspend（默认 True）
+        self._approval_suspend = approval_suspend
 
     def _resolve_tool_timeout_s(self) -> float:
         if self._tool_timeout_s is not None:
@@ -77,6 +82,11 @@ class ExecutionStage:
         if self._usage_floor_ratio is not None:
             return self._usage_floor_ratio
         return get_settings().kernel_usage_floor_ratio
+
+    def _resolve_approval_suspend(self) -> bool:
+        if self._approval_suspend is not None:
+            return self._approval_suspend
+        return get_settings().kernel_approval_suspend
 
     async def run(self, rc: RunContext, step: PlanStep) -> None:
         state, ctx, ledger = rc.states[step.seq], rc.ctx, rc.ledger
@@ -95,7 +105,7 @@ class ExecutionStage:
             approval = next((a for a in rc.approvals if a.param_hash == param_hash), None)
             state.transition(StepStatus.WAITING_APPROVAL, stage=LoopStage.EXECUTION)
             ledger.record_step(state)
-            if approval is None:  # 超时默认拒绝（02 §2 B5）
+            if approval is None:  # 缺回执：两态共发 pending 锚点（审批呈现端点消费面不变）
                 # H-0b 接线：先落 pending 锚点事件（审批呈现端点从 task_events 消费写
                 # task.payload，人工批准后经 worker resume 通道携票重放本步——07 边界契约 D6）
                 self._emit(
@@ -113,10 +123,19 @@ class ExecutionStage:
                         **({"idempotency_key": rc.idempotency_key} if rc.idempotency_key else {}),
                     },
                 )
-                state.transition(StepStatus.FAILED, stage=LoopStage.EXECUTION)
-                state.error = _err(ErrorCode.SCOPE_INSUFFICIENT, "审批缺失/超时，默认拒绝（B5）")
-                ledger.record_step(state)
-                self._emit(ledger, ctx, state.run_id, "kernel.approval_denied", {"step_seq": state.seq})
+                if not self._resolve_approval_suspend():
+                    # 开关关（W2-2b 前现状）：立即 FAILED 默认拒绝（02 §2 B5）
+                    state.transition(StepStatus.FAILED, stage=LoopStage.EXECUTION)
+                    state.error = _err(ErrorCode.SCOPE_INSUFFICIENT, "审批缺失/超时，默认拒绝（B5）")
+                    ledger.record_step(state)
+                    self._emit(ledger, ctx, state.run_id, "kernel.approval_denied", {"step_seq": state.seq})
+                    return
+                # W2-2b 审批挂起（开关默认开，11 篇 §6.2 + 对账提案 W2-2b）：步停
+                # waiting_approval（04 §3 合法在途态，不 FAILED），后续步调度由 loop 在此
+                # 中止并交挂起结算——run 落 waiting_tool（approval_service 核验链要求的态）；
+                # 批准→resume 携票重放本步（票匹配 param_hash 走下方 EXECUTING 支）；
+                # SLA（kernel_approval_sla_minutes，默认 30min）超时由 task worker 默认拒绝
+                # （fail-closed）。工具未被调用（无回执不执行，B5 不变式保持）。
                 return
             state.transition(StepStatus.EXECUTING, stage=LoopStage.EXECUTION)  # 审批通过回执
             ledger.record_step(state)

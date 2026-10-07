@@ -37,9 +37,10 @@ RETRIEVE_DEFAULT_LIMIT_CHARS = 8_000  # 缺省分窗字符数（与 SPILL_THRESH
 RETRIEVE_MAX_LIMIT_CHARS = 64_000  # 单次兑换硬顶（防一次性回灌爆上下文）
 
 _DESCRIPTION = (
-    "兑换 spill 指针取回工具结果完整原文（当工具结果带 locator/spill_locator 字段且预览"
-    "被截断时使用）。locator 须从工具结果中原样复制；offset/limit 可分窗续读（limit 缺省 "
-    "8000 字符）。只读工具。"
+    "兑换 spill 指针取回工具结果落盘快照原文（当工具结果带 locator/spill_locator 字段且预览"
+    "被截断时使用）。注意：fs 来源的 spill_locator 是截断结果快照（非文件完整原文），文件"
+    "续读请用 fs.read 的 offset。locator 须从工具结果中原样复制；offset/limit 可分窗续读"
+    "（limit 缺省 8000 字符）。只读工具。"
 )
 
 _SCHEMA: dict[str, Any] = {

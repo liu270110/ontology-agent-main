@@ -91,9 +91,11 @@ export function AuditTab() {
             </tr>
           </thead>
           <tbody>
-            {rows.map(r => (
+            {rows.map((r, i) => (
               <AuditRowView
-                key={r.trace_id}
+                // F5（联调 2026-10-06）：同 trace 多行动审计行 key 撞车（React 复用错行）——
+                // 行唯一键以 index 兜底
+                key={`${r.trace_id}-${i}`}
                 row={r}
                 expanded={expanded === r.trace_id}
                 onToggle={() => setExpanded(expanded === r.trace_id ? null : r.trace_id)}

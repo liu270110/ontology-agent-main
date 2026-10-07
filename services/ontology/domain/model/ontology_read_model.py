@@ -16,24 +16,14 @@ from pydantic import BaseModel, Field
 
 # ONT-1.2 定义字段白名单（"什么算改定义"，0076 判据；单点定义——快照 repo 与测试同源引用）。
 # 不算改定义（不产生新快照）：name/label/definition(文本)/metadata/enabled/withdrawn 标记。
-# ONT-2 扩型：'capability'（06 篇 §ONT-2.2——requires/produces/constrained_by/execution/
-# binds_action 算定义字段；grants/serves_task 属授权与任务侧，不算改定义）；
-# ck_ont_elem_versions_element_type CHECK 随 ONT-2 迁移①同步扩型。
 DEFINITION_FIELDS: dict[str, tuple[str, ...]] = {
     "class": ("subclass_of", "equivalent_class", "is_behavior", "state_attribute"),
     "property": ("kind", "domain_iri", "range_iri", "type_of_terms", "functional", "constraints"),
     "axiom": ("kind", "subject_iri", "object_iri", "expression"),
     "rule": ("route", "event_class_iri", "condition", "action_ref", "severity"),
-    "capability": ("requires", "produces", "constrained_by", "execution", "binds_action"),
 }
 
-ELEMENT_TYPES: tuple[str, ...] = (
-    "class",
-    "property",
-    "axiom",
-    "rule",
-    "capability",
-)  # ck_ont_elem_versions_element_type 同口径
+ELEMENT_TYPES: tuple[str, ...] = ("class", "property", "axiom", "rule")  # ck_ont_elem_versions_element_type 同口径
 
 
 def canonical_json(payload: Any) -> str:

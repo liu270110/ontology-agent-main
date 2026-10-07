@@ -290,6 +290,42 @@ export interface AnalyticsOverview {
 }
 export const getAnalyticsOverview = () => api.get<AnalyticsOverview>('/admin/analytics/overview')
 
+// ---- 用量总览（§5.8 GET /admin/usage/overview ★ **2026-10-07 B9 §D-C 双端实装**：后端=
+//      services/platform/api/usage.py（llm_calls 三组聚合，days=7|30 白名单，空表全零/空数组）；
+//      mock= admin-handlers.ts 同形状种子（7/30 天，语境与 analytics 同族）供 mock 模式演示。
+//      ekko usage 三视图消费面：「数据分析」Tab 主卡 UsageAnalyticsTab） ----
+/** 窗口内汇总（含失败行；cost_usd=美元合计；latency_ms_p50=非空延迟连续中位取整） */
+export interface UsageSummary {
+  calls: number
+  tokens_in: number
+  tokens_out: number
+  cost_usd: number
+  latency_ms_p50: number
+}
+/** 按日桶（仅回有数据日；day=YYYY-MM-DD 日升序；tokens=token_in+token_out） */
+export interface UsageDayPoint {
+  day: string
+  calls: number
+  tokens: number
+  cost_usd: number
+}
+/** 按模型分组行（cost 降序） */
+export interface UsageModelRow {
+  model: string
+  calls: number
+  tokens: number
+  cost_usd: number
+}
+export interface UsageOverview {
+  summary: UsageSummary
+  by_day: UsageDayPoint[]
+  by_model: UsageModelRow[]
+}
+/** 用量总览聚合（契约行 api/01 §5.8 ★；days 白名单 7|30，其余后端 422+3001） */
+export function getUsageOverview(days: 7 | 30) {
+  return api.get<UsageOverview>(`/admin/usage/overview?days=${days}`)
+}
+
 // ---- 回写台账（§5.8 ★ writeback 三端点已登记且后端 live：services/writeback/api/ledger.py；
 //      DTO=services/writeback/api/schemas/ledger.py WritebackLedgerOut（extra=forbid），W2 2026-10-04
 //      按真实契约消费——前端此前零消费的「白捡」面。注意：§6.5 示例中的 `id` 字段名已过时，

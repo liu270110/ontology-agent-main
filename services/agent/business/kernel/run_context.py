@@ -13,7 +13,7 @@ from services.agent.business.kernel.ledger import KernelLedger, LedgerSink
 from services.agent.business.kernel.plan import PlanProjection
 from services.agent.domain.model.kernel_actions import ApprovalTicket, StepResult
 from services.agent.domain.model.kernel_context import ContextBlock, TaskRef, TenantContext
-from services.agent.domain.model.step_state import StepState
+from services.agent.domain.model.step_state import BudgetWatermark, StepState
 
 # 审计事件发射口签名（AgentKernel._emit，C2）：各阶段共用，账本统一校验归属
 Emit = Callable[[KernelLedger, TenantContext, UUID, str, dict[str, Any]], None]
@@ -40,6 +40,42 @@ class ProgressHeartbeat:
             "at": round(self.at, 6),
             "tokens": self.tokens,
             "tool_results": self.tool_results,
+        }
+
+
+@dataclass(frozen=True)
+class FrozenStepContext:
+    """K33-a 步初冻结快照（值对象，docs/Agent/13 §39 A-4 半级；上游=研究整理/12 对标
+    01-codex §2 StepContext 每步不可变快照）：串行单步段步初（loop 串行路径 register_step
+    前=nudge 注入前）对运行面的一次性冻结，供事件载荷摘要/审计/只读消费。
+
+    **A-4 半级边界（§39 范围裁决）**：只读快照不改变任何执行语义——rc.states 对象身份
+    （:299/:303/:310 status 联动）、rc.results 写回、段边界三写点（splice/水位复判/nudge）
+    原样保留；并行多步段不构造快照（last_step_snapshot 停留最近一次串行步）；
+# 快照隔离是单向的（ocr 2026-10-08 勘注）：rc 变更不回渗快照；但消费方可变快照本体
+# （state_snapshot 仅 validate_assignment 非 frozen）——审计基线防误读，A-4 全级落地时改返回防御拷贝。
+    A-4 全级（视图穿线）待 execution 重构批另行裁决。
+
+    隔离性：state_snapshot 为 StepState 深拷贝（model_copy(deep=True)，步内迁移不回渗）；
+    context_blocks 为步初 tuple 引用快照（ContextBlock 本身 frozen 值对象，运行组装面
+    只整体换元不改原元——splice/压缩/nudge 均为重新赋值，快照 tuple 与其脱钩）；
+    watermark 为 tracker.watermark() frozen 值对象。
+    """
+
+    step_seq: int  # 快照步号（串行步=本步）
+    step_id: str  # K32 派生确定性 id（run_id+seq uuid5，同 run 同 seq 恒等）
+    context_blocks: tuple[ContextBlock, ...]  # 步初组装面引用快照（nudge 注入前纯净态）
+    state_snapshot: StepState  # rc.states[seq] 步初深拷贝（planned 基线，与原对象脱钩）
+    watermark: BudgetWatermark  # 步初预算水位（frozen 值对象，A4 口径）
+    results_count: int  # 步初已完成步结果累计（rc.results 条数）
+
+    def as_payload(self) -> dict[str, Any]:
+        """快照摘要的事件载荷形态（审计/事件消费方取数口；纯计数不含参数原文）。"""
+        return {
+            "step_seq": self.step_seq,
+            "step_id": self.step_id,
+            "blocks": len(self.context_blocks),
+            "results_count": self.results_count,
         }
 
 
@@ -97,6 +133,13 @@ class RunContext:
         # EXTERNAL_WRITE 步注入工具调用参数与审批工单（param_hash 绑定），工具实现侧
         # 幂等消费后续批接键。
         self.idempotency_key: str | None = idempotency_key
+        # K33-a A-4 半级步初冻结快照（docs/Agent/13 §39）：最近一次串行步的步初冻结态
+        # （FrozenStepContext，构造点=loop 串行单步段 register_step 前=nudge 注入前纯净态；
+        # None=尚无串行步开始）。只读消费面：审计/事件载荷经 kernel.last_run_context 可查
+        # （K11 watermark 取数口同款惯例）。半级边界：不改变任何执行语义（rc.states 对象
+        # 身份/写回回路/段边界三写点原样保留），并行多步段不刷新本快照；A-4 全级（视图
+        # 穿线）待 execution 重构批另行裁决。
+        self.last_step_snapshot: FrozenStepContext | None = None
 
     @property
     def is_stuck(self) -> bool:

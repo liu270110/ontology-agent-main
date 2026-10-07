@@ -11,6 +11,8 @@ import { ContextCollapseButton, ContextPanel, ContextPanelRail } from '../compon
 import { WorkspacePanel } from '../components/WorkspacePanel'
 import { ExecutionPanel } from '../components/ExecutionPanel'
 import { EvidenceSheet, type EvidenceFocus } from '../components/EvidenceSheet'
+import { RunApprovalCard } from '../components/RunApprovalCard'
+import { useRunApprovals } from '../use-run-approvals'
 import { EmptyState } from '@/components/states'
 import { api } from '@/api/client'
 import { qk } from '@/lib/qk'
@@ -75,6 +77,9 @@ export function ChatPage() {
   const setConnection = useSessionStore(s => s.setConnection)
   const connection = useSessionStore(s => s.connection)
   const running = useSessionStore(s => s.running)
+  /** D-A 运行审批（34 §D-A）：活跃 run 每 3s 轮询 pending（无活跃 run 零请求）；
+   *  onDuty=接管在岗 → ChatStream 遗留兜底审批槽位让位（同 run 双卡+双轮询防抖） */
+  const runApprovals = useRunApprovals()
   const navigate = useNavigate()
   const qc = useQueryClient()
   /** E7/E9 实体深链预填（41 篇 §2 V3.6/7「chat 侧输入预填@提及」）：/chat/new?entity=
@@ -287,8 +292,15 @@ export function ChatPage() {
               onBaselineReload={reloadBaseline}
               onBaselineContinue={continueBaseline}
               baselineTick={baselineTick}
+              // D-A（34 §D-A）：接管审批卡在岗 → ChatStream 遗留兜底审批槽位让位
+              approvalTakeoverActive={runApprovals.onDuty}
             />
             <ContextMeter used={ctxUsed} limit={ctxLimit} />
+            {/* D-A 运行审批卡（34 §D-A）：接管式挂载位=MessageInput 上方（流底部恒可见）；
+                活跃 run 无待审动作/已裁决时 hook 返回 null，此处零渲染零占位 */}
+            {runApprovals.pending && (
+              <RunApprovalCard pending={runApprovals.pending} onResolved={runApprovals.clear} />
+            )}
             <MessageInput sessionId={sessionId} onStop={handleStop} seedText={seedText ?? undefined} />
           </>
         ) : (

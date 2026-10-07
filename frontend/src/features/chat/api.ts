@@ -31,3 +31,56 @@ export async function createDefaultSession(): Promise<SessionDto> {
   if (!pick) throw new Error('没有可用的 Agent，无法创建会话')
   return createSession({ agent_id: pick.id })
 }
+
+// ---- D-A 运行审批（docs/架构设计/34 §D-A；端点=api/01 §5.15 ★ 行，实装
+//      services/agent/api/approvals.py——L2 运行中审批 H-0b；DTO 手写对齐
+//      services/agent/api/schemas/approval.py，形状=后端真实 DTO）----
+
+/** GET /tasks/{tid}/runs/{rid}/approvals/pending 出参（PendingApprovalOut）：
+ *  action_* 为 null=当前无可审批动作（轮询友好恒 200）。 */
+export interface PendingApprovalDto {
+  task_id: string
+  run_id: string
+  run_status: string
+  action_iri: string | null
+  param_hash: string | null
+  execution_mode: string | null
+  waiting_since: string | null
+}
+
+/** POST /tasks/{tid}/runs/{rid}/approvals 入参（ApprovalDecisionIn，extra=forbid——
+ *  只发 decision/param_hash 必填与 reason/create_ticket/rule_hint 可选，多字段 422）。 */
+export interface ApprovalDecisionDto {
+  decision: 'approve' | 'reject'
+  /** 待审批动作参数哈希（B5 绑定键，8~128 字符——服务端比对防篡改） */
+  param_hash: string
+  /** reject 理由（审计留痕，前端必填）；approve 可选备注 */
+  reason?: string | null
+  /** 审批中心联动建单（本卡不涉及，转人工走流内置顶卡） */
+  create_ticket?: boolean
+  rule_hint?: string | null
+}
+
+/** POST 决策出参（ApprovalDecisionOut）：approve→run_status=running（resume 已触发）；
+ *  reject→cancelled。 */
+export interface ApprovalDecisionResultDto {
+  decision: string
+  task_id: string
+  run_id: string
+  run_status: string
+  ticket_id: string | null
+  review_ticket_id: string | null
+  review_linkage: 'created' | 'degraded' | 'skipped'
+}
+
+/** GET 当前待审批动作视图（api/01 §5.15）。live 路由信封={data:PendingApprovalOut,meta}
+ *  （无 code 字段）——api.get 对无 code 体双形态兼容后原样返回，剥壳归一在
+ *  use-run-approvals.extractRunApprovalPending（与 w1b ApprovalCard extractPending 同纪律）。 */
+export function getPendingRunApproval(taskId: string, runId: string) {
+  return api.get<unknown>(`/tasks/${taskId}/runs/${runId}/approvals/pending`)
+}
+
+/** POST 审批裁决（approve→resume / reject→终态；契约 202）。 */
+export function decideRunApproval(taskId: string, runId: string, body: ApprovalDecisionDto) {
+  return api.post<unknown>(`/tasks/${taskId}/runs/${runId}/approvals`, body)
+}

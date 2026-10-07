@@ -682,4 +682,52 @@ export const handlers = [
       ],
     }),
   ),
+
+  // ---- D-A 运行审批（docs/架构设计/34 §D-A；端点=api/01 §5.15 ★，实装
+  //      services/agent/api/approvals.py；信封形状=live 路由原样 {data, meta} 无 code）----
+
+  // GET /tasks/:taskId/runs/:runId/approvals/pending —— 待审批动作视图（轮询友好恒 200；
+  // DTO=PendingApprovalOut）。默认 action_iri=null（run 正常推进中无待审动作，零 UI 影响，
+  // 活跃 run 场景由用例 server.use 覆写注入 waiting_tool 锚点）
+  http.get('*/api/v1/tasks/:taskId/runs/:runId/approvals/pending', ({ params }) =>
+    HttpResponse.json({
+      data: {
+        task_id: params.taskId,
+        run_id: params.runId,
+        run_status: 'running',
+        action_iri: null,
+        param_hash: null,
+        execution_mode: null,
+        waiting_since: null,
+      },
+      meta: {},
+    }),
+  ),
+
+  // POST /tasks/:taskId/runs/:runId/approvals —— 审批裁决（approve→resume / reject→终态；
+  // DTO=ApprovalDecisionOut，202）。契约级校验对齐 ApprovalDecisionIn（extra=forbid）：
+  // decision 枚举 + param_hash 8~128 必填；reject 理由必填由前端承担（服务端 reason 可选）
+  http.post('*/api/v1/tasks/:taskId/runs/:runId/approvals', async ({ request, params }) => {
+    const body = (await request.json().catch(() => ({}))) as { decision?: string; param_hash?: string }
+    if (body.decision !== 'approve' && body.decision !== 'reject')
+      return jsonErr(3001, '参数校验失败：decision 必须为 approve|reject', 422)
+    const ph = body.param_hash ?? ''
+    if (ph.length < 8 || ph.length > 128)
+      return jsonErr(3001, '参数校验失败：param_hash 长度须在 8~128（B5 绑定键）', 422)
+    return HttpResponse.json(
+      {
+        data: {
+          decision: body.decision,
+          task_id: params.taskId,
+          run_id: params.runId,
+          run_status: body.decision === 'approve' ? 'running' : 'cancelled',
+          ticket_id: null,
+          review_ticket_id: null,
+          review_linkage: 'skipped',
+        },
+        meta: {},
+      },
+      { status: 202 },
+    )
+  }),
 ]

@@ -304,6 +304,21 @@ exclude = [
 ]
 
 [[tool.mypy.overrides]]
+# 环境族豁免（2026-10-07，批次八移交①）：主 venv 存在锁外 torch 2.14.1+cpu / docling /
+# numpy 2.5.3（实验连带安装，uv.lock 均无），numpy stubs 用 PEP 695 `type` 语句，
+# python_version=3.11 下解析崩（numpy/__init__.pyi:737 "Type statement is only supported
+# in Python 3.12+"）。引入链二条：kb/business/parsers.py:225 懒加载 import docling（运行期
+# ImportError 已兜底）；devtools jev-local/onto-train 直 import torch（实验靶）→ torch → numpy。
+# 本仓业务代码零 numpy/torch/docling 直依赖，不触共享 venv（实验依赖在途）。
+# ⚠实证（2026-10-07）：mypy 2.3.1 下 follow_imports=skip（per-module 与全局 CLI 同验）
+# 仍会 parse 被指名模块的 stubs（--verbose 可见 "Parsing ...numpy\\__init__.pyi"），且语法错
+# 属 [syntax] 类、ignore_errors 不兜——本 overrides 表意图与未来版本语义，单独不足以让
+# 「锁外包在场的 venv」复绿；门禁口径=uv lock 忠实环境（worktree 全新 venv / 晋级 §10.3
+# 新 worktree 实证绿），锁外包实验收尾后随 venv 清理自然消除。
+module = ["docling", "docling.*", "numpy", "numpy.*", "torch", "torch.*"]
+follow_imports = "skip"
+
+[[tool.mypy.overrides]]
 # strict 区（domain/core）显式展开。2026-10-07 实证：mypy 2.3.1（锁内版本）下任一 override
 # 带 strict=true 会把 strict 泄漏为全局（与 module 模式是否匹配无关），等效全仓 strict 致
 # 2692 错；显式枚举恢复「domain/core strict、其余 normal」分级本意（docs/standards/01 §2.3）。

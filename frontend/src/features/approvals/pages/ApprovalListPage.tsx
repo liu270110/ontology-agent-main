@@ -5,7 +5,7 @@ import { CheckCheck } from 'lucide-react'
 import { ApiError } from '@/api/client'
 import { ErrorState, SkeletonRows } from '@/components/states'
 import { Tooltip } from '@/components/tooltip'
-import { listReviews, type Approval, type ApprovalType } from '../api'
+import { listReviews, slaBadgeOf, type Approval, type ApprovalType } from '../api'
 import { ApprovalDetailModal, ApprovalTypeBadge } from '../components/ApprovalDetailModal'
 import { BatchApprovalModal } from '../components/BatchApprovalModal'
 import { relativeTime } from '@/lib/reltime'
@@ -112,6 +112,11 @@ export function ApprovalListPage() {
                 </Tooltip>
                 <b className="truncate text-[13px]">{a.title}</b>
                 {a.high_risk && <span className="badge b-red">高危</span>}
+                {a.status === 'pending' && slaBadgeOf(a.sla_deadline) && (
+                  <span className={`badge ${slaBadgeOf(a.sla_deadline)!.cls}`} data-testid="apr-sla-badge">
+                    {slaBadgeOf(a.sla_deadline)!.text}
+                  </span>
+                )}
                 {a.status !== 'pending' && (
                   <span className={`badge ml-auto ${a.status === 'approved' ? 'b-green' : 'b-red'}`}>
                     {a.status === 'approved' ? '已通过' : '已驳回'}

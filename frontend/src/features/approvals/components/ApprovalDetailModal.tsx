@@ -5,8 +5,8 @@ import { toast } from 'sonner'
 import { Modal } from '@/components/modal'
 import { relativeTime } from '@/lib/reltime'
 import {
-  APPROVAL_TYPE_BADGE, APPROVAL_TYPE_LABEL, decideReview,
-  type Approval, type ApprovalType,
+  APPROVAL_TYPE_BADGE, APPROVAL_TYPE_LABEL, decideReview, slaBadgeOf,
+  type Approval, type ApprovalType, type DecisionResultOut,
 } from '../api'
 
 /** IX-APR-01 审批对象详情弹窗（720px；26 篇 §10.1）：六类类型徽标 + 摘要区按类型内嵌
@@ -160,6 +160,7 @@ export function ApprovalDetailModal({
   // 后端 pending_review 等六态已在信任边界收敛，未知值保守视为未决）
   const decided = !!approval && (approval.status === 'approved' || approval.status === 'rejected')
 
+  const [decision, setDecision] = useState<DecisionResultOut | null>(null)
   const mutation = useMutation({
     mutationFn: (action: 'approve' | 'reject') => {
       if (action === 'reject' && !note.trim()) {
@@ -168,10 +169,10 @@ export function ApprovalDetailModal({
       }
       return decideReview(approval!.id, action, note.trim() || undefined)
     },
-    onSuccess: (_data, action) => {
+    onSuccess: (data: DecisionResultOut, action) => {
+      setDecision(data)
       toast.success(action === 'approve' ? '已通过，按类型写回对应域并通知提交人' : '已驳回，意见已随审批链留痕')
       void qc.invalidateQueries({ queryKey: ['approvals'] })
-      onClose()
     },
     onError: (e: Error) => {
       if (e.message !== 'reason required') toast.error(e.message)
@@ -186,6 +187,11 @@ export function ApprovalDetailModal({
           {APPROVAL_TYPE_LABEL[approval.type]}
         </span>
         <b className="text-sm">{approval.title}</b>
+        {approval.status === 'pending' && slaBadgeOf(approval.sla_deadline) && (
+          <span className={`badge ${slaBadgeOf(approval.sla_deadline)!.cls}`} data-testid="apr-detail-sla">
+            {slaBadgeOf(approval.sla_deadline)!.text}
+          </span>
+        )}
         <span className={`badge ${approval.status === 'pending' ? 'b-orange' : approval.status === 'approved' ? 'b-green' : 'b-red'} ml-auto`}>
           {approval.status === 'pending' ? '待终审' : approval.status === 'approved' ? '已通过' : '已驳回'}
         </span>
@@ -246,7 +252,7 @@ export function ApprovalDetailModal({
         <div className="al-info alert mt-3">该工单已终审（{approval.status === 'approved' ? '通过' : '驳回'}），记录只读。</div>
       )}
 
-      {!decided && (
+      {!decided && !decision && (
         <div className="hairline-t mt-3 flex justify-end gap-2 pt-3">
           <button
             type="button"
@@ -266,6 +272,27 @@ export function ApprovalDetailModal({
           >
             通过{note.trim() ? '（附说明）' : '（说明可选）'}
           </button>
+        </div>
+      )}
+
+      {/* 多签进度（B9-D-B）：决策回执 DecisionOut.signatures_required/collected——n/m 进度+完整徽标 */}
+      {decision && decision.signatures_required != null && decision.signatures_collected != null && (
+        <div className="hairline-t mt-3 pt-3" data-testid="apr-signatures">
+          <div className="flex items-center justify-between text-[11px] text-label-2">
+            <span>多签进度（{decision.governance_tier ?? '治理链'}）</span>
+            <span className="mono">
+              {decision.signatures_collected}/{decision.signatures_required}
+              {decision.complete && <span className="badge b-green ml-1.5">签名集齐</span>}
+            </span>
+          </div>
+          <div className="meter mt-1.5">
+            <i
+              style={{
+                width: `${Math.min(100, Math.round((decision.signatures_collected / Math.max(1, decision.signatures_required)) * 100))}%`,
+                background: decision.complete ? 'var(--green)' : 'var(--accent)',
+              }}
+            />
+          </div>
         </div>
       )}
     </Modal>

@@ -67,7 +67,8 @@ class FakeTaskRepo:
 
 
 class FakeSession:
-    """事务内原生 session 桩（uow.session 同名契约，K19-b 跨模块同事务写消费面）：记录 ORM add；flush 模拟 PK 落地。"""
+    """事务内原生 session 桩（uow.session 同名契约，K19-b 跨模块同事务写消费面）：记录 ORM add；
+    flush 模拟 PK 落地；execute 按 whereclause 等值条件过滤 orm_added（K25-a get-or-create 查询消费面）。"""
 
     def __init__(self, repo: FakeTaskRepo) -> None:
         self._repo = repo
@@ -79,6 +80,18 @@ class FakeSession:
         for obj in self._repo.orm_added:
             if getattr(obj, "id", None) is None:
                 obj.id = uuid.uuid4()
+
+    async def execute(self, statement: Any) -> Any:
+        """解析 select(...).where(col==v, ...) 等值条件，对 orm_added 内存行过滤（桩语义=只看得见本事务已 add 行）。"""
+        where = getattr(statement, "whereclause", None)
+        conds = (
+            list(where.clauses)
+            if where is not None and hasattr(where, "clauses")
+            else ([where] if where is not None else [])
+        )
+        filters = {c.left.key: c.right.value for c in conds}
+        hits = [o for o in self._repo.orm_added if all(getattr(o, k, None) == v for k, v in filters.items())]
+        return SimpleNamespace(scalar_one_or_none=lambda: hits[0].id if hits else None)
 
 
 class FakeTx:
@@ -796,6 +809,58 @@ async def test_K23_同工单跨run同hint_两次approve各落候选_rule_key不�
         hashlib.sha256(f"approval|{_HINT}|{task.id}|{run2.id}".encode()).hexdigest()[:32],
     }  # 哈希源形态钉死：approval|hint|task_id|run_id 截断 32
     assert {row.evidence["source_ref"]["run_id"] for row in rows} == {str(run1.id), str(run2.id)}
+
+
+async def test_K25_同run二次落锚携同hint_回流幂等复用_不再撞uk500():
+    """K25-a（13 篇 §31）：同 run 经 wait_external 二次落锚后审批人携同 hint 再次 approve，
+    rule_key 与首次回流恒等——修复前裸 add 撞 uk_kb_rule_candidates_tenant_id_rule_key →
+    审批整体 5xx 回滚；修复后 get-or-create 复用既有候选恰一条（reflux_dedup_skip 留痕，
+    评审单不重发），裁决本体不受影响。"""
+    uow = FakeUow()
+    task = _waiting_task()
+    uow.repo.tasks[task.id] = task
+    run = task.runs[0]
+    port = FakeTicketPort()
+    service = _service(uow, ticket_port=port)
+    first = await service.decide(
+        tenant_id=_TENANT,
+        approver_id=_USER,
+        task_id=task.id,
+        run_id=run.id,
+        decision="approve",
+        param_hash=_HASH,
+        rule_hint=_HINT,
+    )
+    assert first.run_status == "running"
+    assert len([o for o in uow.repo.orm_added if isinstance(o, KbRuleCandidate)]) == 1
+    # Arrange：worker 侧同 run 二次落 waiting_tool 锚点（运行中再审批场景，run_id 不变）
+    run.status = RunStatus.WAITING_TOOL
+    task.active_run_id = run.id
+    task.payload[PENDING_KEY] = {
+        "run_id": str(run.id),
+        "action_iri": _ACTION,
+        "param_hash": _HASH,
+        "execution_mode": "external_write",
+        "waiting_since": _WAITING_SINCE,
+    }
+    second = await service.decide(
+        tenant_id=_TENANT,
+        approver_id=_USER,
+        task_id=task.id,
+        run_id=run.id,
+        decision="approve",
+        param_hash=_HASH,
+        rule_hint=_HINT,  # 同 run 同 hint：修复前裸 add 撞 uk → 500
+    )
+    assert second.run_status == "running"  # 二次裁决亦成功（不再 500）
+    rows = [o for o in uow.repo.orm_added if isinstance(o, KbRuleCandidate)]
+    assert len(rows) == 1  # get-or-create：复用既有候选不重插（幂等恰一条）
+    rule_tickets = [c for c in port.calls if c["target_type"] == RULE_TICKET_TARGET_TYPE]
+    assert len(rule_tickets) == 1  # 评审单首次回流已登记（uk_review_one_open），幂等路径不重发
+    # 审计行可追溯：两次裁决 rule_candidate_id 同指既有候选（宪法 5 全程可追溯）
+    decision_events = [e for e in uow.repo.events if e.event_type == "run.approval_decision"]
+    assert len(decision_events) == 2
+    assert decision_events[1].data["rule_candidate_id"] == str(rows[0].id)
 
 
 async def test_K19_reject携rule_hint_不回流():

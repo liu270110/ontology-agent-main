@@ -50,6 +50,12 @@ class Settings(BaseSettings):
     llm_base_url: str | None = None  # 云渠道 https://api.deepseek.com；本地 vLLM http://127.0.0.1:8001/v1
     llm_model: str = "deepseek-chat"  # 现役默认对话模型；本地渠道用 vLLM served-model-name 固定值 local-main
     llm_api_key: str | None = None
+    # 模型端口默认超时秒数（httpx 超时必设，standards/01 §2.5；env=OA_LLM_TIMEOUT_S）。
+    # 2026-10-07 门4 教训 Settings 化：首晋第二窗实测云端端点对任意模型名路由 glm-5.3-flash
+    # 且 8/8 撞 60s 硬超时，根因=组合根 `_LLM_TIMEOUT_S=60.0` 硬编码、env 不可调
+    # （standards/02 §10.4 晋级台账门4 卡点 + standards/03 §5 经验台账首晋第二窗登记
+    # 「超时改 Settings 化(遗留)」）。收口：[10,600] 夹紧可调；默认 60.0=原硬编码值零行为变化。
+    llm_timeout_s: float = Field(default=60.0, ge=10, le=600)
 
     # 模型韧性（M4.5-C，docs/Agent/12 §3 批次 C：凭证池 + 模型冷却/fallback 链 + 调用级重试落盘）。
     # 缺省全部零行为变化：extra 空串=单凭证直驱（不建池）、chains 空串=禁用降级链。

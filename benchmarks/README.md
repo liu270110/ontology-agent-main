@@ -4,6 +4,9 @@
 > `docs/评审/红队攻击性审查-2026-10-06.md` F 域（RAG 可观测性与指标反馈族）。
 > 本波落地：**rag suite v0**（骨架 + naive 基线 + 六维指标 + 全链实测）。agent-core /
 > intent / ontology-scale 随各自波次落地。
+>
+> **2026-10-07 增补：intent suite v0 落地**（双档对照验证本体约束核心卖点，红队 E2）——
+> 运行指南与口径见下方「intent suite」节。
 
 ## 运行指南
 
@@ -76,3 +79,63 @@ python benchmarks/run.py --suite rag --skip-ingest --kb-id <uuid>
 3. faithfulness 为规则版（n-gram 支撑率），LLM judge 第二波并列双列；
 4. `ours` 经 http harness 测量外部后端时，嵌入端点以该后端自身配置为准（环境指纹
    记录的是 bench 进程侧配置）。
+
+## intent suite（2026-10-07 增补：双档对照，红队 E2）
+
+「ontology 对意图的约束效果」从未被数据验证（红队审查 E2）——本套件以同一金标集跑
+**A0/A1 双档对照**产出差值列 `ontology_constraint_gain`（负值同样如实落档）。
+
+```bash
+# 双档×100 金标全链（本地 vLLM@18001，qwen3-4b-awq；不用外网）
+python benchmarks/run.py --suite intent --smoke
+# 换 tag 重跑留曲线 / 调试截前 N 条
+python benchmarks/run.py --suite intent --tag v0.1.0
+python benchmarks/run.py --suite intent --smoke --limit 5
+```
+
+### 金标集（datasets/golden_v0.jsonl）
+
+100 条意图×行动类映射（平台 17 静态行动类词表，mcp 动态族不入候选集）：
+**明确直射 40 / 歧义近义 30 / 需澄清 20 / 越界 10**。字段：`id/query/expected_action/
+ambiguity_level/notes/expectation`（expectation=map/clarify/reject 与层级一一对应）。
+生成器 `datasets/build_golden_v0.py`：**人工规则构造，零 LLM、零随机**（金标本身即审计
+对象，notes 逐条给依据）；重跑逐字节稳定（sha256 随结果 JSON 落档）。
+
+### 双档口径（同金标集同输出契约，仅候选集表达不同）
+
+| 档 | system 提示注入面 |
+| ---- | ---- |
+| A0 直觉档 | 行动类**名称清单**（无标注无约束条），模型凭直觉选 |
+| A1 本体约束档 | 候选集封闭约束条 + **语义标注常驻段**（action_iri/execution_mode/capability/channel/描述/参数 schema），经平台 `render_tool_schema_section`（services/agent/business/adapters/builtin.py:55）同源渲染 |
+
+**A1 近似口径声明（如实）**：平台 A1 档（OntRAG AgenticRAG 三档装配：A0 服务端代跑/A1
+细粒度工具循环/A2 内核原生）尚未在意图面落地——本套件 A1 为「语义标注增强提示」近似，
+约束注入面取平台真实语义标注（action_catalog.py 全量从平台常量导入，tests 交叉对账），
+**非端到端本体推理管线**；E2 差值在此口径下成立，外推须带此口径。逐类标注来源
+（平台原文 13 类 vs bench 侧补注 4 类：chat_answer/run_terminal/web_fetch/web_search）
+随结果 JSON `a1_mode.annotation_provenance` 落档。
+
+### 指标口径字典（冻结实现 = `suites/intent/metrics.py`）
+
+| 指标 | 定义 | 分母 |
+| ---- | ---- | ---- |
+| intent_accuracy | expectation=map 条（clear 40+ambiguous 30）中 action 与金标一致比例；整体+分层两列 | map 条，parse_error 留在分母内 |
+| clarification_trigger_rate | need_clarification 20 条中选 ask_user（平台澄清行动类）比例 | clarify 条 |
+| out_of_scope_reject_rate | 越界 10 条判拒比例；判拒=action="out_of_scope" 或 confidence<`BENCH_INTENT_OUT_OF_SCOPE_CONFIDENCE_FLOOR`（0.5，映射最近+低置信亦算诚实出路） | reject 条 |
+| ontology_constraint_gain | A1−A0 于上述三率的逐列差值（E2 核心产出，负值保留） | — |
+
+解析口径：输出须为 JSON `{"action","confidence"}`；剥 `<think>` 后取首个平衡 JSON 对象；
+解析失败记 parse_error（计入分母、各率按败计，不静默重试）。
+
+### 结果（results/intent/）
+
+- `results/intent/<date>/run-<HHMMSS>-<tag>.json`：双档四指标+逐条明细（含 raw 截断）+
+  环境指纹（commit/模型/采样/金标 sha256）+ `a1_mode` 近似口径块；
+- `results/intent/SUMMARY.md`：追加式双档曲线表。
+
+### 已知边界（本波如实声明）
+
+1. A1 为语义标注增强提示近似（见上），端到端本体约束（OntRAG 检索面 A1/内核 A2）随波次接入后同金标重跑；
+2. 候选集=17 静态行动类；mcp_bridge 动态族（`action/mcp/{全名}`）无静态清单，不入候选集；
+3. web 两类与 run_terminal/chat_answer 的执行级/描述按上文来源登记（web 绑定未声明执行级，bench 按「只读出网」记 READ）；
+4. 受评面为本地 vLLM 裸模型直选（temperature=0），非平台 chat 主管线（E1：意图层现由 LLM 充当，JEV 未接线）——套件测的是「约束注入对意图判别的增益」，非平台端到端路由准确率。

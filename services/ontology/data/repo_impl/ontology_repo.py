@@ -406,6 +406,10 @@ class PgOntologyRepository:
         row = (await self._db.execute(stmt)).scalar_one_or_none()
         return _version_ref(row) if row is not None else None
 
+    async def head_version_id(self, ontology: Ontology) -> uuid.UUID | None:
+        """head 版本行 id（ONT-2 复位：能力清单 head 过滤用的版本作用域解析面）。"""
+        return await self._version_row_id(ontology.id, ontology.head_version)
+
     async def list_versions(self, ontology_id: uuid.UUID, *, limit: int = 100) -> list[VersionSummary]:
         """版本历史（version_no 降序；回滚用例取 version_no 小于当前 head 的最近一条）。"""
         stmt = (

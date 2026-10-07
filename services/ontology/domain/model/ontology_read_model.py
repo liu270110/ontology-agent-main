@@ -21,9 +21,10 @@ DEFINITION_FIELDS: dict[str, tuple[str, ...]] = {
     "property": ("kind", "domain_iri", "range_iri", "type_of_terms", "functional", "constraints"),
     "axiom": ("kind", "subject_iri", "object_iri", "expression"),
     "rule": ("route", "event_class_iri", "condition", "action_ref", "severity"),
+    "capability": ("requires", "produces", "constrained_by", "execution", "binds_action"),  # ONT-2 复位
 }
 
-ELEMENT_TYPES: tuple[str, ...] = ("class", "property", "axiom", "rule")  # ck_ont_elem_versions_element_type 同口径
+ELEMENT_TYPES: tuple[str, ...] = ("class", "property", "axiom", "rule", "capability")  # ck 约束随 ONT-2 迁移扩五值（复位）
 
 
 def canonical_json(payload: Any) -> str:
@@ -121,8 +122,3 @@ class ReadModelProjection(BaseModel):
     properties: list[ReadModelProperty] = Field(default_factory=list)
     axioms: list[ReadModelAxiom] = Field(default_factory=list)
     rules: list[ReadModelRule] = Field(default_factory=list)
-
-# ── ONT-2 复位增补（R37-2 事故恢复，自 0a3b62f 摘回）──
-# ONT-2 扩型：'capability'（06 篇 §ONT-2.2——requires/produces/constrained_by/execution/
-    "capability": ("requires", "produces", "constrained_by", "execution", "binds_action"),
-    "capability",

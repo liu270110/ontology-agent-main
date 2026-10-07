@@ -27,6 +27,8 @@ from services.kb.data.orm import Document as DocumentORM
 from services.kb.data.orm import KbCollection as KbCollectionORM
 from services.kb.data.orm import KbFact as KbFactORM
 from services.kb.data.rule_orm import KbRuleCandidate as KbRuleCandidateORM
+from services.ontology.data.orm import Capability as CapabilityORM  # ONT-2 复位
+from services.ontology.data.orm import CapabilityRun as CapabilityRunORM  # ONT-2 复位
 from services.ontology.data.orm import Axiom as AxiomORM
 from services.ontology.data.orm import OntoClass as OntoClassORM
 from services.ontology.data.orm import Ontology as OntologyORM
@@ -46,6 +48,8 @@ if sys.platform == "win32":  # psycopg 异步要求 Selector 循环（tests/onto
 # FK 逆序清理清单（kb 链：facts/rule_candidates→documents→collections→ontologies；
 # audit_logs 无 FK，位置不敏感）
 ONT1_CLEANUP_ORDER = (
+    CapabilityRunORM,
+    CapabilityORM,  # ONT-2 复位（R37-2）：能力表先于版本表清理，FK 逆序
     OntologyElementVersionORM,
     RuleORM,
     AxiomORM,

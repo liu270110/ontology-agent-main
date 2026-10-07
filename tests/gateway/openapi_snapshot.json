@@ -156,6 +156,73 @@
         "title": "AccessRequestOut",
         "type": "object"
       },
+      "AdapterProfileListOut": {
+        "additionalProperties": false,
+        "description": "{data, meta} 信封（api/01 §3.1；meta.page_size 缺省=返回全部——内置 profile 量级为个位数）。",
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/AdapterProfileOut"
+            },
+            "title": "Data",
+            "type": "array"
+          },
+          "meta": {
+            "additionalProperties": true,
+            "title": "Meta",
+            "type": "object"
+          }
+        },
+        "required": [
+          "data",
+          "meta"
+        ],
+        "title": "AdapterProfileListOut",
+        "type": "object"
+      },
+      "AdapterProfileOut": {
+        "additionalProperties": false,
+        "description": "profile 列表项（05 篇 §5.2 字段的读面子集：发现面只暴露声明，不暴露端点/凭据）。",
+        "properties": {
+          "capabilities": {
+            "additionalProperties": {
+              "type": "boolean"
+            },
+            "title": "Capabilities",
+            "type": "object"
+          },
+          "form": {
+            "title": "Form",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "profile_version": {
+            "title": "Profile Version",
+            "type": "integer"
+          },
+          "protocol": {
+            "title": "Protocol",
+            "type": "string"
+          },
+          "tool": {
+            "title": "Tool",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "tool",
+          "form",
+          "protocol",
+          "profile_version",
+          "capabilities"
+        ],
+        "title": "AdapterProfileOut",
+        "type": "object"
+      },
       "AdapterSchemaListOut": {
         "additionalProperties": false,
         "description": "适配器 schema 列表（非分页静态清单：{items} 裸信封，mcp ServerListOut 同款）。",
@@ -888,7 +955,7 @@
             "title": "Adapter Id"
           },
           "agent_tool": {
-            "pattern": "^(builtin|claude)$",
+            "pattern": "^(builtin|claude|acp|http-generic|cli-generic)$",
             "title": "Agent Tool",
             "type": "string"
           },
@@ -10150,11 +10217,11 @@
       },
       "SendMessageIn": {
         "additionalProperties": false,
-        "description": "发送消息请求体（api/01 §6.1：content 必填；agent_id 占位兼容、M1 不消费）。\n\nadapter（计划 3.2 增补，向后兼容可选）：适配器路由键（builtin|claude，缺省 builtin，\nAgent 服务设计 §3.2）；api/01 登记册回填随报告待办。",
+        "description": "发送消息请求体（api/01 §6.1：content 必填；agent_id 占位兼容、M1 不消费）。\n\nadapter（计划 3.2 增补，向后兼容可选）：适配器路由键（builtin|claude，缺省 builtin，\nAgent 服务设计 §3.2）；api/01 登记册回填随报告待办。acp=G1 批追加（20 篇 §2/§3.3，\nBridge 六 adapter_type 收敛口径第一波）；G2 批（2026-10-07，docs/Agent/20\n§3.3）：+http-generic|cli-generic（未装配 profile 时编排器报「适配器未注册」，fail-closed）。",
         "properties": {
           "adapter": {
             "default": "builtin",
-            "pattern": "^(builtin|claude)$",
+            "pattern": "^(builtin|claude|acp|http-generic|cli-generic)$",
             "title": "Adapter",
             "type": "string"
           },
@@ -10535,7 +10602,7 @@
                 "type": "null"
               }
             ],
-            "description": "具名工具集（None=现行全集）",
+            "description": "具名工具集，会话工具表面门；None=平台现行全集",
             "title": "Toolset"
           },
           "type": {
@@ -14480,6 +14547,57 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/api/v1/adapter-profiles": {
+      "get": {
+        "description": "profile 目录扫描（内置 adapters/profiles/；Settings.agent_adapter_profiles_root 追加覆盖\n经组合根生效，本端点 root 仅测试注桩通道）。装载失败条目跳过（fail-soft，扫描面口径）。",
+        "operationId": "list_adapter_profiles_api_v1_adapter_profiles_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "form",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "pattern": "^(F2|F3)$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Form"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdapterProfileListOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "内置 agent profile 清单（form/capabilities 声明面；20 篇 §4）",
+        "tags": [
+          "agents"
+        ]
+      }
+    },
     "/api/v1/admin/analytics/overview": {
       "get": {
         "operationId": "get_analytics_overview_api_v1_admin_analytics_overview_get",

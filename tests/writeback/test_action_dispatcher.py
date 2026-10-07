@@ -448,3 +448,23 @@ async def test_params_schema合法放行_缺省None零校验双缺省兼容():
 
     free = await without_schema.invoke_action(tenant_id=TENANT_ID, action_iri=ACTION_IRI, params={"任意": {"x": 1}})
     assert free["status"] == "accepted"  # 缺省 None=零校验（双缺省兼容零变化）
+
+
+async def test_错误路径混型排序不炸_anyOf数组对象混合() -> None:
+    """ocr 2026-10-08：Draft2020-12 混合 error path（int 下标+str 属性名）sorted TypeError
+    会把结构化 3001 拒绝炸成内部错误——str 化全序键后应稳定返回 PARAM_INVALID。"""
+    schema = {
+        "anyOf": [
+            {"type": "array", "items": {"type": "string"}},
+            {"type": "object", "properties": {"x": {"type": "string"}}, "additionalProperties": False},
+        ]
+    }
+    dispatcher, ledger = _dispatcher_with(params_schema=schema)
+    with pytest.raises(WritebackError) as exc:
+        await dispatcher.invoke_action(
+            tenant_id=TENANT_ID,
+            action_iri=ACTION_IRI,
+            params=["ok", 3, {"x": 1}],  # 数组下标 1+对象属性 x 同违例 → 混型 path
+        )
+    assert "参数" in str(exc.value) or "PARAM" in str(exc.value)
+    assert ledger.rows == {}  # 拒绝发生在台账落行前

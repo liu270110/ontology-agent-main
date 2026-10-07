@@ -712,7 +712,12 @@ class ActionDispatcher:
             return
         from jsonschema import Draft202012Validator
 
-        errors = sorted(Draft202012Validator(schema).iter_errors(params), key=lambda e: list(e.absolute_path))
+        errors = sorted(
+            Draft202012Validator(schema).iter_errors(params),
+            # 错误路径混型（数组下标 int/属性名 str）sorted 会 TypeError 炸成内部错误
+            # ——str 化成全序键（ocr 2026-10-08 评审发现）。
+            key=lambda e: [str(p) for p in e.absolute_path],
+        )
         if not errors:
             return
         first = errors[0]

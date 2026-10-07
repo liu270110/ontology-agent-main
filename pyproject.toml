@@ -172,6 +172,9 @@ ignore_imports = [
     # provider 注入；传递链经 kb.business.search_service 生产端口——mcp.bootstrap 单边豁免同款）
     "services.gateway.app -> services.workflows.business.executor",
     "services.gateway.app -> services.workflows.api.runs",  # X16 运行六端点挂载边（api/01 §5.11；workflows.api 挂载边同款，传递链单边豁免收口）
+    # ORSI 贡献者四端点挂载边（2026-10-07 批次 A，architecture/09 §14；传递链经
+    # contributor_registry→ontology.core.rsi_tbox SHACL 写入门禁——挂载边同款单边豁免）
+    "services.gateway.app -> services.rsi.api.contributors",
 ]
 
 [[tool.importlinter.contracts]]

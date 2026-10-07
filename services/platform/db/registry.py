@@ -79,7 +79,11 @@ from services.plugin.data.orm import (  # noqa: F401
     ToolORM,
 )
 from services.review.data.orm import ReviewTicket  # noqa: F401
-from services.rsi.data.orm import OrsiCapabilityORM  # noqa: F401  ORSI 原子能力注册表（docs/Agent/14 §4，M4.6-S3）
+from services.rsi.data.orm import (  # noqa: F401
+    ContributorBindingORM,  # 贡献者命名空间绑定分表（architecture/09 §14.3，批次 A 2026-10-07）
+    ContributorORM,  # ORSI 外部贡献者登记表（architecture/09 §14.1，批次 A 2026-10-07）
+    OrsiCapabilityORM,  # ORSI 原子能力注册表（docs/Agent/14 §4，M4.6-S3）
+)
 from services.sandbox.data.orm import (  # noqa: F401
     EgressPolicy,
     SandboxEvent,

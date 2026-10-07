@@ -2943,6 +2943,161 @@
         "title": "ConsolidateOut",
         "type": "object"
       },
+      "ContributorItemOut": {
+        "additionalProperties": false,
+        "description": "单条响应信封 {data: {...}, meta: {}}（EmptyMeta 序列化恒 {}）。",
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/ContributorOut"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/EmptyMeta"
+          }
+        },
+        "required": [
+          "data",
+          "meta"
+        ],
+        "title": "ContributorItemOut",
+        "type": "object"
+      },
+      "ContributorOut": {
+        "additionalProperties": false,
+        "description": "贡献者登记行投影（含投递目录记录与最近探测档案；软删行不外露）。",
+        "properties": {
+          "contributor_id": {
+            "title": "Contributor Id",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "delivery_dir": {
+            "title": "Delivery Dir",
+            "type": "string"
+          },
+          "display_name": {
+            "title": "Display Name",
+            "type": "string"
+          },
+          "governance_tier": {
+            "title": "Governance Tier",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "probe_profile": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Probe Profile"
+          },
+          "trust_score": {
+            "title": "Trust Score",
+            "type": "number"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "contributor_id",
+          "display_name",
+          "governance_tier",
+          "trust_score",
+          "delivery_dir",
+          "probe_profile",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "ContributorOut",
+        "type": "object"
+      },
+      "ContributorPageOut": {
+        "additionalProperties": false,
+        "description": "列表响应信封 {data: [...], meta: PageMeta}（api/01 §3.1 be2 口径）。",
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/ContributorOut"
+            },
+            "title": "Data",
+            "type": "array"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/PageMeta"
+          }
+        },
+        "required": [
+          "data",
+          "meta"
+        ],
+        "title": "ContributorPageOut",
+        "type": "object"
+      },
+      "ContributorRegisterIn": {
+        "additionalProperties": false,
+        "description": "注册请求（POST /api/v1/rsi/contributors；09 §14.1 body 含 id/显示名/治理档位）。",
+        "properties": {
+          "contributor_id": {
+            "description": "全局唯一 slug（投递目录/claims 绑定公共命名面）",
+            "maxLength": 64,
+            "minLength": 2,
+            "pattern": "^[a-z][a-z0-9-]{0,63}$",
+            "title": "Contributor Id",
+            "type": "string"
+          },
+          "display_name": {
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Display Name",
+            "type": "string"
+          },
+          "governance_tier": {
+            "default": "team",
+            "enum": [
+              "solo",
+              "team",
+              "enterprise"
+            ],
+            "title": "Governance Tier",
+            "type": "string"
+          },
+          "trust_score": {
+            "anyOf": [
+              {
+                "maximum": 1.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trust Score"
+          }
+        },
+        "required": [
+          "contributor_id",
+          "display_name"
+        ],
+        "title": "ContributorRegisterIn",
+        "type": "object"
+      },
       "CostByModelOut": {
         "additionalProperties": false,
         "description": "GET /admin/costs 按 model 分组行（tokens/cost 聚合 + pct=成本占比取整条宽）。",
@@ -5790,6 +5945,58 @@
         "title": "LogoutRequest",
         "type": "object"
       },
+      "MatrixCellOut": {
+        "additionalProperties": false,
+        "description": "兼容性矩阵单格（八扩展点一行一结论；§14.3 步 2 三色）。",
+        "properties": {
+          "adapt_subtype": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Adapt Subtype"
+          },
+          "assemblable": {
+            "title": "Assemblable",
+            "type": "boolean"
+          },
+          "channel": {
+            "title": "Channel",
+            "type": "string"
+          },
+          "color": {
+            "enum": [
+              "green",
+              "yellow",
+              "red"
+            ],
+            "title": "Color",
+            "type": "string"
+          },
+          "extension_point": {
+            "title": "Extension Point",
+            "type": "string"
+          },
+          "rule": {
+            "title": "Rule",
+            "type": "string"
+          }
+        },
+        "required": [
+          "extension_point",
+          "channel",
+          "color",
+          "rule",
+          "adapt_subtype",
+          "assemblable"
+        ],
+        "title": "MatrixCellOut",
+        "type": "object"
+      },
       "MatrixChangeIn": {
         "additionalProperties": false,
         "properties": {
@@ -5855,6 +6062,75 @@
           "affected"
         ],
         "title": "MatrixRoleOut",
+        "type": "object"
+      },
+      "McpEndpointIn": {
+        "additionalProperties": false,
+        "description": "MCP server 端点连接参数（§14.3 步 1 探测握手输入；McpTargetConfig 字段子集）。",
+        "properties": {
+          "args": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Args",
+            "type": "array"
+          },
+          "command": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Command"
+          },
+          "env": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Env",
+            "type": "object"
+          },
+          "headers": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Headers",
+            "type": "object"
+          },
+          "timeout_s": {
+            "default": 10.0,
+            "exclusiveMinimum": 0.0,
+            "maximum": 60.0,
+            "title": "Timeout S",
+            "type": "number"
+          },
+          "transport": {
+            "enum": [
+              "streamable_http",
+              "stdio"
+            ],
+            "title": "Transport",
+            "type": "string"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url"
+          }
+        },
+        "required": [
+          "transport"
+        ],
+        "title": "McpEndpointIn",
         "type": "object"
       },
       "McpServerRow": {
@@ -8132,6 +8408,76 @@
           }
         },
         "title": "PreferencesPutIn",
+        "type": "object"
+      },
+      "ProbeOut": {
+        "additionalProperties": false,
+        "description": "探测握手响应：能力面档案 + 兼容性矩阵（§14.3 步 1~2 产出）。",
+        "properties": {
+          "data": {
+            "additionalProperties": true,
+            "title": "Data",
+            "type": "object"
+          },
+          "matrix": {
+            "items": {
+              "$ref": "#/components/schemas/MatrixCellOut"
+            },
+            "title": "Matrix",
+            "type": "array"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/EmptyMeta"
+          }
+        },
+        "required": [
+          "data",
+          "matrix",
+          "meta"
+        ],
+        "title": "ProbeOut",
+        "type": "object"
+      },
+      "ProbeRequestIn": {
+        "additionalProperties": false,
+        "description": "探测握手请求（POST /api/v1/rsi/contributors/{id}/probe；§14.3 步 1）。\n\n三输入互斥恰一：endpoint（真实 MCP server）/ stub（桩档案内联）/ stub_path（桩文件）。",
+        "properties": {
+          "endpoint": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/McpEndpointIn"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "stub": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stub"
+          },
+          "stub_path": {
+            "anyOf": [
+              {
+                "maxLength": 512,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stub Path"
+          }
+        },
+        "title": "ProbeRequestIn",
         "type": "object"
       },
       "ProbeToolOut": {
@@ -22583,6 +22929,199 @@
         "summary": "聚合就绪探活（PG/Redis/MinIO；任一硬依赖失败 503+明细）",
         "tags": [
           "probe"
+        ]
+      }
+    },
+    "/api/v1/rsi/contributors": {
+      "get": {
+        "description": "分页列出本租户贡献者登记行（updated_at 倒序；api/01 §3.1 信封）。",
+        "operationId": "list_contributors_api_v1_rsi_contributors_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Page",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page_size",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Page Size",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContributorPageOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "贡献者列表（分页；读公开免 scope）",
+        "tags": [
+          "rsi"
+        ]
+      },
+      "post": {
+        "description": "注册贡献者（建 Contributor 实例+投递目录约定路径记录；同 slug 重复 409）。\n\n红线：注册只落登记行与审计行，外部贡献只进候选池（apply 恒拒绝红线不变，09 §14.1）。",
+        "operationId": "register_contributor_api_v1_rsi_contributors_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ContributorRegisterIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContributorItemOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "贡献者注册（rsi:write；SHACL 门禁+投递目录约定路径记录；注册≠生效）",
+        "tags": [
+          "rsi"
+        ]
+      }
+    },
+    "/api/v1/rsi/contributors/{contributor_id}": {
+      "get": {
+        "description": "按 slug 读本租户贡献者登记行（租户过滤在仓储层；不存在不泄露存在性）。",
+        "operationId": "get_contributor_api_v1_rsi_contributors__contributor_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "contributor_id",
+            "required": true,
+            "schema": {
+              "title": "Contributor Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContributorItemOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "贡献者详情（读公开免 scope；slug 定位，跨租户一律 404）",
+        "tags": [
+          "rsi"
+        ]
+      }
+    },
+    "/api/v1/rsi/contributors/{contributor_id}/probe": {
+      "post": {
+        "description": "初次配置探测（§14.3 步 1~2）：list_tools+健康探测 → 档案回写 + 三色矩阵。\n\n探测失败（端点不可达）返回 502 + 档案 error（探测报告语义，不静默不装配）；\n档案落 probe_profile 登记（装配走业务层装配面——本路由零绑定写路径）。",
+        "operationId": "probe_contributor_api_v1_rsi_contributors__contributor_id__probe_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "contributor_id",
+            "required": true,
+            "schema": {
+              "title": "Contributor Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProbeRequestIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProbeOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "探测握手+兼容性矩阵（rsi:write；能力面档案回写登记，不装配）",
+        "tags": [
+          "rsi"
         ]
       }
     },

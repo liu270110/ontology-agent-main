@@ -61,7 +61,13 @@ def _strip_quotes(value: str) -> str:
 
 
 def parse_frontmatter(text: str) -> dict[str, str]:
-    """``---`` 围栏 frontmatter 的单行标量抽取（零依赖；形状见模块 docstring）。"""
+    """``---`` 围栏 frontmatter 的单行标量抽取（零依赖；形状见模块 docstring）。
+
+    fail-open 口径（K5 P2① 明示，deer-flow parser 同款宽容边界）：重复键 last-wins
+    （后行覆盖前行，不告警不挡批）；未知键静默接受原样透传（不做白名单校验，合法性
+    归消费方裁断）——扫描器是 seed 供给面，单资产元数据脏不中断整批扫描（与模块
+    docstring「缺 name 跳过不中断」同一边界，此处落到键级）。
+    """
     lines = text.splitlines()
     if not lines or lines[0].strip() != "---":
         return {}

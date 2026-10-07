@@ -159,6 +159,91 @@ def test_parse_outcome_字段缺省():
     assert outcome.engine == "pdfium" and outcome.degraded_from is None and outcome.drawing_ir == {}
 
 
+# ---------------------------------------------------------------- docling 桩（引擎选择/产物形态/DocumentStream 入参）
+
+
+_DOCling_MARKDOWN = f"# SAMPLE 图纸\n\n图号: {_S1}\n材料: {_S2}\n"
+
+
+def _install_docling_stub(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
+    """fake docling 模块树注入（docling.document_converter + docling_core.types.io）→
+    _parse_docling 真代码路径；captured 记录 convert 收到的 source 供入参形态断言。"""
+    captured: dict[str, Any] = {}
+
+    class _FakeDocumentStream:
+        """DocumentStream 最小桩（docling 2.87 convert 入参三选一形态；记录 name/stream）。"""
+
+        def __init__(self, *, name: str, stream: Any) -> None:
+            self.name, self.stream = name, stream
+
+    class _FakeSize:
+        width, height = 595.0, 842.0
+
+    class _FakePage:
+        size = _FakeSize()
+
+    class _FakeDocument:
+        pages = {1: _FakePage(), 2: _FakePage()}
+
+        def export_to_markdown(self) -> str:
+            return _DOCling_MARKDOWN
+
+    class _FakeConverter:
+        def convert(self, source: Any) -> Any:
+            captured["source"] = source
+            return types.SimpleNamespace(document=_FakeDocument())
+
+    converter_mod = types.ModuleType("docling.document_converter")
+    converter_mod.DocumentConverter = _FakeConverter  # type: ignore[attr-defined]
+    io_mod = types.ModuleType("docling_core.types.io")
+    io_mod.DocumentStream = _FakeDocumentStream  # type: ignore[attr-defined]
+    types_mod = types.ModuleType("docling_core.types")
+    types_mod.io = io_mod  # type: ignore[attr-defined]
+    core_mod = types.ModuleType("docling_core")
+    core_mod.types = types_mod  # type: ignore[attr-defined]
+    docling_mod = types.ModuleType("docling")
+    docling_mod.document_converter = converter_mod  # type: ignore[attr-defined]
+    for name, mod in (
+        ("docling", docling_mod),
+        ("docling.document_converter", converter_mod),
+        ("docling_core", core_mod),
+        ("docling_core.types", types_mod),
+        ("docling_core.types.io", io_mod),
+    ):
+        monkeypatch.setitem(sys.modules, name, mod)
+    return captured
+
+
+def test_extract_pdf_docling桩_走真代码路径(monkeypatch):
+    """docling 引擎选择 + 阅读序文本 + drawing_ir 产物形态（页数/每页图幅 pt）。"""
+    _install_docling_stub(monkeypatch)
+    data = _minimal_pdf(_S1)
+    outcome = extract_pdf(data, engine="docling")
+    assert outcome.engine == "docling" and outcome.degraded_from is None
+    assert _S1 in outcome.text and _S2 in outcome.text  # 阅读序全文写 text（下游链零感知）
+    ir = outcome.drawing_ir
+    assert ir["engine"] == "docling" and ir["page_count"] == 2
+    assert ir["pages"] == [
+        {"page": 1, "width_pt": 595.0, "height_pt": 842.0},
+        {"page": 2, "width_pt": 595.0, "height_pt": 842.0},
+    ]
+    assert outcome.text_runs == []  # docling 不产带坐标片段（空间级 no-op，退回文本两级）
+
+
+def test_extract_pdf_docling桩_DocumentStream入参(monkeypatch):
+    """回归（组合实验批发现）：docling 2.87 convert 入参 pydantic strict 只收
+    Path/str/DocumentStream——裸 BytesIO 会 ValidationError 炸步；修复后须以
+    DocumentStream(name, stream) 包装，字节流原样可达。"""
+    captured = _install_docling_stub(monkeypatch)
+    data = _minimal_pdf(_S1)
+    extract_pdf(data, engine="docling")
+    source = captured["source"]
+    stub_cls = type(source)
+    assert stub_cls.__name__ == "_FakeDocumentStream"  # convert 收到 DocumentStream 形态（非裸 BytesIO）
+    assert source.name == "source.pdf"
+    assert source.stream.getvalue() == data  # bytes 流原样进入 docling
+
+
 # ---------------------------------------------------------------- preprocess 三分支（本地 PG）
 
 
@@ -284,6 +369,23 @@ async def test_preprocess_分支2_docling缺库_降级并登记degraded(pp_env, 
     assert _S1 in meta["content"]  # 降级仍产出文本（降级不失败）
     assert meta["parser"] == "pdfium" and meta["parser_requested"] == "docling"
     assert meta["degraded"] == ["parser"]
+
+
+async def test_preprocess_分支2_docling引擎_阅读序文本进meta_content与标题栏投影(pp_env, pp_pg, monkeypatch):
+    """两级流水线上游（组合实验批）：OA_KB_PARSER=docling 时 preprocess 产出 docling 阅读序
+    文本——markdown 全文写 meta.content（chunk/embed/extract 链零感知），parser=drawing_ir
+    引擎产物落位，标题栏文本投影在阅读序文本上跑（「标签: 值」行 → meta.titleblock）。"""
+    _install_docling_stub(monkeypatch)
+    doc_id, key = await _seed_document(pp_pg, pp_env)
+    store = FakeObjectStore({key: _minimal_pdf(_S1)})
+    await _run_preprocess_only(pp_pg, pp_env, doc_id, monkeypatch, store, kb_parser="docling")
+    meta = await _doc_meta(pp_pg, doc_id)
+    assert meta["content"] == _DOCling_MARKDOWN  # 阅读序文本进 meta.content（换行规整无变化）
+    assert meta["parser"] == "docling" and "parser_requested" not in meta and "degraded" not in meta
+    assert meta["drawing_ir"]["page_count"] == 2 and meta["drawing_ir"]["engine"] == "docling"
+    assert meta["titleblock"] == {"图号": _S1, "材料": _S2}  # 投影消费 docling 文本（阅读序「标签: 值」行直配）
+    assert "titleblock_source" not in meta  # 文本级投影不加注（spatial 专属）
+    assert await _doc_status(pp_pg, doc_id) == "preprocessed"
 
 
 async def test_preprocess_分支3_无内容源_409(pp_env, pp_pg, monkeypatch):

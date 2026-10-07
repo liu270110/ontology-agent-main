@@ -18,8 +18,9 @@ PDF 页面 bbox）。逐字符 charbox 只在页内瞬时持有，聚合为 run 
 字符数；聚合纯函数 _cluster_runs 与字符流顺序解耦——两栏交错打散仍按几何聚合）。docling/
 plumber 不产出（列表恒空，titleblock 空间级对空列表 no-op，行为退回文本两级）。
 
-边界：不做 OCR（扫描件无文本层 → preprocess 显式 409，OCR 通道随 v2）；不做版面分析；
-不做解析结果缓存（幂等重跑代价=重拉对象重抽）。
+边界：文本引擎不做平台级 OCR 编排（扫描件无文本层 → preprocess 显式 409，OCR 通道随
+v2）；docling 例外——其包内自带版面分析+表格结构+OCR（RapidOCR），选 docling 即启用
+（引擎内建能力，非平台 OCR 步）；不做解析结果缓存（幂等重跑代价=重拉对象重抽）。
 """
 
 from __future__ import annotations
@@ -220,21 +221,43 @@ def _pdfium_page_fonts(textpage: object, char_count: int) -> list[str]:
 
 
 def _parse_docling(data: bytes) -> ParseOutcome:
-    """docling 转换：export_to_markdown 全文；页数经 document.pages 可得则记，不可得省略。"""
+    """docling 转换：DocumentStream 包装 bytes（组合实验批修复）→ export_to_markdown 阅读序全文。
+
+    入参形态（2026-10-08 修复，extract_lab 组合实验发现）：已装 docling 2.87 的
+    ``DocumentConverter.convert`` 入参经 pydantic strict 校验只收 Path/str/DocumentStream，
+    裸 BytesIO 会 ValidationError 直接炸步——改用 DocumentStream(name, stream) 包装，
+    bytes 流转零拷贝语义不变。产物形态：text=阅读序全文（markdown 导出，标题栏投影/
+    chunk/extract 链零感知）；drawing_ir 雏形补 pages 每页图幅（同 pdfium 键名口径：
+    width_pt/height_pt，引擎不可得省略）；模型面（版面+表格+OCR）走包缺省——docling
+    自带 OCR（RapidOCR），扫描件「无文本层 409」边界仅约束 pdfium/plumber 文本流。
+    """
     try:
         from docling.document_converter import DocumentConverter  # 懒加载（不进主依赖）
+        from docling_core.types.io import DocumentStream
     except ImportError as exc:
         raise ParserUnavailableError(
             "docling 未安装（可选引擎，不进主依赖；安装后一次性模型下载建议 HF_ENDPOINT=https://hf-mirror.com 镜像）"
         ) from exc
-    result = DocumentConverter().convert(io.BytesIO(data))
-    text = result.document.export_to_markdown()
+    result = DocumentConverter().convert(DocumentStream(name="source.pdf", stream=io.BytesIO(data)))
+    document = result.document
+    text = document.export_to_markdown()
     drawing_ir: dict = {"engine": "docling"}
-    pages = getattr(result.document, "pages", None)
+    pages = getattr(document, "pages", None)
     try:
         drawing_ir["page_count"] = len(pages) if pages is not None else None
     except TypeError:
         drawing_ir["page_count"] = None
+    pages_ir: list[dict] = []
+    for page_nr, page in dict(pages or {}).items():  # 每页图幅 pt（docling 2.87：pages[page_nr].size）
+        size = getattr(page, "size", None)
+        width, height = getattr(size, "width", None), getattr(size, "height", None)
+        if width is None or height is None:
+            continue
+        pages_ir.append(
+            {"page": int(page_nr), "width_pt": round(float(width), 1), "height_pt": round(float(height), 1)}
+        )
+    if pages_ir:
+        drawing_ir["pages"] = pages_ir
     return ParseOutcome(text=text, drawing_ir=drawing_ir, engine="docling")
 
 

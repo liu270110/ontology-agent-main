@@ -20,6 +20,7 @@ from pydantic import BaseModel
 from services.memory.business.retrieval import rrf_merge
 from services.memory.domain.model.l1 import L1Snapshot
 from services.memory.domain.model.l2_fact import FactStatus, L2Fact
+from services.memory.domain.model.memory import DEFAULT_EXPIRY_FLOOR
 from services.memory.domain.repo.fact_repo import L1MemoryStore, L2FactRepository
 
 _L2_W_LAYER: Final[float] = 0.9  # memory §3 加权表 L2 行
@@ -60,9 +61,14 @@ async def build_memory_context(
     top_k: int,
     rrf_k: int,
     half_life_days: float,
+    expiry_floor: float = DEFAULT_EXPIRY_FLOOR,
     now: datetime,
 ) -> ContextBundle:
-    """四层并行召回的 M3 子集：L1 全量 + L2 双通道（full）/单通道（light）RRF 融合 + 时间衰减。"""
+    """四层并行召回的 M3 子集：L1 全量 + L2 双通道（full）/单通道（light）RRF 融合 + 时间衰减。
+
+    expiry_floor=D-6 软时效地板分（K25-c 接线：Settings memory_expiry_floor 经 api 层下传，
+    与 L4 检索通道同参对齐——修复前本路不传即吃域缺省 0.1，与组合根可配地板分叉）。
+    """
     snapshot = await l1_store.read(tenant_id, session_id)
     query = snapshot.latest_user_content if mode == "full" else ""
     hits = await merge_l2_hits(
@@ -73,6 +79,7 @@ async def build_memory_context(
         top_k=top_k,
         rrf_k=rrf_k,
         half_life_days=half_life_days,
+        expiry_floor=expiry_floor,
         now=now,
     )
     degraded = snapshot.degraded or mode == "light"
@@ -88,13 +95,15 @@ async def merge_l2_hits(
     top_k: int,
     rrf_k: int,
     half_life_days: float,
+    expiry_floor: float = DEFAULT_EXPIRY_FLOOR,
     now: datetime,
     vector_hits: Sequence[L2Fact] = (),
 ) -> list[L2Hit]:
     """L2 多通道召回融合（context 与 /search 共用）：关键词/向量/新近 → RRF → 衰减。
 
     vector_hits=调用方向量通道召回（api 层嵌入查询后经 data/vector.py 取回；缺省空=未启用
-    该路，不标降级——降级判定归调用方，kb hybrid_search 同款分层）。"""
+    该路，不标降级——降级判定归调用方，kb hybrid_search 同款分层）；
+    expiry_floor=D-6 软时效地板分（K25-c 接线：api/MCP 调用面下传 Settings 值，与 L4 同参）。"""
     candidates: dict[UUID, L2Fact] = {}
     channels: dict[str, list[UUID]] = {}
     if mode == "full" and query:
@@ -109,12 +118,15 @@ async def merge_l2_hits(
     candidates.update({fact.id: fact for fact in recent_hits})
 
     merged_ids = rrf_merge(channels, k=rrf_k)[:top_k] if channels else []
-    return [_as_hit(candidates[fact_id], now=now, half_life_days=half_life_days) for fact_id in merged_ids]
+    return [
+        _as_hit(candidates[fact_id], now=now, half_life_days=half_life_days, expiry_floor=expiry_floor)
+        for fact_id in merged_ids
+    ]
 
 
-def _as_hit(fact: L2Fact, *, now: datetime, half_life_days: float) -> L2Hit:
+def _as_hit(fact: L2Fact, *, now: datetime, half_life_days: float, expiry_floor: float) -> L2Hit:
     """score = w_layer × relevance(1.0) × time_decay（memory §3 加权合并规则）。"""
-    decay = fact.decay_score_at(now, half_life_days)
+    decay = fact.decay_score_at(now, half_life_days, expiry_floor=expiry_floor)
     return L2Hit(
         fact_id=fact.id,
         content=fact.content,

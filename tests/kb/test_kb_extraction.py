@@ -249,6 +249,7 @@ async def test_extract_writes_candidate_facts_and_tickets_idempotent(
         assert ticket.payload["template_ref"] == "kb_extract@v2"
         assert ticket.payload["payload"]["source_ref"]["chunk_id"]
         assert ticket.payload["payload"]["quote"]  # 引语随单透出（终审可直接对回原文）
+        assert ticket.payload["payload"]["fact"]["violations"] == []  # 干净候选：fact 面零留痕（K21 P2-3）
         assert ticket.payload["confidence"] == 0.9
         assert ticket.payload["review"] == {"state": "pending_review"}
     calls_after_first = model.calls
@@ -329,6 +330,7 @@ async def test_validate_shacl_gate_rejects_violations_and_writes_gate_result(
     assert all(facts[name].status == "candidate" for name in facts)  # 合规候选：留待人工终审
     assert all(facts[name].violations == [] for name in facts)
     assert all(tickets[facts[name].id].payload["gate_result"]["conforms"] is True for name in facts)
+    assert all(tickets[facts[name].id].payload["gate_result"]["violation_count"] == 0 for name in facts)  # P2-2 自洽
 
     # 注入明确违规（R002 状态枚举）后重跑 validate（候选态才参与门禁）
     async with kb_pg() as db, db.begin():
@@ -356,7 +358,9 @@ async def test_validate_shacl_gate_rejects_violations_and_writes_gate_result(
     assert order.status == "rejected"  # kb_facts.status 枚举内取值；任何路径不写 authoritative
     assert order.violations and any("InConstraintComponent" in (v.get("constraint") or "") for v in order.violations)
     gate = ticket.payload["gate_result"]
-    assert gate["conforms"] is False and gate["violation_count"] == len(order.violations)
+    assert gate["conforms"] is False and gate["violation_count"] == 1  # R002 枚举违例恰一条（精确期望）
+    assert gate["mark_count"] == 0  # 无剪枝留痕：mark_count 与 violation_count 分列自洽（K21 P2-2）
+    assert gate["violation_count"] + gate["mark_count"] == len(order.violations)  # 计数拆分不漏不重
     assert gate["shapes"] == "services/seeds/power_seed.ttl@v1" and gate["checked_at"]
     assert ticket.status == "pending_review"  # 仍留人工终审队列
 
@@ -626,7 +630,8 @@ async def test_extract_有候选_信号false(kb_pg: async_sessionmaker[AsyncSess
 
 def test_prune_extraction_out_of_taxonomy_marks_reason():
     """K21-a：schema 外自报类 → out_of_taxonomy 剪除+原因码；标签形可解析（match_seed_class
-    同源判定）不误剪；残缺条目（缺 name）透传不归剪枝管。"""
+    同源判定）不误剪；残缺条目（缺 name）透传不归剪枝管。剪枝侧类目判定只认 exact/
+    glossary_alias 两级（复核 P3-4：比 align 严——contains 字面擦边不再免剪，交终审）。"""
     catalog = load_seed_catalog()
     result = prune_extraction(
         [
@@ -637,14 +642,24 @@ def test_prune_extraction_out_of_taxonomy_marks_reason():
                 "ontology_class": "http://schema.example/Starship",
                 "confidence": 0.8,
             },
-            {"kind": "entity", "name": "城东站", "ontology_class": "变电站", "confidence": 0.7},  # 标签形：在目
+            {"kind": "entity", "name": "城东站", "ontology_class": "变电站", "confidence": 0.7},  # 标签形 exact：在目
+            {  # contains 级（「城东变电站」字面包含「变电站」）：align 会对齐，剪枝侧收严 → 剪除交终审
+                "kind": "entity",
+                "name": "城东变电站甲",
+                "ontology_class": "城东变电站",
+                "confidence": 0.6,
+            },
+            {"kind": "entity", "name": "抢修单WO-7", "ontology_class": "抢修单", "confidence": 0.6},  # 术语别名级：在目
             {"kind": "entity", "confidence": 0.5},  # 残缺（缺 name）：透传 kept
         ],
         catalog,
     )
-    assert [c.get("name") for c in result.kept] == ["馈线F001", "城东站", None]
-    assert [(c["name"], reason) for c, reason in result.pruned] == [("神秘设备", PruningReason.OUT_OF_TAXONOMY)]
-    assert result.pruning_stats == {"out_of_taxonomy": 1}
+    assert [c.get("name") for c in result.kept] == ["馈线F001", "城东站", "抢修单WO-7", None]
+    assert [(c["name"], reason) for c, reason in result.pruned] == [
+        ("神秘设备", PruningReason.OUT_OF_TAXONOMY),
+        ("城东变电站甲", PruningReason.OUT_OF_TAXONOMY),
+    ]
+    assert result.pruning_stats == {"out_of_taxonomy": 2}
 
 
 def test_prune_extraction_keeps_valid_products_intact():
@@ -669,7 +684,11 @@ def test_prune_extraction_keeps_valid_products_intact():
         [{"kind": "entity", "name": "城东站", "ontology_class": "变电站", "confidence": 0.7}],
         {f"{PW}Feeder"},  # 纯 IRI 集合口径：仅精确成员判定
     )
+    assert strict.kept == ()  # 唯一候选被剪：保留集为空（精确期望，不自证）
     assert [reason for _, reason in strict.pruned] == [PruningReason.OUT_OF_TAXONOMY]
+    assert strict.pruning_stats == {"out_of_taxonomy": 1}
+    with pytest.raises(ValueError, match="裸字符串"):  # 裸字符串显式拒收（复核 P3-5：不静默拆字符集）
+        prune_extraction([{"kind": "entity", "name": "馈线F001", "ontology_class": f"{PW}Feeder"}], f"{PW}Feeder")
 
 
 def test_prune_extraction_duplicate_and_relation_endpoint():
@@ -731,20 +750,26 @@ async def test_extract_pruned_items_marked_not_discarded(
     pruned = [f for f in rows if f.subject == "神秘设备"]
     valid = [f for f in rows if f.subject == "馈线F001"]
     assert pruned and valid  # 剪除不丢弃：与合法产物同批落候选
+    ticket_by_target = {t.target_id: t for t in tickets}
     for fact in pruned:
         assert fact.status == "candidate"  # 剪除≠裁决：候选非成品交终审
         assert [v["rule"] for v in fact.violations] == ["out_of_taxonomy"]
         assert "不在种子类目" in fact.violations[0]["detail"]
+        envelope = ticket_by_target[fact.id].payload["payload"]
+        assert [v["rule"] for v in envelope["fact"]["violations"]] == ["out_of_taxonomy"]  # 留痕随单透出（P2-3）
     for fact in valid:
         assert fact.violations == [] and fact.status == "candidate"  # 合法产物零标记
-    assert len(tickets) == len(rows)  # 剪除/合法都进审（一候选一 open 单）
+        assert ticket_by_target[fact.id].payload["payload"]["fact"]["violations"] == []
+    assert len(tickets) == 4  # 2 候选 × 2 chunks（fact_key 含 chunk_id 跨 chunk 不判重）：一候选一 open 单
 
 
 async def test_extract_pruning_stats_meta_and_gate_preserves_marks(
     kb_pg: async_sessionmaker[AsyncSession], extract_env: dict
 ) -> None:
-    """K21-b：pruning_stats 随抽取完成落账（Document.meta，extract_empty 同落点，计数=被剪
-    候选数）；validate 门禁回写保留剪枝留痕且不改变门禁裁决（无门禁违例时仍 candidate）。"""
+    """K21-b：pruning_stats 随抽取完成落账（Document.meta，extract_empty 同落点，精确计数）；
+    validate 门禁回写保留剪枝留痕且不改变门禁裁决（无门禁违例时仍 candidate），gate_result
+    拆 violation_count/mark_count 自洽（P2-2）；带留痕幽灵候选不进 §8.1 冲突分诊池（P2-1：
+    同文档同主谓权威行在手也不触发 T1 封口/T2 工单——权威面零污染）。"""
     model = ScriptedModelPort(
         {
             "candidates": [
@@ -761,16 +786,60 @@ async def test_extract_pruning_stats_meta_and_gate_preserves_marks(
     await run_extract(ctx)
     async with kb_pg() as db:
         doc = await db.get(DocumentORM, extract_env["document_id"])
-        rows = (
-            (await db.execute(select(KbFactORM).where(KbFactORM.tenant_id == extract_env["tenant_id"]))).scalars().all()
+    assert doc.meta["pruning_stats"] == {"out_of_taxonomy": 2}  # 2 chunks × 1 候选（fact_key 含 chunk_id）
+    # 权威事实对照（P2-1）：同文档同主谓权威行在手——若幽灵候选未被整池排除，分诊会命中
+    # T1 same_document：权威行被封口（meta.conflict_triage.state=superseded）+ superseded_by 边
+    async with kb_pg() as db, db.begin():
+        db.add(
+            KbFactORM(
+                tenant_id=extract_env["tenant_id"],
+                document_id=extract_env["document_id"],
+                fact_type="entity",
+                subject="神秘设备",
+                canonical_name="神秘设备",
+                confidence=1.0,
+                status="authoritative",
+            )
         )
-    assert doc.meta["pruning_stats"] == {"out_of_taxonomy": len(rows)}  # 每候选均被剪，计数一致
-    await run_validate(ctx)  # 门禁回写：留痕跨 validate 保留
+    await run_validate(ctx)  # 门禁回写：留痕跨 validate 保留；幽灵候选不进分诊池
     async with kb_pg() as db:
         rows_after = (
-            (await db.execute(select(KbFactORM).where(KbFactORM.tenant_id == extract_env["tenant_id"]))).scalars().all()
+            (
+                await db.execute(
+                    select(KbFactORM).where(
+                        KbFactORM.tenant_id == extract_env["tenant_id"], KbFactORM.status == "candidate"
+                    )
+                )
+            )
+            .scalars()
+            .all()
         )
-    assert rows_after
+        auth = (
+            (
+                await db.execute(
+                    select(KbFactORM).where(
+                        KbFactORM.tenant_id == extract_env["tenant_id"], KbFactORM.status == "authoritative"
+                    )
+                )
+            )
+            .scalars()
+            .one()
+        )
+        tickets = (
+            (
+                await db.execute(select(ReviewTicketORM).where(ReviewTicketORM.tenant_id == extract_env["tenant_id"]))
+            )
+            .scalars()
+            .all()
+        )
+    assert len(rows_after) == 2  # 2 chunks × 1 幽灵候选（kb_fact_relations 表未在测试 PG 建：边计数
+    # 不可查——排除性由下方 meta/工单断言覆盖：T1 封口权威行 meta、T4/T3 标注候选 meta、T2 建单）
+    assert auth.meta.get("conflict_triage") is None  # 幽灵候选未进分诊池：权威行未被 T1 封口
+    assert not any(t.target_type == "conflict" for t in tickets)  # 无 T2 冲突工单（幽灵不比对面）
+    ticket_by_target = {t.target_id: t for t in tickets}
     for fact in rows_after:
         assert [v["rule"] for v in fact.violations] == ["out_of_taxonomy"]  # 留痕未被门禁回写抹除
         assert fact.status == "candidate"  # 剪枝留痕不计入裁决（主流程不变）
+        assert "conflict_triage" not in (fact.meta or {})  # T4/T3 亦未标注（整池排除，非仅挡 T2）
+        gate = ticket_by_target[fact.id].payload["gate_result"]
+        assert gate["conforms"] is True and gate["violation_count"] == 0 and gate["mark_count"] == 1  # P2-2 计数自洽

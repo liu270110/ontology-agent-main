@@ -114,7 +114,6 @@ _DEV_JWT_PLACEHOLDER = "dev-only-change-me"
 _CORS_MAX_AGE = 600
 _CORS_EXPOSE_HEADERS = ["X-Request-ID", "X-Trace-ID"]
 
-_LLM_TIMEOUT_S = 60.0  # 模型端口默认超时（实现内 httpx 超时必设，standards/01 §2.5）
 # LLM 审计批量落库与预算（计划 3.3；07 §5.4：缓冲 1s 或 100 条先到者 flush）。
 # 预算阈值暂驻组合根常量（config.py 非本批领地），随 M3 成本治理批次收口为 Settings 字段。
 _LLM_AUDIT_MAX_BATCH = 100
@@ -170,7 +169,7 @@ def _build_model_port(s: Settings) -> ModelPort | None:
             base_url=s.llm_base_url or "",
             api_key=keys[0],
             model=model_name,
-            timeout_s=_LLM_TIMEOUT_S,
+            timeout_s=s.llm_timeout_s,  # 模型端口默认超时（httpx 超时必设，standards/01 §2.5；OA_LLM_TIMEOUT_S）
             credential_pool=pool,
         )
         return AuditedModelPort(http_channel, audit, budget)

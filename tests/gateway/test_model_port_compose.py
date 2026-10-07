@@ -46,3 +46,24 @@ def test_base_url与key全缺_返回None不装配():
     port = _build_model_port(s)
     # Assert：不装配——不阻塞启动，extract 步以 5002 LLM_UNAVAILABLE 失败（可重跑口径不变）
     assert port is None
+
+
+def test_超时透传Settings的llm_timeout_s而非硬编码(monkeypatch):
+    # 2026-10-07 门4 教训收口（standards/02 §10.4 晋级台账 + standards/03 §5 经验台账）：
+    # 组合根 `_LLM_TIMEOUT_S=60.0` 硬编码 → Settings.llm_timeout_s（OA_LLM_TIMEOUT_S）。
+    # 传 120 验证装配透传 Settings 值——若仍吃旧硬编码 60.0 本断言即红
+    monkeypatch.delenv("OA_LLM_TIMEOUT_S", raising=False)
+    s = Settings(
+        _env_file=None,
+        llm_base_url="http://127.0.0.1:8001/v1",
+        llm_api_key=None,
+        llm_timeout_s=120.0,
+    )
+    # Act
+    port = _build_model_port(s)
+    # Assert：韧性层在外、审计层居中、OpenAI 兼容客户端在内（同上例结构断言）；
+    # 超时=Settings 取值（OpenAICompatibleModelPort.__init__ 存 self._timeout_s）
+    assert port is not None
+    channel = port._inner._inner
+    assert isinstance(channel, OpenAICompatibleModelPort)
+    assert channel._timeout_s == 120.0

@@ -28,6 +28,8 @@ from services.agent.data.repo_impl.session_repo import PgSessionRepository, PgTa
 from services.agent.domain.repo.agent_repo import AgentRepository
 from services.agent.domain.repo.prompt_repo import PromptRepository
 from services.agent.domain.repo.session_repo import SessionRepository, TaskRepository
+from services.workflows.data.repo_impl.workflow_repo import PgWorkflowRepository
+from services.workflows.domain.repo.workflow_repo import WorkflowRepository
 from services.writeback.data.orm import OutboxEventORM
 
 logger = logging.getLogger(__name__)
@@ -48,6 +50,7 @@ class TenantTransaction:
         self.tasks: TaskRepository
         self.agents: AgentRepository
         self.prompts: PromptRepository  # H-1 提示词工程治理批（2026-09-29）
+        self.workflows: WorkflowRepository  # X16 运行控制（2026-10-07 批；runs.py 同事务消费）
 
     async def __aenter__(self) -> TenantTransaction:
         self._session = self._session_factory()
@@ -56,6 +59,7 @@ class TenantTransaction:
         self.tasks = PgTaskRepository(self._session, self._tenant_id)
         self.agents = PgAgentRepository(self._session, self._tenant_id)
         self.prompts = PgPromptRepository(self._session, self._tenant_id)
+        self.workflows = PgWorkflowRepository(self._session, self._tenant_id)
         return self
 
     async def __aexit__(self, exc_type: object, exc: object, tb: object) -> None:

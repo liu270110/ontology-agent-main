@@ -13,9 +13,9 @@ export function WorkflowListPage() {
   const navigate = useNavigate()
   const [newOpen, setNewOpen] = useState(false)
   const listQ = useQuery({ queryKey: ['wf', 'list'], queryFn: () => listWorkflows() })
-  // F8④（B:A-18）：items 提取空数组保底——重试后 data undefined / 形变（B1 双轨缺 items 键）
-  // 时不再 `.items.length` 崩溃或空白，统一落保底空态
-  const items = Array.isArray(listQ.data?.items) ? listQ.data.items : []
+  // F8④（B:A-18）：data 提取空数组保底——重试后 data undefined / 形变时不再 `.length` 崩溃
+  // 或空白，统一落保底空态（live 契约=api.list 归一 {data, meta}，X16 提升批）
+  const items = Array.isArray(listQ.data?.data) ? listQ.data.data : []
 
   return (
     <div className="min-h-0 flex-1 overflow-y-auto p-6" data-testid="wf-list-page">

@@ -11,7 +11,7 @@ from datetime import datetime
 from typing import Any, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from services.platform.schemas import EmptyMeta, PageMeta
 from services.workflows.domain.model.graph import WfNodeKind, WorkflowEdge, WorkflowNode
@@ -77,6 +77,44 @@ class WorkflowPublishIn(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     note: str = Field(default="", max_length=512)
+
+
+class WorkflowRollbackIn(BaseModel):
+    """回滚（POST /workflows/{id}/rollback；前端 rollbackWorkflow body={to_version: "vN"}）。
+
+    to_version 版本**标签**字符串（WfVersion.version 形——画框 25 基线单选值），服务端
+    解析为版本号（:attr:`version_number`）；"v12"/"12" 均收，其余 ValueError→FastAPI
+    原生 422（3xxx DTO 校验段）。
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    to_version: str = Field(min_length=1, max_length=16, description="目标版本标签 vN（WfVersion.version 同形）")
+
+    @field_validator("to_version")
+    @classmethod
+    def _parse_version(cls, value: str) -> str:
+        raw = value.strip().lower().lstrip("v")
+        if not raw.isdigit() or int(raw) < 1:
+            raise ValueError("to_version 须为版本标签 vN（N≥1 整数）")
+        return value.strip()
+
+    @property
+    def version_number(self) -> int:
+        """解析后的版本号（int，≥1；workflow_versions.version 查询键）。"""
+        return int(self.to_version.strip().lower().lstrip("v"))
+
+
+class WorkflowRollbackOut(BaseModel):
+    """回滚响应（202；形状=前端 rollbackWorkflow 消费面 + mock ok() 逐字段对齐：
+    以目标版本内容新建草稿——27 篇 §3「回滚=以旧版本新建草稿」）。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    status: Literal["draft_created"] = "draft_created"
+    draft_version: str  # 新草稿标签（v<head+1>；head 不动故版本号顺延不变）
+    copied_from: str  # 来源版本标签 vN（前端 toast 展示「已以 vN 新建草稿」）
+    note: str = ""  # 复制语义说明（mock 同源文案位）
 
 
 # ---------------------------------------------------------------- 视图（出参）
@@ -300,4 +338,3 @@ class WorkflowTemplatesOut(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     items: list[dict[str, str]]
-

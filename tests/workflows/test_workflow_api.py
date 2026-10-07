@@ -1,8 +1,8 @@
 """workflows API 集成测试（八端点直调=tests/tools 同款；PG 不可达自动跳过）。
 
 覆盖（15 §1.4）：草稿 CRUD 全链（信封 {data, meta}+WfSummary 11 字段）、模板三静态、
-PUT 存前校验（缺表达式 4802/环图 4801）、非草稿 PUT 4803+已发布 DELETE 409、404、
-scope 门禁 2001。
+PUT 存前校验（缺表达式 4802/环图 4801，HTTP 409——api/01 §5.11 登记口径）、
+非草稿 PUT 4803+已发布 DELETE 409、404、scope 门禁 2001。
 """
 
 from __future__ import annotations
@@ -173,8 +173,17 @@ async def test_GET_workflows_列表信封_page_meta与query模糊(wf_seed):
         assert page.meta.page == 1 and page.meta.page_size == 20 and page.meta.total == 2
         row = page.data[0]
         assert set(row.model_dump()) == {
-            "id", "name", "description", "draft_version", "head_version", "node_count",
-            "edge_count", "success_rate", "runs", "acl", "updated_at",
+            "id",
+            "name",
+            "description",
+            "draft_version",
+            "head_version",
+            "node_count",
+            "edge_count",
+            "success_rate",
+            "runs",
+            "acl",
+            "updated_at",
         }
         assert row.draft_version == "v1" and row.head_version is None
         assert row.success_rate == 0 and row.runs == 0 and row.acl == "edit"  # v1 空缺默认
@@ -197,7 +206,7 @@ async def test_GET_workflow_templates_三静态目录(wf_seed):
         assert all(set(t) == {"id", "name", "desc"} for t in out.items)
 
 
-async def test_PUT_workflows_condition缺表达式_422_4802(wf_seed):
+async def test_PUT_workflows_condition缺表达式_409_4802(wf_seed):
     # Arrange：建草稿后 PUT 缺 expression 的条件节点图（禁裸 LLM 分支——27 篇 §3）
     seed = wf_seed
     principal, request = _principal(seed), _request(seed)
@@ -211,14 +220,14 @@ async def test_PUT_workflows_condition缺表达式_422_4802(wf_seed):
             ],
             edges=[{"source": "start", "target": "cond-1"}, {"source": "cond-1", "target": "end"}],
         )
-        # Act / Assert：4802（HTTP 422）+ detail 结构化列违规项
+        # Act / Assert：4802（HTTP 409——api/01 §5.11 错误码登记 409*，X16 存储批对齐）
         with pytest.raises(GatewayError) as exc:
             await save_workflow(created.id, body, principal, db, request)
-        assert exc.value.code == 4802 and exc.value.status_code == 422
+        assert exc.value.code == 4802 and exc.value.status_code == 409
         assert exc.value.detail and any("expression" in str(v) for v in exc.value.detail)
 
 
-async def test_PUT_workflows_环图_422_4801(wf_seed):
+async def test_PUT_workflows_环图_409_4801(wf_seed):
     # Arrange：a→b→c→a 环图（Kahn 无环违规）
     seed = wf_seed
     principal, request = _principal(seed), _request(seed)
@@ -228,10 +237,11 @@ async def test_PUT_workflows_环图_422_4801(wf_seed):
             nodes=[{"id": x, "kind": "template", "label": x} for x in ("a", "b", "c")],
             edges=[{"source": "a", "target": "b"}, {"source": "b", "target": "c"}, {"source": "c", "target": "a"}],
         )
-        # Act / Assert：4801（HTTP 422）+ detail 结构化全量违规项（1 结构面「无开始节点」+3 环上节点）
+        # Act / Assert：4801（HTTP 409——api/01 §5.11 错误码登记 409*）
+        # + detail 结构化全量违规项（1 结构面「无开始节点」+3 环上节点）
         with pytest.raises(GatewayError) as exc:
             await save_workflow(created.id, body, principal, db, request)
-        assert exc.value.code == 4801 and exc.value.status_code == 422
+        assert exc.value.code == 4801 and exc.value.status_code == 409
         assert exc.value.detail and len(exc.value.detail) == 4
         assert any("位于环上" in str(v) for v in exc.value.detail)
 
@@ -254,7 +264,7 @@ async def test_非草稿_PUT_4803_已发布_DELETE_409(wf_seed):
         with pytest.raises(GatewayError) as exc:
             await save_workflow(workflow_id, body, principal, db, request)
         assert exc.value.code == 4803 and exc.value.status_code == 409
-        # Act / Assert：已发布 DELETE → 409+4803（deprecated 语义不做，直接 409）
+        # Act / Assert：已发布 DELETE → 409+4803（archived 语义不做，直接 409）
         with pytest.raises(GatewayError) as exc:
             await delete_workflow(workflow_id, principal, db, request)
         assert exc.value.code == 4803 and exc.value.status_code == 409

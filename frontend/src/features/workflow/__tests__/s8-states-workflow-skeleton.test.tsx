@@ -78,9 +78,8 @@ describe('S8 状态切片 · 工作流编辑器 · 定义加载骨架', () => {
       http.get('*/api/v1/workflows/wf-021', async () => {
         await delay(800)
         // 与 mocks/group-handlers 'wf-021' 同源裁剪：含条件节点，驱动画布挂载断言
+        // live 裸 {data, meta} 形（platform/schemas.py 禁 code 旧信封；X16 提升批 mock 同构）
         return HttpResponse.json({
-          code: 0,
-          message: 'ok',
           data: {
             id: 'wf-021',
             name: '停电故障研判 · 检索问答',
@@ -89,7 +88,7 @@ describe('S8 状态切片 · 工作流编辑器 · 定义加载骨架', () => {
             head_version: 'v2',
             success_rate: 96,
             runs: 27,
-            validation: { dag: '通过', acl: '通过', expression: '通过', test_run: '—' },
+            validation: { dag: true, acl: true, expression: true, test_run: '' },
             agent_slots: [],
             versions: [],
             nodes: [
@@ -97,7 +96,8 @@ describe('S8 状态切片 · 工作流编辑器 · 定义加载骨架', () => {
               { id: 'cond-fault-branch', kind: 'condition', label: '条件路由', x: 320, y: 120 },
             ],
             edges: [{ source: 'start-a1', target: 'cond-fault-branch' }],
-          },
+            },
+            meta: {},
         })
       }),
     )

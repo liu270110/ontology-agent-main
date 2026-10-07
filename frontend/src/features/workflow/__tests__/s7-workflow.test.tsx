@@ -78,82 +78,78 @@ describe('S7 工作流域', () => {
     expect(cond?.params?.expression).toBe('nodes.fault.count > 7')
   }, 25_000)
 
-  it('④ IX-GRP-08/09 试运行：断点命中暂停 → 快照修参 → resume 载荷断言', async () => {
-    const resumes: { edits?: { node_id: string; field: string; value: number }[]; mode?: string }[] = []
-    let mainPolls = 0
-    let branchPolls = 0
+  it('④ IX-GRP-08/09 试运行（X16 真事件）：WORKFLOW_NODE_* 断点命中暂停 → resume 载荷断言 → 续跑成功收尾', async () => {
+    const resumes: { decision?: string; note?: string }[] = []
     server.use(
+      // 受理（live WorkflowRunAcceptedOut：kind 而非 type）
       http.post('*/api/v1/workflows/wf-021/test', () =>
-        HttpResponse.json({ code: 0, message: 'ok', data: { run_id: 'RUN-t0518', task_id: 'tsk_0518', type: 'workflow_test' } }, { status: 202 }),
+        HttpResponse.json(
+          { code: 0, message: 'ok', data: { task_id: 'tsk-0518', run_id: 'RUN-t0518', kind: 'workflow_test', version: null, status: 'queued' } },
+          { status: 202 },
+        ),
       ),
-      http.get('*/api/v1/workflows/wf-021/runs/RUN-t0518', () => {
-        // 按轮询周期推演：首个周期未到断点，之后命中暂停
-        mainPolls += 1
-        const hitBreakpoint = mainPolls >= 2
-        return HttpResponse.json({
-          code: 0, message: 'ok',
+      // 快照兜底（40 篇 §4.4 R3：订阅前详情聚合视图先落一帧；live 裸 {data, meta} 形——
+      // platform/schemas.py 成功体禁 code 旧信封，与 group-handlers bare() 同构）
+      http.get('*/api/v1/workflows/wf-021/runs/RUN-t0518', () =>
+        HttpResponse.json({
           data: {
-            id: 'RUN-t0518', workflow_id: 'wf-021', status: hitBreakpoint ? 'paused' : 'running', branch: 0, resumed_from: null,
-            steps: [
-              { node: 'start', label: '开始', state: 'success', detail: '入口节点', dur: '0.2s', breakpoint: false },
-              { node: 'agent-dispatch', label: 'agent-dispatch', state: 'success', detail: '电网侧研判 · 输出 3 项', dur: '3.8s', breakpoint: false },
-              { node: 'cond-fault-branch', label: 'cond-fault-branch', state: 'success', detail: 'nodes.fault.count = 5 → true · 走并行分支', dur: '0.1s', breakpoint: false },
-              { node: 'agent-equipment', label: 'agent-equipment', state: hitBreakpoint ? 'paused' : 'running', detail: '运行至第 2 轮命中断点 BP-1 · 整图挂起', dur: '1.9s', breakpoint: true },
-              { node: 'rest', label: '汇聚 → 人工审批 → 结束', state: 'queued', detail: '断点恢复后继续执行', dur: '—', breakpoint: false },
-            ],
+            run_id: 'RUN-t0518', task_id: 'tsk-0518', workflow_id: 'wf-021', kind: 'workflow_test', version: null,
+            task_status: 'running', run_status: 'running', paused_node: null, paused_kind: null,
+            nodes: {}, outputs: {}, error: null, created_at: new Date().toISOString(),
+          },
+          meta: {},
+        }),
+      ),
+      // task_events 回放通道（工作流任务 session_id=None 的唯一实时面）：断点帧推送后延迟收尾帧
+      http.get('*/api/v1/tasks/tsk-0518/events', ({ request }) => {
+        if (request.headers.get('Accept') !== 'text/event-stream') {
+          return HttpResponse.json({ code: 0, message: 'ok', data: { items: [], next_cursor: null } })
+        }
+        const enc = new TextEncoder()
+        const frame = (seq: number, type: string, data: Record<string, unknown>) =>
+          enc.encode(`id: ${seq}\nevent: ${type}\ndata: ${JSON.stringify({ seq, type, data })}\n\n`)
+        const stream = new ReadableStream<Uint8Array>({
+          start(controller) {
+            const push = (b: Uint8Array) => { try { controller.enqueue(b) } catch { /* 已关闭 */ } }
+            setTimeout(() => push(frame(1, 'WORKFLOW_NODE_STARTED', { workflow_run_id: 'RUN-t0518', node_id: 'agent-equipment', node_type: 'agent', title: 'Agent:设备', attempt: 1 })), 150)
+            setTimeout(() => push(frame(2, 'WORKFLOW_NODE_FINISHED', { workflow_run_id: 'RUN-t0518', node_id: 'agent-equipment', attempt: 1, status: 'waiting_approval' })), 350)
+            setTimeout(() => push(frame(3, 'WORKFLOW_NODE_FINISHED', { workflow_run_id: 'RUN-t0518', node_id: 'agent-equipment', attempt: 1, status: 'succeeded', duration_ms: 1200 })), 1400)
+            setTimeout(() => push(frame(4, 'RUN_FINISHED', { run_id: 'RUN-t0518', task_type: 'workflow_test', usage: { total_tokens: 900 } })), 1700)
+            setTimeout(() => { try { controller.close() } catch { /* 已关闭 */ } }, 2000)
           },
         })
+        return new HttpResponse(stream, { headers: { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache' } })
       }),
-      http.get('*/api/v1/workflows/wf-021/runs/RUN-t0518-b1', () => {
-        // 新分支：首轮 equipment 运行中，其后成功收尾
-        branchPolls += 1
-        return HttpResponse.json({
-          code: 0, message: 'ok',
-          data: {
-            id: 'RUN-t0518-b1', workflow_id: 'wf-021', status: branchPolls >= 2 ? 'succeeded' : 'running', branch: 1, resumed_from: 'RUN-t0518',
-            steps: [
-              { node: 'agent-equipment', label: 'agent-equipment', state: branchPolls >= 2 ? 'success' : 'running', detail: '修参后新分支恢复（edits 2 项）· 原轨迹保留可回放', dur: '2.1s', breakpoint: false },
-              { node: 'tpl-1', label: 'tpl-1', state: branchPolls >= 2 ? 'success' : 'queued', detail: '研判意见模板汇总', dur: '0.3s', breakpoint: false },
-            ],
-          },
-        })
-      }),
+      // 断点恢复（live WorkflowResumeIn/Out：approve 即续跑；审批类暂停需审批中心出票）
       http.post('*/api/v1/workflows/wf-021/runs/RUN-t0518/resume', async ({ request }) => {
-        const body = (await request.json()) as { edits: { node_id: string; field: string; value: number }[]; mode: string }
-        resumes.push(body)
-        return HttpResponse.json({ code: 0, message: 'ok', data: { run_id: 'RUN-t0518-b1', status: 'resumed', mode: body.mode, edits: body.edits } }, { status: 202 })
+        resumes.push((await request.json()) as { decision: string; note?: string })
+        return HttpResponse.json(
+          { code: 0, message: 'ok', data: { run_id: 'RUN-t0518', decision: 'approve', run_status: 'running', resumed_node: 'agent-equipment' } },
+          { status: 202 },
+        )
       }),
     )
 
     await loginAndGo('/workflows/wf-021')
     expect(await screen.findByTestId('wf-editor-page', {}, { timeout: 10_000 })).toBeInTheDocument()
 
-    // 发起试运行 → 底部 Drawer 时间线
+    // 发起试运行 → 底部 Drawer 时间线（面板吃 task_events 真事件）
     fireEvent.click(screen.getByTestId('wf-test-run'))
     expect(await screen.findByTestId('wf-run-panel')).toBeInTheDocument()
 
-    // 断点命中：Agent:设备 暂停 + BP-1 chip（画布节点卡与面板头徽标同文案，取计数断言）
+    // 断点命中（waiting_approval）：节点行转暂停态 + 面板头「已暂停」徽标
     const paused = await screen.findByTestId('wf-step-agent-equipment-paused', {}, { timeout: 10_000 })
-    expect(paused).toHaveTextContent('断点 BP-1')
-    expect(screen.getAllByText('断点命中 · 已暂停').length).toBeGreaterThan(0)
+    expect(paused).toHaveTextContent('Agent:设备')
+    expect(screen.getAllByText('断点/审批 · 已暂停').length).toBeGreaterThan(0)
 
-    // 「从断点继续」→ GRP-09 快照 + 修参
+    // 「从断点继续」→ live resume 载荷断言（approve；审批类暂停 409 由端点出诚实文案）
     fireEvent.click(screen.getByTestId('wf-run-resume'))
-    expect(await screen.findByRole('dialog', { name: '从断点继续 · time-travel' })).toBeInTheDocument()
-    expect(screen.getByTestId('wf-resume-snapshot')).toHaveTextContent('RUN-t0518')
-    fireEvent.change(screen.getByTestId('wf-resume-threshold'), { target: { value: '7' } })
-
-    // 继续 → resume 载荷断言（修参仅作用于本 Run，以新分支恢复）
-    fireEvent.click(screen.getByTestId('wf-resume-go'))
     await waitFor(() => expect(resumes).toHaveLength(1))
-    expect(resumes[0].mode).toBe('branch')
-    expect(resumes[0].edits).toEqual(
-      expect.arrayContaining([
-        { node_id: 'cond-fault-branch', field: 'threshold', value: 7 },
-        { node_id: 'tool-scada', field: 'retry', value: 2 },
-      ]),
-    )
-    await screen.findByTestId('wf-step-agent-equipment-running', {}, { timeout: 10_000 })
+    expect(resumes[0].decision).toBe('approve')
+
+    // 续跑成功收尾（FINISHED succeeded + RUN_FINISHED → 面板成功徽标；终态帧晚于节点帧，findBy 容竞态）
+    await screen.findByTestId('wf-step-agent-equipment-success', {}, { timeout: 10_000 })
+    expect(await screen.findByText('试运行成功', {}, { timeout: 10_000 })).toBeInTheDocument()
   }, 30_000)
 
   it('⑤ IX-GRP-10 提交发布：说明必填 + team 档转 workflow_publish 审批 → /approvals 跳转', async () => {

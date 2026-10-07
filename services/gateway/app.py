@@ -89,7 +89,9 @@ from services.review.api.admin import router as review_admin_router
 from services.rsi.api.capabilities import router as orsi_router  # M4.6-S3：ORSI 注册表三端点（docs/Agent/14 §3）
 from services.skills.api.skills import router as skills_router  # S2 技能集市四端点（docs/Agent/14 §3）
 from services.tools.api.tools import router as tools_market_router  # S1 工具集市（docs/Agent/14 §3）
+from services.workflows.api.runs import router as workflow_runs_router  # X16 运行六端点（api/01 §5.11）
 from services.workflows.api.workflows import router as workflows_router  # F1 工作流编排八端点（api/01 §5.11）
+from services.workflows.business.executor import WorkflowRunExecutor, build_default_node_ports
 from services.writeback.api.ledger import router as writeback_ledger_router
 from services.writeback.business.relay import LoggingEventPublisher, OutboxRelay
 from services.writeback.data.repo_impl.writeback_repo import PgOutboxPoller
@@ -216,6 +218,32 @@ def _build_candidate_review(session_factory: async_sessionmaker[AsyncSession]) -
     from services.review.business.candidates import ReviewTicketService
 
     return ReviewTicketService(session_factory)
+
+
+def get_or_build_workflow_executor(state: Any) -> WorkflowRunExecutor:
+    """取/建工作流执行器（X16，2026-10-07 批；app.state 单例缓存，chat_orchestrator 同款组合模式）。
+
+    装配：uow + 生产节点端口（agent=builtin ChatAdapter 单轮/model_port；retrieval=kb 公开
+    检索服务；tool=v1 fail-closed——工具通道随 MCP 桥批次接线）+ 节点超时缺省（统一配置层）。
+    供 TaskRunWorker（workflow_executor_provider）与测试共用同一装配面。
+    """
+    cached = getattr(state, "workflow_executor", None)
+    if cached is not None:
+        return cached
+    from services.platform.deps import get_session_factory  # 局部 import 防环（lifespan 同款）
+
+    s = state.settings
+    executor = WorkflowRunExecutor(
+        uow=state.uow,
+        ports=build_default_node_ports(
+            model_port=getattr(state, "model_port", None),
+            session_factory=get_session_factory(s),
+            settings=s,
+        ),
+        node_timeout_default_s=float(getattr(s, "workflow_node_timeout_default_s", 60.0)),
+    )
+    state.workflow_executor = executor
+    return executor
 
 
 # --------------------------------------------------------------- 计划 4.2 组合根装配（MCP 收口）
@@ -348,6 +376,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
                 poll_interval_s=s.task_worker_poll_interval_s,
                 estop_store=get_or_build_estop_store(app.state, redis=get_redis(s)),  # 与 API/编排器同一单例
                 event_publisher=_worker_event_publisher,
+                workflow_executor_provider=lambda: get_or_build_workflow_executor(app.state),  # X16 工作流执行器
             )
             worker_task = asyncio.create_task(worker.run(worker_stop))
             logger.info("task worker started: poll_interval=%ss", s.task_worker_poll_interval_s)
@@ -507,6 +536,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(tools_market_router, prefix=settings.api_prefix)  # S1 工具集市四端点（docs/Agent/14 §3）
     app.include_router(mcp_management_router, prefix=settings.api_prefix)  # mcp 管理域 8 端点（api/01 §5.7）
     app.include_router(workflows_router, prefix=settings.api_prefix)  # F1 workflows 竖切八端点（api/01 §5.11）
+    app.include_router(workflow_runs_router, prefix=settings.api_prefix)  # X16 运行六端点（api/01 §5.11）
     app.include_router(orsi_router, prefix=settings.api_prefix)  # M4.6-S3：ORSI 注册表三端点（docs/Agent/14 §3）
     app.include_router(health_router, prefix=settings.api_prefix)  # M3 销项：readyz 聚合探活（health.py）
     app.include_router(writeback_ledger_router, prefix=settings.api_prefix)  # api/01 §5.8 ★：台账查询（writeback.api）

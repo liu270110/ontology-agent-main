@@ -51,6 +51,7 @@ from services.platform.errors import ErrorCode
 logger = logging.getLogger(__name__)
 
 _MAX_ATTEMPTS = 3  # ≤3 含首次（与 domain/model/task.py._MAX_TASK_ATTEMPTS 同口径）
+_WORKFLOW_TASK_TYPES = ("workflow_run", "workflow_test")  # X16 工作流分派键（task.type）
 
 # H-0c ②：kernel loop 观察阶段 emit 的 validated 步锚点事件（载荷：step_seq/action_iri/
 # trust_level/claimed_trust_level/stage + 投影 sink 注入的 run_id；loop.py _stage_observation）
@@ -97,6 +98,23 @@ class ChatOrchestratorProtocol(Protocol):
         ...
 
 
+class WorkflowRunExecutorProtocol(Protocol):
+    """工作流执行器最小面（X16，2026-10-07 批；组合根经 provider 注入——本模块零
+    workflows import，鸭子消费）。``execute_run`` 产出 ChatEvent 流（含 WORKFLOW_NODE_*
+    与终态事件），落库/推送纪律同 chat 流（_drain_workflow）。"""
+
+    def execute_run(
+        self,
+        *,
+        tenant_id: uuid.UUID,
+        task_id: uuid.UUID,
+        run_id: uuid.UUID,
+        task_type: str,
+        trace_id: str,
+    ) -> Any:  # AsyncIterator[ChatEvent]
+        ...
+
+
 class TaskRunWorker:
     """任务执行 worker：认领 → 执行 → 重试监督（串行单工作项，fail-soft 常驻）。"""
 
@@ -113,6 +131,7 @@ class TaskRunWorker:
         rng: Callable[[], float] = random.random,
         estop_store: Any | None = None,  # M4.5-A：EStopStore（None=不做 estop 前检，直跑形态）
         event_publisher: Callable[[uuid.UUID, str, dict[str, Any]], Awaitable[None]] | None = None,
+        workflow_executor_provider: Callable[[], Any | None] | None = None,  # X16：工作流执行器形态（None=旧行为）
     ) -> None:
         if policy is None:
             from services.agent.domain.model.task import RunRetryPolicy
@@ -142,6 +161,7 @@ class TaskRunWorker:
         # （此前 worker 只落 task_events 不推送，订阅者收不到任何帧；内联 SSE 路径不受影响）。
         # 组合根注入（gateway/app.py 以 app.state.sse_hub.publish 包装）；None=旧行为不推。
         self._event_publisher = event_publisher
+        self._workflow_executor_provider = workflow_executor_provider  # X16：工作流执行器 provider（None=旧行为）
         self._backoff_s = 0.0  # 重试退避节流（排空后 sleep，防止新 Run 早于退避到期被执行）
 
     async def run(self, stop: asyncio.Event) -> None:
@@ -346,7 +366,12 @@ class TaskRunWorker:
         return await self._estop_store.active_reason(tenant_id)
 
     async def _execute_claimed(self, claim: Any) -> bool:
-        """queued Run：认领（queued→running）→ 重放触发消息 → 经编排器执行。"""
+        """queued Run：认领（queued→running）→ 重放触发消息 → 经编排器执行。
+
+        X16（2026-10-07）：task.type∈{workflow_run,workflow_test} 分派工作流执行器
+        （provider 形态，chat 会话/消息重放面不适用——工作流任务 session_id=None）。
+        """
+        workflow_claim: tuple[uuid.UUID, uuid.UUID, uuid.UUID, str, str] | None = None
         async with self._uow.for_tenant(claim.tenant_id) as tx:
             task = await tx.tasks.get(claim.task_id)
             if task is None or task.active_run_id != claim.run_id:
@@ -384,59 +409,76 @@ class TaskRunWorker:
                 )
                 return True
             run.start()  # 聚合断言：queued→running（04 §3）
-            session = await tx.sessions.get(task.session_id) if task.session_id else None
-            if session is None:
-                run.fail({"code": 5004, "message": "会话不存在（worker 认领失败）", "retryable": False})
-                task.fail()
+            if task.type in _WORKFLOW_TASK_TYPES:
+                # X16 工作流分派：认领持久化后交执行器（payload 固化图/断点/变量——runs.py 受理面）
                 await tx.tasks.save(task)
-                return True
-            message = None
-            seq = (task.payload or {}).get("message_seq")
-            if isinstance(seq, int):
-                message = await tx.sessions.get_message_by_seq(task.session_id, seq)
-            if message is None:
-                run.fail({"code": 3001, "message": "触发消息缺失（worker 重放失败）", "retryable": False})
-                task.fail()
+                origin_trace = str((task.payload or {}).get("origin_trace_id") or "").strip()
+                workflow_claim = (
+                    claim.tenant_id,
+                    task.id,
+                    run.id,
+                    task.type,
+                    origin_trace or f"worker-workflow-{run.id}",
+                )
+            if workflow_claim is None:
+                session = await tx.sessions.get(task.session_id) if task.session_id else None
+                if session is None:
+                    run.fail({"code": 5004, "message": "会话不存在（worker 认领失败）", "retryable": False})
+                    task.fail()
+                    await tx.tasks.save(task)
+                    return True
+                message = None
+                seq = (task.payload or {}).get("message_seq")
+                if isinstance(seq, int):
+                    message = await tx.sessions.get_message_by_seq(task.session_id, seq)
+                if message is None:
+                    run.fail({"code": 3001, "message": "触发消息缺失（worker 重放失败）", "retryable": False})
+                    task.fail()
+                    await tx.tasks.save(task)
+                    return True
+                # H-0c ② 对账续跑 v1：重试/恢复重放时取前序 Run 的 validated 步锚点（task_events
+                # 投影），注入 continuation 系统注记；锚点摘要写 task.payload（可观测）。
+                anchors = await self._prior_validated_anchors(tx, task, run)
+                message_content = message.content
+                if anchors:
+                    message_content = f"{message.content}\n\n{_continuation_note(anchors)}"
+                    task.payload = {
+                        **(task.payload or {}),
+                        "resumable_anchors": {"run_id": str(run.id), "steps": anchors},
+                    }
                 await tx.tasks.save(task)
-                return True
-            # H-0c ② 对账续跑 v1：重试/恢复重放时取前序 Run 的 validated 步锚点（task_events
-            # 投影），注入 continuation 系统注记；锚点摘要写 task.payload（可观测）。
-            anchors = await self._prior_validated_anchors(tx, task, run)
-            message_content = message.content
-            if anchors:
-                message_content = f"{message.content}\n\n{_continuation_note(anchors)}"
-                task.payload = {
-                    **(task.payload or {}),
-                    "resumable_anchors": {"run_id": str(run.id), "steps": anchors},
-                }
-            await tx.tasks.save(task)
-            # M4.5-A P-4：可核验锚点（携 param_hash）→ 内核对账三元组（seq 键名归一）；
-            # 无 hash 的存量锚点不进对账（安全侧退化=注记续跑现状）。
-            resumed = tuple(
-                {"seq": a["step_seq"], "action_iri": a["action_iri"], "param_hash": a["param_hash"]}
-                for a in anchors
-                if isinstance(a.get("param_hash"), str) and a["param_hash"]
-            )
-            # C4 trace 贯通（红队审查 §5 修复批 2026-10-07）：受理面（send_message 202）落
-            # task.payload 的网关原始 trace 就近回溯——重放命令复用原 trace 保持跨层同链；
-            # 无法回溯（存量任务/直造任务）才用 worker 合成（现状兜底，行为不回退）。
-            origin_trace = str((task.payload or {}).get("origin_trace_id") or "").strip()
-            # C2 EXTERNAL_WRITE 幂等锚（红队审查 §5 修复批）：attempt 维度幂等键随命令下发
-            # （key=task_id:attempt），经内核注入写动作工具调用参数与审批工单（本 worker 落
-            # run.idempotency_key 审计行，键贯通可见性=bench side_effect_duplication 新口径）。
-            idempotency_key = f"{task.id}:{task.attempt_count}"
-            await tx.tasks.append_event(
-                task.id,
-                TaskEvent(
-                    task_id=task.id,
-                    event_type="run.idempotency_key",
-                    data={  # C2 审计落账：键贯通可见（工单 param_hash 绑定同键参数，工具实现侧幂等后续批）
-                        "run_id": str(run.id),
-                        "idempotency_key": idempotency_key,
-                        "attempt": task.attempt_count,
-                    },
-                ),
-            )
+                # M4.5-A P-4：可核验锚点（携 param_hash）→ 内核对账三元组（seq 键名归一）；
+                # 无 hash 的存量锚点不进对账（安全侧退化=注记续跑现状）。
+                resumed = tuple(
+                    {"seq": a["step_seq"], "action_iri": a["action_iri"], "param_hash": a["param_hash"]}
+                    for a in anchors
+                    if isinstance(a.get("param_hash"), str) and a["param_hash"]
+                )
+                # C4 trace 贯通（红队审查 §5 修复批 2026-10-07）：受理面（send_message 202）落
+                # task.payload 的网关原始 trace 就近回溯——重放命令复用原 trace 保持跨层同链；
+                # 无法回溯（存量任务/直造任务）才用 worker 合成（现状兜底，行为不回退）。
+                origin_trace = str((task.payload or {}).get("origin_trace_id") or "").strip()
+                # C2 EXTERNAL_WRITE 幂等锚（红队审查 §5 修复批）：attempt 维度幂等键随命令下发
+                # （key=task_id:attempt），经内核注入写动作工具调用参数与审批工单（本 worker 落
+                # run.idempotency_key 审计行，键贯通可见性=bench side_effect_duplication 新口径）。
+                idempotency_key = f"{task.id}:{task.attempt_count}"
+                await tx.tasks.append_event(
+                    task.id,
+                    TaskEvent(
+                        task_id=task.id,
+                        event_type="run.idempotency_key",
+                        data={  # C2 审计落账：键贯通可见（工单 param_hash 绑定同键参数，工具实现侧幂等后续批）
+                            "run_id": str(run.id),
+                            "idempotency_key": idempotency_key,
+                            "attempt": task.attempt_count,
+                        },
+                    ),
+                )
+
+        if workflow_claim is not None:
+            # X16 工作流分派：drain 在事务外（03 §6.1 长流程零事务）；事件落库/推送归 _drain_workflow
+            await self._drain_workflow(workflow_claim)
+            return True
 
         command = ChatCommand(
             tenant_id=claim.tenant_id,
@@ -463,7 +505,9 @@ class TaskRunWorker:
         at-least-once 语义：票在重放构造前同事务移除；移除后 drain 前崩溃由孤儿回收
         sweep 兜底（running 悬挂→fail→既有重试），不产生双执行窗口外的重复副作用。
         过期票（expires_at<now）视同无回执：移除 + run.fail(2001 B5 默认拒绝同码)。
+        X16：task.type 为工作流族时取票后交工作流执行器续跑（chat 重放面不适用）。
         """
+        workflow_claim: tuple[uuid.UUID, uuid.UUID, uuid.UUID, str, str] | None = None
         async with self._uow.for_tenant(claim.tenant_id) as tx:
             task = await tx.tasks.get(claim.task_id)
             if task is None or task.active_run_id != claim.run_id:
@@ -514,10 +558,31 @@ class TaskRunWorker:
                     task.id,
                 )
                 return True
-            payload = dict(task.payload or {})
-            payload["approvals"] = [r for r in rows if r not in mine]
-            task.payload = payload
-            if fresh:
+            if task.type in _WORKFLOW_TASK_TYPES:
+                # X16 工作流 resume：取票（事务内移除防双消费）→ 交执行器从暂停节点续跑
+                # （approval 批准即完成 / breakpoint 修参重跑——paused_node 驱动，executor 侧）
+                payload = dict(task.payload or {})
+                payload["approvals"] = [r for r in rows if r not in mine]
+                task.payload = payload
+                await tx.tasks.save(task)
+                if run.status.value != "running":
+                    logger.warning("task=%s 工作流 resume 拒绝：run 非运行态（status=%s）", task.id, run.status.value)
+                    return True
+                origin_trace = str((task.payload or {}).get("origin_trace_id") or "").strip()
+                workflow_claim = (
+                    claim.tenant_id,
+                    task.id,
+                    run.id,
+                    task.type,
+                    origin_trace or f"worker-workflow-resume-{run.id}",
+                )
+            else:
+                payload = dict(task.payload or {})
+                payload["approvals"] = [r for r in rows if r not in mine]
+                task.payload = payload
+            if workflow_claim is not None:
+                pass  # 工作流 resume：票已消费，chat 重放面（fresh/session/message）不适用
+            elif fresh:
                 session = await tx.sessions.get(task.session_id) if task.session_id else None
                 if session is None or run.status.value != "running":
                     # run 已终态：票清理即可（重放无意义）；会话缺失同 queued 认领失败口径
@@ -573,6 +638,10 @@ class TaskRunWorker:
                     ),
                 )
                 return True
+        if workflow_claim is not None:
+            # X16 工作流 resume：drain 在事务外（03 §6.1）；续跑事件落库/推送归 _drain_workflow
+            await self._drain_workflow(workflow_claim)
+            return True
         command = ChatCommand(
             tenant_id=claim.tenant_id,
             user_id=session.user_id,
@@ -637,8 +706,8 @@ class TaskRunWorker:
         推送失败只告警不阻断执行（先落库后推送，04 §2；断线订阅者由 task_events 回放
         与 Last-Event-ID 续传兜底）。publisher 缺省 None=组合根未接线（旧行为不推）。
         """
-        if self._event_publisher is None:
-            return
+        if self._event_publisher is None or session_id is None:
+            return  # 工作流任务无会话（session_id=None）：仅 task_events 回放通道（X16）
         try:
             await self._event_publisher(session_id, name, data)
         except Exception as exc:  # noqa: BLE001
@@ -687,6 +756,47 @@ class TaskRunWorker:
             except Exception as exc:  # 事件留痕失败不阻断执行（转义留痕，standards/01 §2.6）
                 logger.warning("task worker 事件落库失败（run=%s type=%s）: %s", command.run_id, event.name, exc)
             await self._publish_sse(command.session_id, event.name.value, payload)  # 先落库后推送（04 §2）
+        return final_error
+
+    async def _drain_workflow(self, claim: tuple[uuid.UUID, uuid.UUID, uuid.UUID, str, str]) -> dict[str, Any] | None:
+        """工作流执行器事件流消费（X16，2026-10-07 批；_drain_orchestrator 同款纪律）。
+
+        - WORKFLOW_NODE_*/RUN_STARTED：逐条落 task_events（执行结构事件走回放根重试，
+          R11）+ _publish_sse（session_id=None 时推送面跳过——工作流任务无会话，回放通道
+          =GET /tasks/{id}/events；api/01 §5.11 运行详情端点为节点态快照兜底）；
+        - RUN_FINISHED/RUN_ERROR：终态落账归执行器（_finalize 自写 run/task 行+审计行，
+          chat 结果汇的 workflow 同构面），此处只 SSE 推送（无会话=跳过）；
+        - 执行器缺位（provider 未接线）→ 结构化放弃留痕：run 保持 running 交孤儿回收
+          sweep 兜底（对齐 chat 编排器缺位口径）。
+        """
+        tenant_id, task_id, run_id, task_type, trace_id = claim
+        provider = self._workflow_executor_provider or (lambda: None)
+        executor = provider()
+        if executor is None:
+            logger.error("task worker 无可用工作流执行器（未接线？），run=%s 本轮放弃", run_id)
+            return None
+        final_error: dict[str, Any] | None = None
+        async for event in executor.execute_run(
+            tenant_id=tenant_id, task_id=task_id, run_id=run_id, task_type=task_type, trace_id=trace_id
+        ):
+            payload = wire_data(event)
+            if trace_id.startswith("worker-") and "original_trace_id" not in payload:
+                payload["original_trace_id"] = trace_id  # 受理链回溯锚（C4 同款；合成 trace 不回写）
+            if event.name is ChatEventName.RUN_ERROR:
+                final_error = dict(event.data)
+            if event.name in (ChatEventName.RUN_FINISHED, ChatEventName.RUN_ERROR):
+                await self._publish_sse(None, event.name.value, payload)  # 终态落账归执行器，防双写
+                continue
+            try:
+                async with self._uow.for_tenant(tenant_id) as tx:
+                    await tx.tasks.append_event(
+                        task_id,
+                        TaskEvent(task_id=task_id, event_type=event.name.value, data=payload),
+                        replay_root=event.name in EXEC_PERSISTED_EVENTS,  # WORKFLOW_NODE_*=回放根（40 篇 §3.1）
+                    )
+            except Exception as exc:  # 事件留痕失败不阻断执行（转义留痕，standards/01 §2.6）
+                logger.warning("task worker 工作流事件落库失败（run=%s type=%s）: %s", run_id, event.name, exc)
+            await self._publish_sse(None, event.name.value, payload)  # 先落库后推送（04 §2）
         return final_error
 
     # ── 重试监督 ──────────────────────────────────────────────────────────

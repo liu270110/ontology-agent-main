@@ -40,6 +40,14 @@ class WorkflowRepository(Protocol):
         """版本历史（version 升序；不可变行只读）。"""
         ...
 
+    async def get_version(self, workflow_id: UUID, version: int) -> WorkflowVersion | None:
+        """单版本读取（回滚用例：以目标版本快照新建草稿；不可变行只读）。"""
+        ...
+
+    async def find_by_source_run(self, source_run_id: UUID) -> Workflow | None:
+        """血统查重（40 篇 §6 promote 幂等键=run_id：重复提升返回既有草稿）。"""
+        ...
+
     async def add_version(self, version: WorkflowVersion) -> None: ...
 
     async def next_version(self, workflow_id: UUID) -> int:

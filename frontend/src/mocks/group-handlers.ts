@@ -19,6 +19,11 @@ function ok<T>(data: T, status = 200) {
 function err(code: number, message: string, status: number) {
   return HttpResponse.json({ code, message, data: null }, { status })
 }
+/** live 裸形（workflows 段专用：platform/schemas.py 成功体禁 {code,message,data} 旧信封，
+ *  逐字节同构 live——api.get 的包壳/剥壳双形态在 mock 侧必须与 live 同边，否则形状漂移） */
+function bare(data: unknown, status = 200) {
+  return HttpResponse.json(data as never, { status })
+}
 
 // ============================================================
 // 群聊（X15）：Agent 插槽目录 / 群会话 / 成员 / 群消息 SSE
@@ -257,6 +262,9 @@ export interface WfWorkflow {
   success_rate: number
   runs: number
   updated_at: string
+  /** 血统/来源（X16 提升批；画布普通新建缺省缺省） */
+  source_run_id?: string
+  origin?: 'user' | 'llm_candidate'
 }
 
 const WF_NODES: WfNode[] = [
@@ -359,52 +367,60 @@ const WF_TEMPLATES: { id: string; name: string; desc: string; nodes: WfNode[]; e
     ], edges: [{ source: 'start', target: 'ret-1' }, { source: 'ret-1', target: 'agent-1' }, { source: 'agent-1', target: 'end' }] },
 ]
 
-// ---- 试运行（202 → 任务中心 type=workflow_test；节点状态按 elapsed 推演） ----
+// ---- 试运行（202 → 任务中心 type=workflow_test；live WfRunDetail 投影，节点状态按 elapsed 推演） ----
 interface WfRun {
   id: string
   workflow_id: string
   status: 'running' | 'paused' | 'succeeded' | 'aborted'
   started_at: number
-  branch: number
-  edits: { node_id: string; field: string; value: unknown }[]
-  resumed_from: string | null
+  kind: 'workflow_run' | 'workflow_test'
 }
 const WF_RUNS: Record<string, WfRun> = {}
 
-const RUN_PLAN: { node: string; at: number; kind: 'success' | 'fail_retry' | 'paused'; detail: string; dur: string }[] = [
-  { node: 'start', at: 400, kind: 'success', detail: '入口节点', dur: '0.2s' },
-  { node: 'agent-dispatch', at: 1400, kind: 'success', detail: '电网侧研判 · 输出 3 项', dur: '3.8s · 1.2k tok' },
-  { node: 'cond-fault-branch', at: 2100, kind: 'success', detail: 'nodes.fault.count = 5 → true · 走并行分支', dur: '0.1s' },
-  { node: 'agent-report', at: 2900, kind: 'success', detail: '台账与规程检索完成 · 草稿结论已生成', dur: '4.6s · 0.9k tok' },
-  { node: 'tool-scada', at: 3500, kind: 'fail_retry', detail: '首试超时 8.1s → 第 1 次重试成功（scope 高危工具已审计）', dur: '2.4s' },
-  { node: 'agent-equipment', at: 4300, kind: 'paused', detail: '运行至第 2 轮命中断点 BP-1 · 整图挂起', dur: '1.9s' },
+/** 节点推演计划（对齐 WORKFLOW_NODE_* 六态词汇；at=毫秒拍点） */
+const RUN_PLAN: { node: string; label: string; at: number; kind: 'success' | 'fail' | 'paused' }[] = [
+  { node: 'start', label: '开始', at: 400, kind: 'success' },
+  { node: 'ret-1', label: '知识检索', at: 1400, kind: 'success' },
+  { node: 'agent-1', label: 'Agent:生成', at: 2600, kind: 'success' },
+  { node: 'end', label: '结束', at: 3400, kind: 'success' },
 ]
 
 function runState(run: WfRun) {
   const elapsed = Date.now() - run.started_at
-  const plan = RUN_PLAN.map(p => ({ ...p }))
-  const steps = plan.map(p => {
-    let state: 'queued' | 'running' | 'success' | 'fail' | 'paused' = 'queued'
-    if (elapsed >= p.at + 500) state = p.kind === 'fail_retry' ? 'success' : p.kind === 'paused' ? 'paused' : 'success'
-    else if (elapsed >= p.at - 600) state = p.kind === 'fail_retry' ? 'fail' : 'running'
-    return { node: p.node, label: p.node, state, detail: p.detail, dur: p.dur, breakpoint: p.kind === 'paused' }
-  })
-  const bpHit = steps.some(s => s.state === 'paused')
-  let status: WfRun['status'] = 'running'
-  if (run.status === 'aborted') status = 'aborted'
-  else if (bpHit) status = 'paused'
-  else if (run.branch > 0 && elapsed >= 2600) status = 'succeeded'
-  const tail = run.branch > 0
-    ? [
-        { node: 'agent-equipment', label: 'agent-equipment', state: elapsed >= 900 ? ('success' as const) : ('running' as const), detail: `修参后新分支恢复（edits ${run.edits.length} 项）· 原轨迹保留可回放`, dur: '2.1s', breakpoint: false },
-        { node: 'tpl-1', label: 'tpl-1', state: elapsed >= 1700 ? ('success' as const) : ('queued' as const), detail: '研判意见模板汇总', dur: '0.3s', breakpoint: false },
-        { node: 'approval-1', label: 'approval-1', state: elapsed >= 2300 ? ('success' as const) : ('queued' as const), detail: '生成审批中心工单（试运行不派发）', dur: '0.2s', breakpoint: false },
-        { node: 'end', label: 'end', state: elapsed >= 2600 ? ('success' as const) : ('queued' as const), detail: '归档完成', dur: '0.1s', breakpoint: false },
-      ]
-    : [
-        { node: 'rest', label: '汇聚 → 人工审批 → 结束', state: 'queued' as const, detail: '断点恢复后继续执行（审批节点将生成审批中心工单）', dur: '—', breakpoint: false },
-      ]
-  return { id: run.id, workflow_id: run.workflow_id, status, branch: run.branch, resumed_from: run.resumed_from, steps: [...steps, ...tail] }
+  const nodes: Record<string, unknown> = {}
+  let allDone = true
+  for (const p of RUN_PLAN) {
+    let status = 'pending'
+    if (run.status === 'aborted') {
+      status = elapsed >= p.at ? 'cancelled' : 'pending'
+    } else if (elapsed >= p.at + 600) status = 'succeeded'
+    else if (elapsed >= p.at - 600) status = 'running'
+    if (status === 'pending' || status === 'running') allDone = false
+    nodes[p.node] = {
+      status,
+      attempt: 1,
+      title: p.label,
+      parallel_id: null,
+      duration_ms: status === 'succeeded' ? 420 : null,
+    }
+  }
+  const task_status = run.status === 'aborted' ? 'cancelled' : allDone ? 'succeeded' : 'running'
+  const run_status = run.status === 'aborted' ? 'cancelled' : allDone ? 'completed' : 'running'
+  return {
+    run_id: run.id,
+    task_id: `tsk-${run.id}`,
+    workflow_id: run.workflow_id,
+    kind: run.kind,
+    version: run.kind === 'workflow_run' ? 1 : null,
+    task_status,
+    run_status,
+    paused_node: null,
+    paused_kind: null,
+    nodes,
+    outputs: {},
+    error: null,
+    created_at: new Date(run.started_at).toISOString(),
+  }
 }
 
 // ============================================================
@@ -589,19 +605,21 @@ export const groupHandlers = [
   }),
 
   // ============================================================
-  // 工作流（§5.11 / X16）
+  // 工作流（§5.11 / X16 提升批：live 契约投影——形状逐字段对齐后端 pydantic，
+  // 裸 {data, meta} 内层体 + WorkflowRunAccepted/WfRunDetail/promote）
   // ============================================================
 
-  http.get('*/api/v1/workflow-templates', () => ok({
+  http.get('*/api/v1/workflow-templates', () => bare({
     items: WF_TEMPLATES.map(t => ({ id: t.id, name: t.name, desc: t.desc })),
   })),
 
-  http.get('*/api/v1/workflows', () => ok({
-    items: Object.values(WORKFLOWS).map(w => ({
+  http.get('*/api/v1/workflows', () => bare({
+    data: Object.values(WORKFLOWS).map(w => ({
       id: w.id, name: w.name, description: w.description, draft_version: w.draft_version,
       head_version: w.head_version, node_count: w.nodes.length, edge_count: w.edges.length,
       success_rate: w.success_rate, runs: w.runs, acl: w.id === 'wf-021' ? 'publish' : 'edit', updated_at: w.updated_at,
     })),
+    meta: { page: 1, page_size: 20, total: Object.keys(WORKFLOWS).length },
   })),
 
   http.post('*/api/v1/workflows', async ({ request }) => {
@@ -615,19 +633,55 @@ export const groupHandlers = [
       success_rate: 0, runs: 0, updated_at: new Date().toISOString(),
     }
     WF_VERSIONS[id] = []
-    return ok({ id, status: 'draft_created', draft_version: 'v1' }, 201)
+    return bare({ id, status: 'draft_created', draft_version: 'v1' }, 201)
+  }),
+
+  // ---- promote（40 篇 §6：幂等键=run_id，201 新建 / 200 幂等命中；须登记于 /:id 段前——
+  //      MSW 路径匹配按注册序，4 段路径与 /:id 段不交叠，序同后端注册纪律） ----
+  http.post('*/api/v1/workflows/runs/:rid/promote', async ({ params, request }) => {
+    const rid = String(params.rid)
+    const body = (await request.json().catch(() => ({}))) as { title?: string; variable_hints?: string[] }
+    const existed = Object.values(WORKFLOWS).find(w => (w as { source_run_id?: string }).source_run_id === rid)
+    if (existed) return bare({ workflow_id: existed.id, status: 'exists', draft_version: existed.draft_version, source_run_id: rid, origin: (existed as { origin?: string }).origin ?? 'user' }, 200)
+    const id = `wf-${Math.floor(100 + Math.random() * 900)}`
+    // 计划投影形（入口② LLM 候选）：步骤→agent 节点+顺序边+start/end；运行卡提升（入口①）
+    // 复用同形（user 来源）——mock 不区分图源，契约面（幂等/血统/origin 词汇）与 live 一致
+    const steps = (body.title ? [body.title] : ['研判故障现象', '生成处置建议']).slice(0, 4)
+    const nodes: WfNode[] = [{ id: 'start', kind: 'start_end', label: '开始', x: 320, y: 16 }]
+    const edges: WfEdge[] = []
+    let prev = 'start'
+    steps.forEach((s, i) => {
+      const nid = `step-${i + 1}`
+      nodes.push({ id: nid, kind: 'agent', label: s, x: 320, y: 96 + i * 80, params: { prompt: s } })
+      edges.push({ source: prev, target: nid })
+      prev = nid
+    })
+    nodes.push({ id: 'end', kind: 'start_end', label: '结束', x: 320, y: 96 + steps.length * 80 })
+    edges.push({ source: prev, target: 'end' })
+    const wf: WfWorkflow = {
+      id, name: body.title ?? '提升草稿', description: `提升自 run ${rid}`,
+      template: 'blank', draft_version: 'v1', head_version: null,
+      nodes, edges, success_rate: 0, runs: 0, updated_at: new Date().toISOString(),
+      source_run_id: rid, origin: rid in WF_RUNS ? 'user' : 'llm_candidate',
+    }
+    WORKFLOWS[id] = wf
+    WF_VERSIONS[id] = []
+    return bare({ workflow_id: id, status: 'draft_created', draft_version: 'v1', source_run_id: rid, origin: wf.origin }, 201)
   }),
 
   http.get('*/api/v1/workflows/:id', ({ params }) => {
     const w = WORKFLOWS[String(params.id)]
     if (!w) return err(5001, '工作流不存在', 404)
-    return ok({
-      ...w,
-      versions: WF_VERSIONS[w.id] ?? [],
-      draft_diff: { add: 9, del: 2, mod: 4 },
-      // Agent 节点绑插槽实例（继承群聊成员参数）——R：后端应由 §5.1 agents 提供 use 级过滤清单
-      agent_slots: GROUP_SLOTS.filter(s => s.acl_use),
-      validation: { dag: true, acl: true, expression: true, test_run: 'RUN-t0517 · 成功率 100%' },
+    return bare({
+      data: {
+        ...w,
+        versions: WF_VERSIONS[w.id] ?? [],
+        draft_diff: { add: 0, del: 0, mod: 0 },
+        // Agent 节点绑插槽实例（继承群聊成员参数）——live WfDetailOut v1 空列表占位口径
+        agent_slots: [],
+        validation: { dag: true, acl: true, expression: true, test_run: '' },
+      },
+      meta: {},
     })
   }),
 
@@ -640,17 +694,17 @@ export const groupHandlers = [
     if (body.name) w.name = body.name
     if (body.description !== undefined) w.description = body.description
     w.updated_at = new Date().toISOString()
-    return ok({ id: w.id, draft_version: w.draft_version, saved_at: w.updated_at })
+    return bare({ id: w.id, draft_version: w.draft_version, saved_at: w.updated_at })
   }),
 
-  // ---- 提交发布（GRP-10：治理分流 solo 直发 / team·enterprise 转 workflow_publish 审批） ----
+  // ---- 提交发布（GRP-10：治理分流 solo 直发 / team·enterprise 转 workflow_publish 审批；
+  //      origin=llm_candidate 任何档强制审批——宪法 3，mock 租户=team 恒 202 同语义） ----
   http.post('*/api/v1/workflows/:id/versions', async ({ params, request }) => {
     const w = WORKFLOWS[String(params.id)]
     if (!w) return err(5001, '工作流不存在', 404)
     const body = (await request.json()) as { note?: string }
-    if (!body.note?.trim()) return err(5101, '发布说明必填（进入版本历史与审计）', 422)
-    // mock 租户=team 档 → 转 workflow_publish 审批（第七类对象候选，X16）
-    return ok({
+    if (!body.note?.trim()) return err(3001, '发布说明必填（进入版本历史与审计）', 422)
+    return bare({
       status: 'pending_approval', governance: 'team',
       approval_id: `apr-wfp-${Date.now().toString(36)}`, object_type: 'workflow_publish',
       redirect: '/approvals', next_version: 'v4',
@@ -660,60 +714,65 @@ export const groupHandlers = [
   http.get('*/api/v1/workflows/:id/versions', ({ params }) => {
     const w = WORKFLOWS[String(params.id)]
     if (!w) return err(5001, '工作流不存在', 404)
-    return ok({ items: WF_VERSIONS[w.id] ?? [], draft: { version: w.draft_version, diff: { add: 9, del: 2, mod: 4 } } })
+    return bare({ items: WF_VERSIONS[w.id] ?? [], draft: { version: w.draft_version, diff: { add: 0, del: 0, mod: 0 } } })
   }),
 
-  // ---- 回滚 = 以旧版新建草稿（GRP-11；已发布版本不可变） ----
+  // ---- 回滚 = 以旧版新建草稿（GRP-11；已发布版本不可变；live 202） ----
   http.post('*/api/v1/workflows/:id/rollback', async ({ params, request }) => {
     const w = WORKFLOWS[String(params.id)]
     if (!w) return err(5001, '工作流不存在', 404)
     const body = (await request.json()) as { to_version: string }
-    const next = `v${Number(w.draft_version.replace('v', '') || 1) + 1}-draft`
+    const next = `v${Number(w.draft_version.replace('v', '') || 1) + 1}`
     w.draft_version = next
-    return ok({ status: 'draft_created', draft_version: next, copied_from: body.to_version, note: '复制旧版全部节点与参数为新草稿，不影响已发布版本与运行历史' }, 201)
+    return bare({ status: 'draft_created', draft_version: next, copied_from: body.to_version, note: '复制旧版全部节点与参数为新草稿，不影响已发布版本与运行历史' }, 202)
   }),
 
-  // ---- 试运行（202 → 任务中心 type=workflow_test） ----
+  // ---- 试运行（202 → 任务中心 type=workflow_test；live WorkflowRunAcceptedOut 形） ----
   http.post('*/api/v1/workflows/:id/test', ({ params }) => {
     const w = WORKFLOWS[String(params.id)]
     if (!w) return err(5001, '工作流不存在', 404)
     const id = `RUN-t${Date.now().toString(36).slice(-4)}`
-    WF_RUNS[id] = { id, workflow_id: w.id, status: 'running', started_at: Date.now(), branch: 0, edits: [], resumed_from: null }
-    return ok({ run_id: id, task_id: `tsk_${Date.now().toString(36)}`, type: 'workflow_test' }, 202)
+    const taskId = `tsk-${id}`
+    WF_RUNS[id] = { id, workflow_id: w.id, status: 'running', started_at: Date.now(), kind: 'workflow_test' }
+    return bare({ task_id: taskId, run_id: id, kind: 'workflow_test', version: null, status: 'queued' }, 202)
   }),
 
   http.get('*/api/v1/workflows/:id/runs', ({ params }) => {
     const w = WORKFLOWS[String(params.id)]
     if (!w) return err(5001, '工作流不存在', 404)
-    const items = Object.values(WF_RUNS).filter(r => r.workflow_id === w.id)
-    return ok({ items: items.map(r => ({ id: r.id, status: runState(r).status, branch: r.branch, resumed_from: r.resumed_from })) })
+    const items = Object.values(WF_RUNS)
+      .filter(r => r.workflow_id === w.id)
+      .map(r => {
+        const s = runState(r)
+        return { run_id: s.run_id, task_id: s.task_id, kind: s.kind, version: s.version, task_status: s.task_status, run_status: s.run_status, created_at: s.created_at }
+      })
+    return bare({ data: items, meta: { page: 1, page_size: 20, total: items.length } })
   }),
 
   http.get('*/api/v1/workflows/:id/runs/:rid', ({ params }) => {
     const run = WF_RUNS[String(params.rid)]
     if (!run) return err(5002, '运行不存在', 404)
-    return ok(runState(run))
+    return bare({ data: runState(run), meta: {} })
   }),
 
-  // ---- 断点续跑（GRP-09：修参 / 从暂停节点继续，以新分支恢复） ----
+  // ---- 断点续跑（live WorkflowResumeIn/Out：approve 继续 / reject 放弃；审批类需 param_hash） ----
   http.post('*/api/v1/workflows/:id/runs/:rid/resume', async ({ params, request }) => {
     const run = WF_RUNS[String(params.rid)]
     if (!run) return err(5002, '运行不存在', 404)
-    const body = (await request.json()) as { edits?: { node_id: string; field: string; value: unknown }[]; mode?: string }
+    const body = (await request.json()) as { decision?: 'approve' | 'reject'; note?: string }
+    if (body.decision === 'reject') {
+      run.status = 'aborted'
+      return bare({ run_id: run.id, decision: 'reject', run_status: 'cancelled', resumed_node: null }, 202)
+    }
     run.status = 'running'
-    run.branch += 1
     run.started_at = Date.now()
-    run.edits = body.edits ?? []
-    run.resumed_from = run.id
-    const branchId = `${run.id}-b${run.branch}`
-    WF_RUNS[branchId] = { ...run, id: branchId }
-    return ok({ run_id: branchId, status: 'resumed', mode: body.mode ?? 'branch', edits: run.edits }, 202)
+    return bare({ run_id: run.id, decision: 'approve', run_status: 'running', resumed_node: null }, 202)
   }),
 
   http.post('*/api/v1/workflows/:id/runs/:rid/abort', ({ params }) => {
     const run = WF_RUNS[String(params.rid)]
     if (!run) return err(5002, '运行不存在', 404)
     run.status = 'aborted'
-    return ok({ run_id: run.id, status: 'aborted' })
+    return bare({ run_id: run.id, decision: 'abort', run_status: 'cancelled', resumed_node: null })
   }),
 ]

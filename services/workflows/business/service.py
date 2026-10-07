@@ -3,10 +3,11 @@
 用例簇：
 - :meth:`WorkflowService.create` —— 建草稿（模板实例化；模板内置即过校验三件）；
 - :meth:`WorkflowService.save_draft` —— 仅草稿可改（4803）；存前过校验三件（4801/4802）；
-- :meth:`WorkflowService.delete` —— 仅草稿可删（已发布→deprecated 语义不做，直接 4803）；
+- :meth:`WorkflowService.delete` —— 仅草稿可删（已发布→archived 语义不做，直接 4803）；
 - :meth:`WorkflowService.publish` —— 校验三件 → 治理分流：solo=直发固化版本（head+1）；
   team/enterprise=202 pending + workflow_publish 审批工单（批准回迁 head=后续批，v1
   工单仅承载审批记录）；
+- :meth:`WorkflowService.rollback` —— 以目标版本快照新建草稿（版本行零触碰，27 篇 §3）；
 - :meth:`WorkflowService.list_page` / :meth:`get` / :meth:`list_versions` —— 读面。
 
 事务纪律：仓储方法只 flush 不 commit（SessionDep 提交）；审批侧 ReviewTicketService
@@ -29,7 +30,7 @@ from services.workflows.domain.model.graph import (
     validate_nodes,
     validate_structure,
 )
-from services.workflows.domain.model.workflow import Workflow, WorkflowVersion
+from services.workflows.domain.model.workflow import Workflow, WorkflowOrigin, WorkflowVersion
 from services.workflows.domain.repo.review_port import GovernanceTierPort, WorkflowReviewPort, tier_label
 from services.workflows.domain.repo.workflow_repo import WorkflowRepository
 from services.workflows.domain.templates import DEFAULT_TEMPLATE_ID, get_template
@@ -70,9 +71,15 @@ class WorkflowService:
         description: str = "",
         template: str = DEFAULT_TEMPLATE_ID,
         created_by: uuid.UUID | None = None,
+        source_run_id: uuid.UUID | None = None,
         trace_id: str = "",
     ) -> Workflow:
-        """建草稿（name + 可选模板实例化；未知模板 id 回落 blank——mock 口径）。"""
+        """建草稿（name + 可选模板实例化；未知模板 id 回落 blank——mock 口径）。
+
+        source_run_id：血统入参（40 篇 §6 run→template 提升路径写入来源 run id；
+        画布普通新建为 None）。幂等查重（同 run 重复提升返回既有草稿）归 promote 用例，
+        经 :meth:`WorkflowRepository.find_by_source_run` 承载。
+        """
         tpl = get_template(template)
         graph = WorkflowGraph(
             nodes=[WorkflowNode.model_validate(n) for n in tpl["nodes"]],
@@ -85,6 +92,7 @@ class WorkflowService:
             description=description,
             template=tpl["id"],
             draft=graph,
+            source_run_id=source_run_id,
             created_by=created_by,
         )
         await self._repo.add(workflow)
@@ -92,7 +100,7 @@ class WorkflowService:
             actor_id=created_by,
             action="workflows.create",
             resource_id=str(workflow.id),
-            digest={"name": name, "template": tpl["id"]},
+            digest={"name": name, "template": tpl["id"], "source_run_id": str(source_run_id or "")},
             trace_id=trace_id,
         )
         return workflow
@@ -136,18 +144,14 @@ class WorkflowService:
         )
         return workflow
 
-    async def delete(
-        self, *, workflow_id: uuid.UUID, actor_id: uuid.UUID | None = None, trace_id: str = ""
-    ) -> None:
-        """删除：仅草稿可删（已发布→deprecated 语义不做，直接 4803 → api 409）。
+    async def delete(self, *, workflow_id: uuid.UUID, actor_id: uuid.UUID | None = None, trace_id: str = "") -> None:
+        """删除：仅草稿可删（已发布→archived 语义不做，直接 4803 → api 409）。
 
         行锁读取同 :meth:`save_draft`（删除与发布互斥，非草稿判定基于锁后最新行）。
         """
         workflow = await self._require(workflow_id, lock=True)
         if not workflow.is_draft():
-            raise DomainError(
-                f"4803 WORKFLOW_NOT_DRAFT: 工作流非草稿态（当前 {workflow.status.value}），仅草稿可删除"
-            )
+            raise DomainError(f"4803 WORKFLOW_NOT_DRAFT: 工作流非草稿态（当前 {workflow.status.value}），仅草稿可删除")
         await self._repo.delete(workflow_id)
         await self._repo.record_audit(
             actor_id=actor_id,  # 操作人透传（宪法 5；ocr 2026-10-07）
@@ -169,7 +173,9 @@ class WorkflowService:
 
         - solo：直发——版本号顺延，快照落 workflow_versions，head_version 固化（200）；
         - team/enterprise：202 pending——workflow_publish 审批工单落库（批准后回迁 head=
-          后续批；v1 工单仅承载审批记录），head/状态不动。
+          后续批；v1 工单仅承载审批记录），head/状态不动；
+        - origin=llm_candidate（40 篇 §6 入口② LLM 候选）：任何档位强制 202 pending
+          （宪法 3 硬门禁——候选非成品，人工终审生效）。
 
         幂等：同工作流已有 open 工单时 submit_candidate 返回既有 id（uk_review_one_open），
         重放安全。行锁读取（FOR UPDATE）串行化版本分配——并发发布不再同抢 max(version)+1
@@ -180,7 +186,10 @@ class WorkflowService:
         next_version = await self._repo.next_version(workflow_id)
         tier = await self._resolve_tier(workflow.tenant_id)
 
-        if tier == "solo":
+        # 宪法 3 硬门禁（40 篇 §6 入口②）：LLM 产物草稿（origin=llm_candidate）任何治理
+        # 档位（含 solo）不得直发——必过审批队列，人工终审生效。档位只调节 team/enterprise
+        # 的常规分流；候选豁免面为零。
+        if tier == "solo" and workflow.origin is not WorkflowOrigin.LLM_CANDIDATE:
             version = WorkflowVersion(
                 tenant_id=workflow.tenant_id,
                 workflow_id=workflow.id,
@@ -202,7 +211,8 @@ class WorkflowService:
             )
             return PublishOutcome(status="published", governance="solo", next_version=f"v{next_version}")
 
-        # team / enterprise：审批工单（硬门禁任何档不可跳过——设计宪法 3）
+        # team / enterprise：审批工单（硬门禁任何档不可跳过——设计宪法 3）；
+        # origin=llm_candidate 的 solo 档同落本分支（候选非成品，任何档不可直发）
         if self._review is None:
             raise DomainError("5004 STORAGE_UNAVAILABLE: 审核工单端口未装配")
         ticket_id = await self._review.submit_candidate(
@@ -231,6 +241,40 @@ class WorkflowService:
         return PublishOutcome(
             status="pending_approval", governance=tier, next_version=f"v{next_version}", ticket_id=ticket_id
         )
+
+    async def rollback(
+        self,
+        *,
+        workflow_id: uuid.UUID,
+        to_version: int,
+        actor_id: uuid.UUID | None = None,
+        trace_id: str = "",
+    ) -> Workflow:
+        """回滚（27 篇 §3「版本历史+回滚=以旧版本新建草稿」；api/01 §5.11 202）：
+
+        读目标不可变版本行（不存在 LookupError→api 404）→ 快照反序列化 → 重过校验三件
+        （发布时已过，幂等防御）→ 聚合 :meth:`Workflow.rollback_to` 推进（status 回
+        draft、draft=快照、head_version 与版本行零触碰）→ 落库 + 审计。
+
+        行锁读取（FOR UPDATE）与保存/发布/删除互斥——回滚与并发发布不串图（ocr 同款竞态收口）。
+        workflow:edit scope（api/01 §5.11），workflow:publish 不需要——版本历史未变。
+        """
+        workflow = await self._require(workflow_id, lock=True)
+        version = await self._repo.get_version(workflow_id, to_version)
+        if version is None:
+            raise LookupError(f"目标版本不存在: workflow={workflow_id} version=v{to_version}")
+        graph = WorkflowGraph.from_storage(version.snapshot)
+        self._require_valid(graph)
+        workflow.rollback_to(graph)
+        await self._repo.save(workflow)
+        await self._repo.record_audit(
+            actor_id=actor_id,
+            action="workflows.rollback",
+            resource_id=str(workflow.id),
+            digest={"to_version": to_version, "head_version": workflow.head_version},
+            trace_id=trace_id,
+        )
+        return workflow
 
     # ---- 读面 ----
 

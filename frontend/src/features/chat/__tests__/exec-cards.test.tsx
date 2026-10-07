@@ -229,7 +229,7 @@ describe('PlanCard（40 篇 §5.2 计划卡）', () => {
         { id: 'p3', content: '规则核对范围', status: 'pending' },
       ],
     }
-    const { container } = render(<PlanCard plan={plan} />)
+    const { container } = render(<MemoryRouter><PlanCard plan={plan} /></MemoryRouter>)
     expect(screen.getByTestId('plan-progress')).toHaveTextContent('· 1/3')
     expect(screen.getByText('rev 2')).toBeInTheDocument()
     // in_progress 旋转点（animate-spin）
@@ -243,14 +243,14 @@ describe('PlanCard（40 篇 §5.2 计划卡）', () => {
   })
 
   it('⑦ revision 原地刷新（整表快照替换）+ 空态不渲染', () => {
-    const { rerender } = render(<PlanCard plan={{ plan_id: 'r', revision: 1, items: [{ id: 'p1', content: 'A', status: 'pending' }] }} />)
+    const { rerender } = render(<MemoryRouter><PlanCard plan={{ plan_id: 'r', revision: 1, items: [{ id: 'p1', content: 'A', status: 'pending' }] }} /></MemoryRouter>)
     expect(screen.getByTestId('plan-progress')).toHaveTextContent('· 0/1')
-    rerender(<PlanCard plan={{ plan_id: 'r', revision: 2, items: [{ id: 'p1', content: 'A', status: 'completed' }] }} />)
+    rerender(<MemoryRouter><PlanCard plan={{ plan_id: 'r', revision: 2, items: [{ id: 'p1', content: 'A', status: 'completed' }] }} /></MemoryRouter>)
     expect(screen.getByTestId('plan-progress')).toHaveTextContent('· 1/1')
     // 空态纪律：plan=null / items 空 → 不渲染
-    const { container: c1 } = render(<PlanCard plan={null} />)
+    const { container: c1 } = render(<MemoryRouter><PlanCard plan={null} /></MemoryRouter>)
     expect(c1).toBeEmptyDOMElement()
-    const { container: c2 } = render(<PlanCard plan={{ plan_id: 'r', revision: 3, items: [] }} />)
+    const { container: c2 } = render(<MemoryRouter><PlanCard plan={{ plan_id: 'r', revision: 3, items: [] }} /></MemoryRouter>)
     expect(c2).toBeEmptyDOMElement()
   })
 })

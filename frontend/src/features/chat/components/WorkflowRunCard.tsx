@@ -1,8 +1,11 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { toast } from 'sonner'
 import { Ban, Check, Clock, Hourglass, Loader2, SkipForward, Workflow, X } from 'lucide-react'
+import { ApiError } from '@/api/client'
 import type { RunInfo, WorkflowNodeState } from '@/stores/session-store'
 import { WF_NODE_TYPE_TEXT, fmtDuration, sortWfNodesRecent } from '../lib/exec-display'
+import { promoteRun } from '../lib/promote'
 
 /** 工作流运行卡（40 篇 §5.2 N2 + 42 篇 W1b-4 合并版：v1 事件驱动，X16 前无 mock 依赖）。
  *  props {runId, nodes, runStatus}：nodes=store.workflowRuns[runId].nodes（W1a 扁平 Record 的
@@ -90,6 +93,7 @@ function WorkflowRunCardInner({
 }) {
   const navigate = useNavigate()
   const [expanded, setExpanded] = useState(false)
+  const [promoting, setPromoting] = useState(false)
   const running = !runStatus || runStatus === 'running'
   const total = nodes.length
   const done = nodes.filter(n => !isNodeActive(n)).length
@@ -102,7 +106,28 @@ function WorkflowRunCardInner({
   const totalLabel = fmtDuration(totalMs)
   const waitingNode = nodes.find(n => n.status === 'waiting_approval')
 
+  // 存为工作流（40 篇 §6 入口①）：仅已完成运行可提升（图=本次实际执行图，origin=user）；
+  // 幂等键=run_id——重复点击返回既有草稿（exists）同跳转不重建
+  async function saveAsWorkflow() {
+    if (promoting) return
+    setPromoting(true)
+    try {
+      const r = await promoteRun(runId)
+      toast.success(
+        r.status === 'exists' ? `已返回既有草稿（幂等命中）· ${r.draft_version}` : `工作流草稿已创建 · ${r.draft_version}`,
+      )
+      navigate(`/workflows/${r.workflow_id}`)
+    } catch (e) {
+      toast.error(e instanceof ApiError ? e.message : '存为工作流失败')
+    } finally {
+      setPromoting(false)
+    }
+  }
+
   if (collapsed) {
+    // 折叠摘要行（终态）：「存为工作流」（40 篇 §6 入口①：完成后出现——图=本次实际执行图，
+    // origin=user；幂等键=run_id 重复点击返回既有草稿）与「查看执行」并排
+    const failedRun = runStatus === 'failed'
     return (
       <div data-testid="wf-run-card" className="mb-2 rounded-lg border border-separator bg-surface-2 px-3 py-2 text-xs">
         <div className="flex items-center gap-2">
@@ -112,6 +137,19 @@ function WorkflowRunCardInner({
           <span data-testid="wf-run-summary" className="flex-none font-mono text-label-3">
             {headState} · {done}/{total} 节点{totalLabel ? ` · ${totalLabel}` : ''}
           </span>
+          {!failedRun && (
+            <button
+              type="button"
+              data-testid="wf-save-template"
+              className="btn btn-g btn-sm flex-none"
+              disabled={promoting}
+              title="按本次实际执行图新建草稿（40 篇 §6 存为工作流）"
+              onClick={() => void saveAsWorkflow()}
+            >
+              {promoting && <Loader2 size={11} className="animate-spin" aria-hidden />}
+              存为工作流
+            </button>
+          )}
           <button
             type="button"
             data-testid="wf-open-panel"
@@ -201,7 +239,8 @@ function WorkflowRunCardInner({
         </button>
       )}
 
-      {/* 三按钮（40 篇 §5.2）：查看运行实链；画布/存为工作流为批次 C 占位（G8/X16） */}
+      {/* 三按钮（40 篇 §5.2）：查看运行实链；存为工作流=X16 提升实装（已完成运行可提升）；
+          在画布中打开=工作流 id 不在 WORKFLOW_NODE_* 载荷面，仍占位 */}
       <div className="mt-2 flex items-center gap-2 border-t border-separator pt-2">
         <button
           type="button"
@@ -212,10 +251,18 @@ function WorkflowRunCardInner({
         >
           查看运行
         </button>
-        <button type="button" data-testid="wf-open-canvas" className="btn btn-g btn-sm" disabled title="随批次 C 开放">
+        <button type="button" data-testid="wf-open-canvas" className="btn btn-g btn-sm" disabled title="运行卡暂缺工作流 id（RUN_STARTED 载荷未入 store），随批次后续开放">
           在画布中打开
         </button>
-        <button type="button" data-testid="wf-save-template" className="btn btn-g btn-sm" disabled title="随批次 C 开放">
+        <button
+          type="button"
+          data-testid="wf-save-template"
+          className="btn btn-g btn-sm"
+          disabled={running || promoting}
+          title={running ? '运行完成后可存为工作流' : '按本次实际执行图新建草稿（40 篇 §6）'}
+          onClick={() => void saveAsWorkflow()}
+        >
+          {promoting && <Loader2 size={11} className="animate-spin" aria-hidden />}
           存为工作流
         </button>
       </div>

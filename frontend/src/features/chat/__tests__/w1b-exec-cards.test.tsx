@@ -1,6 +1,8 @@
 import '@testing-library/jest-dom/vitest'
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it } from 'vitest'
+import { http, HttpResponse } from 'msw'
+import { server } from '@/mocks/node'
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom'
 import { ExecutionTaskCard } from '@/features/chat/components/ExecutionTaskCard'
 import { PlanCard } from '@/features/chat/components/PlanCard'
@@ -59,7 +61,7 @@ describe('PlanCard 计划清单卡（40 篇 §5.2 形态①）', () => {
 
   it('进度 1/3 + revision 徽章 rev 3 + 三行渲染；未全完成不出现「转为工作流草稿」', () => {
     feed({ name: 'PLAN_UPDATED', data: { plan_id: 'pl-1', revision: 3, items: ITEMS } })
-    render(<PlanCard plan={useSessionStore.getState().plan!} />)
+    render(<MemoryRouter initialEntries={['/chat']}><LocationProbe /><Routes><Route path="*" element={<PlanCard plan={useSessionStore.getState().plan!} />} /></Routes></MemoryRouter>)
     expect(screen.getByTestId('plan-card')).toHaveTextContent('计划')
     expect(screen.getByTestId('plan-progress')).toHaveTextContent('1/3')
     expect(screen.getByText('rev 3')).toBeInTheDocument()
@@ -74,19 +76,36 @@ describe('PlanCard 计划清单卡（40 篇 §5.2 形态①）', () => {
 
   it('畸形 status（未知枚举）按 pending 呈现（载荷不可信，W1a 同纪律）', () => {
     feed({ name: 'PLAN_UPDATED', data: { plan_id: 'pl-1', revision: 1, items: [{ id: 'px', content: '怪状态步', status: 'weird' }] } })
-    render(<PlanCard plan={useSessionStore.getState().plan!} />)
+    render(<MemoryRouter initialEntries={['/chat']}><LocationProbe /><Routes><Route path="*" element={<PlanCard plan={useSessionStore.getState().plan!} />} /></Routes></MemoryRouter>)
     expect(screen.getByTestId('plan-item-px').querySelector('.line-through')).toBeNull()
     expect(screen.getByTestId('plan-progress')).toHaveTextContent('0/1')
   })
 
-  it('全部 completed → 「转为工作流草稿」占位出现且 disabled（G8：随批次 C 开放）', () => {
+  it('全部 completed → 「转为工作流草稿」启用；点击走 promote 且幂等命中返回同一草稿（X16 提升实装）', async () => {
+    // 契约仿真（api/01 §5.11 promote 行）：首次 201 draft_created，重复 200 exists 同 id
+    let calls = 0
+    server.use(
+      http.post('*/api/v1/workflows/runs/pl-2/promote', () => {
+        calls += 1
+        return HttpResponse.json(
+          { code: 0, message: 'ok', data: { workflow_id: 'wf-777', status: calls === 1 ? 'draft_created' : 'exists', draft_version: 'v1', source_run_id: 'pl-2', origin: 'llm_candidate' } },
+          { status: calls === 1 ? 201 : 200 },
+        )
+      }),
+    )
     feed({
       name: 'PLAN_UPDATED',
       data: { plan_id: 'pl-2', revision: 2, items: [{ id: 'q1', content: '步一', status: 'completed' }, { id: 'q2', content: '步二', status: 'completed' }] },
     })
-    render(<PlanCard plan={useSessionStore.getState().plan!} />)
+    render(<MemoryRouter initialEntries={['/chat']}><LocationProbe /><Routes><Route path="*" element={<PlanCard plan={useSessionStore.getState().plan!} />} /></Routes></MemoryRouter>)
     expect(screen.getByTestId('plan-progress')).toHaveTextContent('2/2')
-    expect(screen.getByTestId('plan-promote')).toBeDisabled()
+    const btn = screen.getByTestId('plan-promote')
+    expect(btn).toBeEnabled()  // G8 占位退役：X16 提升实装（LLM 候选 origin，发布必过审批）
+    fireEvent.click(btn)  // 首击：创建草稿 → 跳画布
+    await waitFor(() => expect(screen.getByTestId('probe')).toHaveTextContent('/workflows/wf-777'))
+    fireEvent.click(screen.getByTestId('plan-promote'))  // 复击（幂等）：exists 同 id 不重建
+    await waitFor(() => expect(calls).toBe(2))
+    expect(screen.getByTestId('probe')).toHaveTextContent('/workflows/wf-777')
   })
 })
 
@@ -198,6 +217,35 @@ describe('WorkflowRunCard 工作流运行卡（40 篇 §5.2 N2）', () => {
     )
     fireEvent.click(screen.getByTestId('wf-open-tasks'))
     expect(screen.getByTestId('probe')).toHaveTextContent('/tasks?job=wf-r')
+  })
+
+  it('运行完成后「存为工作流」→ promote 幂等命中返回同一草稿（40 篇 §6 入口①）', async () => {
+    // 契约仿真（api/01 §5.11 promote 行）：首次 201 draft_created，重复 200 exists 同 id
+    let calls = 0
+    server.use(
+      http.post('*/api/v1/workflows/runs/wf-r/promote', () => {
+        calls += 1
+        return HttpResponse.json(
+          { code: 0, message: 'ok', data: { workflow_id: 'wf-888', status: calls === 1 ? 'draft_created' : 'exists', draft_version: 'v1', source_run_id: 'wf-r', origin: 'user' } },
+          { status: calls === 1 ? 201 : 200 },
+        )
+      }),
+    )
+    // 卡常挂载（无 Routes 切换）：跳画布后仍可复位第二次点击验证幂等
+    render(
+      <MemoryRouter initialEntries={['/chat']}>
+        <LocationProbe />
+        <WorkflowRunCard runId="wf-r" nodes={presetWf()} runStatus="succeeded" />
+      </MemoryRouter>,
+    )
+    // 终态 → 折叠摘要行：存为工作流按钮出现（40 篇 §5.2「完成后出现」）
+    const btn = await screen.findByTestId('wf-save-template')
+    expect(btn).toBeEnabled()
+    fireEvent.click(btn) // 首击：创建草稿 → 跳画布
+    await waitFor(() => expect(screen.getAllByTestId('probe').some(p => p.textContent === '/workflows/wf-888')).toBe(true))
+    // 复击（幂等）：exists 同 id 不重建
+    fireEvent.click(screen.getByTestId('wf-save-template'))
+    await waitFor(() => expect(calls).toBe(2))
   })
 })
 

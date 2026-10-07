@@ -79,6 +79,8 @@ ignore_imports = [
     "services.platform.db.uow -> services.agent.domain.repo.agent_repo",
     "services.platform.db.uow -> services.agent.data.repo_impl.prompt_repo",  # 2026-09-29 H-1 提示词工程治理批（TODO(M4) 收口同批）
     "services.platform.db.uow -> services.agent.domain.repo.prompt_repo",
+    "services.platform.db.uow -> services.workflows.data.repo_impl.workflow_repo",  # X16 运行控制（2026-10-07 批；tx.workflows 组合点，agent 仓储同款豁免）
+    "services.platform.db.uow -> services.workflows.domain.repo.workflow_repo",  # 同上（Protocol 类型暴露）
     "services.platform.db.registry -> services.agent.data.orm",
     "services.platform.db.registry -> services.iam.data.orm",
     "services.platform.db.registry -> services.kb.data.orm",
@@ -150,6 +152,8 @@ ignore_imports = [
     "services.platform.db.uow -> services.agent.domain.repo.agent_repo",
     "services.platform.db.uow -> services.agent.data.repo_impl.prompt_repo",  # 2026-09-29 H-1 提示词工程治理批（同上）
     "services.platform.db.uow -> services.agent.domain.repo.prompt_repo",
+    "services.platform.db.uow -> services.workflows.data.repo_impl.workflow_repo",  # X16 运行控制（2026-10-07 批；tx.workflows 组合点，agent 仓储同款豁免）
+    "services.platform.db.uow -> services.workflows.domain.repo.workflow_repo",  # 同上（Protocol 类型暴露）
     "services.gateway.app -> services.agent.business.task_worker",  # 任务执行 worker 组合根装配（2026-09-27 批，mcp.bootstrap 单边豁免同款）
     "services.gateway.app -> services.agent.data.repo_impl.task_poller",  # 任务 worker 轮询器组合根装配（同上）
     "services.gateway.app -> services.agent.domain.model.task",  # RunRetryPolicy 组合根注入（同上）
@@ -164,6 +168,10 @@ ignore_imports = [
     # ——gateway 与独立进程同一装配面；原 kb.business/iam.data/mcp.providers 三条直连边
     # 随装配逻辑移入 bootstrap 撤销，传递链组合点由本条单边豁免收口
     "services.gateway.app -> services.mcp.bootstrap",
+    # X16（2026-10-07 批）：工作流执行器组合根装配（get_or_build_workflow_executor，worker
+    # provider 注入；传递链经 kb.business.search_service 生产端口——mcp.bootstrap 单边豁免同款）
+    "services.gateway.app -> services.workflows.business.executor",
+    "services.gateway.app -> services.workflows.api.runs",  # X16 运行六端点挂载边（api/01 §5.11；workflows.api 挂载边同款，传递链单边豁免收口）
 ]
 
 [[tool.importlinter.contracts]]
@@ -226,6 +234,8 @@ source_modules = ["services.gateway", "services.iam", "services.agent", "service
 forbidden_modules = ["services.kb.data"]
 ignore_imports = [
     "services.gateway.app -> services.kb.api.kb",
+    "services.gateway.app -> services.workflows.business.executor",
+    "services.gateway.app -> services.workflows.api.runs",  # X16 运行六端点挂载边（api/01 §5.11；workflows.api 挂载边同款，传递链单边豁免收口）  # X16 执行器组合根装配传递链（2026-10-07 批；mcp.bootstrap 单边豁免同款）
     "services.kb.business.usage_service -> services.kb.data.usage_orm",  # 知识活性计数落库（TODO(M5) 随 kb-usage-counters 收口）
     "services.agent.business.chat_context -> services.kb.business.search_service",  # M3 检索装配挂载边（standards/01 §2.1 规则 3 显式服务调用；importlinter 连传递链算，agentic 新链触发显形）
     # MCP registry 共享工厂经 kb.business 显式服务面触达 kb.data（模块内 business→data 合法分层
@@ -259,6 +269,8 @@ source_modules = ["services.gateway", "services.iam", "services.agent", "service
 forbidden_modules = ["services.kb.retrieval", "services.sandbox.runtime"]
 ignore_imports = [
     "services.gateway.app -> services.kb.api.kb",
+    "services.gateway.app -> services.workflows.business.executor",
+    "services.gateway.app -> services.workflows.api.runs",  # X16 运行六端点挂载边（api/01 §5.11；workflows.api 挂载边同款，传递链单边豁免收口）  # X16 执行器组合根装配传递链（2026-10-07 批；mcp.bootstrap 单边豁免同款）
     "services.agent.business.chat_context -> services.kb.business.search_service",  # 计划 3.2：chat 检索消费面（规则 3）
     "services.mcp.bootstrap -> services.kb.business.search_service",  # P1-1 收口：knowledge.search 能力绑定（共享工厂，规则 3 许可面）
 ]

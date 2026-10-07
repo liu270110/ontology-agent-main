@@ -169,8 +169,12 @@ class ChatPolicy:
     tool_loop_max_rounds: int = 5  # 计划步数上限（03 §3「上限 5 轮防失控」）
     retrieval_top_k: int = 8  # 检索 top_k（对齐 api/01 §6.2）
     retrieval_retry_max: int = 1  # 检索自动重试（03 §3 步骤 3）
-    rrf_k: int = 60  # L2 融合平滑常数（memory §3）
-    half_life_days: float = 30.0  # L2 时间衰减半衰期（memory §3）
+    # K29-b chat 路参数欠账（K25 P2①，docs/Agent/13 §35）：None=现行硬缺省（rrf 60/
+    # 半衰期 30 天，memory §3）——行为零变化；组合根缺省读统一配置层 Settings.
+    # memory_rrf_k/memory_decay_half_life_days（OA_ 环境变量覆盖，与 REST/MCP/L4 检索
+    # 通道同参），显式传入 policy 时以 policy 值为准（memory_expiry_floor K25-c 同款纪律）。
+    rrf_k: int | None = None  # L2 融合平滑常数（memory §3）
+    half_life_days: float | None = None  # L2 时间衰减半衰期（memory §3）
     # D-6 软时效地板分（Agent/13 §28，K25-c chat 路接线 2026-10-07，§31）：None=不注入，
     # L2 组装吃域缺省 DEFAULT_EXPIRY_FLOOR=0.1；组合根缺省读统一配置层 Settings.
     # memory_expiry_floor（OA_ 环境变量覆盖），显式传入 policy 时以 policy 值为准

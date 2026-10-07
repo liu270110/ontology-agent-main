@@ -165,3 +165,33 @@ async def test_chat路工厂传floor_组装过期项乘子等于Settings值():
     )  # noqa: SLF001
     assert default[0] is not None
     assert default[0].l2[0].score == pytest.approx(0.9 * 0.5 ** (age_days / 30) * 0.1, abs=1e-6)  # 缺省=域 0.1
+
+
+async def test_chat路工厂透传rrf_k_policy100与缺省60对照(monkeypatch):
+    """K29-b（13 §35）：ChatPolicy.rrf_k=100 经 build_chat_context_assembler → _load_memory
+    → build_memory_context 实传 k=100；缺省 policy（rrf_k=None）→ 现行硬缺省 60（行为零
+    变化回退口，memory §3）。half_life_days 同轴同捕获面附带断言（7 ↔ 30.0）。"""
+    from services.agent.business import chat_context as chat_context_module
+
+    real_build = chat_context_module.build_memory_context
+    seen: list[dict] = []
+
+    async def spy_build_memory_context(**kwargs):
+        seen.append({"rrf_k": kwargs["rrf_k"], "half_life_days": kwargs["half_life_days"]})
+        return await real_build(**kwargs)
+
+    monkeypatch.setattr(chat_context_module, "build_memory_context", spy_build_memory_context)
+    fact = _expired_fact()
+    session_id = uuid4()
+
+    await _chat_assembler(ChatPolicy(rrf_k=100, half_life_days=7), [fact])._load_memory(
+        tenant_id=fact.tenant_id, user_id=fact.user_id, session_id=session_id, top_k=8
+    )  # noqa: SLF001
+    await _chat_assembler(ChatPolicy(), [fact])._load_memory(
+        tenant_id=fact.tenant_id, user_id=fact.user_id, session_id=session_id, top_k=8
+    )  # noqa: SLF001
+
+    assert seen == [
+        {"rrf_k": 100, "half_life_days": 7},  # 显式 policy 值下传
+        {"rrf_k": 60, "half_life_days": 30.0},  # 缺省 None → 现行硬缺省（零变化）
+    ]

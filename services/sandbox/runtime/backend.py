@@ -35,7 +35,10 @@ class ExecLimitError(SandboxRuntimeError):
 #
 # 枚举制残余风险（K9-c/B-6，方案依据=docs/Agent/13 §15）：未列名且不落在下方后缀通配族的
 # 新凭证变量不剥离（如路径类 GOOGLE_APPLICATION_CREDENTIALS 型、非标准后缀私有族）——
-# **新凭证族须同步扩表**（精确项）；标准凭证后缀族由 *_API_KEY/*_TOKEN/*_SECRET 通配兜底。
+# **新凭证族须同步扩表**（精确项）；标准凭证后缀族由 *_API_KEY/*_TOKEN/*_SECRET 等通配兜底。
+# K29（docs/Agent/13 §35，R30-3 残余敏感族清扫）：精确项 +KUBECONFIG（集群凭证面）/
+# DATABASE_URL（连接串内嵌口令），后缀族 +_DSN/_PASSWORD/_PRIVATE_KEY（deer-flow 原建议
+# 族，后缀形态对齐既有 *_API_KEY 三元组惯例）。
 HOST_ENV_DENYLIST: frozenset[str] = frozenset(
     {
         "GIT_ASKPASS",
@@ -55,13 +58,23 @@ HOST_ENV_DENYLIST: frozenset[str] = frozenset(
         "ANTHROPIC_API_KEY",
         "DEEPSEEK_API_KEY",
         "HF_TOKEN",
+        "KUBECONFIG",
+        "DATABASE_URL",
     }
 )
 
 # 后缀通配族（K9-c/B-6 第二层）：变量名以后缀命中即剥（精确枚举为主、通配为辅）——新厂商
-# 按命名惯例的凭证变量（如 MYAPP_API_KEY/VENDOR_TOKEN/X_SECRET）自动覆盖，无需扩表；
-# 大小写敏感（env 变量惯例大写）。代价：非凭证的罕见同名后缀变量会被一并剥离（fail-safe 取向）。
-HOST_ENV_DENYLIST_SUFFIXES: tuple[str, ...] = ("_API_KEY", "_TOKEN", "_SECRET")
+# 按命名惯例的凭证变量（如 MYAPP_API_KEY/VENDOR_TOKEN/X_SECRET/MY_DSN/DB_PASSWORD）自动
+# 覆盖，无需扩表；大小写敏感（env 变量惯例大写）。代价：非凭证的罕见同名后缀变量会被一并
+# 剥离（fail-safe 取向）。
+HOST_ENV_DENYLIST_SUFFIXES: tuple[str, ...] = (
+    "_API_KEY",
+    "_TOKEN",
+    "_SECRET",
+    "_DSN",
+    "_PASSWORD",
+    "_PRIVATE_KEY",
+)
 
 
 def _is_denied_env_name(name: str) -> bool:
@@ -73,7 +86,8 @@ def sanitize_env(env: dict[str, str]) -> tuple[dict[str, str], tuple[str, ...]]:
     """宿主 env 刷洗（纯函数；K5 门 3）：命中刷洗表即剥离并返回剥离清单。
 
     命中判定为双层（K9-c/B-6）：HOST_ENV_DENYLIST 精确枚举 + 凭证后缀通配
-    （HOST_ENV_DENYLIST_SUFFIXES，*_API_KEY/*_TOKEN/*_SECRET 命中即剥）。
+    （HOST_ENV_DENYLIST_SUFFIXES，*_API_KEY/*_TOKEN/*_SECRET/*_DSN/*_PASSWORD/
+    *_PRIVATE_KEY 命中即剥）。
     不改入参（防御拷贝）；返回 (剥离后 env, 剥离变量名元组按命中序)。env 组装点
     （docker_backend.create 容器直灌、spec_from_mapping 反序列化边界）统一先过本函数。
     """

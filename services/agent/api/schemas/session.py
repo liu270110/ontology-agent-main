@@ -63,6 +63,9 @@ class SessionOut(BaseModel):
     title: str | None
     type: str = "single"
     routing: str = "round_robin"
+    # K29-c2（docs/Agent/13 §35，K28 P2）：会话具名工具集读面透出（写面 SessionCreateIn.
+    # toolset K28-a 已有）；None=平台现行全集（与写面同口径）。
+    toolset: str | None = None
     created_at: datetime | None = None
 
 
@@ -173,6 +176,7 @@ def from_domain(ag: Session) -> SessionOut:
         title=ag.title,
         type=ag.type.value,
         routing=ag.routing.value,
+        toolset=ag.toolset,  # K29-c2：具名工具集读面透出（K28 落库字段，对齐 to_domain 写面）
         created_at=ag.created_at,  # B3 缺陷修复 2026-10-07：聚合已带行创建时刻，读面不再恒 null
     )
 

@@ -351,3 +351,24 @@ def test_会话工具集None_不过滤_全量注册兼容() -> None:
     kept, names = orchestrator.turn_tool_bindings(None)
     assert kept == extra  # 全量原样（元组恒等）
     assert names == {b.meta.name for b in extra}  # mcp.echo/ask_user.tool/fs.write 全在
+
+
+def test_default工具集与装配面静态绑定名集等价() -> None:
+    """K29-c1 防漂移锚定（docs/Agent/13 §35，K28 P2）：TOOLSETS['default'] ≡ 装配面静态全集。
+
+    锚定形态：以组合根装配函数取「静态能力全集」实际绑定名集——
+    build_capability_tool_bindings（fs 五件+web 双件，写开关开）∪ _build_chat_capability_bindings
+    （subagent 三件+ask_user+jev，jev 开关开）∪ spill 兑换件（get_or_build_chat_orchestrator
+    中与能力集并列的条件装配支，SpillStore 仅取 meta.name 不触实现）——三者并集断言与
+    TOOLSETS['default'] 逐名等价。**新静态绑定未入 default → 此测试红**（注册表漂移防线）。
+    MCP 桥动态面（mcp.*，随 registry 动态、不可静态列举）与 todo 三件（Run 级内核装配）
+    按 toolsets.py 已知边界不入集、不入断言。
+    """
+    from services.agent.business.capabilities.spill_retrieval import build_spill_retrieval_binding
+    from services.agent.business.capabilities.toolsets import TOOLSETS
+
+    full_on = _settings(kernel_capability_write=True, jev_enabled=True)  # jev 引擎懒加载，构造不触模型
+    names = {b.meta.name for b in build_capability_tool_bindings(full_on)}
+    names |= {b.meta.name for b in _build_chat_capability_bindings(SimpleNamespace(settings=full_on))}
+    names.add(build_spill_retrieval_binding(store=object()).meta.name)  # type: ignore[arg-type]
+    assert names == set(TOOLSETS["default"])

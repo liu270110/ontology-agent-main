@@ -175,3 +175,45 @@ async def test_channel_scores_空per_channel为None不透出空壳():
         now=NOW,
     )
     assert hits == []
+
+
+# ---------------------------------------------------------------- K22 D-6 软时效降权（Agent/13 §28）
+
+
+class _RecentRepo:
+    """list_recent 测试替身（TimeChannel 排序面单测）。"""
+
+    def __init__(self, rows: list[MemoryRecord]) -> None:
+        self._rows = rows
+
+    async def list_recent(self, tenant_id, *, subject_user_layer, limit, owner_user_id=None):
+        return self._rows[:limit]
+
+
+def _timed_rec(rid: UUID, *, created: datetime, valid_to: datetime | None) -> MemoryRecord:
+    return MemoryRecord(
+        id=rid,
+        tenant_id=uuid4(),
+        layer=MemoryLayer.USER,
+        record_type=MemoryType.FACT_CLAIM,
+        subject_iri="http://example.org/ent/x",
+        content="c",
+        scope=MemoryScope.PERSONAL,
+        confidence=1.0,
+        created_at=created,
+        valid_to=valid_to,
+    )
+
+
+async def test_TimeChannel_D6_过期记录按地板分沉底_仍召回():
+    """消费面零改动吃分（Agent/13 §28）：valid_to 过点记录（仍 active）经 decay_score 软时效
+    乘子自然沉底但不被丢弃——软降权非硬门；TimeChannel 不传 expiry_floor 即吃域层缺省地板。"""
+    from services.memory.business.retrieval_pg import TimeChannel
+
+    fresh_id, stale_id = uuid4(), uuid4()
+    created = NOW - timedelta(days=1)
+    fresh = _timed_rec(fresh_id, created=created, valid_to=NOW + timedelta(days=9))
+    stale = _timed_rec(stale_id, created=created, valid_to=NOW - timedelta(days=1))  # 过点仍 active
+    hits = await TimeChannel(_RecentRepo([stale, fresh]), 30).recall(uuid4(), "", 8, now=NOW)
+    assert [r.id for r in hits] == [fresh_id, stale_id]  # 过期沉底（fresh 乘子 0.91 > stale 地板 0.1）
+    assert stale_id in [r.id for r in hits]  # 仍召回：过期可注入（D-6 放宽）

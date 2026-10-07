@@ -9,7 +9,7 @@ from __future__ import annotations
 import uuid
 from datetime import UTC, datetime
 from enum import IntEnum, StrEnum
-from typing import Any
+from typing import Any, Final
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -57,6 +57,34 @@ class MemoryStateError(Exception):
     """非法状态流转（网关映射 4xxx 业务错误）。"""
 
 
+DEFAULT_EXPIRY_FLOOR: Final[float] = 0.1  # D-6 软时效地板分缺省（Settings memory_expiry_floor 同源默认）
+
+
+def expiry_multiplier(valid_to: datetime | None, now: datetime, *, start: datetime, floor: float) -> float:
+    """valid_to 剩余寿命连续乘子（D-6 软时效降权，Agent/13 §28；上游 mem0 §6 expiration_date 软时效）。
+
+    - 无时效线（valid_to=None）：恒 1.0，不降权；
+    - 未过期：自 start（调用方传记录 created_at）至 valid_to 随剩余寿命消耗线性滑落 1.0 → floor；
+    - 已过点：floor 常量（自然时效软过期——仍可注入，得分压至地板）。
+
+    双时间线边界：本乘子只承载"时效到点"一支的自然软化；人工失效（invalidate →
+    INVALIDATED 终态）语义严格分离，仍走状态硬门，不经本函数松动。
+    start 形参是线性滑落的起点锚——纯 (valid_to, now) 无法定义线性段；取 created_at
+    与半衰期 age 同锚（两模型该字段恒非空，语义=整段寿命即滑落窗）。
+    """
+    if not 0.0 <= floor <= 1.0:
+        raise ValueError(f"floor 须在 [0,1] 区间，当前 {floor}")
+    if valid_to is None:
+        return 1.0
+    if now >= valid_to:
+        return floor
+    span = (valid_to - start).total_seconds()
+    if span <= 0:  # 时效窗退化（valid_to ≤ created_at）：无滑落段，按过点口径取地板
+        return floor
+    progress = (now - start).total_seconds() / span
+    return 1.0 - (1.0 - floor) * min(max(progress, 0.0), 1.0)
+
+
 class MemoryRecord(BaseModel):
     model_config = ConfigDict(validate_assignment=True)
 
@@ -100,12 +128,31 @@ class MemoryRecord(BaseModel):
         self._transition(RecordState.EXPIRED, now)
 
     def is_injectable(self, now: datetime) -> bool:
-        """可注入上下文：active 且双时间线未失效（规格 §5.2 第 4 点）。"""
-        if self.state is not RecordState.ACTIVE:
-            return False
-        return self.valid_to is None or self.valid_to > now
+        """可注入上下文：仅状态硬门（规格 §5.2 第 4 点；valid_to 硬门随 D-6 软时效放宽，Agent/13 §28）。
 
-    def decay_score(self, now: datetime, half_life_days: float) -> float:
-        """confidence × 时间衰减（规格 §5.3 衰减调度器的打分函数）。"""
+        K22 起 valid_to 过点不再拒绝注入——自然时效软过期仍可注入，得分经 decay_score 的
+        expiry_multiplier 线性滑落/压至地板（消费面 TimeChannel/context 按分吃零改动）。
+        终态语义绝不动：INVALIDATED（本体变更联动/人工下线/遗忘指令）、SUPERSEDED、
+        EXPIRED（衰减调度终局）一律不可注入——valid_to 双时间线只软化"时效到点"一支，
+        与人工失效严格区分。now 形参保留（调用面兼容 + 谓词时间参数化惯例），软化后不再参与判定。
+        """
+        return self.state is RecordState.ACTIVE
+
+    def half_life_score(self, now: datetime, half_life_days: float) -> float:
+        """confidence × 半衰期衰减（纯半衰期分量 = K22 前 decay_score 原语义）。
+
+        衰减调度器过期判定专用（tasks.decay_scan_task）：EXPIRED 自然衰减终局与 D-6
+        软时效降权分离——调度打分不吃软时效乘子，终态语义零漂移。
+        """
         age_days = max((now - self.created_at).total_seconds(), 0.0) / 86400.0
         return float(self.confidence * 0.5 ** (age_days / half_life_days))
+
+    def decay_score(self, now: datetime, half_life_days: float, *, expiry_floor: float = DEFAULT_EXPIRY_FLOOR) -> float:
+        """排序/召回得分 = half_life_score × expiry_multiplier（D-6 软时效，Agent/13 §28）。
+
+        valid_to 未过点线性滑落、过点压至 expiry_floor（缺省 0.1，Settings
+        memory_expiry_floor 同源可配）；TimeChannel 排序零改动按分吃。"""
+        return float(
+            self.half_life_score(now, half_life_days)
+            * expiry_multiplier(self.valid_to, now, start=self.created_at, floor=expiry_floor)
+        )

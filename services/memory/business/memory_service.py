@@ -18,6 +18,7 @@ from services.memory.business.retrieval_pg import KeywordChannel, RecallChannel,
 from services.memory.data.cache.l1_redis import L1SessionStore
 from services.memory.data.repositories.records_repo import MemoryRepository
 from services.memory.domain.model.memory import (
+    DEFAULT_EXPIRY_FLOOR,
     MemoryLayer,
     MemoryRecord,
     MemoryScope,
@@ -94,6 +95,7 @@ class MemoryService:
     rrf_k: int
     half_life_days: float
     extra_channels: tuple[RecallChannel, ...] = field(default=())  # 计划 3 注入向量/图通道
+    expiry_floor: float = DEFAULT_EXPIRY_FLOOR  # D-6 软时效地板分（Settings memory_expiry_floor 注入，Agent/13 §28）
 
     async def write_l1(self, session_id: uuid.UUID, block: str, content: str) -> None:
         await self.l1.set_block(session_id, block, content)
@@ -142,7 +144,7 @@ class MemoryService:
         # TODO(plan3): 查询术语对齐 → subject_iri 图通道锚定（规格 §5.2 第 1-3 点）
         channels: list[RecallChannel] = [
             KeywordChannel(self.repo),
-            TimeChannel(self.repo, self.half_life_days),
+            TimeChannel(self.repo, self.half_life_days, expiry_floor=self.expiry_floor),
             *self.extra_channels,
         ]
         return await search_by_channels(

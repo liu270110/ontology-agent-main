@@ -15,7 +15,7 @@ from services.memory.business.retrieval_rrf import (
     stale_observation_ids,
 )
 from services.memory.data.repositories.records_repo import MemoryRepository
-from services.memory.domain.model.memory import MemoryLayer, MemoryRecord
+from services.memory.domain.model.memory import DEFAULT_EXPIRY_FLOOR, MemoryLayer, MemoryRecord
 
 logger = logging.getLogger(__name__)
 
@@ -54,17 +54,25 @@ class KeywordChannel:
 
 
 class TimeChannel:
-    """时间通道：近期高置信（decay 打分排序，规格 §5.3 衰减函数复用）。"""
+    """时间通道：近期高置信（decay 打分排序，规格 §5.3 衰减函数复用）。
+
+    D-6 软时效（Agent/13 §28）：排序分=decay_score（含 valid_to 软时效乘子），过期记录
+    自然沉底仍可召回——排序逻辑零改动按分吃；expiry_floor 透传 Settings
+    memory_expiry_floor（缺省=域层 DEFAULT_EXPIRY_FLOOR，消费面不传即吃缺省）。
+    """
 
     name = "time"
 
-    def __init__(self, repo: MemoryRepository, half_life_days: float) -> None:
+    def __init__(
+        self, repo: MemoryRepository, half_life_days: float, expiry_floor: float = DEFAULT_EXPIRY_FLOOR
+    ) -> None:
         self._repo = repo
         self._half_life = half_life_days
+        self._expiry_floor = expiry_floor
 
     async def recall(self, tenant_id: uuid.UUID, text_q: str, limit: int, *, now: datetime) -> list[MemoryRecord]:
         recent = await self._repo.list_recent(tenant_id, subject_user_layer=MemoryLayer.USER, limit=limit * 3)
-        recent.sort(key=lambda r: r.decay_score(now, self._half_life), reverse=True)
+        recent.sort(key=lambda r: r.decay_score(now, self._half_life, expiry_floor=self._expiry_floor), reverse=True)
         return recent[:limit]
 
 

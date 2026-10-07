@@ -17,6 +17,8 @@ from typing import Final
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from services.memory.domain.model.memory import DEFAULT_EXPIRY_FLOOR, expiry_multiplier
+
 _WHITESPACE: Final[re.Pattern[str]] = re.compile(r"\s+")
 _FINGERPRINT_HEX_LEN: Final[int] = 64  # sha256 hex 长度（列 fingerprint VARCHAR(64)）
 
@@ -125,10 +127,23 @@ class L2Fact(BaseModel):
         self._transition(FactStatus.SUPERSEDED, now)
         self.supersedes_id = by_id
 
-    def decay_score_at(self, now: datetime, half_life_days: float) -> float:
-        """confidence × 时间衰减（memory §3 加权合并：半衰期默认 30 天，config 可调）。"""
+    def decay_score_at(
+        self, now: datetime, half_life_days: float, *, expiry_floor: float = DEFAULT_EXPIRY_FLOOR
+    ) -> float:
+        """confidence × 时间衰减 × 软时效乘子（memory §3 半衰期合并 + D-6 软时效，Agent/13 §28）。
+
+        valid_to 未过点线性滑落、过点压至 expiry_floor（缺省 0.1，Settings
+        memory_expiry_floor 同源可配）；context 组装 _as_hit 按分吃零改动。
+        双时间线注意：invalidate() 写 valid_to=now（失效时刻）——失效事实本就不进召回
+        候选（status 硬门，repo 查询口径），乘子对其无排名效应，仅打分口径统一；
+        自然时效软过期的"仍可注入"不适用于人工失效（INVALIDATED 终态语义不动）。
+        """
         age_days = max((now - self.created_at).total_seconds(), 0.0) / 86400.0
-        return float(self.confidence * 0.5 ** (age_days / half_life_days))
+        return float(
+            self.confidence
+            * 0.5 ** (age_days / half_life_days)
+            * expiry_multiplier(self.valid_to, now, start=self.created_at, floor=expiry_floor)
+        )
 
 
 class FactInvalidation(BaseModel):

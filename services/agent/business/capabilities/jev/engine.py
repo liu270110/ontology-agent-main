@@ -60,8 +60,19 @@ class JevDetection:
 
 
 def _zh_tokenize(text: str) -> str:
-    """jieba 分词+空格连接（GLiNER 中文整句跨度退化对策；demo_jev.py zh 先例照抄）。"""
-    jieba = importlib.import_module("jieba")
+    """jieba 分词+空格连接（GLiNER 中文整句跨度退化对策；demo_jev.py zh 先例照抄）。
+
+    缺库→JevUnavailableError（模块 docstring「依赖可选」契约：gliner/torch/jieba 同列，
+    工具层转结构化 5002，禁裸 ModuleNotFoundError 逃逸——2026-10-07 全量 pytest 实证修复）。
+    """
+    try:
+        jieba = importlib.import_module("jieba")
+    except ImportError as exc:
+        raise JevUnavailableError(
+            "jieba 依赖未安装（gliner/torch/jieba 为可选依赖）。"
+            f"安装指引：pip install gliner jieba && pip install torch --index-url "
+            f"https://download.pytorch.org/whl/cu128（CUDA 机型）；原始错误：{exc}"
+        ) from exc
     return " ".join(w for w in jieba.cut(text) if w.strip())
 
 

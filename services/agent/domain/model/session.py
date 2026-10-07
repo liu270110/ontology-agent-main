@@ -238,3 +238,30 @@ class Message(BaseModel):
 
     def __hash__(self) -> int:
         return hash(self.id)
+
+
+class FeedbackOutcome(StrEnum):
+    """反馈三元结果（docs/Agent/19 §5 采集环：「任务是否完成」三元采集）。"""
+
+    COMPLETED = "completed"  # 有帮助👍
+    PARTIAL = "partial"  # 部分解决
+    FAILED = "failed"  # 没解决👎
+
+
+class SessionFeedback(BaseModel):
+    """会话级用户反馈值对象（19 §5 采集环；非 session 聚合成员——幂等更新从属行）。
+
+    粒度=(session_id, run_id, user_id) 唯一（uk_session_feedback_session_run_user）：
+    同 run 同用户重复反馈=更新非新增。持久化经 SessionRepository.record_feedback /
+    list_feedback（仓储级持久化细节，同 soft_delete_from 口径——非聚合不变式）。
+    """
+
+    model_config = ConfigDict(validate_assignment=True)
+
+    session_id: uuid.UUID
+    run_id: uuid.UUID
+    user_id: uuid.UUID
+    outcome: FeedbackOutcome
+    tags: list[str] = Field(default_factory=list)
+    correction_text: str | None = None
+    created_at: datetime | None = None  # 首次反馈时刻（仓储回填；幂等更新不改动）

@@ -198,6 +198,10 @@ const HISTORY: Record<string, MockHistoryMessage[]> = {
 /** 运行取消（IX-CHT-06 停止生成）：被取消的 run 剩余帧不再广播（保留已生成部分） */
 const cancelledRuns = new Set<string>()
 
+/** 飞轮采集环（docs/Agent/19 §5，W9）：会话反馈内存态（演示 mock；按 (run_id) 幂等 upsert，
+ *  uk(session,run,user) 三键中 user 取 JWT sub——mock 态同登录态恒一致）。 */
+const FEEDBACK: Record<string, { run_id: string; user_id: string; outcome: string; tags: string[]; correction_text: string | null; created_at: string }[]> = {}
+
 // ---- SSE 仿真（api/02 §2 帧格式：id/event/data；支持多连接广播；POST 触发一轮脚本） ----
 type Ctrl = ReadableStreamDefaultController<Uint8Array>
 const conns = new Set<Ctrl>()
@@ -499,6 +503,49 @@ export const handlers = [
     const body = (await request.json()) as { run_id?: string }
     if (body.run_id) cancelledRuns.add(body.run_id)
     return HttpResponse.json({ code: 0, message: 'ok', data: { run_id: body.run_id ?? null } }, { status: 202 })
+  }),
+
+  // POST /sessions/:id/feedback（docs/Agent/19 §5 采集环，W9+B5：契约 202；同 (session,run,user)
+  // 重复反馈=幂等更新；run/correction_text 校验与 live 同构）
+  http.post('*/api/v1/sessions/:id/feedback', async ({ request, params }) => {
+    const sid = params.id as string
+    if (!SESSIONS.some(x => x.id === sid) && !HISTORY[sid]) return jsonErr(3001, '会话不存在', 404)
+    const body = (await request.json().catch(() => ({}))) as {
+      run_id?: string
+      outcome?: string
+      tags?: string[]
+      correction_text?: string | null
+    }
+    if (!body.run_id) return jsonErr(3001, '参数校验失败：run_id 必填', 422)
+    if (!['completed', 'partial', 'failed'].includes(body.outcome ?? ''))
+      return jsonErr(3001, '参数校验失败：outcome 非法', 422)
+    if ((body.correction_text ?? '').length > 120) return jsonErr(3001, '参数校验失败：纠错文本超 120 字', 422)
+    const rows = (FEEDBACK[sid] ??= [])
+    const existing = rows.find(r => r.run_id === body.run_id)
+    if (existing) {
+      // 幂等更新（created_at 保持首次时刻）
+      existing.outcome = body.outcome as string
+      existing.tags = body.tags ?? existing.tags
+      existing.correction_text = body.correction_text ?? null
+      return HttpResponse.json({ code: 0, message: 'ok', data: existing }, { status: 202 })
+    }
+    const row = {
+      run_id: body.run_id,
+      user_id: 'u-feedback-mock',
+      outcome: body.outcome as string,
+      tags: body.tags ?? [],
+      correction_text: body.correction_text ?? null,
+      created_at: new Date().toISOString(),
+    }
+    rows.push(row)
+    return HttpResponse.json({ code: 0, message: 'ok', data: row }, { status: 202 })
+  }),
+
+  // GET /sessions/:id/feedback（19 §5 采集环读面：本人反馈历史 {data,meta}）
+  http.get('*/api/v1/sessions/:id/feedback', ({ params }) => {
+    const sid = params.id as string
+    if (!SESSIONS.some(x => x.id === sid) && !HISTORY[sid]) return jsonErr(3001, '会话不存在', 404)
+    return HttpResponse.json({ code: 0, message: 'ok', data: { data: FEEDBACK[sid] ?? [], meta: {} } })
   }),
 
   // POST /sessions/:id/compact（api/01 §5.2 compact 登记行：上下文压缩——08 篇 compaction。

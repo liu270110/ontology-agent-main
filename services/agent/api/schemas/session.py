@@ -7,11 +7,16 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
-from typing import Any
+from typing import Annotated, Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 
-from services.agent.domain.model.session import Message, Session, SessionStatus
+from services.agent.domain.model.session import (
+    Message,
+    Session,
+    SessionFeedback,
+    SessionStatus,
+)
 from services.platform.schemas import PageMeta
 
 
@@ -34,7 +39,7 @@ class SessionCreateIn(BaseModel):
     # K28-a（docs/Agent/13 §34）：具名工具集，会话工具表面门（hermes 03 §3 同构）；
     # None=平台现行全集（含 MCP 桥动态面）。名合法性在受理端点 fail-closed 校验
     # （未知名 422，不静默空集），注册表=business/capabilities/toolsets.py。
-    toolset: str | None = Field(default=None, max_length=64, description="具名工具集，会话工具表面门；None=平台现行全集")
+    toolset: str | None = Field(default=None, max_length=64, description="具名工具集（None=现行全集）")
     # 群聊扩展（27 篇 X15，向后兼容可选；type=single 时 members/routing 被聚合拒绝）
     type: str = Field(default="single", pattern="^(single|group)$")
     routing: str = Field(default="round_robin", pattern="^(mention|round_robin|all|orchestrator)$")
@@ -143,6 +148,42 @@ class MessagePageOut(BaseModel):
     next_before_id: uuid.UUID | None = None  # 游标：取下一页时作为 before_id 传入
 
 
+class SessionFeedbackIn(BaseModel):
+    """会话反馈请求体（docs/Agent/19 §5 采集环，W9+B5 批：POST /sessions/{id}/feedback）。
+
+    outcome=「任务是否完成」三元采集（completed 有帮助👍 / partial 部分解决 / failed 没解决👎）；
+    correction_text=可选纠错文本（≤120 字）；tags=结构化标签（v1 收下落库，转化环 B6
+    harvest 筛选面预留，前端 v1 不采集）。枚举/长度为契约常量（Pydantic fail-closed），
+    非部署可变参数。幂等语义：同 (session_id, run_id, user_id) 重复反馈=更新（202）。"""
+
+    model_config = ConfigDict(extra="forbid")
+    run_id: uuid.UUID
+    outcome: str = Field(pattern="^(completed|partial|failed)$")
+    tags: list[Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=32)]] = Field(
+        default_factory=list, max_length=8
+    )
+    correction_text: str | None = Field(default=None, max_length=120)
+
+
+class SessionFeedbackOut(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    session_id: uuid.UUID
+    run_id: uuid.UUID
+    user_id: uuid.UUID
+    outcome: str
+    tags: list[str] = Field(default_factory=list)
+    correction_text: str | None = None
+    created_at: datetime | None = None  # 首次反馈时刻（幂等更新不改动）
+
+
+class SessionFeedbackListOut(BaseModel):
+    """反馈历史信封（api/01 §3.1 {data,meta}；会话内本用户行数=run 数天然有界，不分页）。"""
+
+    model_config = ConfigDict(extra="forbid")
+    data: list[SessionFeedbackOut]
+    meta: dict[str, Any] = Field(default_factory=dict)
+
+
 def to_domain(dto: SessionCreateIn, *, tenant_id: uuid.UUID, user_id: uuid.UUID) -> Session:
     from services.agent.domain.model.session import MemberRole, RoutingMode, SessionType
 
@@ -201,4 +242,16 @@ def message_from_domain(m: Message) -> MessageOut:
         content=m.content,
         content_type=m.content_type,
         created_at=m.created_at,
+    )
+
+
+def feedback_from_domain(f: SessionFeedback) -> SessionFeedbackOut:
+    return SessionFeedbackOut(
+        session_id=f.session_id,
+        run_id=f.run_id,
+        user_id=f.user_id,
+        outcome=f.outcome.value,
+        tags=list(f.tags),
+        correction_text=f.correction_text,
+        created_at=f.created_at,
     )

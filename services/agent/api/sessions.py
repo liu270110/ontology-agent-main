@@ -36,10 +36,13 @@ from services.agent.api.schemas.session import (
     SendMessageIn,
     SessionCancelIn,
     SessionCreateIn,
+    SessionFeedbackIn,
+    SessionFeedbackListOut,
     SessionListOut,
     SessionOut,
     SessionPatchIn,
     SessionRewindIn,
+    feedback_from_domain,
     from_domain,
     member_from_domain,
     message_from_domain,
@@ -51,7 +54,14 @@ from services.agent.business.chat_orchestrator import build_chat_orchestrator
 from services.agent.business.exec_events import EXEC_EVENT_PERSIST_RULES
 from services.agent.domain.model.agent import AgentError
 from services.agent.domain.model.kernel_context import KernelEvent
-from services.agent.domain.model.session import MemberRole, Message, RoutingMode, SessionError, SessionStatus
+from services.agent.domain.model.session import (
+    FeedbackOutcome,
+    MemberRole,
+    Message,
+    RoutingMode,
+    SessionError,
+    SessionStatus,
+)
 from services.agent.domain.model.task import Run, RunStatus, Task, TaskError, TaskEvent, TaskStatus
 from services.memory.business.runtime import build_l1_store  # memory 公开装配面（memory.data 模块私有，P2-2 收口）
 from services.platform.db.uow import AsyncUnitOfWork
@@ -800,6 +810,70 @@ async def rewind_session(
     else:
         logger.info("rewind L1 失效跳过（无可用 L1 实例）: session=%s", session_id)
     return {"data": {"before_seq": body.before_seq, "deleted_count": deleted_count}, "meta": {}}
+
+
+@router.post(
+    "/{session_id}/feedback",
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="会话反馈（19 §5 采集环：三元 outcome+可选纠错；同 run 同用户幂等更新）",
+)
+async def submit_session_feedback(
+    session_id: uuid.UUID, body: SessionFeedbackIn, principal: SessionWriteDep, uow: UowDep
+) -> dict:
+    """用户信号第一落点（docs/Agent/19 §5 数据飞轮·采集环，W9+B5 批）：
+
+    - 归属双断言：会话经 ``get_session_owned``（A2 收口，非归属一律 404）；run 经
+      ``find_by_run`` 反查载体任务并断言 ``task.session_id == session_id``（跨会话 run
+      404，cancel 端点同款口径）；
+    - 幂等：仓储 upsert（uk_session_feedback_session_run_user 兜底）——同 run 同用户重复
+      反馈=更新 outcome/tags/correction_text，恒 202 不产生重复行；
+    - 审计：``session.feedback`` → task_events 就近落（run 归属断言已取任务载体，复用
+      append_event 直写通道=实现小者，rewind 审计先例）；审计 data 只留结构化最小面
+      （outcome/has_correction 布尔），纠错原文不进审计行（用户内容最小留痕）。
+    """
+    async with uow.for_tenant(principal.tenant_id) as tx:
+        await get_session_owned(tx, principal, session_id)  # A2 归属收口（红队 §5）
+        task = await tx.tasks.find_by_run(body.run_id)  # run 归属 session 断言（19 §5 role=归属）
+        if task is None or task.session_id != session_id:
+            raise GatewayError(404, "run 不属于该会话", status_code=404)
+        feedback = await tx.sessions.record_feedback(
+            session_id,
+            body.run_id,
+            principal.user_id,
+            outcome=FeedbackOutcome(body.outcome),
+            tags=body.tags,
+            correction_text=body.correction_text,
+        )
+        await tx.tasks.append_event(
+            task.id,
+            TaskEvent(
+                task_id=task.id,
+                event_type="session.feedback",
+                data={
+                    "session_id": str(session_id),
+                    "run_id": str(body.run_id),
+                    "user_id": str(principal.user_id),
+                    "outcome": body.outcome,
+                    "has_correction": body.correction_text is not None,
+                },
+            ),
+        )
+    return {"data": feedback_from_domain(feedback).model_dump(mode="json"), "meta": {}}
+
+
+@router.get("/{session_id}/feedback", summary="会话反馈历史（本人查询自己的反馈）")
+async def list_session_feedback(
+    session_id: uuid.UUID, principal: SessionReadDep, uow: UowDep
+) -> SessionFeedbackListOut:
+    """本人反馈历史（19 §5 采集环读面；{data,meta} 信封）。
+
+    会话经 ``get_session_owned``（A2 收口，非归属一律 404）；行级再按 user_id 过滤——
+    群会话场景下只回本人行（反馈主体=用户本人，19 §5 口径）。
+    """
+    async with uow.for_tenant(principal.tenant_id) as tx:
+        await get_session_owned(tx, principal, session_id)  # A2 归属收口（红队 §5）
+        items = await tx.sessions.list_feedback(session_id, principal.user_id)
+    return SessionFeedbackListOut(data=[feedback_from_domain(f) for f in items])
 
 
 @router.delete(

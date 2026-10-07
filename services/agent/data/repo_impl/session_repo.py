@@ -18,21 +18,25 @@ from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy import and_, delete, func, or_, select, update
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from services.agent.data.orm import Message as MessageORM
 from services.agent.data.orm import Run as RunORM
 from services.agent.data.orm import Session as SessionORM
+from services.agent.data.orm import SessionFeedback as SessionFeedbackORM
 from services.agent.data.orm import SessionMember as SessionMemberORM
 from services.agent.data.orm import Task as TaskORM
 from services.agent.data.orm import TaskEvent as TaskEventORM
 from services.agent.domain.model.session import (
+    FeedbackOutcome,
     GroupMember,
     MemberRole,
     Message,
     RoutingMode,
     Session,
+    SessionFeedback,
     SessionStatus,
     SessionType,
 )
@@ -115,6 +119,18 @@ def _message_to_domain(row: MessageORM) -> Message:
         agent_id=row.agent_id,
         content=row.content,
         content_type=row.content_type,
+        created_at=row.created_at,
+    )
+
+
+def _feedback_to_domain(row: SessionFeedbackORM) -> SessionFeedback:
+    return SessionFeedback(
+        session_id=row.session_id,
+        run_id=row.run_id,
+        user_id=row.user_id,
+        outcome=FeedbackOutcome(row.outcome),
+        tags=list(row.tags or []),
+        correction_text=row.correction_text,
         created_at=row.created_at,
     )
 
@@ -446,9 +462,11 @@ class PgSessionRepository:
         return _message_to_domain(row) if row is not None else None
 
     async def delete_cascade(self, session_id: uuid.UUID) -> None:
-        """删除会话及其消息与群成员（api/01 §5.2 DELETE；硬删级联，FK 无 ondelete 逐表逆序删）。
+        """删除会话及其消息与群成员（api/01 §5.2 DELETE /sessions 级联；硬删，FK 无 ondelete 逐表逆序删）。
 
-        证据引用随消息行一并清除（citations/ag_ui_events 内嵌于 messages JSONB，无独立表）。"""
+        证据引用随消息行一并清除（citations/ag_ui_events 内嵌于 messages JSONB，无独立表）。
+        反馈行（session_feedback，19 §5 采集环）三标识列无 FK、不入本级联——会话删除后
+        留存为审计留痕（宪法 5），孤儿行由转化环（B6 harvest）读面 JOIN 过滤。"""
         for stmt in (
             delete(MessageORM).where(MessageORM.session_id == session_id, MessageORM.tenant_id == self._tenant_id),
             delete(SessionMemberORM).where(
@@ -458,6 +476,67 @@ class PgSessionRepository:
         ):
             await self._db.execute(stmt)
         await self._db.flush()
+
+    async def record_feedback(
+        self,
+        session_id: uuid.UUID,
+        run_id: uuid.UUID,
+        user_id: uuid.UUID,
+        *,
+        outcome: FeedbackOutcome,
+        tags: list[str],
+        correction_text: str | None,
+    ) -> SessionFeedback:
+        """会话反馈幂等落库（19 §5 采集环）：PG upsert on conflict do update——
+
+        同 (session_id, run_id, user_id) 重复反馈=更新 outcome/tags/correction_text（uk_
+        session_feedback_session_run_user 兜底并发窗口，双写不产生重复行也不 500）；
+        created_at 仅首次落值（on conflict 不更新该列）。非聚合不变式（从属行持久化细节，
+        同 soft_delete_from 口径），不经聚合 save。
+        """
+        values = {
+            "tenant_id": self._tenant_id,
+            "session_id": session_id,
+            "run_id": run_id,
+            "user_id": user_id,
+            "outcome": outcome.value,
+            "tags": list(tags),
+            "correction_text": correction_text,
+        }
+        stmt = (
+            pg_insert(SessionFeedbackORM)
+            .values(**values)
+            .on_conflict_do_update(
+                index_elements=("session_id", "run_id", "user_id"),
+                set_={"outcome": outcome.value, "tags": list(tags), "correction_text": correction_text},
+            )
+            .returning(SessionFeedbackORM.created_at)
+        )
+        created_at = (await self._db.execute(stmt)).scalar_one()
+        await self._db.flush()
+        return SessionFeedback(
+            session_id=session_id,
+            run_id=run_id,
+            user_id=user_id,
+            outcome=outcome,
+            tags=list(tags),
+            correction_text=correction_text,
+            created_at=created_at,
+        )
+
+    async def list_feedback(self, session_id: uuid.UUID, user_id: uuid.UUID) -> list[SessionFeedback]:
+        """会话内本用户反馈历史（GET /sessions/{id}/feedback 取数口；created_at 升序稳定）。"""
+        stmt = (
+            select(SessionFeedbackORM)
+            .where(
+                SessionFeedbackORM.session_id == session_id,
+                SessionFeedbackORM.tenant_id == self._tenant_id,
+                SessionFeedbackORM.user_id == user_id,
+            )
+            .order_by(SessionFeedbackORM.created_at, SessionFeedbackORM.id)
+        )
+        rows = (await self._db.execute(stmt)).scalars().all()
+        return [_feedback_to_domain(r) for r in rows]
 
     async def _load_members(self, session_id: uuid.UUID) -> list[GroupMember]:
         stmt = (

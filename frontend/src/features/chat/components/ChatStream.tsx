@@ -1,5 +1,5 @@
 import { lazy, memo, Suspense, useEffect, useRef, useState, type ComponentType } from 'react'
-import { AlertTriangle, Brain, Check, ChevronDown, Copy, FileText, ListTree, MessagesSquare, RefreshCw, ThumbsDown, ThumbsUp } from 'lucide-react'
+import { AlertTriangle, Brain, Check, ChevronDown, Copy, FileText, ListTree, MessagesSquare, RefreshCw } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import Markdown, { type Components } from 'react-markdown'
 import remarkGfm from 'remark-gfm'
@@ -10,6 +10,7 @@ import { EmptyState, ErrorState, SkeletonRows } from '@/components/states'
 import { BASELINE } from '@/lib/toast-templates'
 import { ToolCallCard } from './ToolCallCard'
 import { ExecInlineCards } from './ExecCards'
+import { MessageFeedback } from './MessageFeedback'
 import { AgenticDegradedBanner } from '@/components/agentic/AgenticDegradedBanner'
 import type { EvidenceFocus } from './EvidenceSheet'
 
@@ -250,11 +251,11 @@ function evidenceFor(m: ChatMessage, evidence: Evidence | null, lastAssistantId:
   return m.evidence ?? (evidence && m.id === lastAssistantId ? evidence : null)
 }
 
-/** 助手消息悬停操作条（IX-CHT-07）：复制 / 重新生成 / 赞踩（反馈本地高亮，M4 接 POST 反馈端点）
- *  +「查看轨迹」（D2 切片：画框21 /chat/:sid/trajectory 深链） */
+/** 助手消息悬停操作条（IX-CHT-07）：复制 / 重新生成 +「查看轨迹」（D2 切片：画框21
+ *  /chat/:sid/trajectory 深链）。原赞踩本地高亮占位已由 MessageFeedback 真反馈组件接替
+ *  （飞轮采集环 W9，docs/Agent/19 §5——POST /sessions/{id}/feedback 落库）。 */
 function MessageActions({ m, sessionId, regenerateContent }: { m: ChatMessage; sessionId: string; regenerateContent: string | null }) {
   const [copied, setCopied] = useState(false)
-  const [feedback, setFeedback] = useState<'up' | 'down' | null>(null)
   const running = useSessionStore(s => s.running)
   const navigate = useNavigate()
 
@@ -292,24 +293,6 @@ function MessageActions({ m, sessionId, regenerateContent }: { m: ChatMessage; s
         className="flex h-6 items-center gap-1 rounded-md px-1.5 text-[11px] text-label-3 hover:bg-surface-2 hover:text-label disabled:opacity-40"
       >
         <RefreshCw size={11} aria-hidden /> 重新生成
-      </button>
-      <button
-        type="button"
-        aria-label="赞"
-        aria-pressed={feedback === 'up'}
-        onClick={() => setFeedback(f => (f === 'up' ? null : 'up'))}
-        className={`flex h-6 w-6 items-center justify-center rounded-md hover:bg-surface-2 ${feedback === 'up' ? 'text-green' : 'text-label-3'}`}
-      >
-        <ThumbsUp size={11} aria-hidden />
-      </button>
-      <button
-        type="button"
-        aria-label="踩"
-        aria-pressed={feedback === 'down'}
-        onClick={() => setFeedback(f => (f === 'up' ? null : 'down'))}
-        className={`flex h-6 w-6 items-center justify-center rounded-md hover:bg-surface-2 ${feedback === 'down' ? 'text-red' : 'text-label-3'}`}
-      >
-        <ThumbsDown size={11} aria-hidden />
       </button>
       <button
         type="button"
@@ -691,6 +674,11 @@ export function ChatStream({
               {/* 悬停操作条：流式中的末条不展示（等生成完） */}
               {!(running && m.id === messages[messages.length - 1]?.id) && (
                 <MessageActions m={m} sessionId={sessionId} regenerateContent={regenMap.get(m.id) ?? null} />
+              )}
+              {/* 飞轮采集环反馈（docs/Agent/19 §5，W9）：run 完成（RUN_FINISHED）后消息卡尾部
+                  三态反馈；历史消息/未完成 run 无 runId 绑定 → 不渲染（无 run_id 不造假） */}
+              {m.runId && runs[m.runId]?.status === 'succeeded' && (
+                <MessageFeedback sessionId={sessionId} runId={m.runId} />
               )}
             </div>
           </div>

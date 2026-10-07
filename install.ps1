@@ -36,8 +36,12 @@ function Test-OaPython {
     foreach ($py in @('python3', 'python')) {
         $cmd = Get-Command $py -ErrorAction SilentlyContinue
         if ($null -ne $cmd) {
-            & $cmd.Source -c "import sys; sys.exit(0 if sys.version_info >= (3, 11) else 1)" 2>$null
-            if ($LASTEXITCODE -eq 0) { return $cmd.Source }
+            try {
+                # PS 5.1 下 2>$null 仍把原生 stderr 行送错误流（WindowsApps 商店桩会写
+                # "Python was not found..."）→ try/catch 兜住，与 Test-OaContainerRunning 同款（ocr 评审 #5）
+                & $cmd.Source -c "import sys; sys.exit(0 if sys.version_info >= (3, 11) else 1)" 2>$null
+                if ($LASTEXITCODE -eq 0) { return $cmd.Source }
+            } catch { continue }
         }
     }
     return $null
@@ -148,7 +152,8 @@ function Invoke-OaEnsureStorage {
     try {
         & docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.local.yml up -d --remove-orphans
     } catch {
-        Pop-Location
+        # catch 内不再 Pop-Location（ocr 评审 #3：finally 在 exit 时也会执行，双弹空栈
+        # 会在 $ErrorActionPreference=Stop 下变成终止性错误掩盖 exit 1 诊断）
         Write-OaDie "docker 不可用（$($_.Exception.Message)）：先安装 Docker Desktop/Engine 后重跑"
     } finally { Pop-Location }
     if ($LASTEXITCODE -ne 0) {
@@ -202,9 +207,18 @@ function Publish-OaEnv([string]$SynthPath) {
         $ts = Get-Date -Format 'yyyyMMddHHmmss'
         Copy-Item $envPath "$envPath.bak-$ts"
         Write-OaLog "检测到既有 .env：已备份为 .env.bak-$ts；原档保留不覆盖（ops/04 §4 首配不覆盖）"
-        Write-OaLog "合成档与现有档 diff（<= 现有 / => 合成；自行取舍后手编 .env）："
+        Write-OaLog "合成档与现有档 diff（密钥值脱敏；<= 现有 / => 合成；自行取舍后手编 .env）："
+        # diff 回显脱敏（ocr 评审 #6：重装路径会把用户已填的真实密钥值打进终端/CI 日志）
         Compare-Object -ReferenceObject (Get-Content $envPath) -DifferenceObject (Get-Content $SynthPath) |
-            ForEach-Object { $mark = if ($_.SideIndicator -eq '<=') { '<' } else { '>' }; "$mark $($_.InputObject)" } |
+            ForEach-Object {
+                $mark = if ($_.SideIndicator -eq '<=') { '<' } else { '>' }
+                $line = "$($_.InputObject)"
+                if ($line -match '^(OA_[A-Za-z0-9_]*(KEY|PASSWORD|SECRET|TOKEN)[A-Za-z0-9_]*)=.+') {
+                    "$mark " + $Matches[1] + "=******（已脱敏）"
+                } else {
+                    "$mark $line"
+                }
+            } |
             Write-Host
         return 'kept'
     }
@@ -266,6 +280,17 @@ function Invoke-OaMain {
             if (-not $LlmChannel) { $LlmChannel = 'none' }
             if (-not $EmbedChannel) { $EmbedChannel = 'none' }
         }
+    }
+    # 交互答案同样校验（ocr 评审 #4：ValidateSet 只护参数绑定，Read-Host 输入不设防——
+    # 打错渠道会静默合成无 LLM 配置的 .env，与 install.sh 的 oa_validate_choice 对齐）
+    if (@('lite', 'full', 'full-cad') -notcontains $DeployProfile) {
+        Write-OaDie "档位取值非法：$DeployProfile（允许：lite full full-cad）"
+    }
+    if (@('local', 'cloud', 'none') -notcontains $LlmChannel) {
+        Write-OaDie "LLM 渠道取值非法：$LlmChannel（允许：local cloud none）"
+    }
+    if (@('tei', 'ollama', 'none') -notcontains $EmbedChannel) {
+        Write-OaDie "嵌入渠道取值非法：$EmbedChannel（允许：tei ollama none）"
     }
     Write-OaLog "ontology-agent 安装开始（root=$Root，SkipApi=$SkipApi）——docs/ops/04 §3.1 八步"
     Invoke-OaPreflight                                                        # 步骤 1

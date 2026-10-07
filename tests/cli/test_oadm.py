@@ -330,12 +330,19 @@ def test_doctor_配置档解析判定(monkeypatch: pytest.MonkeyPatch) -> None:
 class _FakeSettings:
     """Settings 形状桩（避免测试间 env 污染；仅暴露被读字段）。"""
 
-    def __init__(self, deploy_profile: str = "lite", llm_base_url: str | None = None, llm_model: str = "m") -> None:
+    def __init__(
+        self,
+        deploy_profile: str = "lite",
+        llm_base_url: str | None = None,
+        llm_model: str = "m",
+        ollama_base_url: str = "http://embed.test/",
+        embed_protocol: str = "tei",
+    ) -> None:
         self.deploy_profile = deploy_profile
         self.llm_base_url = llm_base_url
         self.llm_model = llm_model
-        self.ollama_base_url = "http://embed.test/"
-        self.embed_protocol = "tei"
+        self.ollama_base_url = ollama_base_url
+        self.embed_protocol = embed_protocol
 
 
 def test_doctor_配置档解析真实Settings(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -400,6 +407,22 @@ def test_status_嵌入端点按协议探活(monkeypatch: pytest.MonkeyPatch) -> 
     result2 = oadm._check_embed()
     # Assert 2
     assert result2.ok is True and probed[-1] == "http://embed.test/api/tags"
+
+
+def test_status_嵌入端点空值判未配置(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Arrange：OA_OLLAMA_BASE_URL 显式置空（Settings 的 str 字段不拦空串）
+    monkeypatch.setattr(oadm, "_load_settings", lambda: _FakeSettings(ollama_base_url=""))
+    # Act
+    result = oadm._check_embed()
+    # Assert：空值=「未配置」红项而非误导性探针错误（ocr 评审 #11，对齐 _check_llm 守卫）
+    assert result.ok is False and "未配置" in result.detail and "OA_OLLAMA_BASE_URL" in result.fix
+
+
+def test_http_probe_损坏端点降级不炸() -> None:
+    # Act：非法端口构造 InvalidURL（不在 httpx.HTTPError 族，ocr 评审 #2）
+    ok, msg = oadm._http_probe("http://127.0.0.1:180a2")
+    # Assert：降级为 (False, 说明)，绝不向 doctor/status 抛异常污染 json 输出
+    assert ok is False and "InvalidURL" in msg
 
 
 # --------------------------------------------------------------- status：矩阵与 json 形状

@@ -108,10 +108,15 @@ def _docker_ps() -> dict[str, str]:
 
 
 def _http_probe(url: str) -> tuple[bool, str]:
-    """GET 探活（LLM/嵌入端点），返回 (是否健康, 说明)。5xx 视为不健康。"""
+    """GET 探活（LLM/嵌入端点），返回 (是否健康, 说明)。5xx 视为不健康。
+
+    InvalidURL 不在 HTTPError 族内（直承 Exception）——恶意/损坏的端点配置值
+    （如 OA_LLM_BASE_URL=http://127.0.0.1:180a2）必须降级为红项说明而非炸 CLI
+    （ocr 评审 #2：否则 traceback 污染 status --output json 的 CI 消费契约）。
+    """
     try:
         resp = httpx.get(url, timeout=_PROBE_TIMEOUT_S)
-    except httpx.HTTPError as exc:
+    except (httpx.HTTPError, httpx.InvalidURL) as exc:
         return False, f"不可达（{type(exc).__name__}）"
     return resp.status_code < 500, f"HTTP {resp.status_code}"
 
@@ -349,6 +354,13 @@ def _check_embed() -> CheckResult:
     except Exception as exc:  # 同配置档解析项：加载异常降级为红项说明，不炸 CLI
         return CheckResult("嵌入端点", False, f"配置档解析失败（{type(exc).__name__}），见 doctor 配置档解析项", "")
     base = settings.ollama_base_url.rstrip("/")
+    if not base:  # 对齐 _check_llm 的空值守卫（ocr 评审 #11：空值时探针退化为相对路径，报错误导）
+        return CheckResult(
+            "嵌入端点",
+            False,
+            "未配置（OA_OLLAMA_BASE_URL 空）",
+            "部署嵌入服务并配置 OA_OLLAMA_BASE_URL（ollama@11434 或 TEI，见 docs/ops/03）；不配置则向量检索维持降级",
+        )
     path = "/health" if settings.embed_protocol == "tei" else "/api/tags"
     ok, msg = _http_probe(base + path)
     return CheckResult(

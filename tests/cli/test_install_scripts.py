@@ -111,6 +111,54 @@ def test_install_ps1_语法检() -> None:
     assert proc.returncode == 0, proc.stdout + proc.stderr
 
 
+@requires_pwsh
+def test_install_ps1_关键函数_点源调用() -> None:
+    """点源 install.ps1 后直调 Oa-* 函数（ocr 评审 #7：与 bash 侧函数单测对齐的 PS 面）。
+
+    覆盖：ConvertTo-OaEnvSynth 合成段（本地渠道 URL/合成段标记）、Publish-OaEnv
+    写入（written）与备份保留（kept，首配不覆盖）双态——$Root 重定向到临时目录，
+    绝不触碰真实仓库 .env。
+    """
+    script = r"""
+$ErrorActionPreference = 'Stop'
+. 'INSTALL_PS1'
+$real = $Root
+$d = Join-Path $env:TEMP ("oa-ps-test-{0}" -f [guid]::NewGuid().ToString('N'))
+New-Item -ItemType Directory -Path $d | Out-Null
+try {
+    Copy-Item (Join-Path $real '.env.lite') (Join-Path $d '.env.lite')
+    $Root = $d                       # 函数的仓库根重定向到临时目录
+    $synth = ConvertTo-OaEnvSynth 'lite' 'local' 'none'
+    if ($synth -notmatch '127\.0\.0\.1:18001/v1') { Write-Error 'synth 缺本地 vLLM 渠道'; exit 1 }
+    if ($synth -notmatch '安装器合成段') { Write-Error 'synth 缺合成段标记'; exit 1 }
+    $synthPath = Join-Path $d 'synth.env'
+    [System.IO.File]::WriteAllText($synthPath, $synth, [System.Text.UTF8Encoding]::new($false))
+    $w1 = Publish-OaEnv $synthPath
+    if ($w1 -ne 'written') { Write-Error "首落位期望 written，实际 $w1"; exit 1 }
+    if (-not (Test-Path (Join-Path $d '.env'))) { Write-Error '.env 未写入'; exit 1 }
+    $w2 = Publish-OaEnv $synthPath
+    if ($w2 -ne 'kept') { Write-Error "重落位期望 kept（首配不覆盖），实际 $w2"; exit 1 }
+    $bak = @(Get-ChildItem (Join-Path $d '.env.bak-*'))
+    if ($bak.Count -lt 1) { Write-Error '备份 .env.bak-* 未生成'; exit 1 }
+    Write-Output 'PS_FUNCS_OK'
+} finally {
+    Remove-Item -Recurse -Force $d -ErrorAction SilentlyContinue
+}
+""".replace("INSTALL_PS1", str(INSTALL_PS1).replace("'", "''"))
+    proc = subprocess.run(
+        ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", script],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        check=False,
+        timeout=120,
+    )
+    # Assert：函数链走通（合成→写入→备份保留），零落真实仓库
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert "PS_FUNCS_OK" in proc.stdout
+
+
 def test_install_ps1_utf8_bom在位() -> None:
     # Act / Assert：PS 5.1 中文注释依赖 BOM（deploy/README 行尾纪律条目）
     assert INSTALL_PS1.read_bytes()[:3] == b"\xef\xbb\xbf", "install.ps1 必须 UTF-8 带 BOM"
@@ -181,6 +229,24 @@ def test_oa_env_place_已有档备份不覆盖() -> None:
     assert ".env.bak-" in proc.stdout
     assert "绝不覆盖" in proc.stdout or "不覆盖" in proc.stdout
     assert "OA_KEEP=original" in proc.stdout  # diff -u 输出含原档行
+
+
+@requires_bash
+def test_oa_env_place_diff_密钥值脱敏() -> None:
+    # Arrange：既有 .env 含用户已填密钥值（合成档同键为空 → diff 必回显该行）
+    proc = _bash(
+        'source install.sh && d="$(mktemp -d)" && '
+        'printf "OA_LLM_API_KEY=real-secret-value\\nOA_JWT_SECRET=top-secret\\n" > "$d/.env" && '
+        'printf "OA_LLM_API_KEY=\\nOA_JWT_SECRET=\\n" > "$d/synth.env" && '
+        'place_rc=0 && { oa_env_place "$d" "$d/synth.env" || place_rc=$?; }; '
+        'printf "RC=%s\\n" "$place_rc"; rm -rf "$d"'
+    )
+    # Assert：diff 回显密钥值脱敏（ocr 评审 #9）；原档保留路径 rc=2 不受影响
+    assert proc.returncode == 0, proc.stderr
+    out = proc.stdout
+    assert "RC=2" in out
+    assert "******" in out
+    assert "real-secret-value" not in out and "top-secret" not in out
 
 
 @requires_bash

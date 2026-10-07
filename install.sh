@@ -20,6 +20,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 MIN_DISK_KB=2097152            # §3.1 磁盘 ≥2G（df -Pk 的 1K 块单位）
 PREFLIGHT_PORTS="8000:api 5432:postgres 6379:redis 9000:minio"   # §3.1 端口口径
+OA_PY_EXE=""                   # oa_py_ok 选中的解释器（版本回显须与判定同源，ocr 评审 #8）
 # set -e 纪律：独立 `[ ] && cmd` 列表条件为假即整条失败会杀脚本——一律用 if 包裹（本文件铁律）
 
 oa_log() { printf '[install] %s\n' "$*"; }
@@ -27,11 +28,12 @@ oa_die() { printf '[install] ✗ %s\n' "$*" >&2; exit 1; }
 
 # ── 步骤 1：前置自检（§3.1：python ≥3.11 / 磁盘 ≥2G / 端口占用；失败打印修复指引并退出）──
 
-oa_py_ok() { # 0=存在 ≥3.11 的 python3/python
+oa_py_ok() { # 0=存在 ≥3.11 的 python3/python；选中的解释器写入全局 OA_PY_EXE
   local py
   for py in python3 python; do
     if command -v "$py" >/dev/null 2>&1; then
       if "$py" -c 'import sys; sys.exit(0 if sys.version_info >= (3, 11) else 1)' 2>/dev/null; then
+        OA_PY_EXE="$py"
         return 0
       fi
     fi
@@ -39,8 +41,7 @@ oa_py_ok() { # 0=存在 ≥3.11 的 python3/python
   return 1
 }
 
-oa_py_version() { python3 -c 'import sys; print("%d.%d.%d" % sys.version_info[:3])' 2>/dev/null \
-  || python -c 'import sys; print("%d.%d.%d" % sys.version_info[:3])'; }
+oa_py_version() { "$OA_PY_EXE" -c 'import sys; print("%d.%d.%d" % sys.version_info[:3])'; }
 
 oa_disk_free_kb() { df -Pk "$1" 2>/dev/null | awk 'NR==2 {print $4}'; }
 
@@ -94,7 +95,10 @@ oa_bootstrap_uv() {
     return 0
   fi
   oa_log "步骤2 未检测到 uv，官方脚本自举..."
-  curl -LsSf https://astral.sh/uv/install.sh | sh
+  # set -e + pipefail 下 curl 失败会静默杀脚本（ocr 评审 #10：与 install.ps1 对齐显式报错）
+  if ! curl -LsSf https://astral.sh/uv/install.sh | sh; then
+    oa_die "uv 自举脚本下载/执行失败：检查网络后重跑，或手动安装 https://docs.astral.sh/uv/getting-started/installation/"
+  fi
   if [ -f "$HOME/.local/bin/env" ]; then . "$HOME/.local/bin/env"; fi
   command -v uv >/dev/null 2>&1 || oa_die "uv 自举失败：请按 https://docs.astral.sh/uv/getting-started/installation/ 手动安装后重跑"
   oa_log "  uv 自举完成：$(command -v uv)"
@@ -167,14 +171,18 @@ oa_env_synth() { # $1=profile(lite|full|full-cad) $2=llm(local|cloud|none) $3=em
   esac
 }
 
+oa_redact() { # diff 输出脱敏（ocr 评审 #9：重装路径 diff 会回显用户已填的真实密钥值）
+  sed -E 's/^([+-][A-Za-z0-9_]*(KEY|PASSWORD|SECRET|TOKEN|key|password|secret|token)[A-Za-z0-9_]*)=.+/\1=******（已脱敏）/I'
+}
+
 oa_env_place() { # $1=root $2=合成内容文件 → 0=已写入新 .env；2=已有 .env（备份后保留原档）
   local ts
   if [ -f "$1/.env" ]; then
     ts="$(date +%Y%m%d%H%M%S)"
     cp "$1/.env" "$1/.env.bak-$ts" || return 1
     printf '[install] 检测到既有 .env：已备份为 .env.bak-%s；原档保留不覆盖（ops/04 §4 首配不覆盖）\n' "$ts"
-    printf '[install] 合成档与现有档 diff（自行取舍后手编 .env）：\n'
-    diff -u "$1/.env" "$2" || true
+    printf '[install] 合成档与现有档 diff（密钥值脱敏；自行取舍后手编 .env）：\n'
+    diff -u "$1/.env" "$2" | oa_redact || true
     return 2
   fi
   cp "$2" "$1/.env"

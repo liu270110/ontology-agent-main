@@ -1,5 +1,7 @@
 # 行尾纪律（2026-10-07 批次A，docs/ops/04 双平台安装器/CLI 壳）：
-# bash 系脚本必须 LF（CRLF 会令 bash 报 ": command not found"）；Windows 系用 CRLF
+# bash 系脚本必须 LF（CRLF 会令 bash 报错）；Windows 系用 CRLF
+# 范围说明（ocr 评审 #1）：刻意只锁本批四文件——放宽为 *.sh/*.ps1 通配会触发既有
+# 脚本（deploy/up.sh 等）的 renormalization 噪声，牵连他人未裁决产物；后续批次按需逐文件追加。
 bin/oadm text eol=lf
 install.sh text eol=lf
 bin/oadm.cmd text eol=crlf

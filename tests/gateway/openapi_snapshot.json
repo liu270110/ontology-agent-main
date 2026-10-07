@@ -1425,7 +1425,7 @@
       },
       "ApprovalDecisionIn": {
         "additionalProperties": false,
-        "description": "裁决入参（api/01 §5.15）：decision/param_hash 必填，reason/create_ticket 可选。",
+        "description": "裁决入参（api/01 §5.15）：decision/param_hash 必填，reason/create_ticket/rule_hint 可选。",
         "properties": {
           "create_ticket": {
             "default": false,
@@ -1460,6 +1460,20 @@
             ],
             "description": "reject 理由（审计留痕）；approve 可选备注",
             "title": "Reason"
+          },
+          "rule_hint": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "审批人附带的策略修正提示，非空时回流规则候选队列供人工终审（K19-b：仅 approve 生效，回流≠自动放行生效）",
+            "title": "Rule Hint"
           }
         },
         "required": [

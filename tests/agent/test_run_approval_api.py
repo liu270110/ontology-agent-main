@@ -2,9 +2,11 @@
 """H-0b 运行中审批回路测试（评审 2026-09-28 §4；api/01 §5.15 ★ 行契约）。
 
 覆盖 RunApprovalService 核验链四分支（成功 resume / 非 waiting_tool 拒 / param_hash
-不符拒 / reject 终态）+ pending 视图 + 审计行 + 审批中心联动（出单/降级）+ 端点直调信封。
-桩：内存 FakeUow（tasks.get/save/append_event + enqueue_projection），不依赖 PG——
-PG 路径与仓储租户过滤由既有集成批（tests/gateway）覆盖。
+不符拒 / reject 终态）+ pending 视图 + 审计行 + 审批中心联动（出单/降级）+ 端点直调信封
++ 策略修正回流（K19-b，13 篇 §25：rule_hint 非空时同事务回流 kb_rule_candidates 候选行
+恒 risk_flag=True + 评审单双写；无 hint 零副作用；重复 approve 锚点消费不重复回流）。
+桩：内存 FakeUow（tasks.get/save/append_event + enqueue_projection + session 裸 add 记录），
+不依赖 PG——PG 路径与仓储租户过滤由既有集成批（tests/gateway）覆盖。
 """
 
 from __future__ import annotations
@@ -15,18 +17,22 @@ from types import SimpleNamespace
 from typing import Any
 
 import pytest
+from pydantic import ValidationError
 
 from services.agent.api.approvals import decide_run_approval, get_pending_run_approval
 from services.agent.api.schemas.approval import ApprovalDecisionIn
 from services.agent.business.approval_service import (
     PENDING_KEY,
     REVIEW_TARGET_TYPE,
+    RULE_REFLUX_TEMPLATE_REF,
+    RULE_TICKET_TARGET_TYPE,
     TICKETS_KEY,
     RunApprovalService,
 )
 from services.agent.business.chat_events import ChatEvent, ChatEventName, wire_data
 from services.agent.business.exec_events import ApprovalDecision, ApprovalResolvedPayload
 from services.agent.domain.model.task import Run, RunStatus, Task, TaskStatus
+from services.kb.data.rule_orm import KbRuleCandidate
 from services.platform.deps import Principal
 from services.platform.errors import GatewayError
 
@@ -44,6 +50,7 @@ class FakeTaskRepo:
         self.tasks: dict[uuid.UUID, Task] = {}
         self.events: list[Any] = []
         self.projections: list[tuple[str, dict[str, Any]]] = []
+        self.orm_added: list[Any] = []  # K19-b：同事务跨模块 ORM 写记录（跨 FakeTx 累积，uow.session 出口消费面）
 
     async def get(self, task_id: uuid.UUID) -> Task | None:
         return self.tasks.get(task_id)
@@ -58,10 +65,26 @@ class FakeTaskRepo:
         return event.seq
 
 
+class FakeSession:
+    """事务内原生 session 桩（uow.session 同名契约，K19-b 跨模块同事务写消费面）：记录 ORM add；flush 模拟 PK 落地。"""
+
+    def __init__(self, repo: FakeTaskRepo) -> None:
+        self._repo = repo
+
+    def add(self, obj: Any) -> None:
+        self._repo.orm_added.append(obj)
+
+    async def flush(self) -> None:
+        for obj in self._repo.orm_added:
+            if getattr(obj, "id", None) is None:
+                obj.id = uuid.uuid4()
+
+
 class FakeTx:
     def __init__(self, repo: FakeTaskRepo) -> None:
         self.tasks = repo
         self._repo = repo
+        self.session = FakeSession(repo)  # K19-b：规则候选同事务写出口（TenantTransaction.session）
 
     async def __aenter__(self) -> FakeTx:
         return self
@@ -588,3 +611,198 @@ async def test_端点装配sse_hub_裁决成功路径发布RESOLVED到会话流(
     assert name == ChatEventName.APPROVAL_RESOLVED.value
     assert data["decision"] == "approved" and data["run_id"] == str(task.runs[0].id)
     assert ApprovalDecision(data["decision"]) is ApprovalDecision.APPROVED
+
+
+# ── 策略修正回流（K19-b，13 篇 §25：批准携带策略修正→审批产出规则而非仅放行）────
+_HINT = "同类停电告警工单今后满足同一前置条件时自动放行"
+
+
+def _refluxed(uow: FakeUow) -> KbRuleCandidate:
+    """断言辅助：取 FakeSession 中唯一规则候选行（无则 fail 给出可读信息）。"""
+    rows = [o for o in uow.repo.orm_added if isinstance(o, KbRuleCandidate)]
+    assert len(rows) == 1, f"期望恰 1 条规则候选回流，实际 {len(rows)}"
+    return rows[0]
+
+
+async def test_K19_approve携rule_hint_同事务回流规则候选_恒高风险带溯源():
+    """回流落队：候选行 risk_flag=True+source=approval+document_id=None（K19-c 放宽），
+    payload 溯源（rule_hint/approval_ticket_id/decided_by）行 meta 与评审单信封双在场。"""
+    uow = FakeUow()
+    task = _waiting_task()
+    uow.repo.tasks[task.id] = task
+    run = task.runs[0]
+    port = FakeTicketPort()
+    result = await _service(uow, ticket_port=port).decide(
+        tenant_id=_TENANT,
+        approver_id=_USER,
+        task_id=task.id,
+        run_id=run.id,
+        decision="approve",
+        param_hash=_HASH,
+        rule_hint=_HINT,
+        trace_id="trace-k19",
+    )
+    assert result.run_status == "running"  # 裁决本体不受回流影响
+    row = _refluxed(uow)
+    # 行级断言：底线 3 恒真 + K19 来源/出处 + 草案最小形态（不伪造结构化字段）
+    assert row.risk_flag is True
+    assert row.source == "approval"
+    assert row.document_id is None and row.chunk_id is None
+    assert row.status == "candidate"  # 回流≠生效（候选非成品，人工终审前不进 TBox）
+    assert row.trigger == _HINT and row.consequence == "" and row.draft_shacl == "" and row.target_class == ""
+    assert {"approval_reflux_unstructured"} <= {v["rule"] for v in row.violations}
+    assert row.trace_id == "trace-k19"
+    assert row.meta["template_ref"] == RULE_REFLUX_TEMPLATE_REF
+    assert row.meta["approval"]["approval_ticket_id"] == result.ticket_id  # 溯源：审批票绑定
+    assert row.meta["approval"]["decided_by"] == str(_USER)
+    # 评审单双写形态对齐 rule_extraction 信封（candidate_type=rule_draft + risk_flag 随单透出）
+    rule_tickets = [c for c in port.calls if c["target_type"] == RULE_TICKET_TARGET_TYPE]
+    approval_tickets = [c for c in port.calls if c["target_type"] == REVIEW_TARGET_TYPE]
+    assert len(rule_tickets) == 1 and len(approval_tickets) == 1  # 双工单并存互不挤占
+    call = rule_tickets[0]
+    assert call["target_id"] == row.id and call["submitter_id"] == _USER
+    assert call["payload"]["candidate_type"] == "rule_draft" and call["payload"]["risk_flag"] is True
+    assert call["payload"]["payload"]["rule_hint"] == _HINT  # 溯源字段随单透出
+    assert call["payload"]["payload"]["approval_ticket_id"] == result.ticket_id
+    assert call["payload"]["payload"]["decided_by"] == str(_USER)
+    # 审计行留痕：rule_candidate_id 可追溯（宪法 5 全程可追溯）
+    decision_event = next(e for e in uow.repo.events if e.event_type == "run.approval_decision")
+    assert decision_event.data["rule_candidate_id"] == str(row.id)
+    # outbox 通道不受回流影响（审批波双行照常；external_write 锚点联动出单通知照旧在场）
+    kinds = [kind for kind, _ in uow.repo.projections]
+    assert kinds[:2] == ["approval.resolved", "run.resume_requested"]
+    assert "approval.ticket_created" in kinds and len(kinds) == 3  # 回流不新增 outbox 行
+
+
+async def test_K19_approve无rule_hint_零回流零副作用():
+    """无 hint：不构造候选行、不发规则评审单、审计行 rule_candidate_id=None（零副作用）。"""
+    uow = FakeUow()
+    task = _waiting_task()
+    uow.repo.tasks[task.id] = task
+    port = FakeTicketPort()
+    result = await _service(uow, ticket_port=port).decide(
+        tenant_id=_TENANT,
+        approver_id=_USER,
+        task_id=task.id,
+        run_id=task.runs[0].id,
+        decision="approve",
+        param_hash=_HASH,
+    )
+    assert result.run_status == "running"
+    assert uow.repo.orm_added == []  # 同事务零 ORM 写
+    assert all(c["target_type"] != RULE_TICKET_TARGET_TYPE for c in port.calls)  # 无规则评审单
+    decision_event = next(e for e in uow.repo.events if e.event_type == "run.approval_decision")
+    assert decision_event.data["rule_candidate_id"] is None
+    # 纯空白 hint 同口径（strip 后视同无 hint）
+    uow2 = FakeUow()
+    task2 = _waiting_task()
+    uow2.repo.tasks[task2.id] = task2
+    port2 = FakeTicketPort()
+    await _service(uow2, ticket_port=port2).decide(
+        tenant_id=_TENANT,
+        approver_id=_USER,
+        task_id=task2.id,
+        run_id=task2.runs[0].id,
+        decision="approve",
+        param_hash=_HASH,
+        rule_hint="   ",
+    )
+    assert uow2.repo.orm_added == []
+
+
+async def test_K19_同工单重复approve_锚点已消费4102_候选不重复():
+    """幂等语义=decide 既有锚点消费口径：首次裁决即收敛（approval_pending 弹出），
+    同 run 第二次裁决 4102 拒绝——回流候选天然至多一条，不依赖去重键兜底。"""
+    uow = FakeUow()
+    task = _waiting_task()
+    uow.repo.tasks[task.id] = task
+    run = task.runs[0]
+    service = _service(uow, ticket_port=FakeTicketPort())
+    first = await service.decide(
+        tenant_id=_TENANT,
+        approver_id=_USER,
+        task_id=task.id,
+        run_id=run.id,
+        decision="approve",
+        param_hash=_HASH,
+        rule_hint=_HINT,
+    )
+    assert first.run_status == "running"
+    with pytest.raises(GatewayError) as ei:
+        await service.decide(
+            tenant_id=_TENANT,
+            approver_id=_USER,
+            task_id=task.id,
+            run_id=run.id,
+            decision="approve",
+            param_hash=_HASH,
+            rule_hint=_HINT,  # 同参同 hint 重放
+        )
+    assert (ei.value.code, ei.value.status_code) == (4102, 409)
+    # 重放拒于核验链首闸（run 已回 running → RUN_NOT_WAITING_TOOL；若并发时序撞锚点已消费
+    # 亦同段 4102 RUN_APPROVAL_ANCHOR_MISSING）——既有幂等语义即收敛保证，回流不破例
+    assert "4102" in ei.value.message
+    rows = [o for o in uow.repo.orm_added if isinstance(o, KbRuleCandidate)]
+    assert len(rows) == 1  # 重放未产生第二条候选
+
+
+async def test_K19_reject携rule_hint_不回流():
+    """拒绝不产规则：reject 即便携 hint 也不回流（回流仅 approve 分支触发）。"""
+    uow = FakeUow()
+    task = _waiting_task()
+    uow.repo.tasks[task.id] = task
+    port = FakeTicketPort()
+    result = await _service(uow, ticket_port=port).decide(
+        tenant_id=_TENANT,
+        approver_id=_USER,
+        task_id=task.id,
+        run_id=task.runs[0].id,
+        decision="reject",
+        param_hash=_HASH,
+        rule_hint=_HINT,
+    )
+    assert result.run_status == "cancelled"
+    assert uow.repo.orm_added == []
+    assert all(c["target_type"] != RULE_TICKET_TARGET_TYPE for c in port.calls)
+
+
+async def test_K19_规则评审单登记失败_降级不反噬_候选行随裁决事务保留():
+    """端口故障：候选行已同事务落队（kb_rule_candidates 即规则候选队列本体），
+    评审单缺登记按降级留痕——审批落账与 resume 不受影响（审计不阻塞主流程，02 §3 ⑥）。"""
+    uow = FakeUow()
+    task = _waiting_task()
+    uow.repo.tasks[task.id] = task
+    result = await _service(uow, ticket_port=FakeTicketPort(error=RuntimeError("review 不可达"))).decide(
+        tenant_id=_TENANT,
+        approver_id=_USER,
+        task_id=task.id,
+        run_id=task.runs[0].id,
+        decision="approve",
+        param_hash=_HASH,
+        rule_hint=_HINT,
+    )
+    assert result.run_status == "running"  # 裁决成立
+    row = _refluxed(uow)  # 候选行保留（状态 candidate 等待终审工作台按 source='approval' 捞取）
+    assert row.status == "candidate" and row.source == "approval"
+    assert [kind for kind, _ in uow.repo.projections] == ["approval.resolved", "run.resume_requested"]
+
+
+async def test_K19_端点直调_rule_hint经schema透传_空hint构造即拒():
+    """ApprovalDecisionIn.rule_hint：路由透传到 service；min_length=1 空串 422 拒收。"""
+    uow = FakeUow()
+    task = _waiting_task()
+    uow.repo.tasks[task.id] = task
+    principal = _principal()
+    resp = await decide_run_approval(
+        task.id,
+        task.runs[0].id,
+        ApprovalDecisionIn(decision="approve", param_hash=_HASH, rule_hint=_HINT),
+        principal=principal,
+        uow=uow,
+    )
+    assert resp["data"]["run_status"] == "running"
+    _refluxed(uow)  # 直调（request=None → 评审端口未装配降级路径）候选行照常落队
+    with pytest.raises(ValidationError):
+        ApprovalDecisionIn(decision="approve", param_hash=_HASH, rule_hint="")  # 空串拒收
+    with pytest.raises(ValidationError):
+        ApprovalDecisionIn(decision="approve", param_hash=_HASH, rule_hint="x" * 2001)  # 超长拒收

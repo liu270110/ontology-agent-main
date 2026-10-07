@@ -69,6 +69,18 @@ class TenantTransaction:
         finally:
             await self._session.close()
 
+    @property
+    def session(self) -> AsyncSession:
+        """事务内原生 AsyncSession（只读出口；enqueue_projection 之外的跨模块同事务写走此处）。
+
+        先例边界：outbox 行经 enqueue_projection 收口；其余 allied 模块 ORM 的同事务写入
+        （K19-b 审批回流规则候选=首个用例）经本属性裸 add——事务边界仍归本 UoW 唯一所有
+        （提交/回滚只发生在 __aexit__，调用方禁 commit/rollback）。
+        """
+        if self._session is None:
+            raise RuntimeError("TenantTransaction 未进入（__aenter__ 未执行）")
+        return self._session
+
     def enqueue_projection(self, event_type: str, aggregate_id: uuid.UUID, payload: dict[str, Any]) -> None:
         """业务行与 outbox 事件同一事务落库的入口（06 §1/§8）。
 

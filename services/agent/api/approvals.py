@@ -94,6 +94,7 @@ async def decide_run_approval(
         param_hash=body.param_hash,
         reason=body.reason,
         create_ticket=body.create_ticket,
+        rule_hint=body.rule_hint,
         trace_id=getattr(request.state, "trace_id", None) if request is not None else None,  # §3.3 RequestID
     )
     return {"data": ApprovalDecisionOut(**vars(result)).model_dump(), "meta": {}}

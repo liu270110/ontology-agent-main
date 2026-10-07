@@ -87,6 +87,7 @@ def _session_to_domain(row: SessionORM, *, next_seq: int, members: list[GroupMem
         title=row.title,
         type=SessionType(row.type),
         routing=RoutingMode(row.routing),
+        toolset=row.toolset,  # K28-a：具名工具集随行映射（None=现行全集）
         members=members or [],
         next_seq=next_seq,
         created_at=row.created_at,  # B3 缺陷修复 2026-10-07：行创建时刻随映射透出（读面不再恒 null）
@@ -193,6 +194,7 @@ class PgSessionRepository:
                 status=session.status.value,
                 type=session.type.value,
                 routing=session.routing.value,
+                toolset=session.toolset,  # K28-a：具名工具集落库（None=现行全集）
             )
         )
         for m in session.members:
@@ -219,6 +221,7 @@ class PgSessionRepository:
                 title=session.title,
                 type=session.type.value,
                 routing=session.routing.value,
+                toolset=session.toolset,  # K28-a：随标量保存（聚合经 get 装载，回写同值不漂移）
             )
         )
         await self._db.execute(stmt)

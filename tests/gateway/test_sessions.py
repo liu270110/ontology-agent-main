@@ -137,3 +137,34 @@ async def test_task_列表详情与取消_终态不可逆4102(gateway_uow, seed)
     with pytest.raises(GatewayError) as ei:
         await cancel_task(task_id, principal=principal, uow=gateway_uow)
     assert (ei.value.code, ei.value.status_code) == (4102, 409)
+
+
+async def test_session_创建携带toolset_领域透传且落库(gateway_uow, seed):
+    """K28-a（docs/Agent/13 §34）：SessionCreateIn.toolset → to_domain → 聚合 → PG 落库读回。
+
+    字段透传三段断言：DTO→领域（to_domain）、领域→行（repo add）、行→领域（get 读回）。
+    """
+    principal, agent_id = seed
+    created = await create_session(
+        body=SessionCreateIn(agent_id=agent_id, toolset="readonly"), principal=principal, uow=gateway_uow
+    )
+    assert created.status == SessionStatus.CREATED
+    # 读回：行→领域映射携带 toolset（读面 SessionOut 未扩列，落库口径经仓储验证）
+    async with gateway_uow.for_tenant(principal.tenant_id) as tx:
+        session = await tx.sessions.get(created.id)
+    assert session is not None
+    assert session.toolset == "readonly"
+
+
+async def test_session_创建未知toolset_422拒绝且零副作用(gateway_uow, seed):
+    """K28-a fail-closed（docs/Agent/13 §34）：未知工具集名 422（3001 PARAM_INVALID），不静默空集。"""
+    principal, agent_id = seed
+    with pytest.raises(GatewayError) as ei:
+        await create_session(
+            body=SessionCreateIn(agent_id=agent_id, toolset="no-such-set"), principal=principal, uow=gateway_uow
+        )
+    assert (ei.value.code, ei.value.status_code) == (3001, 422)
+    assert "no-such-set" in ei.value.message
+    # 零副作用：拒绝路径无会话落库
+    page = await list_sessions(principal=principal, uow=gateway_uow, page=1, page_size=20)
+    assert page.meta.total == 0

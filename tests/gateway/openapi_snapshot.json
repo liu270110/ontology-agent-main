@@ -1959,7 +1959,7 @@
             "type": "string"
           },
           "file": {
-            "format": "binary",
+            "contentMediaType": "application/octet-stream",
             "title": "File",
             "type": "string"
           },
@@ -10179,6 +10179,19 @@
             ],
             "title": "Title"
           },
+          "toolset": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "具名工具集，会话工具表面门；None=平台现行全集",
+            "title": "Toolset"
+          },
           "type": {
             "default": "single",
             "pattern": "^(single|group)$",
@@ -11913,6 +11926,13 @@
       },
       "ValidationError": {
         "properties": {
+          "ctx": {
+            "title": "Context",
+            "type": "object"
+          },
+          "input": {
+            "title": "Input"
+          },
           "loc": {
             "items": {
               "anyOf": [
@@ -22507,7 +22527,7 @@
         ]
       },
       "post": {
-        "description": "会话不变式前置校验（Agent 服务设计 §2）：agent 必须存在（404）且未禁用（disabled 不得被新会话引用，409）。",
+        "description": "会话不变式前置校验（Agent 服务设计 §2）：agent 必须存在（404）且未禁用（disabled 不得被新会话引用，409）。\n\nK28-a（docs/Agent/13 §34）：toolset 具名工具集 fail-closed 校验——未知名 422 拒绝\n（3001 PARAM_INVALID），不静默空集（resolve_toolset ValueError → 422）。",
         "operationId": "create_session_api_v1_sessions_post",
         "requestBody": {
           "content": {

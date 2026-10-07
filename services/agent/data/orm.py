@@ -59,6 +59,10 @@ class Session(Base, PkMixin, TenantMixin, TimestampMixin):
     status: Mapped[str] = mapped_column(String(16), default="created", nullable=False)  # 五态=04 §3
     type: Mapped[str] = mapped_column(String(16), default="single", nullable=False)  # single|group（27 篇 X15）
     routing: Mapped[str] = mapped_column(String(16), default="round_robin", nullable=False)  # 发言编排四模式
+    # K28-a（docs/Agent/13 §34）：具名工具集名（会话工具表面门；NULL=平台现行全集）。
+    # 名单来源=business/capabilities/toolsets.py TOOLSETS（应用层校验，DB 不设 CK——
+    # 注册表演进不应耦合库约束，迁移只增不改纪律下的纯加列）。
+    toolset: Mapped[str | None] = mapped_column(String(64))
     last_message_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     token_usage: Mapped[dict] = mapped_column(JSONB, default=dict, nullable=False)
     # M4.6-D2 会话用户面（docs/Agent/13 §2.1）：滚动检索面 + 定题单向闸 + 会话级软删预留。

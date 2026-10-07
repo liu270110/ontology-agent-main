@@ -554,6 +554,8 @@ def build_chat_orchestrator(
             faithfulness_sample_rate=settings.faithfulness_sample_rate,
             context_threat_scan_enabled=settings.context_threat_scan_enabled,  # F2 注入防御链（15 §2.2）
             memory_expiry_floor=settings.memory_expiry_floor,  # K25-c chat 路接线（13 §31）：与 REST/MCP/L4 同参
+            rrf_k=settings.memory_rrf_k,  # K29-b chat 路接线（13 §35）：与 REST/MCP/L4 同参（K25-c 同轴）
+            half_life_days=settings.memory_decay_half_life_days,  # K29-b：同轴（缺省 30=现行硬缺省，零变化）
         )
     assembler = build_chat_context_assembler(
         l1_store=l1_store,

@@ -101,8 +101,8 @@ class ChatContextAssembler:
         session_factory: async_sessionmaker[AsyncSession],
         knowledge: KnowledgeSearchService,
         top_k: int = 8,
-        rrf_k: int = 60,
-        half_life_days: float = 30.0,
+        rrf_k: int | None = None,  # K29-b（13 §35）：None=现行硬缺省 60（_load_memory 消费点回退）
+        half_life_days: float | None = None,  # K29-b：None=现行硬缺省 30.0（同上，K25-c 同轴形态）
         memory_expiry_floor: float | None = None,  # D-6 软时效地板分（K25-c chat 路接线：None=域缺省 0.1）
         retrieval_retry_max: int = 1,
         repo_factory: RepoFactory = build_l2_repo,  # memory 公开装配面（memory.data 私有，测试可注入 Fake）
@@ -179,8 +179,12 @@ class ChatContextAssembler:
 
         expiry_floor（K25-c chat 路接线，Agent/13 §31）：policy None → 域缺省
         DEFAULT_EXPIRY_FLOOR，与 REST/MCP/L4 同参对齐（修复前本路不传吃域缺省 0.1）。
+        rrf_k/half_life_days（K29-b，Agent/13 §35）：policy/装配 None → 现行硬缺省
+        60/30.0（memory §3，行为零变化回退口；组合根注入 Settings 同参值的消费点）。
         """
         expiry_floor = self._memory_expiry_floor if self._memory_expiry_floor is not None else DEFAULT_EXPIRY_FLOOR
+        rrf_k = self._rrf_k if self._rrf_k is not None else 60
+        half_life_days = self._half_life_days if self._half_life_days is not None else 30.0
         try:
             async with self._session_factory() as db:
                 repo = self._repo_factory(db, tenant_id)
@@ -192,8 +196,8 @@ class ChatContextAssembler:
                     session_id=session_id,
                     mode="full",
                     top_k=top_k,
-                    rrf_k=self._rrf_k,
-                    half_life_days=self._half_life_days,
+                    rrf_k=rrf_k,
+                    half_life_days=half_life_days,
                     expiry_floor=expiry_floor,
                     now=datetime.now(UTC),
                 )
@@ -295,8 +299,8 @@ def build_chat_context_assembler(
         session_factory=session_factory,
         knowledge=knowledge,
         top_k=chat_policy.retrieval_top_k,
-        rrf_k=chat_policy.rrf_k,
-        half_life_days=chat_policy.half_life_days,
+        rrf_k=chat_policy.rrf_k,  # K29-b：None 透传（消费点回退硬缺省 60，K25-c 同轴形态）
+        half_life_days=chat_policy.half_life_days,  # K29-b：None 透传（消费点回退 30.0）
         memory_expiry_floor=chat_policy.memory_expiry_floor,  # K25-c chat 路接线：None=域缺省（组合根注入 Settings 值）
         retrieval_retry_max=chat_policy.retrieval_retry_max,
         threat_scan_enabled=chat_policy.context_threat_scan_enabled,  # F2：开关随 policy（组合根缺省读 Settings）

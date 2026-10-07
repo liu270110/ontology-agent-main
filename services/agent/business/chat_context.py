@@ -37,6 +37,7 @@ from services.kb.business.usage_service import UsageStore
 from services.memory.business.context import ContextBundle, build_memory_context
 from services.memory.business.runtime import build_l2_repo  # memory 公开装配面（memory.data 模块私有，P2-2 收口）
 from services.memory.domain.model.l1 import WindowMessage
+from services.memory.domain.model.memory import DEFAULT_EXPIRY_FLOOR  # D-6 域缺省地板（policy None 时回退，K25-c）
 from services.memory.domain.repo.fact_repo import L1MemoryStore, L2FactRepository
 from services.platform.llm.events import emit_llm_event  # M4.5-C 事件汇（机制通用：先落库后推送/无绑定丢弃）
 from services.platform.threats import scan_for_threats  # hermes-agent MIT 收编件（15 §2.1；运行时禁 import devtools）
@@ -102,6 +103,7 @@ class ChatContextAssembler:
         top_k: int = 8,
         rrf_k: int = 60,
         half_life_days: float = 30.0,
+        memory_expiry_floor: float | None = None,  # D-6 软时效地板分（K25-c chat 路接线：None=域缺省 0.1）
         retrieval_retry_max: int = 1,
         repo_factory: RepoFactory = build_l2_repo,  # memory 公开装配面（memory.data 私有，测试可注入 Fake）
         threat_scan_enabled: bool = True,  # F2 注入防御链开关（15 §2.2；False=零行为变化回退口）
@@ -112,6 +114,7 @@ class ChatContextAssembler:
         self._top_k = top_k
         self._rrf_k = rrf_k
         self._half_life_days = half_life_days
+        self._memory_expiry_floor = memory_expiry_floor
         self._retrieval_retry_max = retrieval_retry_max
         self._repo_factory = repo_factory
         self._threat_scan_enabled = threat_scan_enabled
@@ -172,7 +175,12 @@ class ChatContextAssembler:
     async def _load_memory(
         self, *, tenant_id: UUID, user_id: UUID, session_id: UUID, top_k: int
     ) -> tuple[ContextBundle | None, bool]:
-        """L1+L2 融合（memory 权威消费口）；短只读会话，异常降级留痕不中断。"""
+        """L1+L2 融合（memory 权威消费口）；短只读会话，异常降级留痕不中断。
+
+        expiry_floor（K25-c chat 路接线，Agent/13 §31）：policy None → 域缺省
+        DEFAULT_EXPIRY_FLOOR，与 REST/MCP/L4 同参对齐（修复前本路不传吃域缺省 0.1）。
+        """
+        expiry_floor = self._memory_expiry_floor if self._memory_expiry_floor is not None else DEFAULT_EXPIRY_FLOOR
         try:
             async with self._session_factory() as db:
                 repo = self._repo_factory(db, tenant_id)
@@ -186,6 +194,7 @@ class ChatContextAssembler:
                     top_k=top_k,
                     rrf_k=self._rrf_k,
                     half_life_days=self._half_life_days,
+                    expiry_floor=expiry_floor,
                     now=datetime.now(UTC),
                 )
             return bundle, bundle.degraded
@@ -288,6 +297,7 @@ def build_chat_context_assembler(
         top_k=chat_policy.retrieval_top_k,
         rrf_k=chat_policy.rrf_k,
         half_life_days=chat_policy.half_life_days,
+        memory_expiry_floor=chat_policy.memory_expiry_floor,  # K25-c chat 路接线：None=域缺省（组合根注入 Settings 值）
         retrieval_retry_max=chat_policy.retrieval_retry_max,
         threat_scan_enabled=chat_policy.context_threat_scan_enabled,  # F2：开关随 policy（组合根缺省读 Settings）
     )

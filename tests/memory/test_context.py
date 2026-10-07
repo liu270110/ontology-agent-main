@@ -3,14 +3,20 @@
 
 K25-c 增补（Agent/13 §31）：D-6 软时效地板分 L2 路接线——Settings memory_expiry_floor 经
 api/MCP 下传 merge_l2_hits（修复前本路不传即吃域缺省 0.1，与 L4 检索通道可配地板分叉）。
+K25-c chat 路补齐（§31，2026-10-07）：chat 组装链（ChatPolicy → build_chat_context_assembler
+→ build_memory_context）同参下传（覆盖 chat 路径，工厂级用例）。
 """
 
+from contextlib import asynccontextmanager
 from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
 import pytest
 
+from services.agent.business.chat_context import build_chat_context_assembler
+from services.agent.business.chat_events import ChatPolicy
 from services.memory.business.context import merge_l2_hits
+from services.memory.domain.model.l1 import L1Snapshot
 from services.memory.domain.model.l2_fact import FactCategory, L2Fact
 from services.memory.domain.model.memory import MemoryLayer, MemoryRecord, MemoryScope, MemoryType, RecordState
 
@@ -110,3 +116,52 @@ async def test_缺省不传仍吃域缺省0点1_向后兼容():
         now=NOW,
     )
     assert hits[0].score == pytest.approx(0.9 * 0.5 ** (32 / 30) * 0.1, abs=1e-6)
+
+
+# ── chat 路工厂级用例（K25-c 补齐，Agent/13 §31）：ChatPolicy → 工厂 → 组装链透传 ──────────
+
+
+class _ChatL1Stub:
+    """L1 存储桩（chat 组装最小消费面：read 返回空快照，窗口/块面本用例不触及）。"""
+
+    async def read(self, tenant_id, session_id):  # noqa: ANN001 —— 桩面窄签名
+        return L1Snapshot(tenant_id=tenant_id, session_id=session_id)
+
+
+@asynccontextmanager
+async def _chat_session_stub():
+    yield None  # 短只读会话桩：_load_memory 即用即弃，仓储由 repo_factory 桩替换
+
+
+def _chat_assembler(policy: ChatPolicy, repo_rows: list[L2Fact]):
+    """经 build_chat_context_assembler 工厂构造 chat 组装器，仓储面换桩（工厂不设 repo 参）。"""
+    assembler = build_chat_context_assembler(
+        l1_store=_ChatL1Stub(),  # type: ignore[arg-type]
+        session_factory=_chat_session_stub,  # type: ignore[arg-type]
+        ollama_base_url="http://localhost:11434",
+        policy=policy,
+    )
+    assembler._repo_factory = lambda db, tenant: _RecentRepo(repo_rows)  # noqa: SLF001 —— 桩注入点（组合根同位参）
+    return assembler
+
+
+async def test_chat路工厂传floor_组装过期项乘子等于Settings值():
+    """K25-c chat 路接线（覆盖 chat 路径，工厂级）：ChatPolicy.memory_expiry_floor=0.3 经
+    build_chat_context_assembler → _load_memory → build_memory_context 下传，过期项乘子=0.3
+    （对齐 REST/MCP 一致性口径）；缺省 policy（None）→ 域缺省 0.1（零行为变化回退口）。"""
+    fact = _expired_fact()
+    session_id = uuid4()
+
+    floored = await _chat_assembler(ChatPolicy(memory_expiry_floor=_FLOOR), [fact])._load_memory(
+        tenant_id=fact.tenant_id, user_id=fact.user_id, session_id=session_id, top_k=8
+    )  # noqa: SLF001 —— 记忆面最小消费口（检索面非本用例对象）
+    assert floored[0] is not None and not floored[1] and len(floored[0].l2) == 1
+    real_now = datetime.now(UTC)  # _load_memory 内取真实 now：过期项乘子恒=floor，年龄项对齐手算
+    age_days = (real_now - fact.created_at).total_seconds() / 86400.0
+    assert floored[0].l2[0].score == pytest.approx(0.9 * 0.5 ** (age_days / 30) * _FLOOR, abs=1e-6)  # 乘子=0.3
+
+    default = await _chat_assembler(ChatPolicy(), [fact])._load_memory(
+        tenant_id=fact.tenant_id, user_id=fact.user_id, session_id=session_id, top_k=8
+    )  # noqa: SLF001
+    assert default[0] is not None
+    assert default[0].l2[0].score == pytest.approx(0.9 * 0.5 ** (age_days / 30) * 0.1, abs=1e-6)  # 缺省=域 0.1

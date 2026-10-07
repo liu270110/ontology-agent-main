@@ -14,6 +14,7 @@ from services.agent.domain.model.step_state import (
     StepState,
     StepStateError,
     StepStatus,
+    deterministic_step_id,
 )
 
 
@@ -114,3 +115,57 @@ def test_步状态携带预算水位与门禁结论_终态可追溯():
     state.transition(StepStatus.EXECUTING, stage=LoopStage.EXECUTION)
     assert state.budget_watermark.tokens_used == 42
     assert state.gate_verdict == "allow"
+
+
+# ── K32 A-5 确定性 step_id（docs/Agent/13 §38；恢复幂等根基）──────────────
+
+
+def test_step_id_同run同seq派生稳定_两次构造等值():
+    """K32-a：deterministic_step_id 纯函数两次调用等值；默认生成路径（不传 step_id）
+    两次独立构造同 run 同 seq 得同一 id，且为合法 uuid 形态（UUID() 构造即证）。"""
+    run_id = uuid.uuid4()
+    first = StepState(run_id=run_id, seq=1, stage=LoopStage.PLANNING)
+    second = StepState(run_id=run_id, seq=1, stage=LoopStage.PLANNING)
+    expected = uuid.UUID(deterministic_step_id(str(run_id), 1))  # uuid5 字符串合法可解析
+    assert deterministic_step_id(str(run_id), 1) == deterministic_step_id(str(run_id), 1)
+    assert first.step_id == second.step_id == expected
+
+
+def test_step_id_不同run同seq互异_同run不同seq互异():
+    """K32-a：派生键=run_id+seq 二元组——跨 Run 隔离、Run 内按步序唯一。"""
+    run_id, other_run = uuid.uuid4(), uuid.uuid4()
+    assert deterministic_step_id(str(run_id), 1) != deterministic_step_id(str(other_run), 1)
+    assert deterministic_step_id(str(run_id), 1) != deterministic_step_id(str(run_id), 2)
+    s1 = StepState(run_id=run_id, seq=1, stage=LoopStage.PLANNING)
+    s2 = StepState(run_id=other_run, seq=1, stage=LoopStage.PLANNING)
+    assert s1.step_id != s2.step_id
+
+
+def test_step_id_重放重建判等_按id去重命中():
+    """A-5 端到端（恢复幂等根基）：恢复/重放场景同 run 同 seq 重建 StepState——
+    step_id 与原步判等，按 id 去重可命中（重放去重的根基语义）。"""
+    run_id = uuid.uuid4()
+    original = StepState(run_id=run_id, seq=2, stage=LoopStage.PLANNING, action_iri="urn:ex:act")
+    original.transition(StepStatus.GATED, stage=LoopStage.GATE)  # 原步已推进
+    replay = StepState(run_id=run_id, seq=2, stage=LoopStage.PLANNING, action_iri="urn:ex:act")
+    assert replay.step_id == original.step_id  # 状态不同不影响判等：id 只由 run_id+seq 决定
+    assert len({original.step_id, replay.step_id}) == 1  # 恢复侧按 id 去重的最小形态
+
+
+def test_step_id_显式直传保留_派生不覆盖():
+    """K32-b 边界：显式直传 step_id（测试桩 uuid4 口径）原样保留——派生只在默认生成路径。"""
+    explicit = uuid.uuid4()
+    state = StepState(run_id=uuid.uuid4(), seq=1, stage=LoopStage.PLANNING, step_id=explicit)
+    assert state.step_id == explicit
+
+
+def test_run_id非规范拼写归一后恒等派生():
+    """ocr/专家 P2：{花括号}/大写形态与规范形态必须派生同 id（同 run 恒等）。"""
+    from services.agent.domain.model.step_state import deterministic_step_id
+    rid = "6f9619ff-8b86-d011-b42d-00c04fc964ff"
+    braced = "{" + rid + "}"
+    upper = rid.upper()
+    a = StepState(run_id=rid, seq=3)
+    b = StepState(run_id=braced, seq=3)
+    c = StepState(run_id=upper, seq=3)
+    assert a.step_id == b.step_id == c.step_id

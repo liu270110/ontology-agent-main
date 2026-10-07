@@ -163,3 +163,33 @@ ambiguity_level/notes/expectation`（expectation=map/clarify/reject 与层级一
 2. 候选集=17 静态行动类；mcp_bridge 动态族（`action/mcp/{全名}`）无静态清单，不入候选集；
 3. web 两类与 run_terminal/chat_answer 的执行级/描述按上文来源登记（web 绑定未声明执行级，bench 按「只读出网」记 READ）；
 4. 受评面为本地 vLLM 裸模型直选（temperature=0），非平台 chat 主管线（E1：意图层现由 LLM 充当，JEV 未接线）——套件测的是「约束注入对意图判别的增益」，非平台端到端路由准确率。
+
+## eval release 聚合评测（2026-10-07 增补：docs/Agent/17 §2 批次 B）
+
+「核心验证观测指标 + 本版指标对比 + 市场指标对比」三件套的聚合层——**只聚合不重跑不重
+算**：读 results/ 下四套件已有最近 run JSON（各 suite metrics.py 仍是唯一事实源）。
+
+```bash
+# release 聚合（不重跑套件）：dashboard.json + version_diff.json + SUMMARY.md release 曲线节
+python benchmarks/run.py --release-eval --tag v0.2.0-m4.7-first-curve
+# 显式点名某套件的对比对（tag 命名空间按 suite 隔离；缺省自动取同名 suite 最近两次不同 tag）
+python benchmarks/run.py --release-eval --tag t2 --diff-suite agent-core --diff-prev t1 --diff-curr t2
+# 只跑本版对比（独立入口，等价聚合逻辑）
+python benchmarks/suites/eval/diff.py --suite agent-core --prev t1 --curr t2
+```
+
+### 产出（results/eval/）
+
+| 文件 | 内容 |
+| ---- | ---- |
+| `dashboard.json`（+`<date>/<HHMMSS>-dashboard.json` 历史件） | 四套件核心观测指标（agent-core 六指标 / rag 六维×三 harness / intent 双档四指标+增益 / ontology-scale 三档）+ 环境指纹（按套件分列，可能不同 commit 如实分列）+ suite 级健康标记（结果缺失/部分跑 → partial）+ `market_reference`（leaderboard_citations 三档指针+A/B 档定性位置，citation_only 红线随件透传） |
+| `version_diff.json`（+历史件） | 逐指标 `{metric, prev, curr, delta, trend(↑↓→)}`；单侧缺失以 null 留痕不猜数；`regressions`=方向表判定的变差指标列（批次 C「trend 不劣化」质量依据面） |
+| `SUMMARY.md` | 追加式 release 级曲线（dashboard 节 + version-diff 节；追加式不覆盖历史） |
+
+### 口径与边界（如实声明）
+
+1. 指标全部原样透传各 suite 结果 JSON 的 metrics 段（键=`<来源>.<字段>` 保 provenance），本套件零再计算；
+2. 自动配对只认**不同 tag** 的最近两次 run；跑法/数据集指纹不同（rag=config、intent=config+dataset sha256、场景型=smoke+逐场景参数）→ 该 suite 标 `no_baseline`，不产出误导 delta；显式 `--diff-prev/--diff-curr` 点名时照算但挂 `comparable=false` 旗；
+3. 场景型 run 的 manifest 缺失时，tag 从 suite SUMMARY.md 时间戳最近邻回填（真实案例：bench-core-smoke-final 的 manifest 未入库）；orsi-suggestions 等派生件不入 run 分组；
+4. market_reference 为纯文献引用（`suites/rag/leaderboard_citations/`，nature=citation_only），与本仓实测数字禁止并列——红线原文随 dashboard 透传；
+5. 可变参数走 Settings：`suites/eval/config.py`（env 前缀 `BENCH_EVAL_`：目录/文件名/趋势容差/期望场景数/可比性字段）。

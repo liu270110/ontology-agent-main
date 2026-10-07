@@ -1,5 +1,9 @@
 """benchmarks 统一入口（docs/Agent/16 §3）：python benchmarks/run.py --suite rag [--smoke]。
 
+eval release 聚合评测（docs/Agent/17 §2 批次 B）：``python benchmarks/run.py --release-eval
+--tag <版本tag>``——聚合四套件已有最近结果（不重跑不重算）产 results/eval/dashboard.json
+version_diff.json；``--diff-suite/--diff-prev/--diff-curr`` 显式点名某套件的对比对。
+
 套件分发：rag（benchmarks/suites/rag/runner.py）、agent-core（suites/agent-core/runner.py，
 场景型文件位加载）、intent（suites/intent/runner.py，三档对照 A0 直觉/A1 本体约束/A2=jev 通道）、
 ontology-scale（suites/ontology-scale/runner.py，本体梯度三档×三指标）均已实现；
@@ -32,6 +36,8 @@ sys.path.insert(0, str(ROOT))
 
 from benchmarks.suites.rag.config import RagBenchSettings  # noqa: E402
 
+# 已实现四套件（合并残留修复 2026-10-07：此前两行重复赋值互相覆盖——intent/ontology-scale
+# 各缺一边，--suite intent 直接 argparse 报 choices 错；本行为并集，eval 批 B 顺手纠偏）
 _IMPLEMENTED_SUITES = ("rag", "agent-core", "intent", "ontology-scale")
 
 # 场景型套件（目录含连字符，runner.py 文件位加载；run_suite(smoke, only) 契约）
@@ -43,8 +49,21 @@ _BENCH_ROOT = Path(__file__).resolve().parent
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="benchmarks.run", description="ontology-agent 基准对比套件统一入口")
     parser.add_argument(
-        "--suite", required=True, choices=_IMPLEMENTED_SUITES, help="套件名（已实现：rag/agent-core/intent）"
+        "--suite",
+        required=False,
+        choices=_IMPLEMENTED_SUITES,
+        help="套件名（已实现：rag/agent-core/intent）；--release-eval 时不需",
     )
+    parser.add_argument(
+        "--release-eval",
+        action="store_true",
+        help="eval release 聚合：聚合四套件已有最近结果产 dashboard+version_diff（不重跑，17 篇 §2）",
+    )
+    parser.add_argument(
+        "--diff-suite", default=None, help="release-eval：显式点名的 diff 套件（须配 --diff-prev/--diff-curr）"
+    )
+    parser.add_argument("--diff-prev", default=None, help="release-eval：基线 tag（与 --diff-curr 成对）")
+    parser.add_argument("--diff-curr", default=None, help="release-eval：当前 tag（与 --diff-prev 成对）")
     parser.add_argument("--tag", default=None, help="运行标签（默认读 BENCH_RAG_TAG，缺省 v0）")
     parser.add_argument("--smoke", action="store_true", help="全链冒烟（rag：进库+检索+基线+六维落盘）")
     parser.add_argument("--scenario", default=None, help="agent-core：只跑指定场景（缺省全量）")
@@ -80,6 +99,11 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+    if args.release_eval:
+        return _run_release_eval(args)
+    if not args.suite:
+        print("须指定 --suite <套件名> 或 --release-eval", file=sys.stderr)
+        return 2
     if args.suite not in _IMPLEMENTED_SUITES:
         print(f"suite {args.suite!r} 未实现（当前已实现：{_IMPLEMENTED_SUITES}）", file=sys.stderr)
         return 2
@@ -91,13 +115,17 @@ def main(argv: list[str] | None = None) -> int:
         print("--skip-ingest 须配 --kb-id 与 --tenant-id（collection 与建库租户）", file=sys.stderr)
         return 2
 
-    overrides = {k: v for k, v in {
-        "tag": args.tag,
-        "harness": args.harness,
-        "embed_base_url": args.embed_base_url,
-        "embed_protocol": args.embed_protocol,
-        "token_counter": args.token_counter,
-    }.items() if v is not None}
+    overrides = {
+        k: v
+        for k, v in {
+            "tag": args.tag,
+            "harness": args.harness,
+            "embed_base_url": args.embed_base_url,
+            "embed_protocol": args.embed_protocol,
+            "token_counter": args.token_counter,
+        }.items()
+        if v is not None
+    }
     settings = RagBenchSettings(**overrides)
 
     # 延迟 import：env 注入（ASGI 分支）须先于任何 services.platform.config 读取——
@@ -139,6 +167,41 @@ def _console_digest(result: dict) -> dict:
             "cost_tokens_per_query": round(mt["cost_per_query_tokens"], 0),
         }
     return {"suite": result.get("suite"), "tag": result.get("tag"), "mode": result.get("mode"), "metrics": rows}
+
+
+# ------------------------------------------------------- eval release 聚合（17 篇 §2 批次 B：只聚合不重算）
+
+
+def _run_release_eval(args: argparse.Namespace) -> int:
+    """--release-eval：dashboard+version_diff 落盘 results/eval/，SUMMARY 追加 release 曲线节。"""
+    if bool(args.diff_prev) != bool(args.diff_curr):
+        print("--diff-prev/--diff-curr 须成对给（基线 tag 与当前 tag）", file=sys.stderr)
+        return 2
+    if (args.diff_prev or args.diff_curr) and not args.diff_suite:
+        print("--diff-prev/--diff-curr 须配 --diff-suite（tag 命名空间按 suite 隔离）", file=sys.stderr)
+        return 2
+
+    from benchmarks.suites.eval.config import EvalReleaseSettings
+    from benchmarks.suites.eval.release import run_release_eval
+
+    settings = EvalReleaseSettings()
+    tag = args.tag or settings.tag
+    try:
+        report = run_release_eval(
+            settings,
+            tag=tag,
+            diff_suite=args.diff_suite,
+            diff_prev=args.diff_prev,
+            diff_curr=args.diff_curr,
+        )
+    except ValueError as exc:  # 显式 diff tag 不存在等输入错误：退出码 2，错误如实上屏
+        print(f"[release-eval] 输入错误: {exc}", file=sys.stderr)
+        return 2
+    print(json.dumps(report, ensure_ascii=False, indent=2))
+    print(f"\ndashboard:    {report['dashboard']['latest']}")
+    print(f"version_diff: {report['version_diff']['latest']}")
+    print(f"SUMMARY:      {report['dashboard']['summary']}")
+    return 0
 
 
 # ---------------------------------------------------------------- intent 套件（16 篇 §2 intent 行：双档对照）
@@ -289,12 +352,16 @@ def _run_scenarios_suite(args: argparse.Namespace) -> int:
         asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
     overrides = (
-        {k: v for k, v in {
-            "tiers": [int(x) for x in args.tiers.split(",")] if args.tiers else None,
-            "tier_timeout_s": args.tier_timeout,
-            "latency_repeats": args.latency_repeats,
-            "token_counter": args.onto_token_counter,
-        }.items() if v is not None}
+        {
+            k: v
+            for k, v in {
+                "tiers": [int(x) for x in args.tiers.split(",")] if args.tiers else None,
+                "tier_timeout_s": args.tier_timeout,
+                "latency_repeats": args.latency_repeats,
+                "token_counter": args.onto_token_counter,
+            }.items()
+            if v is not None
+        }
         if args.suite == "ontology-scale"
         else {}
     )

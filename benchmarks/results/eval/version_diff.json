@@ -1,0 +1,131 @@
+{
+  "schema": "eval-version-diff/v1",
+  "release_tag": "v0.2.0-m4.7-first-curve",
+  "generated_at": "2026-10-07T08:17:59.800193+00:00",
+  "note": "指标取自各 suite results/ 已落盘 run JSON（只聚合不重算）；trend=↑升 ↓降 →平；regressions=按方向表判定的变差指标（neutral 指标不作回归判定）",
+  "suites": {
+    "agent-core": {
+      "status": "ok",
+      "prev": {
+        "suite": "agent-core",
+        "tag": "bench-core-smoke-final",
+        "finished_at": "2026-10-06T23:45:41+00:00",
+        "kind": "scenario",
+        "tag_source": "summary_fallback",
+        "files": [
+          "results\\agent-core\\2026-10-07\\074529-cross_tenant_leak.json",
+          "results\\agent-core\\2026-10-07\\074529-invalid_retry_count.json",
+          "results\\agent-core\\2026-10-07\\074529-memory_cross_contamination.json",
+          "results\\agent-core\\2026-10-07\\074529-recovery_time_s.json",
+          "results\\agent-core\\2026-10-07\\074529-session_mutex_rate.json",
+          "results\\agent-core\\2026-10-07\\074529-side_effect_duplication.json"
+        ]
+      },
+      "curr": {
+        "suite": "agent-core",
+        "tag": "redteam-fix-verified",
+        "finished_at": "2026-10-07T00:55:18+00:00",
+        "kind": "scenario",
+        "tag_source": "manifest",
+        "files": [
+          "results\\agent-core\\2026-10-07\\085511-cross_tenant_leak.json",
+          "results\\agent-core\\2026-10-07\\085511-invalid_retry_count.json",
+          "results\\agent-core\\2026-10-07\\085511-memory_cross_contamination.json",
+          "results\\agent-core\\2026-10-07\\085511-recovery_time_s.json",
+          "results\\agent-core\\2026-10-07\\085511-session_mutex_rate.json",
+          "results\\agent-core\\2026-10-07\\085511-side_effect_duplication.json"
+        ]
+      },
+      "comparable": true,
+      "comparability_note": null,
+      "diffs": [
+        {
+          "metric": "cross_tenant_leak.reject_rate",
+          "prev": 0.666667,
+          "curr": 1.0,
+          "delta": 0.333333,
+          "trend": "↑"
+        },
+        {
+          "metric": "invalid_retry_count.invalid_retry_count",
+          "prev": 1,
+          "curr": 1,
+          "delta": 0.0,
+          "trend": "→"
+        },
+        {
+          "metric": "memory_cross_contamination.leak_count",
+          "prev": 0,
+          "curr": 0,
+          "delta": 0.0,
+          "trend": "→"
+        },
+        {
+          "metric": "recovery_time_s.recovery_time_s_p50",
+          "prev": 0.0009,
+          "curr": 0.0011,
+          "delta": 0.0002,
+          "trend": "↑"
+        },
+        {
+          "metric": "session_mutex_rate.session_mutex_rate",
+          "prev": 1.0,
+          "curr": 1.0,
+          "delta": 0.0,
+          "trend": "→"
+        },
+        {
+          "metric": "side_effect_duplication.extra_writes",
+          "prev": 2,
+          "curr": 2,
+          "delta": 0.0,
+          "trend": "→"
+        },
+        {
+          "metric": "side_effect_duplication.idempotency_key_visible",
+          "prev": null,
+          "curr": true,
+          "delta": null,
+          "trend": "n/a"
+        }
+      ],
+      "regressions": [
+        "recovery_time_s.recovery_time_s_p50"
+      ]
+    },
+    "rag": {
+      "status": "no_baseline",
+      "reason": "distinct_tags_lt_2（results/ 内不足两个不同 tag 的 run）"
+    },
+    "intent": {
+      "status": "no_baseline",
+      "reason": "nearest_pair_incomparable（最近两个不同 tag 的 run 跑法/数据集指纹不同）",
+      "candidates": {
+        "prev": {
+          "suite": "intent",
+          "tag": "smoke-probe",
+          "finished_at": "2026-10-07T09:54:35",
+          "kind": "single",
+          "tag_source": "payload",
+          "files": [
+            "results\\intent\\2026-10-07\\run-095435-smoke-probe.json"
+          ]
+        },
+        "curr": {
+          "suite": "intent",
+          "tag": "v0",
+          "finished_at": "2026-10-07T10:22:39",
+          "kind": "single",
+          "tag_source": "payload",
+          "files": [
+            "results\\intent\\2026-10-07\\run-102239-v0.json"
+          ]
+        }
+      }
+    },
+    "ontology-scale": {
+      "status": "no_baseline",
+      "reason": "distinct_tags_lt_2（results/ 内不足两个不同 tag 的 run）"
+    }
+  }
+}

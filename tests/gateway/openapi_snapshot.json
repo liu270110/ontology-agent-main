@@ -12378,6 +12378,79 @@
         "title": "WorkflowListEnvelope",
         "type": "object"
       },
+      "WorkflowPromoteIn": {
+        "additionalProperties": false,
+        "description": "提升入参（POST /workflows/runs/{run_id}/promote；40 篇 §6.2 body 仅可选两字段）。",
+        "properties": {
+          "title": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "variable_hints": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Variable Hints",
+            "type": "array"
+          }
+        },
+        "title": "WorkflowPromoteIn",
+        "type": "object"
+      },
+      "WorkflowPromoteOut": {
+        "additionalProperties": false,
+        "description": "提升响应（201 新建 / 200 幂等命中——重复调用返回既有草稿 id，40 篇 §6.2）。",
+        "properties": {
+          "draft_version": {
+            "title": "Draft Version",
+            "type": "string"
+          },
+          "origin": {
+            "enum": [
+              "user",
+              "llm_candidate"
+            ],
+            "title": "Origin",
+            "type": "string"
+          },
+          "source_run_id": {
+            "format": "uuid",
+            "title": "Source Run Id",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "draft_created",
+              "exists"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "workflow_id": {
+            "format": "uuid",
+            "title": "Workflow Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "workflow_id",
+          "status",
+          "draft_version",
+          "source_run_id",
+          "origin"
+        ],
+        "title": "WorkflowPromoteOut",
+        "type": "object"
+      },
       "WorkflowPublishIn": {
         "additionalProperties": false,
         "description": "提交发布（POST /workflows/{id}/versions；前端 publishWorkflow body={note}）。",
@@ -24134,6 +24207,60 @@
           }
         },
         "summary": "建草稿（模板实例化；模板内置即过校验三件）",
+        "tags": [
+          "workflows"
+        ]
+      }
+    },
+    "/api/v1/workflows/runs/{run_id}/promote": {
+      "post": {
+        "description": "执行成果提升为工作流草稿（api/01 §5.11 ★ 行）：图=本次 run 实际执行图（工作流族）\n或计划投影（chat 族 PLAN_UPDATED 回扫，origin=llm_candidate——发布必过审批，宪法 3）；\n幂等键=run_id，重复调用返回既有草稿 id（201 新建 / 200 幂等命中）；提升前 Kahn 环\n检测 + 孤儿节点剔除（4801→409）。",
+        "operationId": "promote_workflow_run_api_v1_workflows_runs__run_id__promote_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WorkflowPromoteIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkflowPromoteOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "存为工作流草稿（40 篇 §6：端点新建草稿并带 source_run_id 血统；幂等键=run_id）",
         "tags": [
           "workflows"
         ]

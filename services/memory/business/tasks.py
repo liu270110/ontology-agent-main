@@ -78,7 +78,10 @@ async def decay_scan_task(deps: Deps, *, tenant_id: uuid.UUID | None = None, now
     now = now or datetime.now(UTC)
     expired = 0
     for rec in await deps.repo.list_stale_for_decay(tenant_id, before=now, limit=500):
-        if rec.decay_score(now, deps.half_life_days) < deps.expire_threshold:
+        # D-6 软时效（Agent/13 §28）：过期判定保留纯半衰期分量（half_life_score=K22 前
+        # decay_score 原语义）——软时效乘子只作用于排序得分（decay_score），不得借道调度
+        # 阈值加速 EXPIRED 终局，自然衰减终态语义零漂移。
+        if rec.half_life_score(now, deps.half_life_days) < deps.expire_threshold:
             rec.expire(now)
             await deps.repo.update_state(rec)
             expired += 1

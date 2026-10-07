@@ -585,6 +585,7 @@ def wire_memory(app: Any, settings: Any) -> None:
         top_k=settings.memory_search_top_k,
         rrf_k=settings.memory_rrf_k,
         half_life_days=settings.memory_decay_half_life_days,
+        expiry_floor=settings.memory_expiry_floor,
     )
     app.state.consolidation_pipeline = ConsolidationPipeline(
         repo=memory_repo,

@@ -82,8 +82,10 @@ export const useGroupStreamStore = create<GroupStreamState>((set, get) => ({
   lastSeq: 0,
   running: false,
 
+  // F1（联调 2026-10-06）：GET 历史返回 seq 降序——seed 内按 seq 升序排序再入列
+  //（session-store seed 同款修法），群聊消息不再时序倒置
   seed: messages => set({
-    messages,
+    messages: [...messages].sort((a, b) => (a.seq ?? Number.POSITIVE_INFINITY) - (b.seq ?? Number.POSITIVE_INFINITY)),
     lastSeq: messages.reduce((m, x) => Math.max(m, Number(x.seq ?? 0)), 0),
     toolCalls: {},
     decisions: [],

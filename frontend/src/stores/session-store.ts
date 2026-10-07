@@ -486,7 +486,16 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   pushDraftInsert: text =>
     set(s => ({ draftInserts: [...s.draftInserts, { text, seq: ++draftSeq }].slice(-20) })),
 
-  seed: (messages, lastSeq = 0) => set({ messages, lastSeq }),
+  // F1（联调 2026-10-06）：GET messages 返回 seq 降序，历史直塞致「用户问在助手答下方」时序
+  // 倒置——seed 内按 seq 升序排序（带 seq 升序在前，无 seq=实时残缺消息垫后，对齐 backfill
+  // 「历史升序在前、实时在后」既有口径，见 backfill mergedHist 排序）
+  seed: (messages, lastSeq = 0) =>
+    set({
+      messages: [...messages].sort(
+        (a, b) => (a.seq ?? Number.POSITIVE_INFINITY) - (b.seq ?? Number.POSITIVE_INFINITY),
+      ),
+      lastSeq,
+    }),
 
   backfill(history, pending) {
     const s = get()

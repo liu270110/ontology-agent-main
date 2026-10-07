@@ -14,6 +14,20 @@
 - C-params   baseline 提示词 + PoC⑤ 冻结参数（temperature=0/思考关/repetition_penalty/max_tokens）
 - C2-nothink baseline 提示词 + 系统提示词尾部 /no_think 软开关（prompt 级思考控制，零参数变更）
 - combo      指定提示词变体 × C 参数（--combo 如 "A2+C"；未列出的提示词变体与 C 不可组合时报错）
+- v2 / v3    现网基线形态（temperature=0.1/json_object，无 hint 注入）在提示词版本轴的取用：
+             双参 render + 该版本 system/schema/目录渲染（v3=编号目录制，v2=IRI 目录），
+             与 kb_extraction 按 ref 取用的现网行为同源——组合实验轴（引擎×提示词）用
+- v4         现网 active（kb_extract@v4=冻结期 v3 实验版重登记）：编号目录 + 标题栏结构化
+             线索区（确定性投影产物注入，三参 render titleblock_fields=投影字段，空 dict 也
+             注入=零命中指引，与 kb_extraction.run_extract 同口径）——0.328 基线提示词面
+
+引擎轴（--engine，缺省 pdfium；docling 阅读序文本=markdown 导出即阅读序文本）：文本源切换
+不影响提示词轴；v2/v3 组×两引擎即 2×2 组合实验矩阵的取用面。docling 分支经 _docling_outcome
+做 DocumentStream 入参适配（已装 docling 2.87 的 convert 只收 Path/str/DocumentStream，
+生产 _parse_docling 现传 BytesIO 会 ValidationError——本实验发现的骨架缺口，修复随落码批）；
+除入参包装外与生产 _parse_docling 同型（export_to_markdown 全文 + drawing_ir 雏形）。
+多图：LAB_PDF_B 设置后逐图跑同组集，末尾出「宏 F1」按组跨图（scored 文档 F1 算术平均，
+eval_golden.evaluate 宏平均同口径）。
 
 脱敏纪律（standards/02 §11）：样图/golden 路径经环境变量注入（LAB_PDF_A/LAB_GOLDEN），
 本脚本零真实图号、零内置样例值（few-shot 一律 SAMPLE-*）；结果只打印 stdout 与 --out JSON，
@@ -23,6 +37,10 @@
     LAB_PDF_A=<本地样图路径> LAB_GOLDEN=<本地golden路径> \
       .venv/Scripts/python.exe services/devtools/drawing-probe/extract_lab.py \
       --groups baseline,A-hint,A2-hintx,B-fewshot,C-params,C2-nothink [--out result.json]
+    # 组合实验（docling 阅读序文本 × v3/v2；B 图可选）：
+    LAB_PDF_A=<样图A> LAB_PDF_B=<样图B> LAB_GOLDEN=<golden> \
+      .venv/Scripts/python.exe services/devtools/drawing-probe/extract_lab.py \
+      --engine docling --groups v3,v2 [--out combo-docling.json]
 """
 
 from __future__ import annotations
@@ -44,11 +62,18 @@ import httpx  # noqa: E402
 
 from services.kb.business.kb_extraction import (  # noqa: E402
     _EXTRACT_SCHEMA_V2,
+    _EXTRACT_SCHEMA_V3,
     load_seed_catalog,
 )
 from services.kb.business.kb_pipeline import _normalize_newlines  # noqa: E402
-from services.kb.business.parsers import extract_pdf  # noqa: E402
-from services.kb.business.prompts import extract_v2, get_prompt, get_system_prompt  # noqa: E402
+from services.kb.business.parsers import ParseOutcome, extract_pdf  # noqa: E402
+from services.kb.business.prompts import (  # noqa: E402
+    extract_v2,
+    extract_v3,
+    extract_v4,
+    get_prompt,
+    get_system_prompt,
+)
 from services.kb.business.titleblock import (  # noqa: E402
     project_titleblock,
     project_titleblock_spatial,
@@ -158,11 +183,17 @@ def _hint_section(vocab: tuple[str, ...], fields: dict[str, str], *, discipline:
     return "\n\n".join(parts) + "\n"
 
 
-def _user_prompt(group: str, catalog_text: str, chunk_content: str, fields: dict[str, str]) -> str:
-    """按实验组组装用户提示词（baseline 逐字节走现网 render；变体只做「清单区后插 hint 区」）。"""
+def _user_prompt(group: str, catalog_texts: dict[str, str], chunk_content: str, fields: dict[str, str]) -> str:
+    """按实验组组装用户提示词（baseline 逐字节走现网 render；v2/v3 双参、v4 三参 render；变体插 hint 区）。"""
+    if group in VERSION_REFS:
+        ref = VERSION_REFS[group]
+        if ref == extract_v4.TEMPLATE_REF:
+            # v4 现网口径：titleblock_fields 恒注入（空 dict=投影零命中指引，run_extract 同款）
+            return get_prompt(ref)(catalog_texts[ref], chunk_content, titleblock_fields=fields)
+        return get_prompt(ref)(catalog_texts[ref], chunk_content)  # 双参形态（现网非图纸/无 hint 面）
     base_render = get_prompt(TEMPLATE_REF)
     if group == "baseline":
-        return base_render(catalog_text, chunk_content)
+        return base_render(catalog_texts[TEMPLATE_REF], chunk_content)
     hint_by_group: dict[str, str] = {
         "A-hint": _hint_section(NINE_FIELD_VOCAB, fields),
         "A2-hintx": _hint_section(EXTENDED_FIELD_VOCAB, fields),
@@ -172,13 +203,15 @@ def _user_prompt(group: str, catalog_text: str, chunk_content: str, fields: dict
     }
     hint = hint_by_group.get(group)
     if hint is None:
-        return base_render(catalog_text, chunk_content)
-    prefix = f"## 本体引导清单\n{catalog_text}\n\n"
+        return base_render(catalog_texts[TEMPLATE_REF], chunk_content)
+    prefix = f"## 本体引导清单\n{catalog_texts[TEMPLATE_REF]}\n\n"
     return f"{prefix}{hint}## 抽取文本\n{chunk_content}"
 
 
 def _system_prompt(group: str) -> str:
-    """按实验组组装系统提示词（baseline 逐字节现网；B 追加 few-shot；C2 追加 /no_think）。"""
+    """按实验组组装系统提示词（baseline 逐字节现网；v2/v3 走该版本正文；B 追加 few-shot；C2 追加 /no_think）。"""
+    if group in VERSION_REFS:
+        return get_system_prompt(VERSION_REFS[group])
     system = get_system_prompt(TEMPLATE_REF)
     if group == "B-fewshot":
         return system + _FEWSHOT_SYSTEM_SUFFIX
@@ -188,7 +221,7 @@ def _system_prompt(group: str) -> str:
 
 
 def _extra_body(group: str) -> dict[str, Any]:
-    """按实验组叠加请求参数（baseline 逐位复刻现网 complete_structured 请求体）。"""
+    """按实验组叠加请求参数（baseline 逐位复刻现网 complete_structured 请求体；v2/v3 同参数面）。"""
     extra: dict[str, Any] = {"temperature": 0.1}  # 现网：temperature 锁 0.1，无 max_tokens/思考开关
     if group == "C-params":
         return {**extra, **C_EXTRA_BODY}
@@ -197,8 +230,32 @@ def _extra_body(group: str) -> dict[str, Any]:
     return extra
 
 
-GROUPS: tuple[str, ...] = ("baseline", "A-hint", "A2-hintx", "A3-hintsem", "B-fewshot", "C-params", "C2-nothink")
+GROUPS: tuple[str, ...] = (
+    "baseline",
+    "A-hint",
+    "A2-hintx",
+    "A3-hintsem",
+    "B-fewshot",
+    "C-params",
+    "C2-nothink",
+    "v2",
+    "v3",
+    "v4",
+)
 COMBO_GROUPS: tuple[str, ...] = ("A-hint", "A2-hintx", "A3-hintsem", "B-fewshot")
+
+# 提示词版本轴（v2/v3/v4 组）：ref → (system, render, schema, 目录渲染)。
+# 与 kb_extraction._EXTRACT_SCHEMAS/_EXTRACT_CATALOG_RENDERERS 同源同键——组合实验不另造口径。
+VERSION_REFS: dict[str, str] = {
+    "v2": extract_v2.TEMPLATE_REF,
+    "v3": extract_v3.TEMPLATE_REF,
+    "v4": extract_v4.TEMPLATE_REF,
+}
+VERSION_SCHEMAS: dict[str, dict[str, Any]] = {
+    extract_v2.TEMPLATE_REF: _EXTRACT_SCHEMA_V2,
+    extract_v3.TEMPLATE_REF: _EXTRACT_SCHEMA_V3,
+    extract_v4.TEMPLATE_REF: _EXTRACT_SCHEMA_V3,  # v4 沿用 integer 序号 schema（同 kb_extraction 表）
+}
 
 
 def wait_healthy(base: str, model: str, max_wait_s: float = 420.0) -> None:
@@ -225,20 +282,49 @@ def load_eval_module() -> Any:
     return module
 
 
-def build_lab_context(pdf_path: Path, max_gap_pt: float = 150.0) -> dict[str, Any]:
+def _docling_outcome(data: bytes) -> ParseOutcome:
+    """docling 转换（实验本地适配）：DocumentStream 包装 bytes → export_to_markdown 阅读序全文。
+
+    已装 docling 2.87 的 DocumentConverter.convert 入参只收 Path/str/DocumentStream（pydantic
+    strict 校验），生产 _parse_docling 现传裸 BytesIO 会 ValidationError——本适配即落码批要
+    回补的引擎入参形态，除包装外与 _parse_docling 同型同产物（text/drawing_ir/engine）。
+    """
+    import io
+
+    from docling.document_converter import DocumentConverter
+    from docling_core.types.io import DocumentStream
+
+    result = DocumentConverter().convert(DocumentStream(name="source.pdf", stream=io.BytesIO(data)))
+    text = result.document.export_to_markdown()
+    drawing_ir: dict = {"engine": "docling"}
+    pages = getattr(result.document, "pages", None)
+    try:
+        drawing_ir["page_count"] = len(pages) if pages is not None else None
+    except TypeError:
+        drawing_ir["page_count"] = None
+    return ParseOutcome(text=text, drawing_ir=drawing_ir, engine="docling")
+
+
+def build_lab_context(pdf_path: Path, *, engine: str = "pdfium", max_gap_pt: float = 150.0) -> dict[str, Any]:
     """复刻现网 preprocess→chunk 产物面：content + 标题栏投影（文本两级→空间兜底）+ 分块。
 
+    engine="pdfium"：pdfium 文本流（0.328 基线同源）；engine="docling"：阅读序文本
+    （markdown 导出，_docling_outcome 本地适配），标题栏投影照跑 docling 文本。
     与 kb_pipeline._apply_titleblock 同口径：文本两级投影非空即用（不跑空间级）；零命中且有
-    带坐标片段才走空间级。titleblock 额外语义块同 _run_chunk 口径追加（有锚点才加）。
+    带坐标片段才走空间级（docling 无带坐标片段，空间级对空列表 no-op 同生产）。titleblock
+    额外语义块同 _run_chunk 口径追加（有锚点才加）。
     """
-    outcome = extract_pdf(pdf_path.read_bytes(), engine="pdfium")
+    if engine == "docling":
+        outcome = _docling_outcome(pdf_path.read_bytes())
+    else:
+        outcome = extract_pdf(pdf_path.read_bytes(), engine="pdfium")
     if not outcome.text.strip():
         raise SystemExit("样图无文本层（扫描件不在本实验范围——OCR 通道随 v2）")
     content = _normalize_newlines(outcome.text)
     projection = project_titleblock(content)
     fields = dict(projection.fields)
     source = "text"
-    if not fields:
+    if not fields:  # docling 无带坐标片段（text_runs 恒空），空间级对空列表 no-op——同生产降级序
         spatial = project_titleblock_spatial(outcome.text_runs, max_gap_pt=max_gap_pt)
         if spatial.fields:
             fields = dict(spatial.fields)
@@ -342,21 +428,31 @@ def evaluate_group(
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="抽取链路加固实验（09 篇 v2 承接项）")
+    parser = argparse.ArgumentParser(description="抽取链路加固实验（09 篇 v2 承接项；组合实验轴=引擎×提示词）")
     parser.add_argument("--groups", default="baseline,A-hint,A2-hintx,A3-hintsem,B-fewshot,C-params,C2-nothink")
     parser.add_argument("--combo", default="A2-hintx+C", help="combo 组的提示词变体+C，如 A2-hintx+C")
+    parser.add_argument(
+        "--engine",
+        default=os.environ.get("LAB_ENGINE", "pdfium"),
+        choices=("pdfium", "docling"),
+        help="文本源引擎轴：pdfium=文本流基线；docling=阅读序文本（生产 _parse_docling 同函数）",
+    )
     parser.add_argument("--out", default=None, help="结果 JSON 落盘路径（缺省只打印）")
     args = parser.parse_args()
 
-    pdf_path = os.environ.get("LAB_PDF_A")
+    pdf_paths = [p for p in (os.environ.get("LAB_PDF_A"), os.environ.get("LAB_PDF_B")) if p]
     golden_path = os.environ.get("LAB_GOLDEN")
-    if not pdf_path or not golden_path:
+    if not pdf_paths or not golden_path:
         print("环境变量 LAB_PDF_A / LAB_GOLDEN 未设置：样图与 golden 为本地资产，路径经环境变量注入", file=sys.stderr)
         return 2
     base = os.environ.get("LAB_BASE", DEFAULT_BASE)
     model = os.environ.get("LAB_MODEL", DEFAULT_MODEL)
 
     groups = [g.strip() for g in args.groups.split(",") if g.strip()]
+    unknown = [g for g in groups if g not in GROUPS and g != "combo"]
+    if unknown:
+        print(f"未知实验组: {unknown}（合法 {GROUPS} + combo）", file=sys.stderr)
+        return 2
     combo_prompt = args.combo.split("+")[0]
     if "combo" in groups and combo_prompt not in COMBO_GROUPS:
         print(f"--combo 提示词变体非法: {combo_prompt}（合法 {COMBO_GROUPS}）", file=sys.stderr)
@@ -364,60 +460,86 @@ def main() -> int:
 
     eval_mod = load_eval_module()
     golden = eval_mod.load_golden(Path(golden_path))
-    stem = Path(pdf_path).stem
-    entry = next((e for e in golden.get("documents", []) if Path(e["file"]).stem == stem), None)
-    if entry is None:
-        print(f"golden 中未找到 file stem == {stem!r} 的条目", file=sys.stderr)
-        return 2
-    expected = {
-        str(k): str(v)
-        for k, v in (entry.get("titleblock") or {}).items()
-        if v is not None and str(v).strip()  # null 字段不计期望（str(None)='None' 会虚增 FN）
-    }
-
-    ctx = build_lab_context(Path(pdf_path))
     catalog = load_seed_catalog()
-    catalog_text = extract_v2.render_catalog(catalog)
+    catalog_texts = {
+        ref: renderer(catalog)
+        for ref, renderer in (
+            (extract_v2.TEMPLATE_REF, extract_v2.render_catalog),
+            (extract_v3.TEMPLATE_REF, extract_v3.render_catalog),
+            (extract_v4.TEMPLATE_REF, extract_v3.render_catalog),  # v4 目录沿用 v3 编号制（同 kb_extraction 表）
+        )
+    }
     wait_healthy(base, model)
     print(
-        f"抽取加固实验：chunks={len(ctx['chunks'])} 标题栏投影({ctx['titleblock_source']})="
-        f"{len(ctx['fields'])}字段 × {model} @ {base}（{time.strftime('%Y-%m-%d %H:%M:%S')}）\n",
+        f"抽取加固实验：engine={args.engine} groups={groups} 样图={len(pdf_paths)} × {model} @ {base}"
+        f"（{time.strftime('%Y-%m-%d %H:%M:%S')}）\n",
         flush=True,
     )
 
-    results: dict[str, Any] = {"expected_fields": sorted(expected), "groups": {}}
+    results: dict[str, Any] = {"engine": args.engine, "documents": [], "macro": {}}
+    group_f1s: dict[str, list[tuple[str, float]]] = {}  # 组 → [(图 stem, F1)]——宏 F1 按组跨图聚合
     with httpx.Client(timeout=300.0) as client:
-        for group in groups:
-            records = []
-            for i, chunk in enumerate(ctx["chunks"]):
-                prompt_group = combo_prompt if group == "combo" else group
-                record = call_llm(
-                    client,
-                    base,
-                    model,
-                    _system_prompt(prompt_group),
-                    _user_prompt(prompt_group, catalog_text, chunk, ctx["fields"]),
-                    _extra_body(group if group != "combo" else "C-params"),
-                )
-                record["chunk"] = i
-                records.append(record)
-                parsed = record.get("parsed") or {}
-                status = record.get("error") or f"candidates={len(parsed.get('candidates') or [])}"
-                print(
-                    f"  [{group}] chunk{i}: {status} finish={record.get('finish_reason')}"
-                    f" completion_tokens={record.get('completion_tokens')} {record.get('elapsed_s')}s",
-                    flush=True,
-                )
-            summary = evaluate_group(eval_mod, expected, records)
-            results["groups"][group] = {"records": records, "summary": summary}
-            hits = ",".join(summary["hit_fields"]) or "无"
-            m = summary["metrics"]
+        for pdf in pdf_paths:
+            pdf_path = Path(pdf)
+            stem = pdf_path.stem
+            entry = next((e for e in golden.get("documents", []) if Path(e["file"]).stem == stem), None)
+            if entry is None:
+                print(f"golden 中未找到 file stem == {stem!r} 的条目，跳过该图", file=sys.stderr)
+                continue
+            expected = {
+                str(k): str(v)
+                for k, v in (entry.get("titleblock") or {}).items()
+                if v is not None and str(v).strip()  # null 字段不计期望（str(None)='None' 会虚增 FN）
+            }
+            print(f"===== 样图 {stem} =====", flush=True)
+            ctx = build_lab_context(pdf_path, engine=args.engine)
             print(
-                f"== [{group}] 候选={summary['candidates']} 解析失败={summary['parse_failures']}"
-                f" TP={m['tp']} FP={m['fp']} FN={m['fn']} 命中字段=[{hits}]\n"
-                f"   P={m['precision']:.3f} R={m['recall']:.3f} F1={m['f1']:.3f}\n",
+                f"chunks={len(ctx['chunks'])} 标题栏投影({ctx['titleblock_source']})={len(ctx['fields'])}字段"
+                f" content_chars={len(ctx['content'])}\n",
                 flush=True,
             )
+            doc_result: dict[str, Any] = {"expected_fields": sorted(expected), "groups": {}}
+            for group in groups:
+                records = []
+                for i, chunk in enumerate(ctx["chunks"]):
+                    prompt_group = combo_prompt if group == "combo" else group
+                    record = call_llm(
+                        client,
+                        base,
+                        model,
+                        _system_prompt(prompt_group),
+                        _user_prompt(prompt_group, catalog_texts, chunk, ctx["fields"]),
+                        _extra_body(group if group != "combo" else "C-params"),
+                    )
+                    record["chunk"] = i
+                    records.append(record)
+                    parsed = record.get("parsed") or {}
+                    status = record.get("error") or f"candidates={len(parsed.get('candidates') or [])}"
+                    print(
+                        f"  [{group}] chunk{i}: {status} finish={record.get('finish_reason')}"
+                        f" completion_tokens={record.get('completion_tokens')} {record.get('elapsed_s')}s",
+                        flush=True,
+                    )
+                summary = evaluate_group(eval_mod, expected, records)
+                doc_result["groups"][group] = {"records": records, "summary": summary}
+                hits = ",".join(summary["hit_fields"]) or "无"
+                m = summary["metrics"]
+                print(
+                    f"== [{group}] 候选={summary['candidates']} 解析失败={summary['parse_failures']}"
+                    f" TP={m['tp']} FP={m['fp']} FN={m['fn']} 命中字段=[{hits}]\n"
+                    f"   P={m['precision']:.3f} R={m['recall']:.3f} F1={m['f1']:.3f}\n",
+                    flush=True,
+                )
+            results["documents"].append({"sample": stem, **doc_result})
+            for group in groups:
+                f1 = float(doc_result["groups"][group]["summary"]["metrics"]["f1"])
+                group_f1s.setdefault(group, []).append((stem, f1))
+
+    if group_f1s:  # 宏 F1 按组跨图（eval_golden.evaluate 宏平均同口径：scored 文档算术平均）
+        for group, pairs in group_f1s.items():
+            macro = sum(f1 for _, f1 in pairs) / len(pairs)
+            results["macro"][group] = {"f1": round(macro, 4), "per_doc_f1": {s: round(f1, 4) for s, f1 in pairs}}
+            print(f"== [{group}] 宏 F1（{len(pairs)} 图）= {macro:.3f} ==")
 
     if args.out:
         Path(args.out).write_text(json.dumps(results, ensure_ascii=False, indent=2), encoding="utf-8")

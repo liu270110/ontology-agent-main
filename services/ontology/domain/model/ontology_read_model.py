@@ -121,3 +121,8 @@ class ReadModelProjection(BaseModel):
     properties: list[ReadModelProperty] = Field(default_factory=list)
     axioms: list[ReadModelAxiom] = Field(default_factory=list)
     rules: list[ReadModelRule] = Field(default_factory=list)
+
+# ── ONT-2 复位增补（R37-2 事故恢复，自 0a3b62f 摘回）──
+# ONT-2 扩型：'capability'（06 篇 §ONT-2.2——requires/produces/constrained_by/execution/
+    "capability": ("requires", "produces", "constrained_by", "execution", "binds_action"),
+    "capability",

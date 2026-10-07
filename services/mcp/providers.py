@@ -599,6 +599,7 @@ class ActionDispatcherPort(Protocol):
         tenant_id: uuid.UUID,
         action_iri: str,
         params: dict[str, Any],
+        subject_rids: list[str] | None = None,
         confirm_token: str | None = None,
         trace_id: str | None = None,
     ) -> dict[str, Any]: ...  # pragma: no cover — Protocol 方法无实现
@@ -664,6 +665,7 @@ class ActionCapabilityProvider:
                 tenant_id=ctx.tenant_id,
                 action_iri=str(params.get("action_iri") or ""),
                 params=dict(params.get("params") or {}) if isinstance(params.get("params"), dict) else {},
+                subject_rids=params.get("subject_rids") or None,  # K34-a 一等 rids 透传（校验权威在 dispatcher）
                 confirm_token=params.get("confirm_token") or None,
                 trace_id=ctx.trace_id,
             )

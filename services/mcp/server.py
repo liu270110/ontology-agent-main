@@ -357,11 +357,18 @@ def build_mcp_server(
     async def action_invoke(
         action_iri: str,
         params: dict[str, Any],
+        subject_rids: list[str] | None = None,
         confirm_token: str | None = None,
     ) -> dict[str, Any]:
         """业务动作回写（须为本体行动类 IRI；受理即凭证，状态经 writeback.status 查询——4.2 批次装配）。"""
         return await dispatch(
-            "action.invoke", {"action_iri": action_iri, "params": params, "confirm_token": confirm_token}
+            "action.invoke",
+            {
+                "action_iri": action_iri,
+                "params": params,
+                "subject_rids": subject_rids,  # K34-a：本体对象 RID 列表（缺省 None 零变化）
+                "confirm_token": confirm_token,
+            },
         )
 
     async def writeback_status(

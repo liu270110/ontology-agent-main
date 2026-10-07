@@ -9,12 +9,25 @@ import uuid
 
 import pytest
 
-from services.writeback.adapters.base import AdapterError, BizStatusResult
+from services.writeback.adapters.base import (
+    AdapterError,
+    BizStatusResult,
+    ConnectorMeta,
+    ConnectorRegistry,
+)
 from services.writeback.adapters.mock_power_ticket import ACTION_IRI_CREATE_ORDER
-from services.writeback.business.action_dispatcher import project_entry
+from services.writeback.business.action_dispatcher import ActionDispatcher, project_entry
 from services.writeback.business.policy import WritebackPolicy
 from services.writeback.domain.model import LedgerStatus, WritebackAction, WritebackError, WritebackLedger
-from tests.writeback.conftest import NOW, TENANT_ID, ScriptedAdapter, StepClock, make_dispatcher, make_mock_stack
+from tests.writeback.conftest import (
+    NOW,
+    TENANT_ID,
+    FakeLedgerRepo,
+    ScriptedAdapter,
+    StepClock,
+    make_dispatcher,
+    make_mock_stack,
+)
 
 ACTION_IRI = ACTION_IRI_CREATE_ORDER
 
@@ -348,3 +361,110 @@ async def test_status_三键全缺拒绝3001_终态行幂等原样返回():
     ledger.rows[entry.id] = entry
     done = await dispatcher.status(tenant_id=TENANT_ID, ledger_id=entry.id)
     assert done["status"] == "succeeded"  # 终态幂等：不再触达业务侧核实
+
+
+# ---------------------------------------------------------------- K34 增量（Agent 13 §40：subject_rids 一等化 + params_schema 校验）
+
+
+def _dispatcher_with(
+    *, params_schema: dict | None = None, risk_level: str = "medium"
+) -> tuple[ActionDispatcher, FakeLedgerRepo]:
+    """直注装配（连接器 meta 可挂 params_schema——make_dispatcher 未暴露该面，其余同档）。"""
+    adapter = ScriptedAdapter()
+    ledger = FakeLedgerRepo()
+    registry = ConnectorRegistry()
+    registry.register(
+        adapter,
+        ConnectorMeta(
+            connector_id=uuid.uuid4(),
+            name="scripted",
+            action_iris=frozenset({ACTION_IRI}),
+            risk_level=risk_level,
+            supports_query_status=True,
+            supports_compensate=True,
+            params_schema=params_schema,
+        ),
+    )
+    return ActionDispatcher(connectors=registry, ledger_repo=ledger, clock=StepClock()), ledger
+
+
+async def test_subject_rids透传_审计payload留痕对象rid列表():
+    dispatcher, ledger = _dispatcher_with()
+    rids = ["http://ontology-agent.local/o/power#Feeder/F-1", "obj-short-id-2"]
+
+    result = await dispatcher.invoke_action(
+        tenant_id=TENANT_ID, action_iri=ACTION_IRI, params={"a": 1}, subject_rids=rids
+    )
+
+    row = ledger.by_key(result["idempotency_key"])
+    assert row is not None
+    assert row.request_payload["subject_rids"] == rids  # 审计留痕含 rids（全程可追溯）
+
+
+async def test_subject_rids缺省与空列表_审计payload不落键零变化():
+    dispatcher, ledger = _dispatcher_with()
+
+    await dispatcher.invoke_action(tenant_id=TENANT_ID, action_iri=ACTION_IRI, params={"a": 1})
+    await dispatcher.invoke_action(tenant_id=TENANT_ID, action_iri=ACTION_IRI, params={"a": 1}, subject_rids=[])
+
+    assert len(ledger.rows) == 2
+    assert all("subject_rids" not in row.request_payload for row in ledger.rows.values())  # 缺省路径形状零变化
+
+
+async def test_subject_rids非法形态拒绝3001_台账不落行():
+    dispatcher, ledger = _dispatcher_with()
+
+    for bad in ("http://x/obj/1", [""], [123], [None]):  # 非列表 / 空串项 / 非字符串项
+        with pytest.raises(WritebackError) as exc:
+            await dispatcher.invoke_action(
+                tenant_id=TENANT_ID, action_iri=ACTION_IRI, params={"a": 1}, subject_rids=bad
+            )
+        assert exc.value.code == 3001
+    assert ledger.rows == {}  # 拒绝发生在台账落行前（§2.1 先验后投）
+
+
+async def test_params_schema命中拒绝3001_错误含路径与约束语义():
+    schema = {"type": "object", "properties": {"feeder": {"type": "string"}}, "required": ["feeder"]}
+    dispatcher, ledger = _dispatcher_with(params_schema=schema)
+
+    with pytest.raises(WritebackError) as exc:
+        await dispatcher.invoke_action(tenant_id=TENANT_ID, action_iri=ACTION_IRI, params={"feeder": 123})
+    assert exc.value.code == 3001
+    assert "params_schema" in exc.value.message and "feeder" in exc.value.message
+    assert ledger.rows == {}  # 脏数据不出网（B1 门禁语义化，4xx 语义不可重试）
+
+    with pytest.raises(WritebackError) as missing:
+        await dispatcher.invoke_action(tenant_id=TENANT_ID, action_iri=ACTION_IRI, params={"other": "x"})
+    assert missing.value.code == 3001 and "required" in missing.value.message
+
+
+async def test_params_schema合法放行_缺省None零校验双缺省兼容():
+    schema = {"type": "object", "properties": {"feeder": {"type": "string"}}, "required": ["feeder"]}
+    with_schema, _ledger_a = _dispatcher_with(params_schema=schema)
+    without_schema, _ledger_b = _dispatcher_with()
+
+    ok = await with_schema.invoke_action(tenant_id=TENANT_ID, action_iri=ACTION_IRI, params={"feeder": "F1"})
+    assert ok["status"] == "accepted"  # schema 命中且合法 → 放行
+
+    free = await without_schema.invoke_action(tenant_id=TENANT_ID, action_iri=ACTION_IRI, params={"任意": {"x": 1}})
+    assert free["status"] == "accepted"  # 缺省 None=零校验（双缺省兼容零变化）
+
+
+async def test_错误路径混型排序不炸_anyOf数组对象混合() -> None:
+    """ocr 2026-10-08：Draft2020-12 混合 error path（int 下标+str 属性名）sorted TypeError
+    会把结构化 3001 拒绝炸成内部错误——str 化全序键后应稳定返回 PARAM_INVALID。"""
+    schema = {
+        "anyOf": [
+            {"type": "array", "items": {"type": "string"}},
+            {"type": "object", "properties": {"x": {"type": "string"}}, "additionalProperties": False},
+        ]
+    }
+    dispatcher, ledger = _dispatcher_with(params_schema=schema)
+    with pytest.raises(WritebackError) as exc:
+        await dispatcher.invoke_action(
+            tenant_id=TENANT_ID,
+            action_iri=ACTION_IRI,
+            params=["ok", 3, {"x": 1}],  # 数组下标 1+对象属性 x 同违例 → 混型 path
+        )
+    assert "参数" in str(exc.value) or "PARAM" in str(exc.value)
+    assert ledger.rows == {}  # 拒绝发生在台账落行前

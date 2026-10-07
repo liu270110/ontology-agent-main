@@ -39,7 +39,7 @@ from alembic import op
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 
 revision: str = "e2c4a6f8d0b2"
-down_revision: str | None = "b8e4d2f6a9c1"
+down_revision: str | None = "c9e1f3a5d7b2"  # 合入序接舰队 K28 链尾
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

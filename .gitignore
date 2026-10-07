@@ -78,3 +78,5 @@ tools/onto-train/runs/
 # E2E 巡检产物：报告 JSON 入库（跨轮对比），截图可再生不入库（49MB）
 services/devtools/ui-audit/out/crawl/
 services/devtools/ui-audit/out/**/*.png
+
+deploy/artifacts/

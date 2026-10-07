@@ -33,7 +33,7 @@ from collections.abc import Sequence
 from alembic import op
 
 revision: str = "f4d6b8e0a2c4"
-down_revision: str | None = "e2c4a6f8d0b2"
+down_revision: str | None = "e2c4a6f8d0b2"  # 串回本批 schema 迁移之后（线性：K28→e2c4→f4d6）
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

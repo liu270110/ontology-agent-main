@@ -404,7 +404,9 @@ class RunApprovalService:
                 }
             ],
             status="candidate",
-            trace_id=trace_id,
+            # String(128) 限长列首次接触客户端可控 trace_id（历史路径仅入 JSONB 无限长）：
+            # 超长即 flush 截断错→审批整体 5xx 回滚——防御性截断（ocr 2026-10-07 评审发现）。
+            trace_id=(trace_id or "")[:128] or None,
             source="approval",
             meta={
                 "template_ref": RULE_REFLUX_TEMPLATE_REF,

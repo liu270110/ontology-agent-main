@@ -806,3 +806,26 @@ async def test_K19_端点直调_rule_hint经schema透传_空hint构造即拒():
         ApprovalDecisionIn(decision="approve", param_hash=_HASH, rule_hint="")  # 空串拒收
     with pytest.raises(ValidationError):
         ApprovalDecisionIn(decision="approve", param_hash=_HASH, rule_hint="x" * 2001)  # 超长拒收
+
+
+async def test_K19_超长trace_id_回流防御性截断_不炸限长列():
+    """ocr 2026-10-07：客户端可控 trace_id 直击 String(128) 限长列首例——防御性截断防
+    flush 截断错连坐审批整体 5xx 回滚。"""
+    uow = FakeUow()
+    task = _waiting_task()
+    uow.repo.tasks[task.id] = task
+    run = task.runs[0]
+    long_trace = "t" * 300
+    result = await _service(uow).decide(
+        tenant_id=_TENANT,
+        approver_id=_USER,
+        task_id=task.id,
+        run_id=run.id,
+        decision="approve",
+        param_hash=_HASH,
+        rule_hint=_HINT,
+        trace_id=long_trace,
+    )
+    assert result.run_status == "running"  # 审批本体不受影响（截断后正常回流）
+    row = _refluxed(uow)
+    assert row.trace_id == "t" * 128

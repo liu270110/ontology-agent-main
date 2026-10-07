@@ -19,7 +19,7 @@ from sqlalchemy import (
     func,
     text,
 )
-from sqlalchemy.dialects.postgresql import JSONB, UUID
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from services.platform.db.base import Base, PkMixin, TenantMixin, TimestampMixin
@@ -194,6 +194,29 @@ class SessionMember(Base, PkMixin, TenantMixin):  # 群聊成员（27 篇 X15；
         UniqueConstraint("session_id", "display_name", name="uk_session_members_session_display"),
         UniqueConstraint("session_id", "agent_id", name="uk_session_members_session_agent"),
         CheckConstraint("routing_role IN ('coordinator','speaker','observer')", name="ck_session_members_role"),
+    )
+
+
+class SessionFeedback(Base, PkMixin, TenantMixin):  # 飞轮采集环（docs/Agent/19 §5，W9+B5 批）
+    """会话级用户反馈（用户信号第一落点，19 §5 采集环）：(session_id, run_id, user_id) 唯一
+
+    ——同 run 同用户重复反馈=幂等更新（UoW upsert on conflict）。三标识列均无 FK
+    （messages.agent_id / tasks.active_run_id 同款口径）：run 随会话级联硬删、会话/用户
+    删除不受阻；归属断言在端点层（get_session_owned + run∈session）。会话删除后反馈行
+    留存为审计留痕（宪法 5 全程可追溯），孤儿行由转化环（B6 harvest）读面 JOIN 过滤。
+    """
+
+    __tablename__ = "session_feedback"
+    session_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False, index=True)
+    run_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    outcome: Mapped[str] = mapped_column(String(16), nullable=False)  # completed|partial|failed（19 §5 三元采集）
+    tags: Mapped[list[str]] = mapped_column(ARRAY(Text), default=list, nullable=False)
+    correction_text: Mapped[str | None] = mapped_column(Text)  # 可选纠错文本（≤120 字，契约=SessionFeedbackIn）
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    __table_args__ = (
+        CheckConstraint("outcome IN ('completed','partial','failed')", name="ck_session_feedback_outcome"),
+        UniqueConstraint("session_id", "run_id", "user_id", name="uk_session_feedback_session_run_user"),
     )
 
 

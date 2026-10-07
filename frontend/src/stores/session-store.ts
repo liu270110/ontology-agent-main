@@ -26,6 +26,10 @@ export interface ChatMessage {
   /** Agent 产物卡（设计稿 p-chat L2424-2427 .artifact）：SSE artifact.created 自定义帧/
    *  历史载荷附着；候选产物语义——人工终审后生效（宪法 3），名称+摘要+可选资源 id */
   artifact?: { name: string; summary: string; resource_id?: string }
+  /** 所属 run（飞轮采集环 W9，docs/Agent/19 §5）：RUN_FINISHED 归约时绑定到末条 assistant
+   *  消息（本 run 的产物）；反馈组件依赖它定位 POST /sessions/{id}/feedback 的 run_id。
+   *  历史消息服务端不携带 → 不绑定，反馈按钮不渲染（无 run_id 不造假）。 */
+  runId?: string
 }
 
 export interface ToolCall {
@@ -731,7 +735,17 @@ export const useSessionStore = create<SessionState>((set, get) => ({
         set(s => {
           const runs = { ...s.runs, [rid]: { ...s.runs[rid], status: 'succeeded' as const, usage: d.usage } }
           const stillRunning = Object.values(runs).some(r => r.status === 'running')
+          // 飞轮采集环（docs/Agent/19 §5，W9）：run 终态绑定到末条 assistant 消息（本 run 产物），
+          // 反馈组件以此定位 run_id；无 assistant 消息（如纯工具 run）则无绑定、不渲染反馈
+          const msgs = [...s.messages]
+          for (let i = msgs.length - 1; i >= 0; i--) {
+            if (msgs[i].role === 'assistant') {
+              msgs[i] = { ...msgs[i], runId: rid }
+              break
+            }
+          }
           return {
+            messages: msgs,
             runs, running: stillRunning, activeRunId: stillRunning ? s.activeRunId : null,
             approvalPends: settleApproval(s.approvalPends, rid),
             pendingReply: false,

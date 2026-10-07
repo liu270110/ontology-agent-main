@@ -10,6 +10,7 @@ from services.agent.data.orm import (  # noqa: F401
     Message,
     Run,
     Session,
+    SessionFeedback,
     Task,
     TaskEvent,
 )

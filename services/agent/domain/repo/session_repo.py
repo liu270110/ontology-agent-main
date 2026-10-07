@@ -11,7 +11,7 @@ from __future__ import annotations
 from typing import Any, Protocol, runtime_checkable
 from uuid import UUID
 
-from services.agent.domain.model.session import Message, Session
+from services.agent.domain.model.session import Message, Session, SessionFeedback
 from services.agent.domain.model.task import Run, RunStatus, Task, TaskEvent
 
 
@@ -80,6 +80,26 @@ class SessionRepository(Protocol):
 
         任务面（tasks/runs/task_events）由 TaskRepository.delete_by_session 承担——两聚合
         分属两仓储，路由层按 task→session 顺序调用。"""
+        ...
+
+    async def record_feedback(
+        self,
+        session_id: UUID,
+        run_id: UUID,
+        user_id: UUID,
+        *,
+        outcome: Any,
+        tags: list[str],
+        correction_text: str | None,
+    ) -> SessionFeedback:
+        """会话反馈幂等落库（docs/Agent/19 §5 采集环，W9+B5 批）：(session_id, run_id, user_id)
+        撞 uk_session_feedback_session_run_user 即更新 outcome/tags/correction_text（同 run
+        同用户重复反馈=更新非新增行）；返回落库后的值对象（created_at=首次反馈时刻，更新不改）。
+        """
+        ...
+
+    async def list_feedback(self, session_id: UUID, user_id: UUID) -> list[SessionFeedback]:
+        """会话内**本用户**反馈历史（GET /sessions/{id}/feedback 取数口；created_at 升序）。"""
         ...
 
 

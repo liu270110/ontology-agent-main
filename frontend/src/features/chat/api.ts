@@ -83,4 +83,27 @@ export function getPendingRunApproval(taskId: string, runId: string) {
 /** POST 审批裁决（approve→resume / reject→终态；契约 202）。 */
 export function decideRunApproval(taskId: string, runId: string, body: ApprovalDecisionDto) {
   return api.post<unknown>(`/tasks/${taskId}/runs/${runId}/approvals`, body)
+/** 会话反馈（飞轮采集环，docs/Agent/19 §5：POST /sessions/{id}/feedback，契约 202）。
+ *  outcome 三元=completed 有帮助👍 / partial 部分解决 / failed 没解决👎；correction_text
+ *  可选纠错 ≤120 字；同 (session, run, user) 重复反馈=幂等更新（后端 upsert）。 */
+export interface SessionFeedbackDto {
+  session_id: string
+  run_id: string
+  user_id: string
+  outcome: 'completed' | 'partial' | 'failed'
+  tags: string[]
+  correction_text: string | null
+  created_at?: string | null
+}
+
+export function submitSessionFeedback(
+  sessionId: string,
+  body: { run_id: string; outcome: SessionFeedbackDto['outcome']; tags?: string[]; correction_text?: string | null },
+) {
+  return api.post<SessionFeedbackDto>(`/sessions/${sessionId}/feedback`, body)
+}
+
+/** 本人反馈历史（GET /sessions/{id}/feedback；{data,meta} 信封）——回显已反馈状态用。 */
+export function listSessionFeedback(sessionId: string) {
+  return api.get<{ data: SessionFeedbackDto[]; meta: Record<string, never> }>(`/sessions/${sessionId}/feedback`)
 }

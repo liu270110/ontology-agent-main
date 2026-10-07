@@ -38,8 +38,10 @@ from services.rsi.business.orsi_registry import (
     OrsiCapabilityService,
 )
 from services.rsi.domain.orsi import (
+    PROMOTION_EVIDENCE_KEYS,
     GapFaceTrack,
     OrsiCapability,
+    OrsiCapabilityError,
     OrsiCapabilityNotFound,
     OrsiCapabilityStatus,
     OrsiDuplicateFingerprint,
@@ -492,3 +494,97 @@ async def test_face非法值_422统一错误体3001(api_client: Any) -> None:
     # Assert：422 + 统一错误体 code 3001（gateway 同款 handler）
     assert resp.status_code == 422
     assert resp.json()["code"] == 3001
+
+
+# ── promotion_evidence 晋升证据挂接点（docs/Agent/17 §3.3；仅承载不激活迁移） ────
+
+
+async def test_晋升证据构造期校验_五键闭集与必填键() -> None:
+    # Arrange：合法 payload（17 篇 §3.1 五字段；baseline/version_diff 首轮可 None）
+    valid = {
+        "eval_tag": "v0.2.0",
+        "scenario_hash": "h",
+        "metrics_digest": "d",
+        "baseline_digest": None,
+        "version_diff_uri": None,
+    }
+    # Act + Assert（正例）：构造通过且字段承载
+    cap = OrsiCapability(tenant_id=TENANT, **VALID_REGISTER_KW, name="ev-ok", promotion_evidence=valid)
+    assert cap.promotion_evidence == valid
+    # Act + Assert（负例）：缺键/多键皆拒（键集闭集，API DTO extra="forbid" 同词汇表）
+    with pytest.raises(OrsiCapabilityError, match="键集不符"):
+        OrsiCapability(
+            tenant_id=TENANT, **VALID_REGISTER_KW, name="ev-bad", promotion_evidence={"eval_tag": "t"}
+        )
+    with pytest.raises(OrsiCapabilityError, match="键集不符"):
+        OrsiCapability(
+            tenant_id=TENANT, **VALID_REGISTER_KW, name="ev-extra", promotion_evidence={**valid, "extra": 1}
+        )
+    # Act + Assert（负例）：必填键 eval_tag 空值拒；非 dict 类型拒
+    with pytest.raises(OrsiCapabilityError, match="eval_tag"):
+        OrsiCapability(
+            tenant_id=TENANT,
+            **VALID_REGISTER_KW,
+            name="ev-empty",
+            promotion_evidence={**valid, "eval_tag": " "},
+        )
+    with pytest.raises(OrsiCapabilityError, match="必须为 dict"):
+        OrsiCapability(tenant_id=TENANT, **VALID_REGISTER_KW, name="ev-type", promotion_evidence="not-a-dict")  # type: ignore[arg-type]
+    # Assert：键集权威常量与领域校验同源（orsi_link 基准侧引用同一词汇表）
+    assert PROMOTION_EVIDENCE_KEYS == (
+        "eval_tag",
+        "scenario_hash",
+        "metrics_digest",
+        "baseline_digest",
+        "version_diff_uri",
+    )
+
+
+async def test_注册API带晋升证据_201落库并回显(api_client: Any) -> None:
+    # Arrange：带 promotion_evidence 的注册请求（orsi_link v2 --register 真实 payload 形）
+    client, _principal = api_client
+    payload = {
+        "face": "O4",
+        "name": "bench.agent-core.eval.abc123def456",
+        "version": "v0.2.0",
+        "source_channel": "L0",
+        "promotion_evidence": {
+            "eval_tag": "v0.2.0",
+            "scenario_hash": "abc",
+            "metrics_digest": "d1",
+            "baseline_digest": None,
+            "version_diff_uri": None,
+        },
+    }
+    # Action
+    resp = await client.post("/api/v1/orsi/capabilities", json=payload)
+    # Assert：201 + 五键证据原样回显（读面查重/证据链检索消费面）
+    assert resp.status_code == 201
+    assert resp.json()["data"]["promotion_evidence"]["eval_tag"] == "v0.2.0"
+    assert set(resp.json()["data"]["promotion_evidence"]) == set(PROMOTION_EVIDENCE_KEYS)
+    # Action + Assert：DTO extra 键 422（闭集在接口面同样收口）
+    dup = await client.post(
+        "/api/v1/orsi/capabilities",
+        json={**payload, "name": "bench.extra.key", "promotion_evidence": {**payload["promotion_evidence"], "junk": 1}},
+    )
+    assert dup.status_code == 422
+
+
+async def test_带晋升证据的候选_promote仍恒拒_字段不激活迁移() -> None:
+    # Arrange：挂上完整晋升证据的 candidate（评测证据链在挂）
+    cap = OrsiCapability(
+        tenant_id=TENANT,
+        **VALID_REGISTER_KW,
+        name="ev-promote-probe",
+        promotion_evidence={
+            "eval_tag": "v0.2.0",
+            "scenario_hash": "h",
+            "metrics_digest": "d",
+            "baseline_digest": "b",
+            "version_diff_uri": "benchmarks/results/version_diff.json",
+        },
+    )
+    # Act + Assert：promote 恒拒（字段仅承载——M5+ 工单挂接面前证据不自证，红线原样）
+    with pytest.raises(OrsiPromotionBlocked, match="M5\\+"):
+        cap.promote(review_ticket_id="RT-1")
+    assert cap.status is OrsiCapabilityStatus.CANDIDATE

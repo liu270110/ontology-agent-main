@@ -1,0 +1,10 @@
+{
+  "suite": "agent-core",
+  "scenario": "invalid_retry_count",
+  "status": "ok",
+  "smoke": false,
+  "benchmark_ref": "docs/Agent/17 §3（C 批注册演练伪数据）",
+  "metrics": {
+    "count": 1
+  }
+}

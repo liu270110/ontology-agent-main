@@ -14,6 +14,7 @@ face 枚举校验 + 指纹计算在本层收口：face 接受面编号（"O1"/"o
 from __future__ import annotations
 
 import uuid
+from typing import Any
 
 from services.rsi.audit import AuditTrail, InMemoryAuditTrail, RsiAuditRecord
 from services.rsi.domain.orsi import (
@@ -69,6 +70,7 @@ class OrsiCapabilityService:
         source_face_track: GapFaceTrack | str = GapFaceTrack.NORMAL,
         status: OrsiCapabilityStatus | str = OrsiCapabilityStatus.CANDIDATE,
         evidence_uri: str | None = None,
+        promotion_evidence: dict[str, Any] | None = None,
         trace_id: str | None = None,
     ) -> OrsiCapability:
         """原子能力注册（face 枚举校验 + 指纹计算 + 落库 + 审计；零进化副作用）。
@@ -76,6 +78,8 @@ class OrsiCapabilityService:
         - face/source_channel/track/status 均过值域校验（非法值 ValueError/OrsiCapabilityError
           由路由层映射 3001/400）；promoted 不可注册直达（领域构造期红线，Agent14 §4）；
         - 同指纹重复注册 → OrsiDuplicateFingerprint（路由层映射 409）；
+        - promotion_evidence 晋升证据挂接点（17 篇 §3.3；仅承载不激活迁移——领域构造期
+          五键闭集校验，promote 恒拒红线不变）；
         - **本方法不触 proposal/门禁/apply 路径**（红线，测试断言锚点）。
         """
         capability = OrsiCapability(
@@ -87,6 +91,7 @@ class OrsiCapabilityService:
             source_face_track=GapFaceTrack(source_face_track),
             status=OrsiCapabilityStatus(status),
             evidence_uri=evidence_uri,
+            promotion_evidence=promotion_evidence,
         )
         await self._repo.add(capability)
         await self.audit_trail.record(
@@ -100,6 +105,7 @@ class OrsiCapabilityService:
                     "source_channel": capability.source_channel.value,
                     "source_face_track": capability.source_face_track.value,
                     "status": capability.status.value,
+                    "promotion_evidence_tag": (promotion_evidence or {}).get("eval_tag"),
                     "tenant_id": str(tenant_id),
                 },
                 trace_id=trace_id,

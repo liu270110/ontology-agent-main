@@ -12,6 +12,7 @@ from datetime import datetime
 from typing import Any
 
 from sqlalchemy import CheckConstraint, DateTime, String, UniqueConstraint
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from services.platform.db.base import Base, PkMixin, TenantMixin, TimestampMixin
@@ -30,6 +31,8 @@ class OrsiCapabilityORM(Base, PkMixin, TenantMixin, TimestampMixin):
     status: Mapped[str] = mapped_column(String(16), nullable=False, default="candidate")
     capability_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)  # sha256 hex
     evidence_uri: Mapped[str | None] = mapped_column(String(512))
+    # 晋升证据挂接点（17 篇 §3.3；五键闭集 payload，校验在领域层 validate_promotion_evidence）
+    promotion_evidence: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))  # 软删列（v1 无删除端点）
 
     __table_args__ = (
@@ -65,4 +68,5 @@ class OrsiCapabilityORM(Base, PkMixin, TenantMixin, TimestampMixin):
             "status": self.status,
             "capability_fingerprint": self.capability_fingerprint,
             "evidence_uri": self.evidence_uri,
+            "promotion_evidence": self.promotion_evidence,
         }

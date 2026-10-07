@@ -10,6 +10,10 @@
 
 ### 新增
 
+- **审批 SLA 倒计时+多签进度（B9-D-B）**：列表卡/详情弹窗 sla_deadline 徽标（过期红/剩余<2h 橙，slaBadgeOf 单源）+ 决策回执 DecisionOut 多签 n/m 进度条与「签名集齐」徽标（决策后弹窗停留可见）
+- **B8 接通批次**：用户管理 Tab 切 live（/admin/users 列表三维筛选/详情/PATCH 角色全量替换与启停/软删禁删自己；角色下拉收口 member/curator/ontologist/admin，guest+analyst 下架；邮箱直邀下架统一走链接流）+ 记忆两断头补齐（GET /memory/l1 列表多会话卡 TTL/脱敏徽标/搜索；升级终审 POST decision 双归因 header，approve→L3/reject→退回/多签续等）
+
+
 - **B7 接通批次（后端实装+前端接线）**：审批中心详情 GET /admin/reviews/{id} 与批量 POST batch（后端实装，逐单裁决/高危拒批/部分成功语义）+ 回写台账 Tab（ledger 三 live 端点：筛选/状态徽标/行展开 receipt/人工处置三选守卫）；会话删除（级联 204）与停止生成（幂等 202）后端实装+前端状态收口；任务日志（游标）+重试（重建 Run）后端实装+前端 404/空态区分
 
 - **四区信息架构（用户裁决）**：主页 `/`（功能交互）+ 平台页 `/platform`（浏览获取能力：四能力入口卡/精选插件/边界说明，PlatformShell 独立壳）+ 管理控制台 `/console`（收缩为治理+观测：审批中心/系统管理/审计）+ 用户设置 `/settings`；主导航增「独立页面」分组；market/tools/mcp/agents 迁 `/platform/*`（五条旧路径 redirect 查询串透传）；⌘K 自动收录

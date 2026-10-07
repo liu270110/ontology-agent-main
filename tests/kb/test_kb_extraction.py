@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import math
 import re
 import sys
 import uuid
@@ -26,6 +27,9 @@ from services.kb.business.kb_extraction import (
     SEED_TTL_PATH,
     PruningReason,
     StepContext,
+    _connected_components,
+    _embed_cluster,
+    _merge_group_id,
     load_seed_catalog,
     match_seed_class,
     prune_extraction,
@@ -172,17 +176,20 @@ def _ctx(
 
 
 class ScriptedModelPort:
-    """脚本化模型桩：按 system 提示分派抽取/对齐响应（对齐/越界用例的确定性注入，零网络）。"""
+    """脚本化模型桩：按 system 提示分派抽取/对齐/归并响应（对齐/越界/归并用例的确定性注入，零网络）。"""
 
-    def __init__(self, extract: dict, align: dict | None = None) -> None:
+    def __init__(self, extract: dict, align: dict | None = None, merge: dict | None = None) -> None:
         self._extract = extract
         self._align = align
+        self._merge = merge
         self.calls = 0
 
     async def complete_structured(self, *, system: str, user: str, json_schema: dict, **_: object) -> dict:
         self.calls += 1
         if "术语对齐" in system:
             return self._align if self._align is not None else {"mappings": []}
+        if "实体归并" in system:  # K27 归并判定（kb_merge@v1）：未脚本化时空回包=全组未判定
+            return self._merge if self._merge is not None else {"judgements": []}
         return self._extract
 
 
@@ -496,6 +503,7 @@ async def test_align_tier2_embedding_cosine_aligns_pending_names(
     dim = len(texts) + 1
     table = {text: [1.0 if i == j else 0.0 for j in range(dim)] for i, text in enumerate(texts)}
     table["工单OO-123456"] = list(table["停电工单"])  # 与「停电工单」标签同向：余弦=1.0 ≥ 0.92
+    table["馈线F001"] = list(table["馈线"])  # K27 归并前置段：候选整名先过一次嵌入（与工单正交 → 无组零留痕）
     await run_extract(_ctx(kb_pg, extract_env))  # FakeModelPort：馈线F001 / 工单OO-123456 两候选
     await run_align(_ctx(kb_pg, extract_env, model=None, embedder=_ScriptedEmbedder(table)))
     async with kb_pg() as db:
@@ -573,6 +581,202 @@ async def test_align_embed_unavailable_skips_tier2_degrades_not_fails(
     assert order.meta["align"]["status"] == "needs_review" and order.meta["align"]["tier"] is None
     assert order.meta["align"]["reason"] is None  # 各级均无着落（无异常上抛）
     assert facts["馈线F001"].meta["align"]["tier"] == 1  # 一级不受降级影响
+
+
+# ---------------------------------------------------------------- K27 归并前置段（E-6，docs/Agent/13 §33）
+
+
+async def test_merge_embed_cluster_tier1_marks_and_singleton_zero_trace(
+    kb_pg: async_sessionmaker[AsyncSession], extract_env: dict
+) -> None:
+    """K27-a：嵌入近邻 ≥ 阈值建边 → tier1 留痕（meta["merge"] rule=embed_cluster）；裁决=只留痕
+    不改写 subject/subject_type/aliases；单元素组零留痕（无组名无 meta["merge"] 无 violations）。"""
+    model = ScriptedModelPort(
+        {
+            "candidates": [
+                {"kind": "entity", "name": "馈线F001", "ontology_class": IDX_FEEDER, "confidence": 0.9},
+                {"kind": "entity", "name": "馈线F001A", "ontology_class": IDX_FEEDER, "confidence": 0.9},
+                {"kind": "entity", "name": "工单OO-123456", "ontology_class": IDX_OUTAGE_ORDER, "confidence": 0.9},
+            ]
+        }
+    )
+    await run_extract(_ctx(kb_pg, extract_env, model=model))
+    catalog = load_seed_catalog()
+    texts = sorted({text for _, label, local in catalog.classes for text in (label, local)})
+    dim = len(texts) + 2  # 两个正交附加位：倒数第二位=近邻对共享向，末位=孤立名
+    table = {text: [1.0 if i == j else 0.0 for j in range(dim)] for i, text in enumerate(texts)}
+    pair = [0.0] * dim
+    pair[-2] = 1.0
+    table["馈线F001"] = list(pair)  # 组内同向：余弦=1.0 ≥ 阈值（任意 [0,1] 阈值恒成立）
+    table["馈线F001A"] = list(pair)
+    lone = [0.0] * dim
+    lone[-1] = 1.0
+    table["工单OO-123456"] = lone  # 与近邻对正交：不成组（单元素组零留痕）
+    await run_align(_ctx(kb_pg, extract_env, model=None, embedder=_ScriptedEmbedder(table)))
+    async with kb_pg() as db:
+        facts = {
+            f.subject: f
+            for f in (await db.execute(select(KbFactORM).where(KbFactORM.tenant_id == extract_env["tenant_id"])))
+            .scalars()
+            .all()
+        }
+    a, b, order = facts["馈线F001"], facts["馈线F001A"], facts["工单OO-123456"]
+    merged = a.meta["merge"]
+    assert re.fullmatch(r"mg-[0-9a-f]{12}", merged["group_id"])
+    assert b.meta["merge"] == merged  # 同组行值互指一致（group_id/canonical/members 全等）
+    assert merged["members"] == ["馈线F001", "馈线F001A"] and merged["canonical"] == "馈线F001"  # 组内字典序最小
+    assert merged["rule"] == "embed_cluster" and merged["tier"] == 1 and merged["template_ref"] is None
+    assert a.subject == "馈线F001" and b.subject == "馈线F001A"  # 裁决：只留痕不改写实体名
+    assert a.subject_type == f"{PW}Feeder" and a.aliases == [f"{PW}Feeder"]  # 对齐面行为不受归并影响
+    assert a.violations == [] and b.violations == []  # tier1 零 LLM：不挂 merge_candidate
+    assert "merge" not in order.meta and order.violations == []  # 单元素组零留痕
+
+
+def test_merge_connected_components_transitivity_and_threshold_boundary():
+    """K27-a 纯函数：A~B、B~C 建边而 A~C 低于阈值 → 传递闭包单分量（连通分量传递性）；边界含等号
+    （恰在阈值建边）；无建边全隔离零成组；group_id 与成员顺序无关（幂等锚）。"""
+    threshold = 0.9
+    vectors = {
+        "A": [1.0, 0.0],
+        "B": [math.cos(math.radians(25)), math.sin(math.radians(25))],  # cos(A,B)=cos25°≈0.906 ≥ 0.9
+        "C": [math.cos(math.radians(50)), math.sin(math.radians(50))],  # cos(B,C)=cos25°；cos(A,C)=cos50°≈0.643
+    }
+    names = ["A", "B", "C"]
+    assert _embed_cluster(names, [vectors[n] for n in names], threshold) == [("A", "B", "C")]  # 传递闭包
+    assert _connected_components(names, [(0, 1), (1, 2)]) == [("A", "B", "C")]  # 建边下标对直入同一结论
+    t = 0.5
+    base = [1.0, 0.0]
+    at = [0.5, math.sqrt(1 - 0.25)]  # 与 x 轴基 cos=0.5 恰在阈值 → ≥ 含等号建边
+    below = [0.49, math.sqrt(1 - 0.49**2)]  # 与 x 轴基 cos=0.49 < 0.5 → 不建边
+    assert _embed_cluster(["U", "V"], [base, at], t) == [("U", "V")]
+    assert _embed_cluster(["W", "X"], [base, below], t) == []
+    assert _embed_cluster(["X", "Y"], [[1.0, 0.0], [0.0, 1.0]], t) == []  # 正交不建边（单元素零留痕）
+    assert _connected_components(names, []) == [("A",), ("B",), ("C",)]  # 无边全隔离
+    assert _merge_group_id(["B", "A"]) == _merge_group_id(["A", "B"])  # 成员序无关
+
+
+async def test_merge_llm_whitelist_confirm_tier2_and_out_of_range_rejected(
+    kb_pg: async_sessionmaker[AsyncSession], extract_env: dict
+) -> None:
+    """K27-b：分量 ≥2 组交 LLM 批量判定——采纳（members ⊆ 组内白名单且 canonical ∈ members）升级
+    tier2 llm_confirmed；越界弃整组 → merge_candidate 留痕 + tier1 记录保留（needs_review 语义不裁决）。"""
+    gid_feed = _merge_group_id(["馈线F001", "馈线F001A"])
+    gid_station = _merge_group_id(["城东站", "城东变"])
+    model = ScriptedModelPort(
+        {
+            "candidates": [
+                {"kind": "entity", "name": "馈线F001", "ontology_class": IDX_FEEDER, "confidence": 0.9},
+                {"kind": "entity", "name": "馈线F001A", "ontology_class": IDX_FEEDER, "confidence": 0.9},
+                {"kind": "entity", "name": "城东站", "ontology_class": IDX_SUBSTATION, "confidence": 0.9},
+                {"kind": "entity", "name": "城东变", "ontology_class": IDX_SUBSTATION, "confidence": 0.9},
+            ]
+        },
+        align={"mappings": []},  # 对齐面回空映射（与本批归并断言无关）
+        merge={
+            "judgements": [
+                {"gid": gid_feed, "canonical": "馈线F001", "members": ["馈线F001A", "馈线F001"]},  # 过白名单 → 采纳
+                {"gid": gid_station, "canonical": "城东站", "members": ["城东站", "神秘站"]},  # 越界 → 整组弃
+            ]
+        },
+    )
+    await run_extract(_ctx(kb_pg, extract_env, model=model))
+    catalog = load_seed_catalog()
+    texts = sorted({text for _, label, local in catalog.classes for text in (label, local)})
+    dim = len(texts) + 2  # 两个正交附加位：-2=馈线组共享向，-1=城东组共享向（组内同向成对、组间正交）
+    table = {text: [1.0 if i == j else 0.0 for j in range(dim)] for i, text in enumerate(texts)}
+    for name, slot in (("馈线F001", -2), ("馈线F001A", -2), ("城东站", -1), ("城东变", -1)):
+        vec = [0.0] * dim
+        vec[slot] = 1.0
+        table[name] = vec
+    await run_align(_ctx(kb_pg, extract_env, model=model, embedder=_ScriptedEmbedder(table)))
+    async with kb_pg() as db:
+        facts = {
+            f.subject: f
+            for f in (await db.execute(select(KbFactORM).where(KbFactORM.tenant_id == extract_env["tenant_id"])))
+            .scalars()
+            .all()
+        }
+    f1, f1a = facts["馈线F001"], facts["馈线F001A"]
+    s1, s2 = facts["城东站"], facts["城东变"]
+    confirmed = f1.meta["merge"]
+    assert confirmed["rule"] == "llm_confirmed" and confirmed["tier"] == 2
+    assert confirmed["canonical"] == "馈线F001" and confirmed["members"] == ["馈线F001", "馈线F001A"]
+    assert confirmed["group_id"] == gid_feed and confirmed["template_ref"] == "kb_merge@v1"  # 出处落库可追溯
+    assert f1a.meta["merge"] == confirmed and f1.violations == [] and f1a.violations == []  # 采纳组零留痕
+    rejected = s1.meta["merge"]  # 越界弃：tier1 嵌入记录保留（确定性证据不因 LLM 失败丢失）
+    assert rejected["rule"] == "embed_cluster" and rejected["tier"] == 1 and rejected["group_id"] == gid_station
+    for row in (s1, s2):
+        assert len(row.violations) == 1 and row.violations[0]["rule"] == "merge_candidate"
+        assert "越界" in row.violations[0]["detail"]
+        assert row.status == "candidate"  # 留痕只标记不裁决（needs_review 语义，不失败）
+    assert s1.subject == "城东站" and s2.subject == "城东变"  # 归并不改写实体名
+
+
+async def test_merge_embed_unavailable_skips_zero_trace(
+    kb_pg: async_sessionmaker[AsyncSession], extract_env: dict
+) -> None:
+    """K27-a 降级契约：嵌入路不可用 → 归并段整步跳过零留痕（无 meta["merge"] 无 merge_candidate，
+    步不失败），对齐面行为与既有降级一致。"""
+    await run_extract(_ctx(kb_pg, extract_env))  # FakeModelPort：馈线F001 / 工单OO-123456
+    await run_align(_ctx(kb_pg, extract_env, model=None, embedder=_FailingEmbedder()))
+    async with kb_pg() as db:
+        facts = {
+            f.subject: f
+            for f in (await db.execute(select(KbFactORM).where(KbFactORM.tenant_id == extract_env["tenant_id"])))
+            .scalars()
+            .all()
+        }
+    for fact in facts.values():
+        assert "merge" not in fact.meta and fact.violations == []  # 整步跳过零留痕
+    assert facts["馈线F001"].meta["align"]["tier"] == 1  # 对齐一级不受降级影响
+
+
+async def test_merge_idempotent_rerun_no_accumulation(
+    kb_pg: async_sessionmaker[AsyncSession], extract_env: dict
+) -> None:
+    """K27-c 幂等：重跑 run_align 归并结论稳定——group_id 不漂移、violations 留痕不累积、meta 值
+    不变不空写（重放后状态与首轮逐名全等）。"""
+    model = ScriptedModelPort(
+        {
+            "candidates": [
+                {"kind": "entity", "name": "馈线F001", "ontology_class": IDX_FEEDER, "confidence": 0.9},
+                {"kind": "entity", "name": "馈线F001A", "ontology_class": IDX_FEEDER, "confidence": 0.9},
+            ]
+        },
+        align={"mappings": []},
+        merge={"judgements": []},  # LLM 全组未判定 → 未判定留痕路径（marks 幂等去重的真值路径）
+    )
+    await run_extract(_ctx(kb_pg, extract_env, model=model))
+    catalog = load_seed_catalog()
+    texts = sorted({text for _, label, local in catalog.classes for text in (label, local)})
+    dim = len(texts) + 1
+    table = {text: [1.0 if i == j else 0.0 for j in range(dim)] for i, text in enumerate(texts)}
+    pair = [0.0] * dim
+    pair[-1] = 1.0
+    table["馈线F001"] = list(pair)
+    table["馈线F001A"] = list(pair)
+    ctx = _ctx(kb_pg, extract_env, model=model, embedder=_ScriptedEmbedder(table))
+    await run_align(ctx)
+    async with kb_pg() as db:
+        first = {
+            f.subject: (dict(f.meta), list(f.violations), f.status)
+            for f in (await db.execute(select(KbFactORM).where(KbFactORM.tenant_id == extract_env["tenant_id"])))
+            .scalars()
+            .all()
+        }
+    await run_align(ctx)  # 重放（断点续跑语义）
+    async with kb_pg() as db:
+        second = {
+            f.subject: (dict(f.meta), list(f.violations), f.status)
+            for f in (await db.execute(select(KbFactORM).where(KbFactORM.tenant_id == extract_env["tenant_id"])))
+            .scalars()
+            .all()
+        }
+    assert second == first  # meta/violations/status 逐名全等：留痕幂等（不空写不累积）
+    mark = first["馈线F001"][1]
+    assert len(mark) == 1 and mark[0]["rule"] == "merge_candidate"  # 重放后恰好一条留痕
+    assert "未给出该组判定" in mark[0]["detail"]
+    assert first["馈线F001"][0]["merge"]["rule"] == "embed_cluster"  # LLM 未判定 → tier1 记录保留
 
 
 # ---------------------------------------------------------------- extract 空候选显式信号（2026-10-07 静态清账批单元四）

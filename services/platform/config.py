@@ -244,6 +244,11 @@ class Settings(BaseSettings):
     # 一级精确/包含未命中的候选名 × 种子类表层全量嵌入，余弦 ≥ 阈值即对齐；嵌入不可用整级跳过（降级不失败）。
     align_embed_threshold: float = Field(default=0.92, ge=0.0, le=1.0)
 
+    # kb 实体归并嵌入阈值（K27 E-6，docs/Agent/13 §33；graphiti 去重确定性优先起步值，实测后冻结）。
+    # run_align 前置归并段：候选实体名成对余弦 ≥ 阈值建边 → 连通分量为归并组（只留痕 meta["merge"]
+    # 交终审，不改写 subject/object）；嵌入不可用整步跳过（降级不失败，对齐二级同款）。
+    kb_merge_embed_threshold: float = Field(default=0.88, ge=0.0, le=1.0)
+
     # kb 文件直传通道（v1.5 wedge，feature/kb-file-parse）：multipart PDF 单文件字节上限；
     # 超限 413（错误码 3001 PARAM_INVALID，02 §7 既有段）。图纸 PDF 50MB 起步值，实测后冻结。
     kb_file_upload_max_bytes: int = Field(default=50 * 1024 * 1024, gt=0)

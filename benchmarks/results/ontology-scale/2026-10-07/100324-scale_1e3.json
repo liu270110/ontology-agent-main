@@ -1,0 +1,198 @@
+{
+  "suite": "ontology-scale",
+  "scenario": "scale_1e3",
+  "benchmark_ref": "docs/Agent/16-基准对比体系设计 §2 + docs/评审/红队攻击性审查-2026-10-06 G1/F3",
+  "orsi_face_suggestion": "O2",
+  "smoke": true,
+  "started_at": "2026-10-07T02:03:28+00:00",
+  "params": {
+    "scale": 1000,
+    "seed": 20261007,
+    "instance_multiplier": 10,
+    "violation_ratio": 0.01,
+    "latency_repeats": 3,
+    "reindex_mutations": 4,
+    "tier_timeout_s": 900.0,
+    "token_counter": "vllm"
+  },
+  "metrics": {
+    "classes": 1000,
+    "properties": 2000,
+    "instances_per_form": 10000,
+    "violations_expected": 100,
+    "tbox_triples": 5021,
+    "shapes_triples": 16000,
+    "abox_clean_triples": 30000,
+    "abox_violations_triples": 29967,
+    "scale": 1000,
+    "validate_latency": {
+      "clean": {
+        "samples": 3,
+        "p50_ms": 3591.0,
+        "p95_ms": 3903.0,
+        "mean_ms": 3433.0
+      },
+      "violations": {
+        "samples": 3,
+        "p50_ms": 3858.0,
+        "p95_ms": 4080.0,
+        "mean_ms": 3780.333
+      },
+      "violation_overhead_ratio": 1.1012,
+      "violations_found": 100,
+      "violations_expected": 100,
+      "violation_hit_exact": true
+    },
+    "validate_clean_p50_ms": 3591.0,
+    "validate_clean_p95_ms": 3903.0,
+    "validate_violations_p50_ms": 3858.0,
+    "validate_violations_p95_ms": 4080.0,
+    "validate_violation_overhead_ratio": 1.1012,
+    "violations_found": 100,
+    "violation_hit_exact": true,
+    "clean_conforms": true,
+    "violations_nonconforms": true,
+    "assemble_token_cost": {
+      "summary_tokens": 58220,
+      "full_tokens": 226731,
+      "summary_chars": 118222,
+      "full_chars": 608727,
+      "compression_ratio": 3.8944,
+      "tokens_per_class_summary": 58.22,
+      "tokens_per_class_full": 226.731,
+      "counter_backend": "vllm"
+    },
+    "summary_tokens": 58220,
+    "full_tokens": 226731,
+    "compression_ratio": 3.8944,
+    "reindex_consistency": {
+      "contract_mutations": 3,
+      "contract_detected": 3,
+      "detection_rate": 1.0,
+      "per_kind_breakdown": {
+        "range_tighten": {
+          "targets": 1,
+          "detected": 1
+        },
+        "enum_narrow": {
+          "targets": 1,
+          "detected": 1
+        },
+        "required_add": {
+          "targets": 1,
+          "detected": 1
+        }
+      },
+      "tbox_only_visible": false,
+      "tbox_only_targets": 1,
+      "min_violations_after": 10
+    },
+    "detection_rate": 1.0,
+    "contract_mutations": 3,
+    "tbox_only_visible": false
+  },
+  "samples": [
+    {
+      "phase": "validate_latency",
+      "repeat": 0,
+      "clean_ms": 2805,
+      "violations_ms": 3858,
+      "clean_conforms": true,
+      "violations_found": 100
+    },
+    {
+      "phase": "validate_latency",
+      "repeat": 1,
+      "clean_ms": 3591,
+      "violations_ms": 3403,
+      "clean_conforms": true,
+      "violations_found": 100
+    },
+    {
+      "phase": "validate_latency",
+      "repeat": 2,
+      "clean_ms": 3903,
+      "violations_ms": 4080,
+      "clean_conforms": true,
+      "violations_found": 100
+    },
+    {
+      "phase": "assemble_token_cost",
+      "summary_tokens": 58220,
+      "full_tokens": 226731,
+      "backend": "vllm"
+    },
+    {
+      "phase": "reindex",
+      "kind": "range_tighten",
+      "class_local": "Breaker00001",
+      "detected": true,
+      "violations_after": 10,
+      "description": "Breaker00001.ratedVoltageKv maxInclusive 收紧至 3.0"
+    },
+    {
+      "phase": "reindex",
+      "kind": "enum_narrow",
+      "class_local": "AnimalCausedFault00007",
+      "detected": true,
+      "violations_after": 10,
+      "description": "AnimalCausedFault00007.regionCode sh:in 收窄至 [RGN-000]"
+    },
+    {
+      "phase": "reindex",
+      "kind": "required_add",
+      "class_local": "AcceptanceWorkOrder00004",
+      "detected": true,
+      "violations_after": 10,
+      "description": "AcceptanceWorkOrder00004.restoredAt minCount 1→2"
+    },
+    {
+      "phase": "reindex",
+      "kind": "tbox_range_only",
+      "class_local": "Breaker00001",
+      "detected": false,
+      "violations_after": 0,
+      "description": "Breaker00001.ratedVoltageKv rdfs:range→xsd:string（仅 TBox）"
+    }
+  ],
+  "asserts": [
+    {
+      "metric": "violation_hit_exact",
+      "op": "==",
+      "value": true,
+      "actual": true,
+      "passed": true
+    },
+    {
+      "metric": "clean_conforms",
+      "op": "==",
+      "value": true,
+      "actual": true,
+      "passed": true
+    },
+    {
+      "metric": "violations_nonconforms",
+      "op": "==",
+      "value": true,
+      "actual": true,
+      "passed": true
+    },
+    {
+      "metric": "detection_rate",
+      "op": "==",
+      "value": 1.0,
+      "actual": 1.0,
+      "passed": true
+    },
+    {
+      "metric": "compression_ratio",
+      "op": ">",
+      "value": 1.0,
+      "actual": 3.8944,
+      "passed": true
+    }
+  ],
+  "status": "ok",
+  "error": null,
+  "duration_s": 42.982
+}

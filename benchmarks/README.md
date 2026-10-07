@@ -7,6 +7,9 @@
 >
 > **2026-10-07 增补：intent suite v0 落地**（双档对照验证本体约束核心卖点，红队 E2）——
 > 运行指南与口径见下方「intent suite」节。
+> 本波落地：**rag suite v0**（骨架 + naive 基线 + 六维指标 + 全链实测）、**agent-core**
+> （红队 A/B/C/H 六场景）、**ontology-scale**（G1/F3 重型本体规模梯度三档×三指标）。
+> intent 随各自波次落地。
 
 ## 运行指南
 
@@ -26,11 +29,17 @@ python benchmarks/run.py --suite rag --tag v0.2.0
 # 只跑 ours / 复跑检索侧（索引幂等，跳过进库）
 python benchmarks/run.py --suite rag --ours-only
 python benchmarks/run.py --suite rag --skip-ingest --kb-id <uuid>
+
+# ontology-scale（G1/F3）：确定性合成三档 10²/10³/10⁴ × 三指标，零网络依赖
+# （vLLM@18001 仅 token 计数；10⁴ 档全链 ~7min，超时预算 tier_timeout_s 内 partial 如实落盘）
+python benchmarks/run.py --suite ontology-scale --smoke
+python benchmarks/run.py --suite ontology-scale --tiers 100,1000 --tier-timeout 300 --onto-token-counter heuristic
 ```
 
-可变参数全部走 Settings（`benchmarks/suites/rag/config.py`，env 前缀 `BENCH_RAG_`）；
-平台参数（嵌入端点等）仍归 `services.platform.config`（bench 仅在 ASGI 分支按 CLI 显式
-注入 OA_ 环境变量，None=不动平台配置）。
+可变参数全部走 Settings（rag=`suites/rag/config.py` 前缀 `BENCH_RAG_`；ontology-scale=
+`suites/ontology-scale/config.py` 前缀 `BENCH_ONTO_SCALE_`）；平台参数（嵌入端点等）仍归
+`services.platform.config`（bench 仅在 ASGI 分支按 CLI 显式注入 OA_ 环境变量，None=不动
+平台配置）。
 
 ### harness 面向
 
@@ -44,7 +53,22 @@ python benchmarks/run.py --suite rag --skip-ingest --kb-id <uuid>
 盘不打印）；数据隔离：每轮 run 独立随机租户 + 独立 collection（共享 PG 只追加，
 不触碰既有数据）。
 
-## 指标口径字典（冻结实现 = `suites/rag/metrics.py`）
+## ontology-scale 指标口径字典（冻结实现 = `suites/ontology-scale/metrics.py`）
+
+问题源=红队审查 G1（重型本体性能）/F3（TBox 改版漂移检出）；生成器 `generator.py`
+（电力停电域词汇合成，确定性种子，同种子同输出；三族=设备类型/工单类型/故障模式族，
+每类 2 个 PropertyShape，实例 10N，违例实例占比 `violation_ratio` 按族均衡分摊）。
+
+| 指标 | 定义 | 采集点 |
+| ---- | ---- | ---- |
+| validate_latency | pySHACL 校验时延（平台 `services/ontology/core/shacl.validate` 原路径：advanced=True/inference=none）。干净 ABox（应 conforms）与带违例 ABox（应非 conforms）两形态各 `latency_repeats` 次：p50/p95（nearest-rank）+ 膨胀比（违例/干净均值）。`violation_hit_exact`=违例命中数与生成器解析期望恰等（shapes 有效性的运行时证据） | 每档每形态逐次计时（ValidationReport.elapsed_ms） |
+| assemble_token_cost | TBox 注入上下文 token 成本（grounding 组装口径，`ContextBlock.tokens` 求和同语义）。两模式：summary=类名+属性清单摘要（tier=1 稳定知识块合成形态）/ full=全量 schema（类公理+SHACL shapes Turtle）。`compression_ratio`=full/summary（>1=摘要面净收益）。后端 `vllm`（本地 /tokenize 真分词器，按批合并计数）/ `heuristic`（CJK×1+ASCII 词×1） | 每档两模式各计一次（单元=每类一条） |
+| reindex_consistency | F3 漂移检出率：改 TBox 属性定义（三契约型变异：range_tighten/enum_narrow/required_add，保证可检出）→ 旧实例（干净 ABox）重校验，`detection_rate`=检出数/契约型布靶数。TBox-only 对照（仅改 rdfs:range 不动 shapes）在 inference=none 下 pySHACL 不读 rdfs:range，属已知盲区——`tbox_only_visible` 单列不计分母 | 每档 4 处变异（`mutation_targets` 确定性选靶） |
+
+基准断言（每档五条，失败即 assert_failed 如实落盘）：violation_hit_exact / clean_conforms /
+violations_nonconforms / detection_rate==1.0 / compression_ratio>1。
+
+## rag 指标口径字典（冻结实现 = `suites/rag/metrics.py`）
 
 | 指标 | 定义 | 采集点 |
 | ---- | ---- | ---- |

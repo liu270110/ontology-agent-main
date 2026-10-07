@@ -4,22 +4,32 @@ import { toast } from 'sonner'
 import { ApiError } from '@/api/client'
 import { Sheet } from '@/components/sheet'
 import { ErrorState, SkeletonRows } from '@/components/states'
-import { getCollectionSettings, updateCollectionSettings, type KbCollectionSettings } from '../api'
+import { ensureCollectionId, getCollectionSettings, updateCollectionSettings, type KbCollectionSettings } from '../api'
+import { KB_TARGETS } from './UploadDialog'
 
 /** 库设置抽屉（B3-Q 占位转实；画板 p-kb 顶栏入口）：
  *  分片大小（300–2000）/ 分片重叠（0–500）/ 抽取深度（standard|deep 两档 seg）
  *  / 上传后自动抽取开关（role=switch，ServerDetailSheet 同款）。GET 载入 → 脏态解锁保存
  *  → PUT 全量对象 → toast + 关抽屉。端点=api/01 §5.4 追加行。
- *  R53 口径：后端无 GET /kb/collections 列表，页面级「库设置」先挂默认库 col-default，
- *  多库切换随 R53 列表端点补齐后再接。 */
-const DEFAULT_COLLECTION_ID = 'col-default'
+ *  C3 live 对接：**先解析真实 collection id 再读 settings**——live 未知 id 404「知识库不存在」，
+ *  旧 col-default 硬编码已废。挂载目标=默认上传目标库（UploadDialog KB_TARGETS[0] 同名，
+ *  设置随库走）；ensureCollectionId 先 GET 列表按名查重，未命中才创建（R53 列表端点已实装）。 */
+const DEFAULT_KB_NAME = KB_TARGETS[0]
 
 export function CollectionSettingsSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
   const qc = useQueryClient()
-  const query = useQuery({
-    queryKey: ['kb', 'collection-settings', DEFAULT_COLLECTION_ID],
-    queryFn: () => getCollectionSettings(DEFAULT_COLLECTION_ID),
+  // ① 目标库 id 解析（查重→创建；staleTime 内不重复发列表请求）
+  const idQuery = useQuery({
+    queryKey: ['kb', 'collection-id', DEFAULT_KB_NAME],
+    queryFn: () => ensureCollectionId(DEFAULT_KB_NAME),
     enabled: open,
+    staleTime: 5 * 60_000,
+  })
+  // ② settings 读/写（拿到真实 id 才启用；live 未知 id 404 由解析步前置挡掉）
+  const query = useQuery({
+    queryKey: ['kb', 'collection-settings', idQuery.data],
+    queryFn: () => getCollectionSettings(idQuery.data!),
+    enabled: open && !!idQuery.data,
   })
   const [form, setForm] = useState<KbCollectionSettings | null>(null)
   const [saving, setSaving] = useState(false)
@@ -39,11 +49,19 @@ export function CollectionSettingsSheet({ open, onClose }: { open: boolean; onCl
       form.auto_extract !== server.auto_extract)
   const valid = !!form && form.chunk_size >= 300 && form.chunk_size <= 2000 && form.chunk_overlap >= 0 && form.chunk_overlap <= 500
 
+  // 两段链路的加载/错误归一：id 解析失败与 settings 读取失败同走错误态
+  const loading = idQuery.isPending || (!!idQuery.data && query.isPending)
+  const error = idQuery.isError ? idQuery.error : query.isError ? query.error : null
+  function retry() {
+    if (idQuery.isError) void idQuery.refetch()
+    else void query.refetch()
+  }
+
   async function onSave() {
-    if (!form || !dirty || !valid || saving) return
+    if (!form || !dirty || !valid || saving || !idQuery.data) return
     setSaving(true)
     try {
-      await updateCollectionSettings(DEFAULT_COLLECTION_ID, form)
+      await updateCollectionSettings(idQuery.data, form)
       toast.success('库设置已保存')
       await qc.invalidateQueries({ queryKey: ['kb', 'collection-settings'] })
       onClose()
@@ -56,17 +74,17 @@ export function CollectionSettingsSheet({ open, onClose }: { open: boolean; onCl
 
   return (
     <Sheet open={open} onClose={onClose} title="库设置" width={480}>
-      {query.isPending && (
+      {loading && (
         <div className="p-5">
           <SkeletonRows rows={4} rowHeight={40} />
         </div>
       )}
-      {query.isError && (
+      {error && (
         <div className="p-5">
           <ErrorState
-            message={query.error instanceof Error ? query.error.message : undefined}
-            code={query.error instanceof ApiError ? query.error.code : undefined}
-            onRetry={() => void query.refetch()}
+            message={error instanceof Error ? error.message : undefined}
+            code={error instanceof ApiError ? error.code : undefined}
+            onRetry={retry}
           />
         </div>
       )}

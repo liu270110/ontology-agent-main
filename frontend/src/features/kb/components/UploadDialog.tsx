@@ -21,7 +21,8 @@ import { Select } from '@/components/select'
  *  失败→错误横幅（lib/errors 映射文案）+ 该文件行标失败可单行重试。 */
 
 const MAX_TOTAL = 100 * 1024 * 1024 // 汇总大小校验上限（100MB）
-const KB_TARGETS = ['配网运检知识库', '停电分析知识库', '抢修工单知识库']
+/** 目标知识库选项（导出单源：CollectionSettingsSheet 挂 KB_TARGETS[0] 同一默认库——设置随库走） */
+export const KB_TARGETS = ['配网运检知识库', '停电分析知识库', '抢修工单知识库']
 const SLICE_STRATEGIES = ['段落', '语义', '固定长度'] as const
 
 type FileRowState = 'queued' | 'uploading' | 'done' | 'failed'

@@ -282,9 +282,12 @@ export function startPipeline(id: string) {
   return postKbRaw<PipelineStartOut>(`/kb/documents/${id}/pipeline/start`)
 }
 
-/** DELETE /kb/documents/{id}（IX-KB-03；契约缺口见交付报告 R17：§5.4 未列 DELETE 行） */
-export function deleteDocument(id: string) {
-  return api.delete<{ deleted: boolean }>(`/kb/documents/${id}`)
+/** DELETE /kb/documents/{id}（IX-KB-03；契约缺口见交付报告 R17：§5.4 未列 DELETE 行）。
+ *  B3-Q 起软删=移入回收站（valid_to 封口 + deleted_at 戳，7 天保留期）；live 200
+ *  DocumentDeleteEnvelope {data:{deleted,cascade},meta}（无 code，B1 形态）——剥内层回 {deleted}。 */
+export async function deleteDocument(id: string) {
+  const body = await api.delete<{ data: { deleted: boolean }; meta?: unknown }>(`/kb/documents/${id}`)
+  return body.data
 }
 
 /** POST /kb/documents/{id}/pipeline/retry —— 断点重跑（IX-KB-04 全文/仅失败分片；IX-REV-05 单分片） */
@@ -347,19 +350,28 @@ export interface RecycleItem {
   status: 'deleted'
 }
 
-/** GET /kb/recycle-bin —— 回收站列表（status=deleted 文档，主列表不可见） */
-export function listRecycleBin() {
-  return api.get<{ items: RecycleItem[]; next_cursor: string | null }>('/kb/recycle-bin')
+/** GET /kb/recycle-bin —— 回收站列表（status=deleted 文档，主列表不可见）。
+ *  C3 live 投影：{data:{items,next_cursor}, meta:{page,page_size,total}} 强信封（kb 列表
+ *  先例，无 code 字段）——api.get 原样回整信封体，此处剥内层 data 保消费方
+ *  {items,next_cursor} 形态（RecycleBinSheet 读 .items 不变）。 */
+export async function listRecycleBin() {
+  const body = await api.get<{ data: { items: RecycleItem[]; next_cursor: string | null }; meta?: unknown }>(
+    '/kb/recycle-bin',
+  )
+  return body.data
 }
 
-/** POST /kb/documents/{id}/restore —— 回收站恢复（status 回 ready，重入文档列表） */
+/** POST /kb/documents/{id}/restore —— 回收站恢复（live 200 **裸回执** {id,status:'ready'}——
+ *  api.post 直取；不在册/重复恢复 404「文档不在回收站」，错误码 404 非 mock 旧 4041） */
 export function restoreDocument(id: string) {
   return api.post<{ id: string; status: string }>(`/kb/documents/${id}/restore`)
 }
 
-/** DELETE /kb/documents/{id}/purge —— 彻底删除（物理删除；信封体 {id}，勿回 204 空体——client 不解析空体） */
-export function purgeDocument(id: string) {
-  return api.delete<{ id: string }>(`/kb/documents/${id}/purge`)
+/** DELETE /kb/documents/{id}/purge —— 彻底删除（物理删除；live 200 信封 {data:{id},meta}
+ *  非 204——client 不解析空体；此处剥内层回裸 {id}） */
+export async function purgeDocument(id: string) {
+  const body = await api.delete<{ data: { id: string }; meta?: unknown }>(`/kb/documents/${id}/purge`)
+  return body.data
 }
 
 // ---------------------------------------------------------------- 库设置（B3-Q 转实）
@@ -375,12 +387,21 @@ export interface KbCollectionSettings {
   auto_extract: boolean
 }
 
-/** GET /kb/collections/{id}/settings —— 库设置读取（未知 id 发默认值 500/50/standard/true） */
-export function getCollectionSettings(collectionId: string) {
-  return api.get<KbCollectionSettings>(`/kb/collections/${collectionId}/settings`)
+/** GET /kb/collections/{id}/settings —— 库设置读取。
+ *  C3 live 投影：{data,meta} 资源面信封（DocumentDetailEnvelope 同构）——剥内层回四键对象；
+ *  空设置回落默认 500/50/standard/true；**未知 id live 404「知识库不存在」**（mock 旧
+ *  「未知 id 发默认值」工程妥协已退役）——调用方须先解析真实 collection id。 */
+export async function getCollectionSettings(collectionId: string) {
+  const body = await api.get<{ data: KbCollectionSettings; meta?: unknown }>(`/kb/collections/${collectionId}/settings`)
+  return body.data
 }
 
-/** PUT /kb/collections/{id}/settings —— 库设置保存（全量对象） */
-export function updateCollectionSettings(collectionId: string, body: KbCollectionSettings) {
-  return api.put<KbCollectionSettings>(`/kb/collections/${collectionId}/settings`, body)
+/** PUT /kb/collections/{id}/settings —— 库设置保存（全量对象；live 回显 {data,meta} 信封剥内层，
+ *  越界 422→3001） */
+export async function updateCollectionSettings(collectionId: string, body: KbCollectionSettings) {
+  const res = await api.put<{ data: KbCollectionSettings; meta?: unknown }>(
+    `/kb/collections/${collectionId}/settings`,
+    body,
+  )
+  return res.data
 }

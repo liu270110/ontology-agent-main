@@ -31,7 +31,8 @@ describe('B3-Q 知识库库设置', () => {
       http.put('*/api/v1/kb/collections/:id/settings', async ({ request }) => {
         const body = (await request.json()) as (typeof puts)[number]
         puts.push(body)
-        return HttpResponse.json({ code: 0, message: 'ok', data: body })
+        // C3 live 投影：PUT 回显 {data,meta} 资源面信封（CollectionSettingsEnvelope 同构）
+        return HttpResponse.json({ data: body, meta: {} })
       }),
     )
     await loginAndGo('/kb')

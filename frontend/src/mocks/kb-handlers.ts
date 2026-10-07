@@ -255,7 +255,11 @@ export function agenticBlockFor(query: string): AgenticBlock {
   }
 }
 
-// ---- 回收站（B3-Q 转实；软删 7 天保留期 → 恢复 / 彻底删除，契约=api/01 §5.4 追加行）----
+// ---- 回收站（B3-Q 转实；软删 7 天保留期 → 恢复 / 彻底删除）----
+// C3 live 投影（2026-10-07 后端实装，services/kb/api/kb.py）：信封形态与 live 网关同构——
+// GET 列表 {data:{items,next_cursor}, meta:{page,page_size,total}} 强信封（kb 列表先例，无 code）；
+// restore 裸回执 {id,status:'ready'}（DocumentRestoreOut）；purge {data:{id},meta} 信封非 204；
+// 在册判据 404 错误码=404（live「文档不在回收站」，mock 旧 4041 退役）。
 const DAY_MS = 86_400_000
 
 /** 回收站条目 = KbDoc 快照 + 删除元数据；status 恒 'deleted'（不进 GET /kb/documents 主列表） */
@@ -276,6 +280,9 @@ const KB_RECYCLE: KbRecycleDoc[] = [
 ]
 
 // ---- 库设置（B3-Q 转实；chunk_size/chunk_overlap/extract_prompt_level/auto_extract，PUT 全量）----
+// C3 live 投影：{data,meta} 资源面信封（CollectionSettingsEnvelope 同构）；未知 collection id
+// 404「知识库不存在」（live 以 api/01 登记行为准——mock 旧「未知 id 发默认值」系无持久化的
+// 工程妥协，随 live 实装退役）；PUT 越界 422→3001 与 live 网关归一同码。
 interface KbSettings {
   chunk_size: number
   chunk_overlap: number
@@ -287,6 +294,11 @@ const KB_SETTINGS: Record<string, KbSettings> = {}
 
 function settingsFor(id: string): KbSettings {
   return KB_SETTINGS[id] ?? { chunk_size: 500, chunk_overlap: 50, extract_prompt_level: 'standard', auto_extract: true }
+}
+
+/** 模拟集合在册判据（COLLECTION_IDS 值域；与 live _load_collection tenant 过滤同语义的 mock 近似） */
+function collectionExists(id: string): boolean {
+  return Object.values(COLLECTION_IDS).includes(id)
 }
 
 export const kbHandlers = [
@@ -380,9 +392,9 @@ export const kbHandlers = [
     return HttpResponse.json({ code: 0, message: 'ok', data: doc }, { status: 201 })
   }),
 
-  // 软删（B3-Q 最小改，对齐 api/01 §8 补录行「文档软删 status=deleted，不物理删除」）：
-  // 移入回收站（7 天保留期，expires_at=deleted_at+7d），恢复/彻底删除走 /restore、/:id/purge。
-  // 回 200 信封而非 204 空体——client apiFetch 解析不了空体会误抛（与 purge 同口径）。
+  // 软删（B3-Q 最小改 + C3 live 投影）：移入回收站（7 天保留期，expires_at=deleted_at+7d），
+  // 恢复/彻底删除走 /restore、/:id/purge。live 回 DocumentDeleteEnvelope {data:{deleted,cascade},meta}
+  // 强信封（无 code，B1 形态）而非 204 空体——client apiFetch 解析不了空体会误抛（与 purge 同口径）。
   http.delete('*/api/v1/kb/documents/:id', ({ params }) => {
     const idx = KB_DOCS.findIndex(d => d.id === params.id)
     if (idx >= 0) {
@@ -390,7 +402,7 @@ export const kbHandlers = [
       const now = new Date()
       KB_RECYCLE.unshift({ ...doc, status: 'deleted', collection_id: 'col-1', deleted_at: now.toISOString(), expires_at: new Date(now.getTime() + 7 * DAY_MS).toISOString(), prev_status: doc.status })
     }
-    return HttpResponse.json({ code: 0, message: 'ok', data: { deleted: true } })
+    return HttpResponse.json({ data: { deleted: true, cascade: { chunks: (KB_CHUNKS[String(params.id)] ?? []).length } }, meta: {} })
   }),
 
   // 七步流水线：启动 / 断点重试（IX-KB-04 重新抽取、IX-REV-05 重抽分片共用，scope 区分）
@@ -511,30 +523,26 @@ export const kbHandlers = [
     return HttpResponse.json({ code: 0, message: 'ok', data: { accepted, rejected } }, { status: 202 })
   }),
 
-  // ---- 回收站（B3-Q：GET 列表 / POST 恢复 / DELETE 彻底删除；信封体，勿回 204 空体） ----
-  http.get('*/api/v1/kb/recycle-bin', () =>
-    HttpResponse.json({
-      code: 0,
-      message: 'ok',
-      data: {
-        items: KB_RECYCLE.map(r => ({
-          id: r.id,
-          name: r.name,
-          collection_id: r.collection_id,
-          deleted_at: r.deleted_at,
-          expires_at: r.expires_at,
-          size: r.size_bytes,
-          status: 'deleted' as const,
-        })),
-        next_cursor: null,
-      },
-    }),
-  ),
+  // ---- 回收站（C3 live 投影：GET {data,meta} 强信封 / restore 裸回执 / purge {data,meta}） ----
+  http.get('*/api/v1/kb/recycle-bin', () => {
+    const items = KB_RECYCLE.map(r => ({
+      id: r.id,
+      name: r.name,
+      collection_id: r.collection_id,
+      deleted_at: r.deleted_at,
+      expires_at: r.expires_at,
+      size: r.size_bytes,
+      status: 'deleted' as const,
+    }))
+    // live RecycleBinListOut：{data:{items,next_cursor}, meta:{page,page_size,total}}（deleted_at 降序=新删在前）
+    return HttpResponse.json({ data: { items, next_cursor: null }, meta: { page: 1, page_size: 50, total: items.length } })
+  }),
 
-  // 恢复：移出回收站回主列表（prev_status 回填原流水线态）；响应 status='ready'（B3-Q 契约口径）
+  // 恢复：移出回收站回主列表（prev_status 回填原流水线态）；live 200 裸回执 DocumentRestoreOut
+  // {id, status:'ready'}（无信封）；不在册/重复恢复 404「文档不在回收站」（错误码 404 同 live）
   http.post('*/api/v1/kb/documents/:id/restore', ({ params }) => {
     const idx = KB_RECYCLE.findIndex(d => d.id === String(params.id))
-    if (idx < 0) return jsonErr(4041, '文档不在回收站', 404)
+    if (idx < 0) return jsonErr(404, '文档不在回收站', 404)
     const [rec] = KB_RECYCLE.splice(idx, 1)
     KB_DOCS.unshift({
       id: rec.id,
@@ -549,23 +557,29 @@ export const kbHandlers = [
       updated_at: new Date().toISOString(),
       indexed_today: true,
     })
-    return HttpResponse.json({ code: 0, message: 'ok', data: { id: rec.id, status: 'ready' } })
+    return HttpResponse.json({ id: rec.id, status: 'ready' })
   }),
 
-  // 彻底删除（物理删除：连分片/向量引用一并清；200 信封体——client 不解析 204 空体）
+  // 彻底删除（物理删除：连分片/向量引用一并清；live 200 DocumentPurgeEnvelope {data:{id},meta}
+  // 非 204 空体——client 不解析空体）
   http.delete('*/api/v1/kb/documents/:id/purge', ({ params }) => {
     const idx = KB_RECYCLE.findIndex(d => d.id === String(params.id))
-    if (idx < 0) return jsonErr(4041, '文档不在回收站', 404)
+    if (idx < 0) return jsonErr(404, '文档不在回收站', 404)
     const [rec] = KB_RECYCLE.splice(idx, 1)
     delete KB_CHUNKS[rec.id]
-    return HttpResponse.json({ code: 0, message: 'ok', data: { id: rec.id } })
+    return HttpResponse.json({ data: { id: rec.id }, meta: {} })
   }),
 
-  // ---- 库设置（B3-Q：GET 读 / PUT 全量写；未知 collection id 发默认值） ----
-  http.get('*/api/v1/kb/collections/:id/settings', ({ params }) =>
-    HttpResponse.json({ code: 0, message: 'ok', data: settingsFor(String(params.id)) }),
-  ),
+  // ---- 库设置（C3 live 投影：{data,meta} 资源面信封；未知 id 404「知识库不存在」；
+  // PUT 全量写回显，越界 422→3001 同 live 网关归一） ----
+  http.get('*/api/v1/kb/collections/:id/settings', ({ params }) => {
+    const id = String(params.id)
+    if (!collectionExists(id)) return jsonErr(404, '知识库不存在', 404)
+    return HttpResponse.json({ data: settingsFor(id), meta: {} })
+  }),
   http.put('*/api/v1/kb/collections/:id/settings', async ({ params, request }) => {
+    const id = String(params.id)
+    if (!collectionExists(id)) return jsonErr(404, '知识库不存在', 404)
     const body = (await request.json()) as Partial<KbSettings>
     if (
       typeof body.chunk_size !== 'number' || body.chunk_size < 300 || body.chunk_size > 2000 ||
@@ -579,7 +593,7 @@ export const kbHandlers = [
       extract_prompt_level: body.extract_prompt_level === 'deep' ? 'deep' : 'standard',
       auto_extract: body.auto_extract === true,
     }
-    KB_SETTINGS[String(params.id)] = next
-    return HttpResponse.json({ code: 0, message: 'ok', data: next })
+    KB_SETTINGS[id] = next
+    return HttpResponse.json({ data: next, meta: {} })
   }),
 ]

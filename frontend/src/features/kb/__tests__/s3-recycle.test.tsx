@@ -61,12 +61,16 @@ describe('B3-Q 知识库回收站', () => {
       status: 'deleted' as const,
     }
     server.use(
+      // C3 live 投影形态：GET {data:{items,next_cursor},meta} 强信封 / purge {data:{id},meta} 信封
       http.get('*/api/v1/kb/recycle-bin', () =>
-        HttpResponse.json({ code: 0, message: 'ok', data: { items: purged ? [] : [item], next_cursor: null } }),
+        HttpResponse.json({
+          data: { items: purged ? [] : [item], next_cursor: null },
+          meta: { page: 1, page_size: 50, total: purged ? 0 : 1 },
+        }),
       ),
       http.delete('*/api/v1/kb/documents/:id/purge', ({ params }) => {
         purged = true
-        return HttpResponse.json({ code: 0, message: 'ok', data: { id: String(params.id) } })
+        return HttpResponse.json({ data: { id: String(params.id) }, meta: {} })
       }),
     )
     await loginAndGo('/kb')

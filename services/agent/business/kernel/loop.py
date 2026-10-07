@@ -183,10 +183,11 @@ class AgentKernel:
         M4.5-A 运行中输入面（docs/Agent/12-M4.5运行中输入面与模型韧性设计（主仓本地）§1）：
 
         - ``inbox``（每 Run 一个 KernelInbox，组合根经运行注册表挂入）：B-① 分段驱动的
-          **段边界**先 drain_steerable()——steer/inject 文本包装为 ContextBlock（B3 标界
-          agent_attested）追加进运行组装面（rc.context_blocks），followup 留存步中不生效、
-          终态后由编排器 take_followups()；每笔 submit/drain 落账本事件
-          kernel.inbox_spliced / kernel.inbox_drained（payload：kind/source/seq/text）。
+          **段边界**先 claim_steerable()（K26-b 两段式：注入落账后 complete 收口）——
+          steer/inject 文本包装为 ContextBlock（B3 标界 agent_attested）追加进运行组装面
+          （rc.context_blocks），followup 留存步中不生效、终态后由编排器 take_followups()；
+          每笔 submit/drain 落账本事件 kernel.inbox_spliced / kernel.inbox_drained
+          （payload：kind/source/seq/text）。
         - ``control_gate``（紧急停止闸门探针，同步 callable）：**段边界**先于 drain 查询，
           返回非 None（=激活原因）即走 :meth:`_finalize_interrupted` 优雅中断
           （reason_code=4104 ESTOP_ACTIVE，``run_checklist=False``）。
@@ -461,18 +462,26 @@ class AgentKernel:
                 },
             )
 
-    # ── M4.5-A：段边界 steering/inject 拼接（docs/Agent/12 §1.1）───────────
+    # ── M4.5-A：段边界 steering/inject 拼接（docs/Agent/12 §1.1；K26-b 两段式）──
     def _splice_inbox_blocks(self, rc: RunContext, inbox: KernelInbox) -> None:
-        """段边界 drain（steer+inject 全取、followup 留存）：文本包装为 ContextBlock
-        （source="user_steer"，B3 标界 agent_attested，tier=3 易变尾）追加进运行组装面
-        （rc.context_blocks，grounding 供给器通道就近接入）；每笔落 kernel.inbox_drained
-        （payload：kind/source/seq/text——审计必需内容，非工具正文）。
+        """段边界两段式消费（K26-b，docs/Agent/13 §32）：claim（steer+inject 全取、
+        followup 留存）→ 文本包装为 ContextBlock（source="user_steer"，B3 标界
+        agent_attested，tier=3 易变尾）追加进运行组装面（rc.context_blocks，grounding
+        供给器通道就近接入）；每笔落 kernel.inbox_drained（payload：kind/source/seq/text
+        ——审计必需内容，非工具正文）；落账后逐项 complete(seq)（claimed→completed 从
+        活动面清除+dedupe 留痕）——complete 前崩溃/中断窗口的 claimed 项留箱，
+        release_stale 可重投（durable ingress 闭环）。
+
+        at-least-once 语义（K26 复核修 2 声明）：emit 中途失败的 pass 里**已落账**的
+        seq，release 重投再消费后会**二次落** kernel.inbox_drained——审计侧与注入面
+        同为 at-least-once（对账按 seq 留重影，不承诺事件数唯一）。
         """
-        drained: tuple[InboxItem, ...] = inbox.drain_steerable()
-        if not drained:
+        claimed: tuple[InboxItem, ...] = inbox.claim_steerable()
+        if not claimed:
             return
         blocks: list[ContextBlock] = list(rc.context_blocks)
-        for item in drained:
+        splice_tokens = 0
+        for item in claimed:
             # B3：用户 steer 文本同为不可信外部输入，信任级由内核标界 agent_attested；
             # tokens=组装器同源估算（K11-a 收编：原零成本留痕口径不入水位，steer 注入
             # 增长对步间复判不可见——现按 estimate_tokens 计入块与 tracker 估算账，
@@ -483,7 +492,7 @@ class AgentKernel:
                     source="user_steer", content=item.text, tokens=tokens, trust_level=TrustLevel.AGENT_ATTESTED
                 )
             )
-            rc.tracker.add_estimated(tokens)  # M4.5-B 锚定估算账：steer 注入增长入账（复判/预算检查口径）
+            splice_tokens += tokens  # K26 复核修 1：只累加，入账延后到回填点（all-or-nothing）
             self._emit(
                 rc.ledger,
                 rc.ctx,
@@ -491,7 +500,20 @@ class AgentKernel:
                 "kernel.inbox_drained",
                 {"kind": item.kind, "source": item.source, "seq": item.seq, "text": item.text},
             )
+        # 延迟回填=防部分注入+重投双份 ContextBlock 的结构护栏（at-least-once 语义），
+        # 禁改就地 append：循环中途失败时组装面保持零注入（claimed 项留箱，release 重投
+        # 后整批重来——重投只会整批重复，不会部分叠加）。
         rc.context_blocks = tuple(blocks)
+        # K26 复核修 1：估算账移到回填之后入账（M4.5-B 锚定估算账：steer 注入增长入账，
+        # 复判/预算检查口径）。不变量=注入可见 ⇔ 估算入账（all-or-nothing）：若在循环内
+        # 逐项 add_estimated，emit 中途抛异常的 pass 已入账前几项，release 重投再入账=
+        # 估算账翻倍、prematurely 触发 A4。移动无时序依赖——本函数内无 tracker 读取方，
+        # 步间水位复判（_recheck_watermark）在本函数返回后才执行。
+        rc.tracker.add_estimated(splice_tokens)
+        # K26-b 两段式收口：注入块已进组装、kernel.inbox_drained 已落账 → 逐项 complete
+        # （claimed→completed 从活动面清除+dedupe 留痕；此点前崩溃/中断=claimed 留箱可重投）
+        for item in claimed:
+            inbox.complete(item.seq)
 
     # ── K11-a 步间水位复判（docs/Agent/13 §17；研究 12/gemini-cli §4 请求前溢出预判）──
     async def _recheck_watermark(self, rc: RunContext) -> None:

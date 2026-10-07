@@ -8,7 +8,12 @@
 - A-7 estop：control_gate 命中 → 段边界优雅中断（在途工具自然收敛、零取消闭合——
   与 cancel 语义区分断言）；EStopStore 激活/解除/探针（fakeredis）；
 - P-4 resume 计划对账：READ 步三元组全等特批跳过（kernel.step_resumed_validated 落账
-  resumed=true）、EXTERNAL_WRITE 恒不跳、计划变更全量重放 + kernel.resume_mismatch。
+  resumed=true）、EXTERNAL_WRITE 恒不跳、计划变更全量重放 + kernel.resume_mismatch；
+- K26 durable ingress 三态+去重（docs/Agent/13 §32）：claim/complete 两段式生命周期、
+  claimed 再 claim 不重复取、同键幂等回执原 seq（不双份/不占容量/不重复落审计）、
+  completed 命中行为、release_stale 重投、内核段边界消费闭环；
+- K26 复核护栏（§32 复核批）：emit 中途失败=零注入+估算账不入账（all-or-nothing）、
+  release 重投恰一份注入块、审计侧 at-least-once（失败 pass 已落账 seq 二次落）。
 """
 
 from __future__ import annotations
@@ -25,7 +30,13 @@ from services.agent.business.kernel.gate_baseline import canonical_param_hash
 from services.agent.business.kernel.inbox import KernelInbox
 from services.agent.business.kernel.loop import AgentKernel
 from services.agent.domain.model.kernel_actions import ApprovalTicket, ToolCall, ToolResult
-from services.agent.domain.model.kernel_context import ExtensionMeta, KernelEvent, TenantContext, TrustLevel
+from services.agent.domain.model.kernel_context import (
+    ContextBlock,
+    ExtensionMeta,
+    KernelEvent,
+    TenantContext,
+    TrustLevel,
+)
 from services.agent.domain.model.kernel_planning import PlanCandidate, PlanStep
 from services.agent.domain.model.step_state import StepStatus
 from services.platform.errors import ErrorCode
@@ -83,10 +94,14 @@ async def test_inbox_三通道提交_seq单调_容量超限4203结构化拒绝()
     with pytest.raises(KernelError) as ei:
         inbox.submit("followup", "再补一份报告", source="user-1")
     assert ei.value.code == int(ErrorCode.INBOX_CAPACITY)
-    # Act：取走 steerable 后容量回收
-    drained = inbox.drain_steerable()
-    # Assert：steer+inject 全取、followup 留存；空文本契约拒绝
-    assert [i.kind for i in drained] == ["steer", "inject"]
+    # Act：两段式取件（K26-b：claim 标记不清除，complete 收口后容量回收）
+    claimed = inbox.claim_steerable()
+    # Assert：steer+inject 全取且标记 claimed、followup 留存；complete 后容量回收
+    assert [i.kind for i in claimed] == ["steer", "inject"]
+    assert all(i.status == "claimed" for i in claimed)
+    assert inbox.pending_count == 2  # claimed 仍占容量（未 complete 前不释放）
+    for item in claimed:
+        assert inbox.complete(item.seq) is True
     assert inbox.pending_count == 0
     with pytest.raises(KernelContractError):
         inbox.submit("steer", "  ", source="user-1")
@@ -97,13 +112,176 @@ async def test_followup_终态后可取走_步边界drain留存():
     inbox = KernelInbox(max_per_run=8)
     inbox.submit("followup", "跑完顺便出图", source="user-1")
     inbox.submit("inject", "提醒：只看 220kV", source="user-1")
-    # Act：步边界 drain（followup 应留存）
-    drained = inbox.drain_steerable()
+    # Act：步边界 claim（followup 应留存）+ complete 收口
+    claimed = inbox.claim_steerable()
+    for item in claimed:
+        inbox.complete(item.seq)
     taken = inbox.take_followups()
     # Assert：followup 不在步边界生效面；终态后取走即空
-    assert [i.kind for i in drained] == ["inject"]
+    assert [i.kind for i in claimed] == ["inject"]
     assert [i.text for i in taken] == ["跑完顺便出图"]
     assert inbox.take_followups() == ()  # 幂等取空
+
+
+# ── K26 durable ingress：三态+去重（docs/Agent/13 §32；上游 openclaw §9）────────
+async def test_claim两段式_生命周期pending经claimed到completed_complete后活动面清除():
+    # Arrange：两笔 steerable
+    inbox = KernelInbox(max_per_run=4)
+    inbox.submit("steer", "侧重备用线路", source="user-1")
+    inbox.submit("inject", "只看 220kV", source="user-1")
+    # Act+Assert ①：claim=pending→claimed（不清除，容量仍占位）
+    claimed = inbox.claim_steerable()
+    assert [i.status for i in claimed] == ["claimed", "claimed"]
+    assert inbox.pending_count == 2
+    # Assert ②：complete=活动面清除并返回 True；重复/未知 seq 幂等无害返回 False
+    assert inbox.complete(claimed[0].seq) is True
+    assert inbox.complete(claimed[0].seq) is False
+    assert inbox.complete(999) is False
+    assert inbox.pending_count == 1
+    assert inbox.complete(claimed[1].seq) is True
+    assert inbox.pending_count == 0
+
+
+async def test_claimed项再claim不重复取_release重投回pending后可再claim():
+    # Arrange
+    inbox = KernelInbox()
+    inbox.submit("steer", "第一笔", source="u")
+    inbox.submit("steer", "第二笔", source="u")
+    first = inbox.claim_steerable()
+    assert [i.text for i in first] == ["第一笔", "第二笔"]
+    # Assert ①：claimed 项再 claim 不重复取（两段式语义核心；complete 前不二次投递）
+    assert inbox.claim_steerable() == ()
+    # Act ②：release_stale 把 claimed 重投回 pending（fresh 箱调用=空转幂等）
+    assert KernelInbox().release_stale() == ()
+    released = inbox.release_stale()
+    assert [i.status for i in released] == ["pending", "pending"]
+    # Assert ③：重投后可再 claim（seq 不变=审计对账键保持）
+    again = inbox.claim_steerable()
+    assert [i.seq for i in again] == [i.seq for i in first]
+    assert all(i.status == "claimed" for i in again)
+
+
+async def test_去重幂等_同键回执原seq_不双份不占容量_先查重后查容量():
+    # Arrange：容量 2 + 审计采集
+    inbox = KernelInbox(max_per_run=2)
+    events: list[tuple[str, dict]] = []
+    inbox.attach_auditor(lambda t, p: events.append((t, p)))
+    s1 = inbox.submit("steer", "同一句话", source="user-1")
+    # Act+Assert ①：pending 命中——同键重投回执原 seq 不双份（含跨通道同文：键不含 kind）
+    assert inbox.submit("steer", "同一句话", source="user-1") == s1
+    assert inbox.submit("inject", "同一句话", source="user-1") == s1
+    assert inbox.pending_count == 1
+    # Assert ②：重投不重复落审计（回执即原受理回执，与 C2 幂等回执同型）
+    assert len(events) == 1
+    # Assert ③：键含 source——不同提交方同文=新提交（seq 递增）
+    assert inbox.submit("steer", "同一句话", source="user-2") == 2
+    # Assert ④：先查重后查容量——箱满后同键重投仍回执原 seq（不因 4203 被拒）
+    assert inbox.submit("steer", "同一句话", source="user-1") == s1
+    with pytest.raises(KernelError) as ei:
+        inbox.submit("steer", "第三笔", source="user-3")
+    assert ei.value.code == int(ErrorCode.INBOX_CAPACITY)
+
+
+async def test_completed命中_回执原seq不留新条目_含followup取走留痕():
+    # Arrange
+    inbox = KernelInbox()
+    s1 = inbox.submit("steer", "结束后出图", source="user-1")
+    f1 = inbox.submit("followup", "跑完再补摘要", source="user-1")
+    # Act ①：steer 消费闭环 → completed 留痕
+    (item,) = inbox.claim_steerable()
+    assert inbox.complete(item.seq) is True
+    # Assert ①：completed 命中=回执原 seq+不留新条目（内容已进组装，复注即双份——同型幂等）
+    assert inbox.submit("steer", "结束后出图", source="user-1") == s1
+    assert inbox.pending_count == 1  # 仅 followup 活动面
+    # Act ②：followup 终态取走（清除式）同样进 completed 留痕
+    assert [i.seq for i in inbox.take_followups()] == [f1]
+    # Assert ②：取走后同键重投回执原 seq，不复活条目
+    assert inbox.submit("followup", "跑完再补摘要", source="user-1") == f1
+    assert inbox.pending_count == 0
+
+
+async def test_内核段边界claim_complete闭环_终局后completed命中不复注():
+    # Arrange：2 步计划；步 1 在途提交 steer → 段边界 claim→注入→complete 闭环
+    flag: list[bool] = []
+    tools = [_SlowTool(f"{_IRI}_1", sleep_s=0.15, on_invoke=lambda: flag.append(True)), _SlowTool(f"{_IRI}_2")]
+    candidate = make_candidate((make_step(seq=1, action_iri=f"{_IRI}_1"), make_step(seq=2, action_iri=f"{_IRI}_2")))
+    kernel = _kernel_with(candidate, tools)
+    inbox = KernelInbox()
+    run_task = asyncio.create_task(
+        kernel.run(make_task(), make_ctx(), budget=Budget(max_steps=10, duration_s=30), inbox=inbox)
+    )
+    for _ in range(200):
+        await asyncio.sleep(0.005)
+        if flag:
+            break
+    s = inbox.submit("steer", "步 2 转人工复核", source="user-9")
+    outcome = await run_task
+    # Assert ①：消费闭环——活动面清零（claim 后已 complete），组装面恰一份注入块
+    assert outcome.status == "completed"
+    assert inbox.pending_count == 0
+    rc = kernel.last_run_context
+    assert [b.content for b in rc.context_blocks if b.source == "user_steer"] == ["步 2 转人工复核"]
+    assert _events(kernel, "kernel.inbox_drained")[0].data["seq"] == s
+    # Assert ②：终局后 completed 命中——同键重投回执原 seq 不复活条目（防复注双份）
+    assert inbox.submit("steer", "步 2 转人工复核", source="user-9") == s
+    assert inbox.pending_count == 0
+    # Assert ③：complete 闭环后无 claimed 残留，release_stale 空转
+    assert inbox.release_stale() == ()
+
+
+# ── K26 复核护栏：emit 中途失败窗口（复核修 1/修 2 不变量）──────────────────────
+async def test_部分失败护栏_emit中断零注入_估算账不入账_release重投恰一份(monkeypatch):
+    """emit 中途失败=零注入+估算账不入账（all-or-nothing）；release 重投后恰一份注入。
+
+    直调段边界拼接函数而非 run() 全流程：该失败窗口无法从 run() 确定性触达（异常
+    逃逸 run() 且 last_run_context 未回填），而护栏标的正是 _splice_inbox_blocks
+    自身的部分失败不变量（参考段边界用例形态、断言口径与 run() 用例一致）。
+    """
+    # Arrange：2 笔 steerable + 既有组装面基线块；ledger.append_event 在第 2 笔
+    # kernel.inbox_drained 落账后抛异常（模拟 emit 中途失败——失败 pass 已落账 seq 1/2）
+    import time as _time
+
+    from services.agent.business.kernel.compaction import estimate_tokens
+    from services.agent.business.kernel.run_context import RunContext
+
+    kernel = _kernel_with(make_candidate((make_step(seq=1),)), [_SlowTool()])
+    rc = RunContext(make_task(), make_ctx(), Budget(max_tokens=10_000), clock=_time.monotonic, approvals=())
+    baseline = ContextBlock(
+        source="fixture.baseline", content="组装基线", tokens=10, trust_level=TrustLevel.AGENT_ATTESTED
+    )
+    rc.context_blocks = (baseline,)
+    inbox = KernelInbox()
+    inbox.submit("steer", "第一笔", source="u")
+    inbox.submit("steer", "第二笔", source="u")
+    original_append = rc.ledger.append_event
+    armed, drained_seqs = [True], []
+
+    def flaky_append(event: KernelEvent) -> None:
+        original_append(event)
+        if event.event_type == "kernel.inbox_drained":
+            drained_seqs.append(event.data["seq"])
+            if armed[0] and len(drained_seqs) == 2:
+                raise RuntimeError("模拟 emit 中途失败（第 2 项 drained 落账后）")
+
+    monkeypatch.setattr(rc.ledger, "append_event", flaky_append)
+    # Act ①：首次拼接在第 2 项失败 → 异常上抛（由终止路径处置）
+    with pytest.raises(RuntimeError):
+        kernel._splice_inbox_blocks(rc, inbox)
+    # Assert ①：零注入（组装面原样=无部分注入）+ claimed 项留箱 + 估算账零入账（未翻倍）
+    assert rc.context_blocks == (baseline,)
+    assert inbox.pending_count == 2
+    assert inbox.claim_steerable() == ()  # claimed 留箱：不 complete 前不二次投递
+    assert rc.tracker.tokens_effective == 0
+    # Act ②：release_stale 重投（armed 解除=落账恢复）→ 二次拼接成功
+    armed[0] = False
+    assert [i.seq for i in inbox.release_stale()] == [1, 2]
+    kernel._splice_inbox_blocks(rc, inbox)
+    # Assert ②：每笔恰一份注入块（无双份）+ 估算账恰一轮（失败 pass 未预入账、未翻倍）
+    assert [b.content for b in rc.context_blocks if b.source == "user_steer"] == ["第一笔", "第二笔"]
+    assert rc.tracker.tokens_effective == estimate_tokens("第一笔") + estimate_tokens("第二笔")
+    assert inbox.pending_count == 0  # complete 收口
+    # Assert ③：审计侧 at-least-once——失败 pass 已落账的 seq 经重投二次落 kernel.inbox_drained
+    assert drained_seqs == [1, 2, 1, 2]
 
 
 # ── 段边界 steering/inject（§1.1 消费点）─────────────────────────────────────────

@@ -92,6 +92,9 @@ async def submit_run_inbox(
     409+4105=Run 不在本进程（终态已注销/他副本执行/与该会话活跃 Run 不符）；
     429+4203=收件箱容量超限（每 Run 待处理上限，Settings.kernel_inbox_max_per_run）。
     受理即发布 INBOX_SPLICED 回执（用户可见；hub 未装配仅记日志不阻断）。
+    K26-a 幂等透传：同 dedupe_key（source+sha256(text)，12 篇 A 批口径）重投命中即
+    原样回执原 seq（202 同型回执，无 409——幂等不是冲突）；INBOX_SPLICED SSE 回执按
+    seq 可重复发布，消费方按 seq 幂等处理。
     """
     req = _require_request(request, "运行注册表")
     async with uow.for_tenant(principal.tenant_id) as tx:
@@ -119,6 +122,11 @@ async def _publish_inbox_receipt(
 ) -> None:
     """SSE 回执（INBOX_SPLICED，用户可见）：hub 双形态（同步/协程 publish）同 sessions 先例；
     发布失败只告警不阻断（审计不阻塞主流程，02 §3 ⑥——账本侧 kernel.inbox_spliced 已留痕）。
+
+    K26 复核修 3（口径澄清，行为不动）：dedupe 命中路径（submit 幂等回执原 seq）同样
+    发布本回执——该笔**不新增**账本事件，既有 kernel.inbox_spliced 留痕属**原 submit**
+    受理（不背书本笔重收回执）；回执按 seq 重复发布、消费方按 seq 幂等处理（同
+    submit_run_inbox 契约声明），审计对账以账本事件为准、SSE 回执非凭证。
     """
     hub = getattr(request.app.state, "sse_hub", None)
     if hub is None:

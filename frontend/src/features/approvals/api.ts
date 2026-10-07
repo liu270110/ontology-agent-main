@@ -50,6 +50,10 @@ export interface Approval {
   submitted_at: string
   status: ApprovalStatus
   high_risk: boolean
+  /** SLA 截止（AdminReviewOut.sla_deadline 直传；B9-D-B：列表卡/详情倒计时） */
+  sla_deadline?: string | null
+  /** 多签进度（DecisionOut 回传快照；pending 单 payload 携带时透传，B9-D-B） */
+  signatures?: { required: number; collected: number; complete?: boolean } | null
   /** 类型化摘要载荷（按 type 分派渲染；契约缺口：payload schema 待 §5.8 补详情行） */
   payload: {
     project?: string; base?: string; target?: string
@@ -84,6 +88,8 @@ export interface ReviewTicketRaw {
   reviewer_id?: string | null
   decision_note?: string | null
   sla_deadline?: string | null
+  signatures_required?: number
+  signatures_collected?: number
   created_at: string
   /** @deprecated mock 富形状遗留（§5.8 契约冻结后仅 created_at 为权威）；normalizeReview 兜底链保留读取 */
   submitted_at?: string
@@ -151,6 +157,11 @@ export function normalizeReview(raw: ReviewTicketRaw): Approval {
     // 状态，显式 undefined 与缺键同归保守 'pending'（Record<string,…> 索引签名下 ?? 不防二者）
     status: Object.hasOwn(REVIEW_STATUS_MAP, raw.status) ? REVIEW_STATUS_MAP[raw.status] : 'pending',
     high_risk: raw.high_risk ?? HIGH_RISK_TYPES.includes(type),
+    sla_deadline: raw.sla_deadline ?? null,
+    signatures:
+      raw.signatures_required != null && raw.signatures_collected != null
+        ? { required: raw.signatures_required, collected: raw.signatures_collected }
+        : null,
     payload: raw.payload ?? {},
     chain: raw.chain ?? [],
   }
@@ -172,11 +183,32 @@ export function getReview(id: string) {
 /** 审批裁决（api/01 §5.8 POST /admin/reviews/{id}/decision）。R50 后端 DecisionIn 为
  *  {action, note} 且 extra=forbid——意见字段名=note（前端曾发 reason 致 live 422，已对齐；
  *  fe1 ocr 发现4：公开参数同步改名 note，调用方位置传参行为不变）。 */
+/** 决策结果=后端 DecisionOut（含 governance_tier/signatures_required/collected/complete——B9-D-B 多签进度展示） */
+export interface DecisionResultOut {
+  ticket_id?: string
+  status?: string
+  governance_tier?: string
+  signatures_required?: number
+  signatures_collected?: number
+  complete?: boolean
+}
+
 export function decideReview(id: string, action: 'approve' | 'reject', note?: string) {
-  return api.post<{ ticket_id?: string; status?: string }>(`/admin/reviews/${id}/decision`, {
+  return api.post<DecisionResultOut>(`/admin/reviews/${id}/decision`, {
     action,
     note: note ?? '',
   })
+}
+
+/** SLA 徽标（B9-D-B）：过期红 / 剩余<2h 橙 / 其余不渲染（克制，设计 34 篇 §D-B） */
+export function slaBadgeOf(sla?: string | null): { text: string; cls: string } | null {
+  if (!sla) return null
+  const diff = new Date(sla).getTime() - Date.now()
+  if (Number.isNaN(diff)) return null
+  if (diff <= 0) return { text: 'SLA 已过期', cls: 'b-red' }
+  const h = diff / 3_600_000
+  if (h < 2) return { text: `SLA 剩 ${Math.max(1, Math.round(diff / 60_000))} 分钟`, cls: 'b-orange' }
+  return null
 }
 
 /** 批量审批（§5.8 ☆ W2 契约冻结端点，IX-APR-02；W1 已按卡追认实装 2026-10-04）。

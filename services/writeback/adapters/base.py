@@ -112,6 +112,9 @@ class ConnectorMeta:
     supports_compensate: bool = False
     idempotency_mode: str = "native"  # native=业务侧按幂等键去重 | weak=弱幂等（§5.3 第 3 项）
     retryable_codes: frozenset[str] | None = None  # 缺省用 dispatcher 策略的 retryable_codes
+    # K34-b（Agent 13 §40）：params 的 JSON Schema（Draft 2020-12）声明——invoke 时 dispatcher
+    # 侧前置校验，非法结构化 3001 拒绝（B1 门禁语义化，不脏数据出网）；缺省 None=零校验零变化。
+    params_schema: dict[str, Any] | None = None
 
 
 @dataclass(frozen=True, slots=True)

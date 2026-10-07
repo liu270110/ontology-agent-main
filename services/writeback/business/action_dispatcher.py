@@ -143,14 +143,22 @@ class ActionDispatcher:
         tenant_id: uuid.UUID,
         action_iri: str,
         params: dict[str, Any],
+        subject_rids: list[str] | None = None,
         confirm_token: str | None = None,
         trace_id: str | None = None,
     ) -> dict[str, Any]:
-        """行动实例化 + 幂等投递（api/03 §3.7）：受理即凭证，重复请求返回原结果。"""
+        """行动实例化 + 幂等投递（api/03 §3.7）：受理即凭证，重复请求返回原结果。
+
+        可选 ``subject_rids``（K34-a，Agent 13 §40；对标 tis@18 §10.7 executeAction 的
+        一等 rids 对象列表）：本操作绑定的本体对象 RID 列表——只透传入台账
+        ``request_payload`` 审计位（全程可追溯），不下探连接器契约（``WritebackRequest``
+        不动，全同构下探留后续批次）；缺省 None=现行行为零变化。
+        """
         if not action_iri:
             raise WritebackError(ErrorCode.PARAM_INVALID, "action_iri 为必填（须为本体行动类 IRI）")
         if not isinstance(params, dict) or not params:
             raise WritebackError(ErrorCode.PARAM_INVALID, "params 为必填（行动类参数对象）")
+        subject_rids = self._validate_subject_rids(subject_rids)
         binding = self._connectors.resolve(action_iri)
         if binding is None:
             self._emit_unbound_action(tenant_id=tenant_id, action_iri=action_iri, trace_id=trace_id)
@@ -162,6 +170,7 @@ class ActionDispatcher:
                 ErrorCode.PARAM_INVALID,
                 f"高风险行动类（risk_level=high）必须携带 confirm_token（人工二次确认，api/03 §7）: {action_iri}",
             )
+        self._validate_params_schema(binding, params)
 
         # ---- 行动实例化（OB2 行动类实例；重试回传同一 action_instance_id → 同幂等键）----
         retry_instance_raw = params.get("action_instance_id")
@@ -179,6 +188,8 @@ class ActionDispatcher:
             "risk_level": binding.meta.risk_level,
             "trace_id": trace_id,
         }
+        if subject_rids:  # K34-a 审计留痕（缺省不落键——缺省路径 payload 形状零变化）
+            payload["subject_rids"] = list(subject_rids)
         entry = WritebackLedger.create_pending(
             tenant_id=tenant_id, action=action, request_payload=payload, now=self._now()
         )
@@ -670,6 +681,46 @@ class ActionDispatcher:
         if binding is None:
             raise WritebackError(ErrorCode.MCP_TARGET_UNAVAILABLE, f"连接器未注册: {connector_id}（组合根装配缺位）")
         return binding
+
+    @staticmethod
+    def _validate_subject_rids(subject_rids: list[str] | None) -> list[str] | None:
+        """subject_rids 最小形态校验（K34-a）：list[str] 且每项非空串。
+
+        边界声明：强校验（IRI 形态/前缀属当前本体域）留后续批——本体域裁决需跨模块
+        ontology 上下文，本批最小=非空字符串；空列表等价缺省 None（零变化）。
+        """
+        if subject_rids is None:
+            return None
+        if not isinstance(subject_rids, list):
+            raise WritebackError(ErrorCode.PARAM_INVALID, "subject_rids 须为本体对象 RID 字符串列表（list[str]）")
+        for rid in subject_rids:
+            if not isinstance(rid, str) or not rid.strip():
+                raise WritebackError(
+                    ErrorCode.PARAM_INVALID, f"subject_rids 每项须为非空字符串（本体对象 RID）: {rid!r}"
+                )
+        return subject_rids or None  # 空列表归一为缺省（payload 不落键）
+
+    @staticmethod
+    def _validate_params_schema(binding: ConnectorBinding, params: dict[str, Any]) -> None:
+        """params_schema 前置校验（K34-b）：连接器声明 JSON Schema（Draft 2020-12）则先验后投。
+
+        非法 → 结构化 3001（与既有参数校验同码族，4xx 语义=不可重试脏数据不出网）；
+        缺省 None=零校验零变化。jsonschema 经 platform/llm/gateway 同款延迟导入（仓内先例）。
+        """
+        schema = binding.meta.params_schema
+        if schema is None:
+            return
+        from jsonschema import Draft202012Validator
+
+        errors = sorted(Draft202012Validator(schema).iter_errors(params), key=lambda e: list(e.absolute_path))
+        if not errors:
+            return
+        first = errors[0]
+        path = ".".join(str(p) for p in first.absolute_path) or "<root>"
+        raise WritebackError(
+            ErrorCode.PARAM_INVALID,
+            f"params 不符连接器 params_schema（{binding.meta.name}）: {path}: {first.message}",
+        )
 
     def _emit_unbound_action(self, *, tenant_id: uuid.UUID, action_iri: str, trace_id: str | None) -> None:
         """resolve-miss → ORSI 缺口轨 ``unbound_action`` 事件（09 §13.4；gap_sink 未装配则零操作）。

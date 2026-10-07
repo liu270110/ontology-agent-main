@@ -122,6 +122,30 @@ def test_未绑定的action命名空间注册冲突被拒():
     assert "已注册" in str(exc.value)
 
 
+async def test_action_invoke_subject_rids经registry透传至审计payload():
+    """K34-a（Agent 13 §40）：provider 入参投影 subject_rids → dispatcher 审计位；缺省零变化。"""
+    adapter = ScriptedAdapter()
+    dispatcher, ledger = make_dispatcher(adapter)
+    registry = CapabilityRegistry()
+    registry.register(ActionCapabilityProvider(dispatcher))
+    provider, _descriptor = registry.get("action.invoke")
+
+    rids = ["http://ontology-agent.local/o/power#Feeder/F-9"]
+    with_rids = await provider.invoke(
+        "action.invoke",
+        {"action_iri": ACTION_IRI_CREATE_ORDER, "params": {"feeder": "F-9"}, "subject_rids": rids},
+        CTX,
+    )
+    row = ledger.by_key(with_rids.value["idempotency_key"])
+    assert row is not None and row.request_payload["subject_rids"] == rids  # 透传入审计位
+
+    without = await provider.invoke(
+        "action.invoke", {"action_iri": ACTION_IRI_CREATE_ORDER, "params": {"feeder": "F-8"}}, CTX
+    )
+    row_default = ledger.by_key(without.value["idempotency_key"])
+    assert "subject_rids" not in row_default.request_payload  # 缺省 None 零变化
+
+
 def test_域错误类型可从provider侧导入_零循环依赖():
     # mcp → writeback.domain 为许可边（模块内聚契约未列 writeback）；验证导入面稳定
     assert WritebackError(3001, "x").code == 3001

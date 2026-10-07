@@ -138,13 +138,9 @@ async def test_发布team档_202_pending_工单落库workflow_publish(wf_seed):
         ticket_id = outcome.ticket_id
     # Assert：工单落库 target_type=workflow_publish（第七类对象候选，X16）
     async with seed.factory() as db:
-        row = (
-            await db.execute(
-                text(
-                    "SELECT target_type, target_id, status, payload FROM review_tickets WHERE id = CAST(:tid AS uuid)"
-                ),
-                {"tid": str(ticket_id)},
-            )
+        row = await db.execute(
+            text("SELECT target_type, target_id, status, payload FROM review_tickets WHERE id = CAST(:tid AS uuid)"),
+            {"tid": str(ticket_id)},
         )
         ticket = row.mappings().one()
         assert ticket["target_type"] == "workflow_publish"

@@ -398,9 +398,7 @@ class WorkflowRunControl:
         违规 4801→409（与受理面同码同语义）；节点级必填不在提升面（promote 用例 docstring）。"""
         violations = [*validate_structure(graph), *validate_dag(graph)]
         if violations:
-            raise GatewayError(
-                4801, f"4801 WORKFLOW_GRAPH_INVALID: {'; '.join(violations)}", status_code=409
-            )
+            raise GatewayError(4801, f"4801 WORKFLOW_GRAPH_INVALID: {'; '.join(violations)}", status_code=409)
 
     # ── 断点恢复（POST /workflows/{id}/runs/{run_id}/resume）───────────────
 

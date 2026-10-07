@@ -826,9 +826,7 @@ async def test_extract_pruning_stats_meta_and_gate_preserves_marks(
             .one()
         )
         tickets = (
-            (
-                await db.execute(select(ReviewTicketORM).where(ReviewTicketORM.tenant_id == extract_env["tenant_id"]))
-            )
+            (await db.execute(select(ReviewTicketORM).where(ReviewTicketORM.tenant_id == extract_env["tenant_id"])))
             .scalars()
             .all()
         )

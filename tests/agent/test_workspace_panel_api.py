@@ -138,9 +138,7 @@ async def test_tree_symlink_not_followed(ws_env):
 
 async def test_file_read_ok(ws_env):
     """读单文件：内容/language 映射/路径回显 canonical（mock 契约 {path,language,content}）。"""
-    out = await get_workspace_file(
-        ws_env["session_id"], ws_env["read_principal"], ws_env["base"], "/workspace/报告.md"
-    )
+    out = await get_workspace_file(ws_env["session_id"], ws_env["read_principal"], ws_env["base"], "/workspace/报告.md")
     assert out.path == "/workspace/报告.md"
     assert out.language == "markdown"
     assert out.content.startswith("# 排查报告")
@@ -164,9 +162,7 @@ async def test_file_read_nested_path(ws_env):
 async def test_file_missing_404(ws_env):
     """文件不存在 → 404 错误体（mock 3404 语义对齐到平台 404 裸码先例）。"""
     with pytest.raises(GatewayError) as excinfo:
-        await get_workspace_file(
-            ws_env["session_id"], ws_env["read_principal"], ws_env["base"], "/workspace/ghost.md"
-        )
+        await get_workspace_file(ws_env["session_id"], ws_env["read_principal"], ws_env["base"], "/workspace/ghost.md")
     assert excinfo.value.status_code == 404
 
 
@@ -215,9 +211,7 @@ async def test_file_traversal_attacks_rejected(ws_env, evil_path):
 async def test_file_traversal_never_leaks_secret(ws_env):
     """含 ``..`` 解析后恰落回会话目录内的路径也不放行（``..`` 段 deny-by-default，fs jail 同源）。"""
     with pytest.raises(GatewayError) as excinfo:
-        await get_workspace_file(
-            ws_env["session_id"], ws_env["read_principal"], ws_env["base"], "notes/../报告.md"
-        )
+        await get_workspace_file(ws_env["session_id"], ws_env["read_principal"], ws_env["base"], "notes/../报告.md")
     assert excinfo.value.code == 3001
 
 
@@ -344,9 +338,7 @@ async def test_exec_output_truncated(ws_env):
     """输出超 400 行截断并留标记行（grep . 逐行回显大文件——真实命令路径）。"""
     if shutil.which("grep") is None:
         pytest.skip("本机无 grep 可执行文件")
-    (ws_env["session_dir"] / "many.txt").write_text(
-        "".join(f"line-{i}\n" for i in range(500)), encoding="utf-8"
-    )
+    (ws_env["session_dir"] / "many.txt").write_text("".join(f"line-{i}\n" for i in range(500)), encoding="utf-8")
     out = await _exec(ws_env, "grep . many.txt")
     assert len(out.lines) == workspace_panel.TERMINAL_MAX_LINES + 1  # 400 行 + 1 截断标记
     assert "截断" in out.lines[-1]
@@ -419,7 +411,9 @@ async def test_resources_stable_ids(ws_env):
 async def test_resources_empty_when_session_dir_missing(ws_env):
     """会话目录不存在 = 空资源列表（不炸、不建目录）。"""
     out = await get_session_resources(
-        uuid.uuid4(), ws_env["read_principal"], ws_env["base"]  # 未创建过的会话
+        uuid.uuid4(),
+        ws_env["read_principal"],
+        ws_env["base"],  # 未创建过的会话
     )
     assert out.items == []
     assert not (ws_env["base"] / "resources-probe").exists()

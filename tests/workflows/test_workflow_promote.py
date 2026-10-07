@@ -114,7 +114,11 @@ async def test_promote_运行卡提升_执行图与血统落稿_幂等返回既�
     )
     workflow_id = await _publish_draft_with_graph(rs, clean)
     accepted = await submit_workflow_test(
-        workflow_id, WorkflowTestIn(variables={"city": "苏州", "region": "华东", "amount": 7}), rs.principal(), rs.uow, rs.request()
+        workflow_id,
+        WorkflowTestIn(variables={"city": "苏州", "region": "华东", "amount": 7}),
+        rs.principal(),
+        rs.uow,
+        rs.request(),
     )
     await _drive_once(rs, accepted.task_id, accepted.run_id)
 
@@ -143,7 +147,11 @@ async def test_promote_运行卡提升_执行图与血统落稿_幂等返回既�
 
     # 变更确认清单入参：variable_hints 与抽取合并去重（提升新 run 验证 hints 路径）
     accepted2 = await submit_workflow_test(
-        workflow_id, WorkflowTestIn(variables={"city": "南京", "feeder": "FL-10kV"}), rs.principal(), rs.uow, rs.request()
+        workflow_id,
+        WorkflowTestIn(variables={"city": "南京", "feeder": "FL-10kV"}),
+        rs.principal(),
+        rs.uow,
+        rs.request(),
     )
     await _drive_once(rs, accepted2.task_id, accepted2.run_id)
     outcome2 = await control.promote(

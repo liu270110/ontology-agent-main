@@ -151,10 +151,18 @@ class TestOntologyConstraintGain:
 
     def test_差值逐列计算(self):
         # Arrange：A0 acc 0.5 / A1 acc 0.75（其余同值）
-        a0 = aggregate([score_item(**_MAP, raw_output='{"action": "file_grep"}', confidence_floor=0.5),
-                        score_item(**_MAP, raw_output='{"action": "file_read"}', confidence_floor=0.5)])
-        a1 = aggregate([score_item(**_MAP, raw_output='{"action": "file_grep"}', confidence_floor=0.5),
-                        score_item(**_MAP, raw_output='{"action": "file_grep"}', confidence_floor=0.5)])
+        a0 = aggregate(
+            [
+                score_item(**_MAP, raw_output='{"action": "file_grep"}', confidence_floor=0.5),
+                score_item(**_MAP, raw_output='{"action": "file_read"}', confidence_floor=0.5),
+            ]
+        )
+        a1 = aggregate(
+            [
+                score_item(**_MAP, raw_output='{"action": "file_grep"}', confidence_floor=0.5),
+                score_item(**_MAP, raw_output='{"action": "file_grep"}', confidence_floor=0.5),
+            ]
+        )
         # Act
         got = ontology_constraint_gain(a0, a1)
         # Assert

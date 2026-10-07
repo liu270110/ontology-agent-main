@@ -41,7 +41,7 @@ def _sse_response() -> httpx.Response:
     """流式响应：一帧增量 + usage 末块 + [DONE]（OpenAI 兼容 SSE 形态）。"""
     payload = json.dumps({"choices": [{"delta": {"content": "你好"}}]})
     usage = json.dumps({"choices": [], "usage": {"prompt_tokens": 3, "completion_tokens": 2}})
-    body = (f"data: {payload}\n\n" f"data: {usage}\n\n" "data: [DONE]\n\n").encode()
+    body = (f"data: {payload}\n\ndata: {usage}\n\ndata: [DONE]\n\n").encode()
     return httpx.Response(200, content=body, headers={"content-type": "text/event-stream"})
 
 
@@ -187,9 +187,7 @@ class YieldingOrchestrator:
     async def _stream(self, command: ChatCommand) -> AsyncIterator[ChatEvent]:
         self.commands.append(command)
         yield ChatEvent(name=ChatEventName.RUN_STARTED, data={"run_id": str(command.run_id)}, run_id=command.run_id)
-        yield ChatEvent(
-            name=ChatEventName.RUN_FINISHED, data={"run_id": str(command.run_id)}, run_id=command.run_id
-        )
+        yield ChatEvent(name=ChatEventName.RUN_FINISHED, data={"run_id": str(command.run_id)}, run_id=command.run_id)
 
 
 class QueuedPoller:

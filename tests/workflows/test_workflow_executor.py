@@ -49,7 +49,7 @@ class FakeTx:
     def __init__(self, repo: FakeTasksRepo) -> None:
         self.tasks = repo
 
-    async def __aenter__(self) -> "FakeTx":
+    async def __aenter__(self) -> FakeTx:
         return self
 
     async def __aexit__(self, *exc: Any) -> None:
@@ -68,7 +68,9 @@ class StubPorts:
     """桩端口：agent/tool/retrieval 罐头输出；tool=params.tool=="boom" 时结构化失败。"""
 
     async def agent_turn(self, node: Any, message: str, ctx: Any, *, run_id: uuid.UUID) -> NodeOutcome:
-        return NodeOutcome(output={"answer": f"agent:{node.id}:{message}"}, usage={"input_tokens": 10, "output_tokens": 5})
+        return NodeOutcome(
+            output={"answer": f"agent:{node.id}:{message}"}, usage={"input_tokens": 10, "output_tokens": 5}
+        )
 
     async def invoke_tool(self, node: Any, args: dict, ctx: Any, *, run_id: uuid.UUID) -> NodeOutcome:
         if node.params.get("tool") == "boom":
@@ -84,9 +86,7 @@ def _node(nid: str, kind: str, label: str, **params: Any) -> WorkflowNode:
 
 
 def _graph(nodes: list[WorkflowNode], edges: list[tuple[str, str, str | None]]) -> WorkflowGraph:
-    return WorkflowGraph(
-        nodes=nodes, edges=[WorkflowEdge(source=s, target=t, label=label) for s, t, label in edges]
-    )
+    return WorkflowGraph(nodes=nodes, edges=[WorkflowEdge(source=s, target=t, label=label) for s, t, label in edges])
 
 
 def _make_task(graph: WorkflowGraph, *, kind: str = "workflow_test", breakpoints: list[str] | None = None) -> Any:
@@ -113,12 +113,23 @@ TENANT = uuid.uuid4()
 WF_ID = uuid.uuid4()
 
 
-async def _drive(executor: WorkflowRunExecutor, repo: FakeTasksRepo, task: Any, *, kind: str = "workflow_test") -> list[Any]:
+async def _drive(
+    executor: WorkflowRunExecutor, repo: FakeTasksRepo, task: Any, *, kind: str = "workflow_test"
+) -> list[Any]:
     """消费事件流（worker._drain_workflow 同款：全部事件顺序收集）。"""
     command = WorkflowRunCommand(
         tenant_id=TENANT, task_id=task.id, run_id=task.runs[0].id, task_type=kind, trace_id="trace-x16"
     )
-    events = [event async for event in executor.execute_run(tenant_id=command.tenant_id, task_id=command.task_id, run_id=command.run_id, task_type=command.task_type, trace_id=command.trace_id)]
+    events = [
+        event
+        async for event in executor.execute_run(
+            tenant_id=command.tenant_id,
+            task_id=command.task_id,
+            run_id=command.run_id,
+            task_type=command.task_type,
+            trace_id=command.trace_id,
+        )
+    ]
     return events
 
 
@@ -175,7 +186,9 @@ async def test_串行三节点_全绿事件序列与终态回写():
     finished = [e for e in uow.repo.events if e.event_type == "run.finished"]
     assert finished and finished[0].data["task_type"] == "workflow_test"
     # STARTED 事件 payload 面（40 篇 §4.2）：node_type/title/attempt/parallel_id
-    started_agent = next(e for e in events if e.name is ChatEventName.WORKFLOW_NODE_STARTED and e.data["node_id"] == "agent-1")
+    started_agent = next(
+        e for e in events if e.name is ChatEventName.WORKFLOW_NODE_STARTED and e.data["node_id"] == "agent-1"
+    )
     assert started_agent.data["node_type"] == "agent"
     assert started_agent.data["title"] == "Agent:调度"
     assert started_agent.data["attempt"] == 1
@@ -230,7 +243,12 @@ def test_受限表达式求值器_比较布尔组合_禁eval面():
     node = _node("c", "condition", "条件", expression="amount > 100 and mode == 'fast' or not flag")
     assert evaluate_condition(node, {"amount": 500, "mode": "fast", "flag": False}) is True
     assert evaluate_condition(node, {"amount": 50, "mode": "slow", "flag": True}) is False
-    assert evaluate_condition(_node("d", "condition", "d", expression="nodes.a.score >= 0.5"), {"nodes": {"a": {"score": 0.7}}}) is True
+    assert (
+        evaluate_condition(
+            _node("d", "condition", "d", expression="nodes.a.score >= 0.5"), {"nodes": {"a": {"score": 0.7}}}
+        )
+        is True
+    )
     with pytest.raises(NodeExecutionError):
         evaluate_condition(_node("e", "condition", "e", expression="__import__('os')"), {})
 
@@ -352,7 +370,10 @@ async def test_断点前置命中_暂停标注_resume修参续跑():
     assert events2[-1].name is ChatEventName.RUN_FINISHED
     assert task.payload["workflow_state"]["outputs"]["b1"]["output"] == "修参:500"  # 修参生效
     # 断点不重复命中（breakpoint_hit 护栏）
-    assert all(not (e.name is ChatEventName.WORKFLOW_NODE_FINISHED and e.data.get("status") == "waiting_approval") for e in events2)
+    assert all(
+        not (e.name is ChatEventName.WORKFLOW_NODE_FINISHED and e.data.get("status") == "waiting_approval")
+        for e in events2
+    )
 
 
 # ---------------------------------------------------------------- 失败终态/超时

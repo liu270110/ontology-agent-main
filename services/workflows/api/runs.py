@@ -297,6 +297,4 @@ async def abort_workflow_run(
         )
     except TaskError as exc:  # 终态不可逆断言（04 §3）→ 4102 → 409（tasks/cancel 同款映射）
         raise domain_error(exc, fallback_code=4102) from exc
-    return WorkflowRunControlOut(
-        run_id=outcome.run_id, decision=outcome.decision, run_status=outcome.run_status
-    )
+    return WorkflowRunControlOut(run_id=outcome.run_id, decision=outcome.decision, run_status=outcome.run_status)

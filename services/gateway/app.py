@@ -88,6 +88,9 @@ from services.platform.errors import error_response
 from services.plugin.api.plugins import router as plugin_router
 from services.review.api.admin import router as review_admin_router
 from services.rsi.api.capabilities import router as orsi_router  # M4.6-S3：ORSI 注册表三端点（docs/Agent/14 §3）
+from services.rsi.api.contributors import (
+    router as rsi_contributor_router,  # 批次 A：贡献者注册/探测四端点（architecture/09 §14.1/§14.3）
+)
 from services.skills.api.skills import router as skills_router  # S2 技能集市四端点（docs/Agent/14 §3）
 from services.tools.api.tools import router as tools_market_router  # S1 工具集市（docs/Agent/14 §3）
 from services.workflows.api.runs import router as workflow_runs_router  # X16 运行六端点（api/01 §5.11）
@@ -538,6 +541,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(workflows_router, prefix=settings.api_prefix)  # F1 workflows 竖切八端点（api/01 §5.11）
     app.include_router(workflow_runs_router, prefix=settings.api_prefix)  # X16 运行六端点（api/01 §5.11）
     app.include_router(orsi_router, prefix=settings.api_prefix)  # M4.6-S3：ORSI 注册表三端点（docs/Agent/14 §3）
+    app.include_router(rsi_contributor_router, prefix=settings.api_prefix)  # 批次 A：贡献者四端点（09 §14）
     app.include_router(health_router, prefix=settings.api_prefix)  # M3 销项：readyz 聚合探活（health.py）
     app.include_router(writeback_ledger_router, prefix=settings.api_prefix)  # api/01 §5.8 ★：台账查询（writeback.api）
     app.include_router(usage_overview_router, prefix=settings.api_prefix)  # api/01 §5.8 ★：用量总览（B9 §D-C，platform.api）

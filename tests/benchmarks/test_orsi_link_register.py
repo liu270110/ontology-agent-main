@@ -114,9 +114,7 @@ def repo() -> FakeOrsiRepo:
 
 
 @pytest.fixture
-async def registrar(
-    repo: FakeOrsiRepo, monkeypatch: pytest.MonkeyPatch
-) -> Any:
+async def registrar(repo: FakeOrsiRepo, monkeypatch: pytest.MonkeyPatch) -> Any:
     """注册器 + 进程内客户端（依赖覆盖：principal 含 rsi:write，会话短路到假仓储）。
 
     JWT 头仍由 Registrar 真签发（encode_token 真链路）；中间件验签面被依赖覆盖替换，
@@ -223,9 +221,7 @@ def test_version_diff读取_三种载体形状兼容(tmp_path: Path) -> None:
 # ── 注册链：套件归属 + payload 五字段 + 真调用面 ────────────────────────────
 
 
-async def test_注册模式_套件归属与payload五字段(
-    registrar: Any, repo: FakeOrsiRepo, tmp_path: Path
-) -> None:
+async def test_注册模式_套件归属与payload五字段(registrar: Any, repo: FakeOrsiRepo, tmp_path: Path) -> None:
     # Arrange：agent-core 结果两场景（数值指标两枚）
     results = _write_results(tmp_path, scenarios={"session_mutex_rate": {"rate": 1.0}, "invalid_retry_count": {"n": 2}})
     # Action
@@ -332,9 +328,7 @@ async def test_幂等_同tag同场景集复用既有行(registrar: Any, repo: Fa
     assert len(repo.rows) == 1
 
 
-async def test_baseline_digest_取上一tag同场景集指标摘要(
-    registrar: Any, repo: FakeOrsiRepo, tmp_path: Path
-) -> None:
+async def test_baseline_digest_取上一tag同场景集指标摘要(registrar: Any, repo: FakeOrsiRepo, tmp_path: Path) -> None:
     # Arrange：v1 注册（首轮 baseline=None）
     results = _write_results(tmp_path, scenarios={"session_mutex_rate": {"rate": 1.0}})
     await registrar.register_eval(results)
@@ -355,9 +349,7 @@ async def test_baseline_digest_取上一tag同场景集指标摘要(
 # ── 红线回归：eval 来源 candidate（带 promotion_evidence）promote 仍恒拒 ────────
 
 
-async def test_红线回归_带晋升证据的candidate_promote仍恒拒(
-    registrar: Any, repo: FakeOrsiRepo, tmp_path: Path
-) -> None:
+async def test_红线回归_带晋升证据的candidate_promote仍恒拒(registrar: Any, repo: FakeOrsiRepo, tmp_path: Path) -> None:
     # Arrange：注册模式产出的 capability（promotion_evidence 已挂）
     results = _write_results(tmp_path, scenarios={"session_mutex_rate": {"rate": 1.0}})
     await registrar.register_eval(results)

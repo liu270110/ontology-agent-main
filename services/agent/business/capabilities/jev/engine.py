@@ -184,9 +184,7 @@ class JevEngine:
             raw_intents = predictor.predict_entities(
                 f"{_CLASSIFY_PREFIX}{zh}", list(jev_labels.intent_labels()), threshold=self._threshold
             )
-            raw_entities = predictor.predict_entities(
-                zh, list(jev_labels.ENTITY_LABELS), threshold=self._threshold
-            )
+            raw_entities = predictor.predict_entities(zh, list(jev_labels.ENTITY_LABELS), threshold=self._threshold)
             latency_ms = (time.perf_counter() - t0) * 1000
         intents = sorted(
             (

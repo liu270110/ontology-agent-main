@@ -513,13 +513,9 @@ async def test_晋升证据构造期校验_五键闭集与必填键() -> None:
     assert cap.promotion_evidence == valid
     # Act + Assert（负例）：缺键/多键皆拒（键集闭集，API DTO extra="forbid" 同词汇表）
     with pytest.raises(OrsiCapabilityError, match="键集不符"):
-        OrsiCapability(
-            tenant_id=TENANT, **VALID_REGISTER_KW, name="ev-bad", promotion_evidence={"eval_tag": "t"}
-        )
+        OrsiCapability(tenant_id=TENANT, **VALID_REGISTER_KW, name="ev-bad", promotion_evidence={"eval_tag": "t"})
     with pytest.raises(OrsiCapabilityError, match="键集不符"):
-        OrsiCapability(
-            tenant_id=TENANT, **VALID_REGISTER_KW, name="ev-extra", promotion_evidence={**valid, "extra": 1}
-        )
+        OrsiCapability(tenant_id=TENANT, **VALID_REGISTER_KW, name="ev-extra", promotion_evidence={**valid, "extra": 1})
     # Act + Assert（负例）：必填键 eval_tag 空值拒；非 dict 类型拒
     with pytest.raises(OrsiCapabilityError, match="eval_tag"):
         OrsiCapability(

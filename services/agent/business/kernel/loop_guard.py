@@ -12,6 +12,11 @@
 
 阈值常量可配置（默认 2=两次重复后硬终止；1=一次重复即终止、无软警告档）。记账器
 每 Run 一个（状态不跨 Run），串行步循环与并行段路径共用同一记账口。
+
+双 nudge 通道叠加（K12 P2④ 明示，治理面消费方需知）：loop_nudge（本模块 K1 两段式）
+与 stuck nudge（K12 观测态）**同边界可叠加注入**——同一注入面（rc.context_blocks 追加、
+agent_attested、tier=3 易变尾、tokens=0），信息不同源（签名连续重复 vs 无实质进展/单步
+超时）且注入零成本，故同一 Run 内两类引导块可并存于组装面，不互斥不合并。
 """
 
 from __future__ import annotations

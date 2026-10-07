@@ -257,7 +257,10 @@ class Capability(_WithdrawMixin, Base, PkMixin):
     """
 
     __tablename__ = "capabilities"
-    tenant_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False, index=True)
+    # tenant_id 不设单列索引（DDL §ONT-2 只有组合 ix_capabilities_tenant_iri 且前缀即
+    # tenant_id；index=True 会令 create_all 产出迁移没有的 ix_capabilities_tenant_id——
+    # 两路建库 schema 分叉，ontology_element_versions 同款纪律）
+    tenant_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
     ontology_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("ontologies.id"), nullable=False)
     version_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("ontology_versions.id"), nullable=False)
     iri: Mapped[str] = mapped_column(String(256), nullable=False)
@@ -300,7 +303,9 @@ class CapabilityRun(Base, PkMixin):
     """
 
     __tablename__ = "capability_runs"
-    tenant_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False, index=True)
+    # tenant_id 不设单列索引（DDL §ONT-2 组合 ix_capability_runs_lookup 前缀即 tenant_id，
+    # 部分索引 ix_capability_runs_open 亦含 tenant_id 列；理由同 capabilities.tenant_id）
+    tenant_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
     capability_iri: Mapped[str] = mapped_column(String(256), nullable=False)
     capability_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("capabilities.id", ondelete="SET NULL"))
     action_iri: Mapped[str | None] = mapped_column(String(256))

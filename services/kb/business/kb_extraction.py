@@ -39,8 +39,10 @@
   count}）随抽取完成落账事务写入 Document.meta（extract_empty 信号同落点先例）。
 
 提示词治理（standards/01 §5.1 / 18 篇 §1）：抽取模板为版本化资产，正文落
-business/prompts/ 包（active=extract_v3，K24 §30 编号制硬幻觉门禁：目录编号制+序号回包+解析侧
-序号→IRI 映射；v2=证据逐字引语版，留注册表可回退），运行期经
+business/prompts/ 包（active=extract_v4，v4=v3 编号目录制硬幻觉门禁（K24 §30：目录编号制+序号
+回包+解析侧序号→IRI 映射）+ 用户提示词标题栏结构化线索区（09 篇分期表 v2 承接项，extract_lab
+真机实测乱序图纸文本字段命中 0→3；系统提示词/schema 与 v3 同口径；线索区仅图纸文档注入，
+非图纸文档零行为变化）），运行期经
 business/prompts 注册表按 template_ref 取用（version pin：同一 job 全程同版本，未知 ref 明确
 抛错），ref 随 kb_facts.meta 与审核信封落库可追溯；种子本体 = services/seeds/power_seed.ttl（电力停电
 wedge，M2 出口条件）。评审票据写入经 CandidateReviewPort（review.data 模块私有，见端口 docstring）。
@@ -69,7 +71,7 @@ from sqlalchemy import false, select, update
 
 from services.kb.business.conflict_triage import triage_conflicts
 from services.kb.business.pipeline_base import PipelineError, StepContext
-from services.kb.business.prompts import extract_v2, extract_v3, get_prompt, get_system_prompt
+from services.kb.business.prompts import extract_v2, extract_v3, extract_v4, get_prompt, get_system_prompt
 from services.kb.data.orm import Document, DocumentChunk, KbFact
 from services.kb.retrieval.embed import EmbeddingUnavailableError
 from services.ontology.core import shacl as ontology_shacl
@@ -361,8 +363,11 @@ def _pruning_violation(cand: dict[str, Any], reason: PruningReason) -> dict[str,
 
 # ---------------------------------------------------------------- extract（§2.3 批量抽取）
 
-_EXTRACT_TEMPLATE_REF = extract_v3.TEMPLATE_REF  # "kb_extract@v3"：K24 §30 切换行——回退 v2=仅改此行，
-# 配套 schema/目录渲染/序号映射开关按 ref 同步选取（下方三表）；v2 留注册表可回退。
+_EXTRACT_TEMPLATE_REF = extract_v4.TEMPLATE_REF  # "kb_extract@v4"：K24 §30 切换行升级——v4 = v3 编号目录制
+# （硬幻觉门禁原样生效）+ 标题栏结构化线索区（09 篇分期表 v2 承接项，2026-10-07 extract_lab 真机
+# 三轮实测：乱序图纸文本 golden 字段命中 0→3（图号/材料/表面处理），系统提示词/schema 与 v3
+# 逐字节同口径；对照实验数据见 extract_v4 模块头）。回退 v3/v2=仅改此行，配套 schema/目录渲染/
+# 序号映射/线索区开关按 ref 同步选取（下方各表）；v3/v2 留注册表可回退。
 # 抽取输出 JSON Schema（端口实现负责校验，宪法第 2 条；兼容 FakeModelPort 确定性输出）。
 # evidence 为可选字段：旧模型/确定性桩不产出时仅逐字门禁空转（无引语无可证伪），不判违例。
 _EXTRACT_SCHEMA_V2: dict[str, Any] = {
@@ -431,16 +436,23 @@ _EXTRACT_SCHEMA_V3: dict[str, Any] = {
     },
 }
 
-# 模板配套资产按 ref 选取（K24 §30：回退=仅改 _EXTRACT_TEMPLATE_REF 一行，三表随 ref 同步切换）。
+# 模板配套资产按 ref 选取（K24 §30：回退=仅改 _EXTRACT_TEMPLATE_REF 一行，各表随 ref 同步切换）。
 _EXTRACT_SCHEMAS: dict[str, dict[str, Any]] = {
     extract_v2.TEMPLATE_REF: _EXTRACT_SCHEMA_V2,
     extract_v3.TEMPLATE_REF: _EXTRACT_SCHEMA_V3,
+    extract_v4.TEMPLATE_REF: _EXTRACT_SCHEMA_V3,  # v4 沿用 K24 v3 integer 序号 schema（线索区不触 schema 面）
 }
 _EXTRACT_CATALOG_RENDERERS: dict[str, Any] = {
     extract_v2.TEMPLATE_REF: extract_v2.render_catalog,
     extract_v3.TEMPLATE_REF: extract_v3.render_catalog,
+    extract_v4.TEMPLATE_REF: extract_v3.render_catalog,  # v4 目录沿用 v3 编号制渲染（声明序 idx 从 1 起）
 }
-_NUMBERED_CATALOG_REFS = frozenset({extract_v3.TEMPLATE_REF})  # 编号目录制模板集合（序号→IRI 映射门禁启用面）
+_NUMBERED_CATALOG_REFS = frozenset(
+    {extract_v3.TEMPLATE_REF, extract_v4.TEMPLATE_REF}
+)  # 编号目录制模板集合（序号→IRI 映射门禁启用面）
+_HINT_TITLEBLOCK_REFS = frozenset(
+    {extract_v4.TEMPLATE_REF}
+)  # 标题栏线索区启用面（v4 三参形态；v3/v2 双参不传零行为变化）
 
 
 def _map_class_indices(candidates: list[Any], class_index: dict[int, str]) -> list[Any]:
@@ -634,16 +646,31 @@ async def run_extract(ctx: StepContext) -> None:
             existing[key] = row.id
 
     catalog_text = _EXTRACT_CATALOG_RENDERERS[_EXTRACT_TEMPLATE_REF](catalog)
-    # K24-c：目录序号→种子类 IRI 映射表（SeedCatalog.classes 声明序 enumerate，与 v3 渲染同序同
+    # K24-c：目录序号→种子类 IRI 映射表（SeedCatalog.classes 声明序 enumerate，与 v3/v4 渲染同序同
     # 起点——声明序=渲染序=映射序不变式）；仅编号目录制模板消费，v2 直出 IRI 时空转。
     class_index = {idx: iri for idx, (iri, _, _) in enumerate(catalog.classes, start=1)}
+    # 标题栏结构化线索（v4 用户提示词区，09 篇分期表 v2 承接项）：文档级投影产物（preprocess 落
+    # meta.titleblock）逐 chunk 复用。非图纸文档（meta 无 titleblock）传 None = 提示词与 v3 逐字节
+    # 一致（零行为变化）；空 dict 也注入（线索区带「投影零命中需按标签语义配对」指引——确定性
+    # 投影零命中的乱序图纸恰为 extract_lab 实测空候选根因场景）。仅线索区启用面模板消费
+    # （_HINT_TITLEBLOCK_REFS），v3/v2 回退路径双参调用零行为变化。
+    titleblock_meta = doc_meta.get("titleblock")
+    titleblock_fields = (
+        {str(k): str(v) for k, v in titleblock_meta.items()}
+        if isinstance(titleblock_meta, dict) and titleblock_meta
+        else None
+    )
     template_ref = _EXTRACT_TEMPLATE_REF  # version pin（18 篇 §1.1）：同一 job 全程同版本
     pruning_stats: dict[str, int] = {}  # K21：各原因码计数跨 chunk 累积，随抽取完成落账
     for chunk in chunks:  # 单 chunk 失败即抛 → 步级重试 ≤3；已落候选按 fact_key 去重续跑
         trace_id = f"kb-extract:{ctx.document_id}:{chunk.seq}"
         data = await ctx.model.complete_structured(
             system=get_system_prompt(_EXTRACT_TEMPLATE_REF),
-            user=get_prompt(_EXTRACT_TEMPLATE_REF)(catalog_text, chunk.content),
+            user=(
+                get_prompt(_EXTRACT_TEMPLATE_REF)(catalog_text, chunk.content, titleblock_fields=titleblock_fields)
+                if _EXTRACT_TEMPLATE_REF in _HINT_TITLEBLOCK_REFS  # v4 三参形态（线索区按 meta 注入）
+                else get_prompt(_EXTRACT_TEMPLATE_REF)(catalog_text, chunk.content)  # v3/v2 双参形态（回退零行为变化）
+            ),
             json_schema=_EXTRACT_SCHEMAS[_EXTRACT_TEMPLATE_REF],
             trace_id=trace_id,
         )

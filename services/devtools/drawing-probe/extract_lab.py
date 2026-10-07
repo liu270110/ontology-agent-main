@@ -134,7 +134,11 @@ def _hint_section(vocab: tuple[str, ...], fields: dict[str, str], *, discipline:
     vocab_lines = "\n".join(f"- {name}" for name in vocab)
     parts = [
         "## 标题栏结构化线索（确定性投影产物，可能含错配——仅作位置线索，取值须以「抽取文本」原文为准）\n"
-        + (serialize_fields(fields) if fields else "（投影零命中：标题栏字段未配对，需你从乱序文本中按标签语义配对）")
+        + (
+            serialize_fields(fields)
+            if fields
+            else "（投影零命中：标题栏字段未配对，需你从乱序文本中按标签语义配对）"
+        )
     ]
     if discipline:
         parts.append(
@@ -147,8 +151,8 @@ def _hint_section(vocab: tuple[str, ...], fields: dict[str, str], *, discipline:
         )
     parts.append(
         "## 候选字段清单（标题栏字段；输出 attribute 候选时 predicate 取清单中的**字段中文名**（括号外部分），"
-        '每个可配对字段一条：{"kind": "attribute", "name": "<字段值所属实体>", '
-        '"predicate": "<字段名>", "object": "<字段值>"}）\n' + vocab_lines
+        "每个可配对字段一条：{\"kind\": \"attribute\", \"name\": \"<字段值所属实体>\", "
+        "\"predicate\": \"<字段名>\", \"object\": \"<字段值>\"}）\n" + vocab_lines
     )
     parts.append("## 输出 JSON schema（强约束，违反即无效）\n" + json.dumps(_EXTRACT_SCHEMA_V2, ensure_ascii=False))
     return "\n\n".join(parts) + "\n"
@@ -308,7 +312,9 @@ def call_llm(
     return record
 
 
-def evaluate_group(eval_mod: Any, expected: dict[str, str], records: list[dict[str, Any]]) -> dict[str, Any]:
+def evaluate_group(
+    eval_mod: Any, expected: dict[str, str], records: list[dict[str, Any]]
+) -> dict[str, Any]:
     """组级汇总：候选总数（跨 chunk）+ golden 字段级命中（name→subject 映射后走 doc_metrics 口径）。"""
     candidates: list[dict[str, Any]] = []
     for record in records:

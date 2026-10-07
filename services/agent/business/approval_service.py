@@ -374,7 +374,9 @@ class RunApprovalService:
           consequence/target_class/draft_shacl 留空待终审结构化（人本草案无 LLM 生成环节，
           不伪造草案；违例面以 approval_reflux_unstructured 标记携带，只标记不裁决）；
         - 宪法第 3 条：risk_flag 恒 True（库级 CHECK 双保险）；status=candidate——回流≠生效；
-        - rule_key=sha256('approval|hint|task_id') 截断 32：同工单同提示幂等（uk 落库级强制）；
+        - rule_key=sha256('approval|hint|task_id|run_id') 截断 32（K23 P2①，K19 P2① 收口：
+          run_id 并入哈希源）——同 run 同工单同提示幂等（uk 落库级强制）；跨 run 同 hint
+          不再撞 uk（修复同工单第二个 run 携相同 hint 回流即 500 的缺陷面）；
         - 评审单双写形态对齐 rule_extraction.persist_rule_candidates 信封（candidate_type=
           rule_draft + risk_flag=true 随单透出；payload 溯源=rule_hint/approval_ticket_id/
           decided_by）；端口自持事务，未装配/失败降级留痕不反噬裁决（02 §3 ⑥）。
@@ -384,7 +386,7 @@ class RunApprovalService:
             document_id=None,  # K19-c：审批回流无文档出处（占位锚语义失真，立项裁决放宽 nullable）
             chunk_id=None,
             rule_id=f"approval-{run_id}",  # 人读坐标：审批回流无模板序号，以 run 定位
-            rule_key=hashlib.sha256(f"approval|{rule_hint}|{task_id}".encode()).hexdigest()[:32],
+            rule_key=hashlib.sha256(f"approval|{rule_hint}|{task_id}|{run_id}".encode()).hexdigest()[:32],
             kind="precondition",  # 策略修正≈放行前置条件的修订建议；结构化细分交终审（kind 枚举内最贴切值）
             trigger=rule_hint,  # 审批人提示原文即触发条件描述
             consequence="",  # 待终审结构化（不伪造草案）

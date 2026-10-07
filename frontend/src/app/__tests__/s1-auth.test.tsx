@@ -26,7 +26,9 @@ describe('S1 登录与基座', () => {
   it('① admin 登录成功 → 进入 AppShell（工作台）', async () => {
     render(<App />)
     await fillLogin('admin@example.com', 'password123')
-    expect(await screen.findByRole('heading', { name: /，刘以在$/ })).toBeInTheDocument()
+    // findBy 默认 1s 在满载并发池下不够（App 懒加载 chunk+登录 query+AppShell 三级挂载链），
+    // 三域以上组合必超时——显式 10s（台账 P-013，与懒加载竞态既有结论同族）
+    expect(await screen.findByRole('heading', { name: /，刘以在$/ }, { timeout: 10_000 })).toBeInTheDocument()
     expect(screen.getByRole('navigation', { name: '主导航' })).toBeInTheDocument()
     // claims 权威：roles 来自 JWT（admin@example.com → ['admin']），localStorage 持久化
     expect(useAuthStore.getState().user?.roles).toEqual(['admin'])

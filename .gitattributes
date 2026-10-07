@@ -1,0 +1,6 @@
+# 行尾纪律（2026-10-07 批次A，docs/ops/04 双平台安装器/CLI 壳）：
+# bash 系脚本必须 LF（CRLF 会令 bash 报 ": command not found"）；Windows 系用 CRLF
+bin/oadm text eol=lf
+install.sh text eol=lf
+bin/oadm.cmd text eol=crlf
+install.ps1 text eol=crlf

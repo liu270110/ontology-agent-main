@@ -1,11 +1,16 @@
-"""X16 工作流运行路由（api/01 §5.11 预登记 runs 族六端点；scope=workflow:run/read）。
+"""X16 工作流运行路由（api/01 §5.11 预登记 runs 族六端点 + promote 提升端点；scope=workflow:run/read/edit）。
 
-    POST /workflows/{id}/test                试运行（dry-run→task type=workflow_test）workflow:run  202 / 409*、4102
+    POST /workflows/runs/{run_id}/promote    存为工作流草稿（40 篇 §6 提升）  workflow:edit 201/200 / 404*、409*
+    POST /workflows/{id}/test                试运行（dry-run→task type=workflow_test） workflow:run  202 / 409*、4102
     POST /workflows/{id}/runs                正式运行（→task type=workflow_run）       workflow:run  202 / 409*、4102
     GET  /workflows/{id}/runs                  运行历史（对齐任务中心过滤）              workflow:read 200 / 404*
     GET  /workflows/{id}/runs/{run_id}         运行详情（节点状态聚合视图）              workflow:read 200 / 404*
     POST /workflows/{id}/runs/{run_id}/resume  断点恢复（审批通过/修参续跑）             workflow:run  202 / 404*、409*
     POST /workflows/{id}/runs/{run_id}/abort   运行中止（对齐 tasks/cancel 语义）        workflow:run  202 / 404*、409*
+
+路由注册序（api/01 §5.11 promote 行显式约定）：promote 挂 workflows 命名空间下 runs
+子资源（4 段路径），与 /workflows/{id} 段（≤3 段）无前缀交叠、方法面亦不冲突；本路由
+仍按契约把 promote 定义置于 runs 族**首位**（含于本 router 的注册序即文档化约定）。
 
 执行挂接：task+run 行入队后由 TaskRunWorker 认领（orchestrator_provider 同款 provider
 注入工作流执行器形态——04 §3 管道零新通道；事件经 task_events 回放根 + hub 双通道）。
@@ -18,13 +23,15 @@ from __future__ import annotations
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Query, Request
+from fastapi import APIRouter, Depends, Query, Request, Response
 
 from services.agent.domain.model.task import TaskError
 from services.platform.deps import Principal, UowDep, domain_error, require_scope
 from services.platform.schemas import PageMeta
 from services.workflows.api.schemas.runs import (
     WorkflowAbortIn,
+    WorkflowPromoteIn,
+    WorkflowPromoteOut,
     WorkflowResumeIn,
     WorkflowRunAcceptedOut,
     WorkflowRunControlOut,
@@ -34,7 +41,7 @@ from services.workflows.api.schemas.runs import (
     WorkflowRunSummaryOut,
     WorkflowTestIn,
 )
-from services.workflows.business.runs import RunControlOutcome, SubmitOutcome, WorkflowRunControl
+from services.workflows.business.runs import PromoteOutcome, RunControlOutcome, SubmitOutcome, WorkflowRunControl
 
 router = APIRouter(tags=["workflows"])
 
@@ -55,6 +62,45 @@ def _origin_trace(request: Request | None) -> str:
     """C4 trace 贯通（sessions._origin_trace 同款）：受理面记录网关原始 trace 供 worker 回溯。"""
     state = getattr(request, "state", None)
     return str(getattr(state, "trace_id", "") or "").strip()
+
+
+# ---------------------------------------------------------------- 提升（40 篇 §6 run→template）
+
+
+@router.post(
+    "/workflows/runs/{run_id}/promote",
+    summary="存为工作流草稿（40 篇 §6：端点新建草稿并带 source_run_id 血统；幂等键=run_id）",
+)
+async def promote_workflow_run(
+    run_id: uuid.UUID,
+    body: WorkflowPromoteIn,
+    principal: Annotated[Principal, Depends(require_scope("workflow:edit"))],
+    uow: UowDep,
+    request: Request,
+    response: Response,
+) -> WorkflowPromoteOut:
+    """执行成果提升为工作流草稿（api/01 §5.11 ★ 行）：图=本次 run 实际执行图（工作流族）
+    或计划投影（chat 族 PLAN_UPDATED 回扫，origin=llm_candidate——发布必过审批，宪法 3）；
+    幂等键=run_id，重复调用返回既有草稿 id（201 新建 / 200 幂等命中）；提升前 Kahn 环
+    检测 + 孤儿节点剔除（4801→409）。"""
+    control = _control(request, principal, uow)
+    outcome: PromoteOutcome = await control.promote(
+        run_id=run_id,
+        tenant_id=principal.tenant_id,
+        actor_id=principal.user_id,
+        title=body.title,
+        variable_hints=body.variable_hints,
+        trace_id=_origin_trace(request),
+    )
+    if not outcome.created:  # 幂等命中 → 200（新建 201 由路由默认状态码承载）
+        response.status_code = 200
+    return WorkflowPromoteOut(
+        workflow_id=outcome.workflow_id,
+        status="draft_created" if outcome.created else "exists",
+        draft_version=outcome.draft_version,
+        source_run_id=outcome.source_run_id,
+        origin=outcome.origin,  # type: ignore[arg-type]  # 字面量面=WorkflowOrigin 词汇（用例枚举收敛）
+    )
 
 
 # ---------------------------------------------------------------- 受理（test / runs）

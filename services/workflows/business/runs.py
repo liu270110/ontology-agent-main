@@ -13,6 +13,12 @@
 - :meth:`abort` —— 运行中止（POST /workflows/{id}/runs/{rid}/abort，202 对齐 tasks/cancel
   语义）：聚合 task.cancel() + 开放节点 FINISHED(cancelled) 标注 + run.cancelled 审计行；
   在途执行器波间检查 run 行静默收敛（executor._run_alive）；
+- :meth:`promote` —— 存为工作流草稿（POST /workflows/runs/{run_id}/promote，40 篇 §6
+  run→template N3 定稿；201 新建 / 200 幂等命中）：图=本次 run 实际执行图
+  （task.payload.workflow_graph 固化面）或计划投影（task_events PLAN_UPDATED 回扫，
+  入口②计划卡）；幂等键=run_id（find_by_source_run 查重 + ux 部分唯一索引兜底）；
+  Kahn 环检测 + 孤儿节点剔除后落草稿，source_run_id 血统 + origin 落列
+  （llm_candidate=计划推导 LLM 候选，发布必过审批——宪法 3）；
 - :meth:`list_runs` / :meth:`run_detail` —— 读面（GET /workflows/{id}/runs[/ {rid}]）；
   节点状态聚合视图投影自 payload.workflow_state（执行器落账）。
 
@@ -29,6 +35,9 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
+from sqlalchemy.exc import IntegrityError
+
+from services.agent.business.chat_events import ChatEventName
 from services.agent.domain.model.task import Task, TaskEvent
 from services.platform.errors import GatewayError
 from services.platform.ports.review_port import CandidateReviewPort
@@ -40,8 +49,16 @@ from services.workflows.business.executor import (
     TICKETS_KEY,
     WORKFLOW_TASK_TYPES,
 )
-from services.workflows.domain.model.graph import WorkflowGraph, validate_dag, validate_nodes, validate_structure
-from services.workflows.domain.model.workflow import WorkflowStatus
+from services.workflows.domain.model.graph import (
+    WfNodeKind,
+    WorkflowEdge,
+    WorkflowGraph,
+    WorkflowNode,
+    validate_dag,
+    validate_nodes,
+    validate_structure,
+)
+from services.workflows.domain.model.workflow import Workflow, WorkflowOrigin, WorkflowStatus
 
 logger = logging.getLogger(__name__)
 
@@ -49,6 +66,18 @@ _TICKET_TTL_S = 3600.0  # 审批票时效（approval_service 同款 1h 口径）
 _DECISION_EVENT = "run.approval_decision"  # 审计行（H-0b 同名事件，workflow 语境）
 _RESUME_PROJECTION = "run.resume_requested"  # outbox：resume 触发（与 H-0b 同名同消费面）
 _REVIEW_TARGET_TYPE = "workflow_approval"  # 审批中心联动 target_type（工作流审批决议标注）
+_PLAN_EVENT_LIMIT = 500  # promote 计划投影回扫窗口（task_events 按 seq 升序取尾）
+
+
+@dataclass(frozen=True, slots=True)
+class PromoteOutcome:
+    """提升结果（api 层映射：created→201 / 幂等命中→200；前端跳转 /workflows/{id}）。"""
+
+    workflow_id: uuid.UUID
+    created: bool  # True=新建草稿（201）；False=幂等命中既有草稿（200）
+    draft_version: str
+    source_run_id: uuid.UUID
+    origin: str  # user | llm_candidate（llm_candidate 发布必过审批——宪法 3）
 
 
 @dataclass(frozen=True, slots=True)
@@ -69,6 +98,75 @@ class RunControlOutcome:
     decision: str  # approve | reject | abort
     run_status: str
     resumed_node: str | None = None
+
+
+# ── promote 图投影纯函数（40 篇 §6.2；同输入同输出，负向测试锚点）─────────────────
+
+
+def _prune_orphans(graph: WorkflowGraph) -> WorkflowGraph:
+    """孤儿节点剔除（40 篇 §6.2「提升前…孤儿节点剔除」，Hermes _validate_children_graph
+    模式）：零关联度节点（无入边亦无出边）不进提升稿；边不引用孤儿（定义使然），零删除面。"""
+    linked: set[str] = set()
+    for edge in graph.edges:
+        linked.add(edge.source)
+        linked.add(edge.target)
+    kept = [n for n in graph.nodes if n.id in linked]
+    return WorkflowGraph(nodes=kept, edges=list(graph.edges))
+
+
+def _mark_breakpoint_hits(graph: WorkflowGraph, state: Any) -> WorkflowGraph:
+    """试运行断点回写：workflow_state.breakpoint_hit 命中节点在提升稿上置 breakpoint=True
+    （重放保留人工关卡——27 篇 §3 断点语义随血统延续）；非工作流族 state 缺省零命中。"""
+    rows = state.get("breakpoint_hit") if isinstance(state, dict) else None
+    hits = {str(x) for x in rows or [] if isinstance(x, str)}
+    if not hits:
+        return graph
+    nodes = [n.model_copy(update={"breakpoint": True}) if n.id in hits else n for n in graph.nodes]
+    return WorkflowGraph(nodes=nodes, edges=list(graph.edges))
+
+
+def _with_template_variables(graph: WorkflowGraph, names: list[str]) -> WorkflowGraph:
+    """变量清单落位（40 篇 §6.2 参数抽取 v1=交互确认清单口径）：去重序保留，记入 start
+    节点 params.template_variables（画布 Inspector 确认面——不追求全自动，不重写节点参数）。"""
+    if not graph.nodes:
+        return graph
+    deduped = list(dict.fromkeys(n.strip() for n in names if isinstance(n, str) and n.strip()))
+    if not deduped:
+        return graph
+    targets = {e.target for e in graph.edges}
+    head = next((n for n in graph.nodes if n.id not in targets), graph.nodes[0])  # 结构 start（入度 0）
+    params = dict(head.params)
+    prior = params.get("template_variables")
+    merged = list(dict.fromkeys([*(prior if isinstance(prior, list) else []), *deduped]))
+    params["template_variables"] = merged
+    start = head.model_copy(update={"params": params})
+    return WorkflowGraph(nodes=[start, *[n for n in graph.nodes if n.id != head.id]], edges=list(graph.edges))
+
+
+def _plan_projection(items: list[str], hints: list[str]) -> WorkflowGraph:
+    """计划投影（40 篇 §6.1 入口②）：步骤→agent 节点（label=params.prompt=条目内容，
+    slot_id 待画布绑定——LLM 候选必缺必填，发布面被宪法 3 拦截至人工终审）；顺序→顺序边；
+    start/end 补结构两端（validate_structure 口径：入度 0 唯一起点 + 可达汇点）。"""
+    nodes: list[WorkflowNode] = [WorkflowNode(id="start", kind=WfNodeKind.START_END, label="开始")]
+    edges: list[WorkflowEdge] = []
+    previous = "start"
+    for i, content in enumerate(items, 1):
+        nid = f"step-{i}"
+        nodes.append(
+            WorkflowNode(
+                id=nid,
+                kind=WfNodeKind.AGENT,
+                label=content[:128],  # WorkflowNode.label 上限（剩余内容保 params.prompt 全量）
+                x=260,
+                y=(i - 1) * 120,
+                params={"prompt": content},
+            )
+        )
+        edges.append(WorkflowEdge(source=previous, target=nid))
+        previous = nid
+    nodes.append(WorkflowNode(id="end", kind=WfNodeKind.START_END, label="结束", x=260, y=len(items) * 120))
+    edges.append(WorkflowEdge(source=previous, target="end"))
+    return _with_template_variables(WorkflowGraph(nodes=nodes, edges=edges), hints)
 
 
 class WorkflowRunControl:
@@ -163,6 +261,146 @@ class WorkflowRunControl:
                 ),
             )
         return SubmitOutcome(task_id=task.id, run_id=task.runs[-1].id, kind=kind, version=version)
+
+    # ── 存为工作流草稿（POST /workflows/runs/{run_id}/promote，40 篇 §6）──
+
+    async def promote(
+        self,
+        *,
+        run_id: uuid.UUID,
+        tenant_id: uuid.UUID,
+        actor_id: uuid.UUID | None = None,
+        title: str | None = None,
+        variable_hints: list[str] | None = None,
+        trace_id: str = "",
+    ) -> PromoteOutcome:
+        """run → template 提升（40 篇 §6.2 定稿；api/01 §5.11 201/200）。
+
+        - 图源两分支：工作流族 run 取 payload.workflow_graph 固化执行图（入口①「存为
+          工作流」，本图受理时已过校验三件）；其余（chat 任务）回扫 task_events 取
+          PLAN_UPDATED（plan_id=run_id）最高 revision 整表投影：步骤→agent 节点
+          （params.prompt=条目内容，slot 待画布绑定）+ 顺序边 + start/end（入口②
+          「转为工作流草稿」）；
+        - 幂等键=run_id：find_by_source_run 查重命中即返既有草稿（200）；ux 部分唯一
+          索引兜底并发双草稿（撞索引→复查返既有，单草稿不变量库侧收口）；
+        - 校验=Kahn 环检测 + 孤儿剔除（40 篇 §6.2 提升面显式两件；孤儿=零关联度节点，
+          剔除后重过结构/无环，违规 4801→409）。节点级必填不在提升面：user 图受理时
+          已过三件；llm_candidate 图必缺 slot_id——候选待画布补全+审批终审（宪法 3）；
+        - 血统与来源：source_run_id 落列（画布 Inspector 只读展示）；origin=user/
+          llm_candidate 落列（后者发布侧任何档位强制审批）；试运行断点命中节点回写
+          breakpoint=True（提升稿重放保留人工关卡）；起点变量抽取 v1=payload.variables
+          顶层字符串字段名（+body.variable_hints）记入 start 节点 params.template_variables
+          （交互确认清单口径，40 篇 §6.2「不追求全自动」）。
+        """
+        hints = [h.strip() for h in (variable_hints or []) if isinstance(h, str) and h.strip()]
+        try:
+            async with self._uow.for_tenant(tenant_id) as tx:
+                existing = await tx.workflows.find_by_source_run(run_id)
+                if existing is not None:  # 幂等命中（重复调用返回既有草稿 id——40 篇 §6.2）
+                    return PromoteOutcome(
+                        workflow_id=existing.id,
+                        created=False,
+                        draft_version=existing.draft_version_label,
+                        source_run_id=run_id,
+                        origin=existing.origin.value,
+                    )
+                task = await tx.tasks.find_by_run(run_id)
+                if task is None:
+                    raise GatewayError(404, "运行不存在", status_code=404)
+                graph, origin, default_title = await self._promote_source(tx, task, run_id, hints)
+                workflow = Workflow(
+                    tenant_id=tenant_id,
+                    name=(title or "").strip() or default_title,
+                    description=f"提升自 run {run_id}"
+                    + ("（LLM 候选：发布需人工审批）" if origin is WorkflowOrigin.LLM_CANDIDATE else ""),
+                    template="blank",
+                    origin=origin,
+                    draft=graph,
+                    source_run_id=run_id,
+                    created_by=actor_id,
+                )
+                await tx.workflows.add(workflow)
+                await tx.workflows.record_audit(
+                    actor_id=actor_id,
+                    action="workflows.promote",
+                    resource_id=str(workflow.id),
+                    digest={
+                        "source_run_id": str(run_id),
+                        "origin": origin.value,
+                        "nodes": len(graph.nodes),
+                        "edges": len(graph.edges),
+                    },
+                    trace_id=trace_id,
+                )
+        except IntegrityError:  # 并发提升撞 ux_workflows_source_run_id：回滚后复查返既有（幂等收敛）
+            async with self._uow.for_tenant(tenant_id) as tx:
+                raced = await tx.workflows.find_by_source_run(run_id)
+            if raced is not None:
+                return PromoteOutcome(
+                    workflow_id=raced.id,
+                    created=False,
+                    draft_version=raced.draft_version_label,
+                    source_run_id=run_id,
+                    origin=raced.origin.value,
+                )
+            raise GatewayError(
+                4801, "4801 WORKFLOW_GRAPH_INVALID: 同 run 并发提升冲突（幂等唯一索引兜底）", status_code=409
+            ) from None
+        return PromoteOutcome(
+            workflow_id=workflow.id,
+            created=True,
+            draft_version=workflow.draft_version_label,
+            source_run_id=run_id,
+            origin=origin.value,
+        )
+
+    async def _promote_source(
+        self, tx: Any, task: Task, run_id: uuid.UUID, hints: list[str]
+    ) -> tuple[WorkflowGraph, WorkflowOrigin, str]:
+        """提升图源解析：工作流族=固化执行图（孤儿剔除+断点回写+变量抽取）；其余=计划投影。"""
+        payload = task.payload or {}
+        if task.type in WORKFLOW_TASK_TYPES:
+            graph = WorkflowGraph.from_storage(payload.get("workflow_graph"))
+            if not graph.nodes:
+                raise GatewayError(404, "运行无可提升内容（执行图缺失）", status_code=404)
+            graph = _prune_orphans(graph)
+            self._require_promotable(graph)  # Kahn+结构（4801→409）；节点必填不在提升面
+            graph = _mark_breakpoint_hits(graph, payload.get(STATE_KEY))
+            variables = payload.get("variables") or {}
+            extracted = sorted(k for k, v in variables.items() if isinstance(k, str) and isinstance(v, str))
+            graph = _with_template_variables(graph, [*hints, *extracted])
+            return graph, WorkflowOrigin.USER, f"来自运行 {str(run_id)[:8]}"
+        # 非工作流族（chat 任务）：PLAN_UPDATED 计划投影（40 篇 §6 入口②；plan_id=run_id）
+        events = await tx.tasks.list_events(task.id, limit=_PLAN_EVENT_LIMIT)
+        plan_rows = [
+            e
+            for e in events
+            if e.event_type == ChatEventName.PLAN_UPDATED.value
+            and str((e.data or {}).get("plan_id") or "") == str(run_id)
+        ]
+        if not plan_rows:
+            raise GatewayError(404, "运行无可提升内容（无执行图亦无计划投影）", status_code=404)
+        best = max(plan_rows, key=lambda e: int((e.data or {}).get("revision") or 0))
+        items = [
+            str(i.get("content")).strip()
+            for i in (best.data or {}).get("items") or []
+            if isinstance(i, dict) and str(i.get("content") or "").strip()
+        ]
+        if not items:
+            raise GatewayError(404, "计划投影无有效条目，不可提升", status_code=404)
+        graph = _plan_projection(items, hints)
+        self._require_promotable(graph)
+        return graph, WorkflowOrigin.LLM_CANDIDATE, items[0][:96]
+
+    @staticmethod
+    def _require_promotable(graph: WorkflowGraph) -> None:
+        """提升校验（40 篇 §6.2 两件）：Kahn 无环 + 结构（start 唯一/end 可达/边端点存在）。
+        违规 4801→409（与受理面同码同语义）；节点级必填不在提升面（promote 用例 docstring）。"""
+        violations = [*validate_structure(graph), *validate_dag(graph)]
+        if violations:
+            raise GatewayError(
+                4801, f"4801 WORKFLOW_GRAPH_INVALID: {'; '.join(violations)}", status_code=409
+            )
 
     # ── 断点恢复（POST /workflows/{id}/runs/{run_id}/resume）───────────────
 

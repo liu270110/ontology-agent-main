@@ -124,3 +124,24 @@ class WorkflowRunControlOut(BaseModel):
     decision: str  # approve | reject | abort
     run_status: str
     resumed_node: str | None = None
+
+
+class WorkflowPromoteIn(BaseModel):
+    """提升入参（POST /workflows/runs/{run_id}/promote；40 篇 §6.2 body 仅可选两字段）。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    title: str | None = Field(default=None, min_length=1, max_length=128)  # 草稿名（缺省运行/计划派生）
+    variable_hints: list[str] = Field(default_factory=list)  # 模板变量确认清单（start 节点 params 落位）
+
+
+class WorkflowPromoteOut(BaseModel):
+    """提升响应（201 新建 / 200 幂等命中——重复调用返回既有草稿 id，40 篇 §6.2）。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    workflow_id: UUID
+    status: Literal["draft_created", "exists"]
+    draft_version: str  # 草稿标签（v<head+1>，promote 恒草稿态）
+    source_run_id: UUID  # 血统（画布 Inspector 只读展示「来源于某 run」）
+    origin: Literal["user", "llm_candidate"]  # llm_candidate 发布必过审批（宪法 3）

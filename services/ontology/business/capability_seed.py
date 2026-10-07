@@ -519,6 +519,12 @@ async def seed_capabilities(
     幂等四层：①本体行按 (tenant, iri_base) 判重；②版本按制品 checksum 判重（同内容不追版本）；
     ③能力行按 UNIQUE(version_id, iri) 判重；④快照按 definition_hash 判等（ONT-1 机制自带）。
     """
+    # 跨模块 FK 解析前置：ontologies.owner_business FK→users（iam）——ORM flush 的 sort_tables
+    # 需要 users 表在 Base.metadata 内。迁移子进程只加载了本模块链（无 registry 聚合），首次
+    # `alembic upgrade head` 即崩 NoReferencedTableError（全量套件实测）；函数级导入聚合注册表
+    # （幂等，已加载时零开销），同时覆盖直接调用与迁移壳两条入口。
+    from services.platform.db import registry as _orm_registry  # noqa: F401  全表聚合注册（跨模块 FK 解析）
+
     # 0) 装载自证门禁（lint + SHACL Violation 清零 + TBox/形状与常量行对账——资产损坏/漂移即拒）
     gate = cap_tbox_gate()
     gate.ensure_ok()

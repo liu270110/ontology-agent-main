@@ -19,6 +19,24 @@ def rrf_scores(channels: Mapping[str, Sequence[UUID]], k: int = 60) -> dict[UUID
     return dict(scores)
 
 
+def channel_contributions(
+    channels: Mapping[str, Sequence[UUID]], k: int = 60
+) -> dict[UUID, dict[str, float]] | None:
+    """逐通道贡献分解（D-5 可解释召回，Agent/13 §26 / K20）：贡献=1/(k+通道内名次)，与 rrf_scores
+    同源同参零新逻辑（mem0 explain 范式：分数明细随结果返回，单条 Σ贡献=fused 分）。
+
+    channels 为空 dict 时返回 None（不透出空壳）；单条记录只携带确有排名的通道键
+    （记录未被某通道召回则该通道不出现在其贡献里）。
+    """
+    if not channels:
+        return None
+    contrib: dict[UUID, dict[str, float]] = {}
+    for name, ranked in channels.items():
+        for rank, doc_id in enumerate(ranked, start=1):
+            contrib.setdefault(doc_id, {})[name] = 1.0 / (k + rank)
+    return contrib
+
+
 def rrf_merge(channels: Mapping[str, Sequence[UUID]], k: int = 60) -> list[UUID]:
     """多通道排序融合（基于 rrf_scores）；同分按首次出现序（规格 §9.4-7：通道缺失即跳过）。"""
     scores = rrf_scores(channels, k)

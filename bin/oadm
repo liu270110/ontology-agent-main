@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+# bin/oadm —— oadm CLI 启动壳（docs/ops/04 §2/§5：经 uv run 进 venv 后派发模块入口）。
+# 用法：bin/oadm <command> [options]；等价 `uv run python -m services.cli.oadm ...`。
+# 前置：仓库根已 uv sync（安装器第 3 步完成）；行尾必须 LF（.gitattributes 锁定）。
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$ROOT"
+exec uv run python -m services.cli.oadm "$@"

@@ -306,6 +306,101 @@
         "title": "AdminGroupOut",
         "type": "object"
       },
+      "AdminGroupPatchIn": {
+        "additionalProperties": false,
+        "description": "PATCH /admin/groups/{id}（部分语义：仅提供的字段更新；members 提供即该数组全量替换）。",
+        "properties": {
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "members": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "maxItems": 256,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Members"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "role_template": {
+            "anyOf": [
+              {
+                "maxLength": 32,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Role Template"
+          }
+        },
+        "title": "AdminGroupPatchIn",
+        "type": "object"
+      },
+      "AdminGroupPutIn": {
+        "additionalProperties": false,
+        "description": "PUT /admin/groups/{id}（§5.10 预登记；15 篇 §3 全量语义：四字段即组的新状态，\nmembers 数组全量替换——user_groups.members 为 ARRAY(Text) 展示位列，无成员关联表）。",
+        "properties": {
+          "description": {
+            "default": "",
+            "title": "Description",
+            "type": "string"
+          },
+          "members": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 256,
+            "title": "Members",
+            "type": "array"
+          },
+          "name": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "role_template": {
+            "default": "member",
+            "title": "Role Template",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "AdminGroupPutIn",
+        "type": "object"
+      },
       "AdminReviewDetailOut": {
         "additionalProperties": false,
         "description": "审核工单详情（api/01 §5.8 W1 实装行 GET /admin/reviews/{ticket_id}；契约源=\nfrontend/src/features/approvals/api.ts getReview → normalizeReview）。\n\n详情=列表查询面加 id 过滤 + 全量富字段：payload（review_tickets.payload JSONB 原样透传，\n含 gate_result/approvals 审批留痕）+ chain（由 payload.approvals 派生的前端\nApprovalChainStep 视图，见路由层 _chain_from_payload；终态单无 current 步）。\n前端 normalizeReview 对 title/summary/applicant 等富字段可选兜底（缺省回退\ntarget_type/target_id 等），后端不伪造、缺省不返回。",
@@ -516,6 +611,31 @@
           "created_at"
         ],
         "title": "AdminReviewOut",
+        "type": "object"
+      },
+      "AdminStatsOut": {
+        "additionalProperties": false,
+        "description": "GET /admin/stats（api/01 §5.8 契约行「平台统计」按 15 篇 §3 收敛为轻量计数：\nusers=本租户用户总数；sessions_30d/runs_30d=30 天窗口计数。）",
+        "properties": {
+          "runs_30d": {
+            "title": "Runs 30D",
+            "type": "integer"
+          },
+          "sessions_30d": {
+            "title": "Sessions 30D",
+            "type": "integer"
+          },
+          "users": {
+            "title": "Users",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "users",
+          "sessions_30d",
+          "runs_30d"
+        ],
+        "title": "AdminStatsOut",
         "type": "object"
       },
       "AdminUserDisabledOut": {
@@ -2746,6 +2866,72 @@
           "session_id"
         ],
         "title": "ConsolidateOut",
+        "type": "object"
+      },
+      "CostByModelOut": {
+        "additionalProperties": false,
+        "description": "GET /admin/costs 按 model 分组行（tokens/cost 聚合 + pct=成本占比取整条宽）。",
+        "properties": {
+          "cost": {
+            "title": "Cost",
+            "type": "number"
+          },
+          "model": {
+            "title": "Model",
+            "type": "string"
+          },
+          "pct": {
+            "title": "Pct",
+            "type": "integer"
+          },
+          "tokens": {
+            "title": "Tokens",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "model",
+          "tokens",
+          "cost",
+          "pct"
+        ],
+        "title": "CostByModelOut",
+        "type": "object"
+      },
+      "CostsOut": {
+        "additionalProperties": false,
+        "description": "GET /admin/costs（api/01 §5.8 ★ 契约行有路径无形状——形状随本批登记，15 篇 §3：\nllm_calls 30d 聚合，总量 + 按 model 分组；形状就近 ModelsTab usage 字段口径（同窗口\n30d、同源 llm_calls，展示串格式化留前端）；pct=analytics attribution pct 同构）。",
+        "properties": {
+          "by_model": {
+            "items": {
+              "$ref": "#/components/schemas/CostByModelOut"
+            },
+            "title": "By Model",
+            "type": "array"
+          },
+          "total_cost": {
+            "title": "Total Cost",
+            "type": "number"
+          },
+          "total_tokens": {
+            "title": "Total Tokens",
+            "type": "integer"
+          },
+          "window": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Window",
+            "type": "object"
+          }
+        },
+        "required": [
+          "window",
+          "total_tokens",
+          "total_cost",
+          "by_model"
+        ],
+        "title": "CostsOut",
         "type": "object"
       },
       "CreateInviteIn": {
@@ -6167,6 +6353,64 @@
           "usage_30d"
         ],
         "title": "ModelChannelOut",
+        "type": "object"
+      },
+      "ModelChannelPutIn": {
+        "additionalProperties": false,
+        "description": "PUT /admin/models/{id}（api/01 §5.8 ★ 渠道配置更新；15 篇 §3 口径=别名/优先级/预算/\n启停四字段，仅提供的字段更新，budget_daily 显式 null=清空预算（透传）；密钥类字段不\n开放改写（08 §2.0 红线，渠道密钥轮换随 L7 渠道表批次）。",
+        "properties": {
+          "budget_daily": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Budget Daily"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "priority": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Priority"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "enum": [
+                  "active",
+                  "disabled"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          }
+        },
+        "title": "ModelChannelPutIn",
         "type": "object"
       },
       "ModelTestIn": {
@@ -11274,6 +11518,443 @@
         "title": "VariableIn",
         "type": "object"
       },
+      "WfDetailOut": {
+        "additionalProperties": false,
+        "description": "详情视图（前端 WfDetail 同形；draft_diff v1 空对象、agent_slots v1 空列表）。",
+        "properties": {
+          "agent_slots": {
+            "items": {},
+            "title": "Agent Slots",
+            "type": "array"
+          },
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "draft_diff": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Draft Diff",
+            "type": "object"
+          },
+          "draft_version": {
+            "title": "Draft Version",
+            "type": "string"
+          },
+          "edges": {
+            "items": {
+              "$ref": "#/components/schemas/WfEdgeOut"
+            },
+            "title": "Edges",
+            "type": "array"
+          },
+          "head_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Head Version"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "nodes": {
+            "items": {
+              "$ref": "#/components/schemas/WfNodeOut"
+            },
+            "title": "Nodes",
+            "type": "array"
+          },
+          "runs": {
+            "default": 0,
+            "title": "Runs",
+            "type": "integer"
+          },
+          "success_rate": {
+            "default": 0,
+            "title": "Success Rate",
+            "type": "integer"
+          },
+          "template": {
+            "title": "Template",
+            "type": "string"
+          },
+          "validation": {
+            "$ref": "#/components/schemas/WorkflowValidationOut"
+          },
+          "versions": {
+            "items": {
+              "$ref": "#/components/schemas/WfVersionOut"
+            },
+            "title": "Versions",
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "description",
+          "template",
+          "draft_version",
+          "head_version",
+          "nodes",
+          "edges",
+          "versions",
+          "draft_diff",
+          "agent_slots",
+          "validation"
+        ],
+        "title": "WfDetailOut",
+        "type": "object"
+      },
+      "WfEdgeIn": {
+        "additionalProperties": false,
+        "description": "有向边入参（前端 WfEdge 同形）。",
+        "properties": {
+          "id": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Id"
+          },
+          "label": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label"
+          },
+          "source": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Source",
+            "type": "string"
+          },
+          "target": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Target",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source",
+          "target"
+        ],
+        "title": "WfEdgeIn",
+        "type": "object"
+      },
+      "WfEdgeOut": {
+        "additionalProperties": false,
+        "description": "边视图（前端 WfEdge 同形；id 后端不生成，缺省 null）。",
+        "properties": {
+          "id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Id"
+          },
+          "label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          },
+          "target": {
+            "title": "Target",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source",
+          "target"
+        ],
+        "title": "WfEdgeOut",
+        "type": "object"
+      },
+      "WfNodeIn": {
+        "additionalProperties": false,
+        "description": "画布节点入参（前端 WfNode 同形；必填语义校验在 domain 纯函数，DTO 只管形状）。",
+        "properties": {
+          "breakpoint": {
+            "default": false,
+            "title": "Breakpoint",
+            "type": "boolean"
+          },
+          "id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/WfNodeKind"
+          },
+          "label": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Label",
+            "type": "string"
+          },
+          "params": {
+            "additionalProperties": true,
+            "title": "Params",
+            "type": "object"
+          },
+          "sub": {
+            "anyOf": [
+              {
+                "maxLength": 256,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sub"
+          },
+          "x": {
+            "default": 0,
+            "title": "X",
+            "type": "number"
+          },
+          "y": {
+            "default": 0,
+            "title": "Y",
+            "type": "number"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "label"
+        ],
+        "title": "WfNodeIn",
+        "type": "object"
+      },
+      "WfNodeKind": {
+        "description": "八类节点（27 篇 §3 v1 最小够用；循环子图 v2 另议）。",
+        "enum": [
+          "start_end",
+          "agent",
+          "tool",
+          "retrieval",
+          "condition",
+          "parallel",
+          "approval",
+          "template"
+        ],
+        "title": "WfNodeKind",
+        "type": "string"
+      },
+      "WfNodeOut": {
+        "additionalProperties": false,
+        "description": "节点视图（前端 WfNode 同形）。",
+        "properties": {
+          "breakpoint": {
+            "default": false,
+            "title": "Breakpoint",
+            "type": "boolean"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/WfNodeKind"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "params": {
+            "additionalProperties": true,
+            "title": "Params",
+            "type": "object"
+          },
+          "sub": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sub"
+          },
+          "x": {
+            "title": "X",
+            "type": "number"
+          },
+          "y": {
+            "title": "Y",
+            "type": "number"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "label",
+          "x",
+          "y"
+        ],
+        "title": "WfNodeOut",
+        "type": "object"
+      },
+      "WfSummaryOut": {
+        "additionalProperties": false,
+        "description": "列表行（前端 WfSummary 11 字段逐一对齐；success_rate/acl 等 v1 空缺默认 0/edit）。",
+        "properties": {
+          "acl": {
+            "default": "edit",
+            "title": "Acl",
+            "type": "string"
+          },
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "draft_version": {
+            "title": "Draft Version",
+            "type": "string"
+          },
+          "edge_count": {
+            "title": "Edge Count",
+            "type": "integer"
+          },
+          "head_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Head Version"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "node_count": {
+            "title": "Node Count",
+            "type": "integer"
+          },
+          "runs": {
+            "default": 0,
+            "title": "Runs",
+            "type": "integer"
+          },
+          "success_rate": {
+            "default": 0,
+            "title": "Success Rate",
+            "type": "integer"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "description",
+          "draft_version",
+          "head_version",
+          "node_count",
+          "edge_count",
+          "updated_at"
+        ],
+        "title": "WfSummaryOut",
+        "type": "object"
+      },
+      "WfVersionOut": {
+        "additionalProperties": false,
+        "description": "版本视图（前端 WfVersion 同形；version=标签 vN，diff v1 恒空串）。",
+        "properties": {
+          "diff": {
+            "default": "",
+            "title": "Diff",
+            "type": "string"
+          },
+          "note": {
+            "default": "",
+            "title": "Note",
+            "type": "string"
+          },
+          "published_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Published At"
+          },
+          "status": {
+            "const": "published",
+            "default": "published",
+            "title": "Status",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "version"
+        ],
+        "title": "WfVersionOut",
+        "type": "object"
+      },
       "WindowMessage": {
         "description": "滑动窗口消息（权威日志在 PG messages，Redis 仅热缓存——database/01 §5.2）。",
         "properties": {
@@ -11345,6 +12026,336 @@
           "content"
         ],
         "title": "WindowMessageIn",
+        "type": "object"
+      },
+      "WorkflowCreateIn": {
+        "additionalProperties": false,
+        "description": "建草稿（POST /workflows；前端 createWorkflow body；未知模板 id 回落 blank）。",
+        "properties": {
+          "description": {
+            "default": "",
+            "maxLength": 512,
+            "title": "Description",
+            "type": "string"
+          },
+          "name": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "template": {
+            "default": "blank",
+            "maxLength": 64,
+            "title": "Template",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "WorkflowCreateIn",
+        "type": "object"
+      },
+      "WorkflowCreatedOut": {
+        "additionalProperties": false,
+        "description": "建草稿响应（前端 createWorkflow 同形：{id, status, draft_version}）。",
+        "properties": {
+          "draft_version": {
+            "title": "Draft Version",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "status": {
+            "const": "draft_created",
+            "default": "draft_created",
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "draft_version"
+        ],
+        "title": "WorkflowCreatedOut",
+        "type": "object"
+      },
+      "WorkflowDetailEnvelope": {
+        "additionalProperties": false,
+        "description": "详情响应（api/01 §3.1 {data, meta}；tools ToolEnvelope 先例同款）。",
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/WfDetailOut"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/EmptyMeta"
+          }
+        },
+        "required": [
+          "data"
+        ],
+        "title": "WorkflowDetailEnvelope",
+        "type": "object"
+      },
+      "WorkflowListEnvelope": {
+        "additionalProperties": false,
+        "description": "列表响应（api/01 §3.1 {data: [...], meta: PageMeta}；15 §1.3 列表行）。",
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/WfSummaryOut"
+            },
+            "title": "Data",
+            "type": "array"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/PageMeta"
+          }
+        },
+        "required": [
+          "data",
+          "meta"
+        ],
+        "title": "WorkflowListEnvelope",
+        "type": "object"
+      },
+      "WorkflowPublishIn": {
+        "additionalProperties": false,
+        "description": "提交发布（POST /workflows/{id}/versions；前端 publishWorkflow body={note}）。",
+        "properties": {
+          "note": {
+            "default": "",
+            "maxLength": 512,
+            "title": "Note",
+            "type": "string"
+          }
+        },
+        "title": "WorkflowPublishIn",
+        "type": "object"
+      },
+      "WorkflowPublishOut": {
+        "additionalProperties": false,
+        "description": "发布响应（前端 PublishResult 同形；solo 直发 200 / team·enterprise 202）。",
+        "properties": {
+          "approval_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Approval Id"
+          },
+          "governance": {
+            "title": "Governance",
+            "type": "string"
+          },
+          "next_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Version"
+          },
+          "object_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Object Type"
+          },
+          "redirect": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Redirect"
+          },
+          "status": {
+            "enum": [
+              "published",
+              "pending_approval"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "governance"
+        ],
+        "title": "WorkflowPublishOut",
+        "type": "object"
+      },
+      "WorkflowSaveIn": {
+        "additionalProperties": false,
+        "description": "草稿保存（PUT /workflows/{id}；前端 saveWorkflow body=nodes/edges，name/描述 mock 兼容可选）。",
+        "properties": {
+          "description": {
+            "anyOf": [
+              {
+                "maxLength": 512,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "edges": {
+            "items": {
+              "$ref": "#/components/schemas/WfEdgeIn"
+            },
+            "title": "Edges",
+            "type": "array"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "nodes": {
+            "items": {
+              "$ref": "#/components/schemas/WfNodeIn"
+            },
+            "title": "Nodes",
+            "type": "array"
+          }
+        },
+        "required": [
+          "nodes",
+          "edges"
+        ],
+        "title": "WorkflowSaveIn",
+        "type": "object"
+      },
+      "WorkflowSavedOut": {
+        "additionalProperties": false,
+        "description": "草稿保存响应（前端 saveWorkflow 同形：{id, draft_version, saved_at}）。",
+        "properties": {
+          "draft_version": {
+            "title": "Draft Version",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "saved_at": {
+            "format": "date-time",
+            "title": "Saved At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "draft_version",
+          "saved_at"
+        ],
+        "title": "WorkflowSavedOut",
+        "type": "object"
+      },
+      "WorkflowTemplatesOut": {
+        "additionalProperties": false,
+        "description": "模板目录（前端 listTemplates 同形：{items: [{id, name, desc}]}；15 §1.3 形状=前端）。",
+        "properties": {
+          "items": {
+            "items": {
+              "additionalProperties": {
+                "type": "string"
+              },
+              "type": "object"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "WorkflowTemplatesOut",
+        "type": "object"
+      },
+      "WorkflowValidationOut": {
+        "additionalProperties": false,
+        "description": "实时校验结果（15 §1.3 详情行：validation=DAG 校验实时结果；前端 validation 同形）。",
+        "properties": {
+          "acl": {
+            "title": "Acl",
+            "type": "boolean"
+          },
+          "dag": {
+            "title": "Dag",
+            "type": "boolean"
+          },
+          "expression": {
+            "title": "Expression",
+            "type": "boolean"
+          },
+          "test_run": {
+            "title": "Test Run",
+            "type": "string"
+          }
+        },
+        "required": [
+          "dag",
+          "acl",
+          "expression",
+          "test_run"
+        ],
+        "title": "WorkflowValidationOut",
+        "type": "object"
+      },
+      "WorkflowVersionsOut": {
+        "additionalProperties": false,
+        "description": "版本列表（前端 listVersions 同形：{items, draft:{version, diff}}）。",
+        "properties": {
+          "draft": {
+            "additionalProperties": true,
+            "title": "Draft",
+            "type": "object"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/WfVersionOut"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items",
+          "draft"
+        ],
+        "title": "WorkflowVersionsOut",
         "type": "object"
       },
       "WritebackLedgerDisposeIn": {
@@ -11724,6 +12735,49 @@
         ]
       }
     },
+    "/api/v1/admin/api-keys/{key_id}/rotate": {
+      "post": {
+        "operationId": "rotate_api_key_api_v1_admin_api_keys__key_id__rotate_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "key_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Key Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiKeyCreatedOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "轮换 API Key（旧 key 立即吊销 + 同 name/scopes 新签发，明文仅本次返回；§5.8 ★，15 篇 §3）",
+        "tags": [
+          "iam"
+        ]
+      }
+    },
     "/api/v1/admin/audit-logs": {
       "get": {
         "operationId": "list_audit_logs_api_v1_admin_audit_logs_get",
@@ -11874,6 +12928,27 @@
         ]
       }
     },
+    "/api/v1/admin/costs": {
+      "get": {
+        "operationId": "get_costs_api_v1_admin_costs_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CostsOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "成本看板聚合（llm_calls 30d：总 tokens/cost + 按 model 分组降序与占比；§5.8 ★）",
+        "tags": [
+          "iam"
+        ]
+      }
+    },
     "/api/v1/admin/estop": {
       "delete": {
         "operationId": "deactivate_estop_api_v1_admin_estop_delete",
@@ -12005,6 +13080,144 @@
           }
         },
         "summary": "建组（§5.10 预登记；role_template=角色码）",
+        "tags": [
+          "iam"
+        ]
+      }
+    },
+    "/api/v1/admin/groups/{group_id}": {
+      "delete": {
+        "operationId": "delete_group_api_v1_admin_groups__group_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "group_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Group Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "解散组（有成员 409 先清空再解散；§5.10 预登记 204 口径，15 篇 §3）",
+        "tags": [
+          "iam"
+        ]
+      },
+      "patch": {
+        "operationId": "patch_group_api_v1_admin_groups__group_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "group_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Group Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdminGroupPatchIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminGroupOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "组部分更新（仅提供的字段生效；members 提供即该数组全量替换；§5.10 预登记，15 篇 §3）",
+        "tags": [
+          "iam"
+        ]
+      },
+      "put": {
+        "operationId": "put_group_api_v1_admin_groups__group_id__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "group_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Group Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdminGroupPutIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminGroupOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "组更新（全量语义：四字段即新状态，members 全量替换；§5.10 预登记，15 篇 §3）",
         "tags": [
           "iam"
         ]
@@ -12145,6 +13358,57 @@
         "tags": [
           "iam"
         ]
+      },
+      "put": {
+        "operationId": "put_model_channel_api_v1_admin_models__channel_id__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "channel_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Channel Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ModelChannelPutIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelChannelOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "渠道配置更新（别名/优先级/预算/启停；仅提供的字段生效，budget_daily 显式 null=清空；§5.8 ★）",
+        "tags": [
+          "iam"
+        ]
       }
     },
     "/api/v1/admin/models/{channel_id}/impact": {
@@ -12208,7 +13472,8 @@
                     "memory_l2_upgrade",
                     "plugin_listing",
                     "writeback_incident",
-                    "conflict"
+                    "conflict",
+                    "workflow_publish"
                   ],
                   "type": "string"
                 },
@@ -12486,6 +13751,27 @@
           }
         },
         "summary": "角色-权限矩阵写（覆写 upsert；未知角色/权限点 422）",
+        "tags": [
+          "iam"
+        ]
+      }
+    },
+    "/api/v1/admin/stats": {
+      "get": {
+        "operationId": "get_stats_api_v1_admin_stats_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminStatsOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "平台统计轻量计数（users=本租户用户总数；sessions/runs=30 天窗口；§5.8）",
         "tags": [
           "iam"
         ]
@@ -21354,6 +22640,361 @@
         "summary": "生命周期动作（下架/恢复/撤销；迁移合法+审计行，14 §2）",
         "tags": [
           "tools"
+        ]
+      }
+    },
+    "/api/v1/workflow-templates": {
+      "get": {
+        "operationId": "list_workflow_templates_api_v1_workflow_templates_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkflowTemplatesOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "工作流模板目录（三静态代码内置；形状=前端 listTemplates）",
+        "tags": [
+          "workflows"
+        ]
+      }
+    },
+    "/api/v1/workflows": {
+      "get": {
+        "operationId": "list_workflows_api_v1_workflows_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 128,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Query"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Page",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page_size",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Page Size",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkflowListEnvelope"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "工作流列表（query 模糊 name；api/01 §3.1 信封；WfSummary 11 字段）",
+        "tags": [
+          "workflows"
+        ]
+      },
+      "post": {
+        "operationId": "create_workflow_api_v1_workflows_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WorkflowCreateIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkflowCreatedOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "建草稿（模板实例化；模板内置即过校验三件）",
+        "tags": [
+          "workflows"
+        ]
+      }
+    },
+    "/api/v1/workflows/{workflow_id}": {
+      "delete": {
+        "operationId": "delete_workflow_api_v1_workflows__workflow_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workflow_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workflow Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "删除（仅草稿；已发布 409+4803）",
+        "tags": [
+          "workflows"
+        ]
+      },
+      "get": {
+        "operationId": "get_workflow_api_v1_workflows__workflow_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workflow_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workflow Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkflowDetailEnvelope"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "详情（draft_diff v1 空对象；validation=实时校验结果）",
+        "tags": [
+          "workflows"
+        ]
+      },
+      "put": {
+        "operationId": "save_workflow_api_v1_workflows__workflow_id__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workflow_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workflow Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WorkflowSaveIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkflowSavedOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "草稿保存（仅草稿可改 4803；存前过校验三件 4801/4802）",
+        "tags": [
+          "workflows"
+        ]
+      }
+    },
+    "/api/v1/workflows/{workflow_id}/versions": {
+      "get": {
+        "operationId": "list_workflow_versions_api_v1_workflows__workflow_id__versions_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workflow_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workflow Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkflowVersionsOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "版本历史（不可变版本升序；含草稿标签与 diff 空对象）",
+        "tags": [
+          "workflows"
+        ]
+      },
+      "post": {
+        "operationId": "publish_workflow_api_v1_workflows__workflow_id__versions_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workflow_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workflow Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WorkflowPublishIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkflowPublishOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "提交发布（校验三件→治理分流：solo 直发 200 / team·enterprise 202 pending+工单）",
+        "tags": [
+          "workflows"
         ]
       }
     }

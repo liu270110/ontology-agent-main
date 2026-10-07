@@ -255,8 +255,7 @@ def test_promote_路由注册201_首调新建码():
     route = next(
         r
         for r in runs_router.routes
-        if getattr(r, "path", "") == "/workflows/runs/{run_id}/promote"
-        and "POST" in getattr(r, "methods", set())
+        if getattr(r, "path", "") == "/workflows/runs/{run_id}/promote" and "POST" in getattr(r, "methods", set())
     )
     assert route.status_code == 201
 
